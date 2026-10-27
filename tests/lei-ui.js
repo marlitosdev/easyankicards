@@ -1385,6 +1385,124 @@ async function testes() {
        "U24h a procedencia nao registrou a norma da atualizacao");
   }
 
+  /* ---- U26: NAVEGAÇÃO DA COMPARAÇÃO — contador identifica o artigo,
+   * visão geral lista tudo com cores de decisão, saltos rápidos levam às
+   * pendentes e às com atenção, e a prévia mostra só o que foi aceito. ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "EC 9/2024";
+    api.$("leiUpdTexto").value = L4320
+      .replace("Art. 35. Pertencem ao exercício financeiro:",
+               "Art. 35. Pertencem ao exercício financeiro (redação dada pela EC 9):")
+      .replace("Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.",
+               "Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.\n\n"
+               + "Art. 116. Artigo acrescentado por lei posterior.");
+    ok(api.leiAtualizarComparar() === true, "U26 a comparação não abriu");
+    const comparo = api.leiUpdComparoAtual();
+    ok(comparo.length === 2, "U26b deveriam ser 2 itens");
+
+    /* o contador carrega a identificação do artigo — navegar entre 38 sem
+     * saber qual está na tela era o defeito */
+    ok(/item 1 de 2 · Art\. 35/.test(api.$("leiUpdConta").textContent),
+       "U26c o contador não identifica o artigo em exame: " + api.$("leiUpdConta").textContent);
+    ok(api.$("leiUpdAtualNum").textContent.indexOf("35") >= 0,
+       "U26d a faixa do item em exame não mostra o artigo");
+
+    /* visão geral: uma linha por item, cinza (sem decisão) no início */
+    const visao = api.$("leiUpdVisao");
+    ok(visao.children.length === 2, "U26e a visão geral não lista os 2 itens");
+    ok((visao.children[0].className || "").indexOf("st-pend") >= 0,
+       "U26f itens sem decisão deveriam vir em cinza");
+
+    /* saltos: ir direto a um item e pular para a próxima pendente */
+    api.leiUpdIrPara(1);
+    ok(api.leiUpdIdxAtual() === 1, "U26g irPara não moveu para o item 2");
+    api.leiUpdPularPara("pend");
+    ok(api.leiUpdIdxAtual() === 0, "U26h próxima pendente deveria voltar ao item 1");
+
+    /* decisões pintam a lista: aceito verde, recusado vermelho */
+    api.$("leiUpdExplica").value = "";
+    api.leiUpdAceitar();           /* item 0 (art. 35) aceito */
+    api.leiUpdMover(1);
+    api.leiUpdPular();             /* item 1 (art. 116) recusado */
+    ok((visao.children[0].className || "").indexOf("st-aceito") >= 0,
+       "U26i o aceito não ficou verde na visão geral");
+    ok((visao.children[1].className || "").indexOf("st-recusado") >= 0,
+       "U26j o recusado não ficou vermelho na visão geral");
+    ok(/finalizar e gravar os 1 aceito/.test(api.$("btnLeiUpdFinalizar").textContent),
+       "U26k o botão de finalizar não mostra quantos vão entrar");
+
+    /* prévia: só o aceito aparece, com o que muda marcado */
+    api.leiUpdPreviaAbrir();
+    ok(api.$("dlgLeiUpdPrevia").open === true, "U26l a prévia não abriu");
+    const corpo = api.$("leiUpdPrevCorpo");
+    ok(corpo.children.length === 1, "U26m a prévia deveria ter só o item aceito");
+    const marca = corpo.querySelectorAll("mark");
+    ok(marca.length > 0, "U26n a prévia não destaca o que entra");
+    ok(/alteração 1 de 1/.test(api.$("leiUpdPrevConta").textContent),
+       "U26o a prévia não conta a alteração");
+    api.leiUpdPreviaNav(1); /* cicla e não quebra com um só alvo */
+  }
+
+  /* ---- U27: PARECER DA IA — o prompt junta as pendentes pedindo
+   * "aceite/recuse + motivo"; a resposta colada marca as decisões e o
+   * motivo grava no artigo como nota de estudo. ---- */
+  {
+    const { api } = rodar();
+    preparar(api, "Direito Financeiro", "Receita pública");
+    api.leiAbrir("Direito Financeiro", "Receita pública");
+    api.$("leiTexto").value = L4320;
+    api.leiGravar();
+    api.leiAtualizarAbrir();
+    api.$("leiUpdFonte").value = "EC 9/2024";
+    api.$("leiUpdTexto").value = L4320
+      .replace("Art. 35. Pertencem ao exercício financeiro:",
+               "Art. 35. Pertencem ao exercício financeiro (redação dada pela EC 9):")
+      .replace("Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.",
+               "Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.\n\n"
+               + "Art. 116. Artigo acrescentado por lei posterior.");
+    api.leiAtualizarComparar();
+    const comparo = api.leiUpdComparoAtual();
+
+    api.leiUpdIA();
+    const pr = api.$("leiUpdPrompt").value;
+    ok(/EC 9\/2024/.test(pr), "U27a o parecer não cita a norma alteradora");
+    ok(/Art\. 35/.test(pr) && /Art\. 116/.test(pr),
+       "U27b o parecer não lista as duas pendentes");
+    ok(/ACEITAR/.test(pr), "U27c o parecer não pede decisão aceitar/recusar");
+
+    /* resposta colada no formato item — decisão — motivo */
+    api.$("leiUpdExplica").value = "Art. 35 — ACEITAR — redação nova dá crédito presumido\n"
+      + "Art. 116 — RECUSAR — texto não confere com a base";
+    api.leiUpdIAAplicar();
+    ok(comparo[0].aceito === true && comparo[1].recusado === true,
+       "U27d o parecer não marcou as duas decisões");
+    ok(/crédito presumido/.test(comparo[0].explicacao || ""),
+       "U27e o motivo do aceite não ficou no item");
+    ok(comparo[0].viaIA === true && comparo[1].viaIA === true,
+       "U27f1 as decisões da IA não ficaram marcadas para revisão");
+    ok(api.leiUpdIdxAtual() === 0,
+       "U27f2 aplicar o parecer não levou à primeira decisão da IA para revisar");
+
+    /* já decidido não muda: segunda aplicação do mesmo parecer não desfaz */
+    api.leiUpdIAAplicar();
+    ok(comparo[0].aceito === true && comparo[1].recusado === true,
+       "U27f reaplicar o parecer mexeu no que já estava decidido");
+
+    ok(api.leiAtualizarAplicar() === true, "U27g finalizar com parecer aplicado");
+    const leiDepois = api.leisLista()[0];
+    ok(/crédito presumido/.test((leiDepois.alteracoes || {})["35"].explicacao || ""),
+       "U27h o motivo não gravou na alteração do artigo");
+    const efet = api.leiArtigosEfetivos(leiDepois).filter((a) => a.num === "35")[0];
+    ok(efet && /crédito presumido/.test(efet.explicacao || ""),
+       "U27i o motivo não chegou ao artigo efetivo (nota de estudo)");
+  }
+
   /* ---- U25: a edição livre do texto inteiro só existe ANTES da
    * primeira gravação — depois disso "editar" vira só leitura, e a
    * marcação (que grava por outro caminho, direto no valor do campo)

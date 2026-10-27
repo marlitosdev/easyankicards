@@ -1428,6 +1428,37 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-upd-lado{max-height:260px;overflow:auto}
 .lei-upd-marca{background:rgba(250,204,21,.32);border-radius:3px;padding:0 1px}
 .lei-upd-recusada{font-size:11px;font-weight:700;color:var(--erro);margin-left:6px}
+/* NAVEGAÇÃO DA COMPARAÇÃO: visão geral com cores de decisão, faixa do item
+ * atual e prévia do texto final. */
+.lei-upd-nav{flex-wrap:wrap}
+.lei-upd-conta{font-weight:700;min-width:110px;text-align:center}
+.lei-upd-visao-cx{margin:0 0 8px}
+.lei-upd-visao{display:flex;flex-direction:column;gap:2px;max-height:170px;overflow:auto;margin-top:4px}
+.lei-upd-visao-item{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:6px;cursor:pointer;border-left:4px solid var(--borda);font-size:12px}
+.lei-upd-visao-item:hover{background:var(--campo)}
+.lei-upd-visao-item.atual{outline:2px solid var(--info)}
+.lei-upd-visao-item.st-aceito{border-left-color:var(--verde);background:rgba(26,127,55,.12)}
+.lei-upd-visao-item.st-recusado{border-left-color:var(--erro);background:rgba(239,68,68,.10);opacity:.75}
+.lei-upd-visao-item.st-pend{border-left-color:var(--borda)}
+.lei-upd-st{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-left:auto;white-space:nowrap}
+.st-aceito>.lei-upd-st,.lei-upd-atual.st-aceito .lei-upd-st{color:var(--verde)}
+.st-recusado>.lei-upd-st,.lei-upd-atual.st-recusado .lei-upd-st{color:var(--erro)}
+.st-pend>.lei-upd-st,.lei-upd-atual.st-pend .lei-upd-st{color:var(--sutil)}
+.lei-upd-atual{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:8px 12px;margin:0 0 8px;border:1px solid var(--borda);border-radius:10px;background:color-mix(in srgb,var(--info) 8%,transparent)}
+.lei-upd-atual-num{font-size:17px;font-weight:800}
+.lei-upd-atual-info{flex:1 1 auto}
+.lei-upd-atual.st-aceito{border-color:var(--verde)}
+.lei-upd-atual.st-recusado{border-color:var(--erro)}
+dialog.lei-upd-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100dvh;border-radius:0;resize:none;display:flex;flex-direction:column}
+dialog.lei-upd-cheia .lei-upd-visao{max-height:none}
+dialog.lei-upd-cheia #leiUpdItem{flex:1 1 auto;min-height:0;overflow:auto}
+.lei-upd-prev-corpo{max-height:55vh;overflow:auto;white-space:pre-wrap;font-size:12.5px;line-height:1.55}
+.lei-upd-prev-art{border-left:4px solid var(--verde);background:rgba(26,127,55,.12);border-radius:0 8px 8px 0;padding:8px 10px;margin:10px 0}
+.lei-upd-prev-art .lei-upd-prev-rot{font-weight:700;font-size:11.5px;margin-bottom:4px}
+.lei-upd-prev-art.rev{border-left-color:var(--erro);background:rgba(239,68,68,.10)}
+.lei-upd-prev-art.rev .lei-upd-prev-rot{color:var(--erro)}
+.lei-upd-prev-art mark{background:rgba(26,127,55,.35);border-radius:3px;padding:0 1px}
+.lei-nota-explica{margin:6px 0 0;padding:5px 9px;border-left:3px solid var(--atencao);border-radius:0 6px 6px 0;background:rgba(250,204,21,.08);font-size:11.5px}
 /* BIBLIOTECA DE LEIS: um cartão por lei; o que a lei faz nos tópicos vem à vista */
 .lei-bib-card{border:1px solid var(--borda);border-radius:10px;padding:9px 11px;background:var(--panel)}
 .lei-bib-tit{font-weight:800;font-size:14px;overflow-wrap:anywhere}
@@ -9170,15 +9201,27 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
   <div id="leiUpdPasso2" hidden>
-    <div class="mat-topo">
-      <button class="btn-min" id="btnLeiUpdAnterior">&#8592;</button>
-      <span class="nota" id="leiUpdConta"></span>
-      <button class="btn-min" id="btnLeiUpdProximo">&#8594;</button>
+    <div class="mat-topo lei-upd-nav">
+      <button class="btn-min" id="btnLeiUpdAnterior" data-i18n="lei_upd_ant">&#8592;</button>
+      <span class="nota lei-upd-conta" id="leiUpdConta"></span>
+      <button class="btn-min" id="btnLeiUpdProximo" data-i18n="lei_upd_prox">&#8594;</button>
+      <button class="btn-min" id="btnLeiUpdProxAt" data-i18n="lei_upd_prox_at"></button>
+      <button class="btn-min" id="btnLeiUpdProxPend" data-i18n="lei_upd_prox_pend"></button>
       <span class="mat-topo-dir nota" id="leiUpdResumo"></span>
+      <button class="btn-min" id="btnLeiUpdCheia" data-i18n-title="lei_upd_cheia" title="tela cheia">&#9974;</button>
     </div>
     <div class="lei-upd-seguros" id="leiUpdSegurosBar" hidden>
       <span class="nota" id="leiUpdSegurosTxt"></span>
       <button class="btn-min" id="btnLeiUpdAceitarSeguros"></button>
+    </div>
+    <details class="lei-upd-visao-cx" id="leiUpdVisaoCx">
+      <summary class="nota" id="leiUpdVisaoTit"></summary>
+      <div id="leiUpdVisao" class="lei-upd-visao"></div>
+    </details>
+    <div class="lei-upd-atual" id="leiUpdAtual" hidden>
+      <span class="lei-upd-atual-num" id="leiUpdAtualNum"></span>
+      <span class="lei-upd-atual-info nota" id="leiUpdAtualInfo"></span>
+      <span class="lei-upd-st" id="leiUpdAtualSt"></span>
     </div>
     <div id="leiUpdItem"></div>
 
@@ -9192,6 +9235,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       style="width:100%;box-sizing:border-box"></textarea>
     <div class="mat-topo" id="leiUpdPromptBarra" hidden>
       <button class="btn-min" id="btnLeiUpdIACopiar" data-i18n="lei_cloze_copiar"></button>
+      <button class="btn-min" id="btnLeiUpdIAAplicar" data-i18n="lei_upd_ia_aplicar"></button>
     </div>
     <label class="nota" id="leiUpdExplicaRot" hidden></label>
     <textarea id="leiUpdExplica" rows="4" hidden
@@ -9200,9 +9244,30 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <div class="dlg-rodape">
       <button class="btn btn-cinza" id="btnLeiUpdPular" data-i18n="lei_upd_pular"></button>
       <button class="btn btn-verde" id="btnLeiUpdAceitar" data-i18n="lei_upd_aceitar"></button>
+      <button class="btn btn-azul" id="btnLeiUpdPrevia" data-i18n="lei_upd_previa"></button>
       <button class="btn btn-azul" id="btnLeiUpdFinalizar" data-i18n="lei_upd_finalizar"></button>
       <button class="btn btn-cinza" id="btnLeiUpdFechar2" data-i18n="help_close"></button>
     </div>
+  </div>
+</dialog>
+
+<!-- PRÉVIA DA ATUALIZAÇÃO: o texto inteiro da lei como ficaria com os itens
+     aceitos, com o que entra em destaque. Nada é gravado aqui. -->
+<dialog id="dlgLeiUpdPrevia" class="ui-modal diag-modal">
+  <div class="vka-cab">
+    <h3 data-i18n="lei_upd_previa_tit"></h3>
+    <button type="button" class="dlg-x" id="btnLeiUpdPreviaX" data-i18n-title="help_close">&#10006;</button>
+  </div>
+  <p class="nota" data-i18n="lei_upd_previa_leg"></p>
+  <div class="mat-topo">
+    <button class="btn-min" id="btnLeiUpdPrevAnt">&#8592;</button>
+    <span class="nota" id="leiUpdPrevConta"></span>
+    <button class="btn-min" id="btnLeiUpdPrevProx">&#8594;</button>
+    <span class="mat-topo-dir nota" id="leiUpdPrevResumo"></span>
+  </div>
+  <div id="leiUpdPrevCorpo" class="lei-upd-prev-corpo"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnLeiUpdPreviaSair" data-i18n="lei_upd_previa_sair"></button>
   </div>
 </dialog>
 

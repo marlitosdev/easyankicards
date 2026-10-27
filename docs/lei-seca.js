@@ -3832,7 +3832,7 @@ function leiArtigosEfetivos(l) {
     if (!ov) return a;
     achados[a.num] = true;
     if (ov.revogado) {
-      return Object.assign({}, a, { revogado: true, fonteAlteracao: ov.fonteAlteracao || "" });
+      return Object.assign({}, a, { revogado: true, fonteAlteracao: ov.fonteAlteracao || "", explicacao: ov.explicacao || "" });
     }
     const novoTxt = String(ov.texto || "");
     const lido = leiArtigos(novoTxt)[0];
@@ -3843,6 +3843,7 @@ function leiArtigosEfetivos(l) {
       alterado: true,
       fonteAlteracao: ov.fonteAlteracao || "",
       textoOriginal: a.texto,
+      explicacao: ov.explicacao || "",
     });
   });
 
@@ -3865,6 +3866,7 @@ function leiArtigosEfetivos(l) {
         divisao: "", divisaoTipo: "",
         alterado: true, novo: true,
         fonteAlteracao: alt[num].fonteAlteracao || "",
+        explicacao: alt[num].explicacao || "",
       };
     })
     .sort((x, y) => x.ordem - y.ordem);

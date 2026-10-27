@@ -2154,6 +2154,16 @@ function leiPintarLeitura() {
     if (recebidas) bloco.append(recebidas);
     bloco.append(corpo);
 
+    /* A NOTA DE ESTUDO DO PARECER — quando a mudança veio com explicação
+     * (da IA, no fluxo de atualização), ela mora aqui: embaixo do artigo,
+     * onde a dúvida sobre "por que mudou" acontece. */
+    if (a.explicacao) {
+      const nt = document.createElement("div");
+      nt.className = "lei-nota-explica nota";
+      nt.textContent = t("lei_nota_explica") + " — " + a.explicacao;
+      bloco.append(nt);
+    }
+
     /* AVISO DO ARTIGO QUE MAIS CAI.
      * O ranking já existia, mas numa janela à parte — e quem está lendo a
      * lei não vai abrir outra tela para conferir se aquele artigo é
@@ -8224,11 +8234,31 @@ function leiUpdAceitarSeguros() {
 function leiUpdMostrar() {
   if (!leiUpdComparo || leiUpdIdx < 0) return;
   const item = leiUpdComparo[leiUpdIdx];
-  $("leiUpdConta").textContent = (leiUpdIdx + 1) + "/" + leiUpdComparo.length;
+  const rotuloAtual = item.rotulo || "Art. " + item.numCru;
+  /* o contador carrega a identificação: navegar entre 38 itens sem saber qual
+   * artigo está na tela era o grande defeito desta navegação. */
+  $("leiUpdConta").textContent = t("lei_upd_item_x_de", { k: leiUpdIdx + 1, n: leiUpdComparo.length })
+    + " · " + rotuloAtual;
   const ac = leiUpdComparo.filter((x) => x.aceito).length;
   const re = leiUpdComparo.filter((x) => x.recusado).length;
   $("leiUpdResumo").textContent = t("lei_upd_placar",
     { a: ac, r: re, p: leiUpdComparo.length - ac - re });
+  /* faixa do item em exame: número grande, tipo e a decisão em cor */
+  if ($("leiUpdAtual")) {
+    const st = item.aceito ? "st-aceito" : item.recusado ? "st-recusado" : "st-pend";
+    $("leiUpdAtual").hidden = false;
+    $("leiUpdAtual").className = "lei-upd-atual " + st;
+    $("leiUpdAtualNum").textContent = rotuloAtual;
+    $("leiUpdAtualInfo").textContent = t("lei_upd_tipo_" + item.tipo)
+      + (item.seguro === false ? " · " + t("lei_upd_atencao_badge") : "")
+      + (item.viaIA ? " · " + t("lei_upd_via_ia") : "");
+    $("leiUpdAtualSt").textContent = item.aceito ? t("lei_upd_ok")
+      : item.recusado ? t("lei_upd_recusada") : t("lei_upd_st_pend");
+  }
+  if ($("btnLeiUpdFinalizar")) {
+    $("btnLeiUpdFinalizar").textContent = ac ? t("lei_upd_finalizar_n", { n: ac })
+      : t("lei_upd_finalizar");
+  }
   /* a barra "aceitar os sem risco": só aparece enquanto sobrar item seguro sem decisão */
   const segPend = leiUpdComparo.filter((x) => x.seguro && !x.aceito && !x.recusado).length;
   const atnPend = leiUpdComparo.filter((x) => x.seguro === false && !x.aceito && !x.recusado).length;
@@ -8269,6 +8299,14 @@ function leiUpdMostrar() {
       als.append(d);
     });
     cx.append(als);
+  }
+
+  /* o parecer da IA, quando já foi colado para este item */
+  if (item.explicacao) {
+    const ex = document.createElement("div");
+    ex.className = "nota";
+    ex.textContent = t("lei_upd_com_explicacao") + ": " + item.explicacao;
+    cx.append(ex);
   }
 
   /* o texto INTEIRO de cada lado, com as palavras que só existem ali marcadas. "Novo" não tem "como está";
@@ -8333,6 +8371,130 @@ function leiUpdMostrar() {
   $("leiUpdExplicaRot").hidden = true;
   $("leiUpdExplica").hidden = true;
   $("leiUpdExplica").value = item.explicacao || "";
+  leiUpdVisaoPintar();
+}
+
+/* A LISTA COLORIDA de todos os itens, logo acima da faixa do item em exame.
+ * Verde = aceito, vermelho = recusado, cinza = sem decisão; o item em exame
+ * tem contorno. Toque numa linha para ir direto a ele — com 38 itens, "próxima"
+ * clicada 38 vezes não é navegação. */
+function leiUpdVisaoPintar() {
+  const cx = $("leiUpdVisao");
+  if (!cx || !leiUpdComparo) return;
+  $("leiUpdVisaoTit").textContent = t("lei_upd_visao_tit", { n: leiUpdComparo.length });
+  cx.innerHTML = "";
+  leiUpdComparo.forEach((it, i) => {
+    const d = document.createElement("div");
+    d.className = "lei-upd-visao-item " + (it.aceito ? "st-aceito" : it.recusado ? "st-recusado" : "st-pend")
+      + (i === leiUpdIdx ? " atual" : "");
+    const rot = document.createElement("span");
+    rot.textContent = (it.rotulo || "Art. " + it.numCru) + " — " + t("lei_upd_tipo_" + it.tipo);
+    if (it.seguro === false && !it.aceito && !it.recusado) rot.textContent += " ⚠";
+    if (it.viaIA) rot.textContent += " " + t("lei_upd_via_ia");
+    const st = document.createElement("span");
+    st.className = "lei-upd-st";
+    st.textContent = it.aceito ? t("lei_upd_ok") : it.recusado ? t("lei_upd_recusada") : t("lei_upd_st_pend");
+    d.append(rot, st);
+    d.onclick = () => leiUpdIrPara(i);
+    cx.append(d);
+  });
+}
+
+function leiUpdIrPara(i) {
+  if (!leiUpdComparo || i < 0 || i >= leiUpdComparo.length) return;
+  leiUpdIdx = i;
+  leiUpdMostrar();
+  const alvo = $("leiUpdAtual");
+  if (alvo && alvo.scrollIntoView) try { alvo.scrollIntoView({ block: "nearest" }); } catch (e) {}
+}
+
+/* PULAR DIRETO para o próximo item que ainda precisa de decisão — "⚠ com atenção"
+ * vai à primeira coisa que tem alerta; "○ sem decisão" vai a qualquer um ainda
+ * em aberto (atenção ou não). Volta ao início da lista quando não acha depois. */
+function leiUpdPularPara(quem) {
+  if (!leiUpdComparo || !leiUpdComparo.length) return;
+  const prova = (it) => quem === "atencao"
+    ? it.seguro === false && !it.aceito && !it.recusado
+    : !it.aceito && !it.recusado;
+  for (let k = 1; k <= leiUpdComparo.length; k++) {
+    const i = (leiUpdIdx + k) % leiUpdComparo.length;
+    if (prova(leiUpdComparo[i])) { leiUpdIrPara(i); return; }
+  }
+  toastMsg(t(quem === "atencao" ? "lei_upd_sem_at" : "lei_upd_sem_pend"), 2600);
+}
+
+/* TELA CHEIA da janela de atualização — a mesma tela-cheia de verdade dos
+ * leitores (telaCheiaPedir, app.js): a página pede ao navegador e a janela,
+ * por cima, passa a ocupá-la. Sem a API (iPhone), o CSS sozinho já estica. */
+function leiUpdCheiaTrocar(forcar) {
+  const dg = $("dlgLeiAtualizar");
+  if (!dg) return;
+  const quer = typeof forcar === "boolean" ? forcar : !dg.classList.contains("lei-upd-cheia");
+  dg.classList.toggle("lei-upd-cheia", quer);
+  if (quer) { if (typeof telaCheiaPedir === "function") telaCheiaPedir("lei-upd", () => { try { dg.classList.remove("lei-upd-cheia"); } catch (e) {} }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("lei-upd");
+}
+
+/* PRÉVIA DO RESULTADO: o texto de cada item ACEITO com o que entra em destaque
+ * (e o que sai riscado, nas revogações). Nada é gravado aqui — é só leitura. */
+let leiUpdPrevIdx = 0;
+let leiUpdPrevAlvos = [];
+
+function leiUpdPreviaAbrir() {
+  if (!leiUpdComparo) return;
+  const aceitos = leiUpdComparo.filter((x) => x.aceito);
+  const corpo = $("leiUpdPrevCorpo");
+  corpo.innerHTML = "";
+  leiUpdPrevAlvos = [];
+  const fonte = (it) => it.fonteItem || leiUpdFonteGlobal || "";
+  if (!aceitos.length) {
+    const v = document.createElement("p");
+    v.className = "nota";
+    v.textContent = t("lei_upd_previa_vazio");
+    corpo.append(v);
+    $("leiUpdPrevConta").textContent = "";
+    $("leiUpdPrevResumo").textContent = "";
+  } else {
+    aceitos.forEach((it) => {
+      const d = document.createElement("div");
+      d.className = "lei-upd-prev-art" + (it.tipo === "revogado" ? " rev" : "");
+      const rot = document.createElement("div");
+      rot.className = "lei-upd-prev-rot";
+      rot.textContent = (it.rotulo || "Art. " + it.numCru) + " — " + t("lei_upd_tipo_" + it.tipo)
+        + (fonte(it) ? " · " + fonte(it) : "");
+      d.append(rot);
+      const tx = document.createElement("div");
+      if (it.tipo === "revogado") {
+        tx.textContent = it.antigo || "";
+        tx.style.textDecoration = "line-through";
+        tx.style.opacity = ".65";
+      } else if (it.tipo === "novo") {
+        /* tudo é novo: contra vazio marca cada palavra */
+        leiMarcarDiferencas(tx, it.novo, "");
+      } else if (it.tipo === "mudou" || it.tipo === "anexo_subst") {
+        leiMarcarDiferencas(tx, it.novo, it.antigo || "");
+      } else {
+        tx.textContent = String(it.novo || "");
+      }
+      d.append(tx);
+      corpo.append(d);
+      leiUpdPrevAlvos.push(d);
+    });
+    leiUpdPrevIdx = 0;
+    const ac = aceitos.length, re = leiUpdComparo.filter((x) => x.recusado).length;
+    $("leiUpdPrevResumo").textContent = t("lei_upd_placar", { a: ac, r: re, p: leiUpdComparo.length - ac - re });
+    leiUpdPreviaNav(0);
+  }
+  const dg = $("dlgLeiUpdPrevia");
+  if (dg && dg.showModal) dg.showModal();
+}
+
+function leiUpdPreviaNav(delta) {
+  if (!leiUpdPrevAlvos.length) return;
+  leiUpdPrevIdx = (leiUpdPrevIdx + delta + leiUpdPrevAlvos.length) % leiUpdPrevAlvos.length;
+  $("leiUpdPrevConta").textContent = t("lei_upd_previa_alts", { k: leiUpdPrevIdx + 1, n: leiUpdPrevAlvos.length });
+  const alvo = leiUpdPrevAlvos[leiUpdPrevIdx];
+  if (alvo.scrollIntoView) try { alvo.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) {}
 }
 
 function leiUpdMover(delta) {
@@ -8363,17 +8525,29 @@ function leiUpdPular() {
   else leiUpdMostrar();
 }
 
-/* PEDIR APOIO DA IA — mesmo formato do resto do app: monta o prompt com
- * o antes e o depois, mostra numa caixa copiável, e a resposta colada
- * fica numa caixa própria — ela não é aplicada sozinha em lugar nenhum,
- * só acompanha a alteração se o artigo for aceito. */
+/* PEDIR PARECER DA IA — um único prompt com TODAS as alterações ainda sem
+ * decisão, pedindo o que a pessoa precisa para decidir depressa: "aceite /
+ * recuse, porque". A resposta colada vira decisão com um clique
+ * (leiUpdIAAplicar) — e o motivo fica gravado no artigo como nota de estudo.
+ * Nada é aplicado sem a pessoa colar e confirmar. */
 function leiUpdIA() {
   if (!leiUpdComparo) return;
-  const item = leiUpdComparo[leiUpdIdx];
+  const pendentes = leiUpdComparo.filter((it) => !it.aceito && !it.recusado);
+  if (!pendentes.length) { toastMsg(t("lei_upd_ia_sem_pend"), 3000); return; }
+  const l = leiDe(leiIdAtual);
+  const corta = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n);
+  const blocos = pendentes.map((it, i) => {
+    const rot = it.rotulo || "Art. " + it.numCru;
+    const al = (it.alertas || []).map((x) => x.k).join(", ");
+    return (i + 1) + ") " + rot + " — " + t("lei_upd_tipo_" + it.tipo)
+      + (al ? " · alertas do app: " + al : "")
+      + "\n   COMO ESTÁ: " + corta(it.antigo || "(não existia)", 320)
+      + "\n   COMO FICARIA: " + corta(it.novo || "(revogado)", 320);
+  });
   $("leiUpdPrompt").value = t("lei_upd_ia_prompt", {
-    artigo: item.rotulo || "Art. " + item.numCru,
-    antigo: item.antigo || t("lei_upd_nao_existia"),
-    novo: item.novo || t("lei_upd_revogado_texto"),
+    lei: (l && l.nome) || "—",
+    fonte: leiUpdFonteGlobal || "—",
+    itens: blocos.join("\n\n"),
   });
   $("leiUpdPrompt").hidden = false;
   $("leiUpdPromptBarra").hidden = false;
@@ -8381,7 +8555,45 @@ function leiUpdIA() {
   $("leiUpdExplicaRot").hidden = false;
   $("leiUpdExplica").placeholder = t("lei_upd_explica_ph");
   $("leiUpdExplica").hidden = false;
-  leiReg("atualizacao", "apoio de IA pedido", "Art. " + item.numCru);
+  leiReg("atualizacao", "parecer da IA pedido", pendentes.length + " item(ns) pendente(s)");
+}
+
+/* APLICAR O PARECER: lê a resposta da IA (uma decisão por linha, com o
+ * rótulo do item) e marca aceitar/recusar nos itens ainda sem decisão.
+ * O motivo vai junto — grava no artigo como nota de estudo. */
+function leiUpdIAAplicar() {
+  if (!leiUpdComparo) return;
+  const txt = String(($("leiUpdExplica") || {}).value || "");
+  if (!txt.trim()) { toastMsg(t("lei_upd_ia_nada"), 3200); return; }
+  const normal = (s) => String(s).toLowerCase().replace(/[^a-z0-9à-ú]+/gi, " ").trim();
+  const linhas = txt.split("\n").map((x) => x.trim()).filter(Boolean);
+  let a = 0, r = 0;
+  leiUpdComparo.forEach((it) => {
+    if (it.aceito || it.recusado) return; /* o que já foi decidido não muda */
+    const rotN = normal(it.rotulo || "Art. " + it.numCru);
+    const numN = normal(String(it.numCru));
+    for (const l of linhas) {
+      const ll = normal(l);
+      const borda = (p) => new RegExp("\\b" + p.replace(/\s+/g, "\\s+") + "\\b");
+      if (!borda(rotN).test(ll) && !borda(numN).test(ll)) continue;
+      const m = l.match(/\b(aceitar|aceito|aplicar|recusar|recusado|pular)\b/i);
+      if (!m) continue;
+      const dec = /recus|pular/i.test(m[1]);
+      it.aceito = !dec;
+      it.recusado = dec;
+      it.viaIA = true;
+      it.explicacao = l.length > 200 ? l.slice(0, 200).trim() + "…" : l;
+      if (dec) r++; else a++;
+      break;
+    }
+  });
+  if (!a && !r) { toastMsg(t("lei_upd_ia_nada"), 3200); return; }
+  leiUpdMostrar();
+  /* a revisão começa no que a IA decidiu — é o que merece olho humano */
+  const primeiroIA = leiUpdComparo.findIndex((x) => x.viaIA);
+  if (primeiroIA >= 0) leiUpdIrPara(primeiroIA);
+  toastMsg(t("lei_upd_ia_aplicado", { a, r }), 5600);
+  leiReg("atualizacao", "parecer da IA aplicado", a + " aceita(s), " + r + " recusada(s)");
 }
 
 /* FINALIZAR — só aqui algo é gravado, e só os itens aceitos. A base
@@ -8418,6 +8630,7 @@ function leiAtualizarAplicar() {
       revogado: ehRevogado,
       historico: hist,
       dataLei: item.dataLei || "",
+      explicacao: String(item.explicacao || ""),
     };
   });
 
@@ -9077,11 +9290,44 @@ function leiIniciar() {
   liga("btnLeiUpdFechar2", "fechar atualização", () => $("dlgLeiAtualizar").close());
   liga("btnLeiUpdAnterior", "artigo anterior da comparação", () => leiUpdMover(-1));
   liga("btnLeiUpdProximo", "próximo artigo da comparação", () => leiUpdMover(1));
+  liga("btnLeiUpdProxAt", "ir à próxima alteração com atenção", () => leiUpdPularPara("atencao"));
+  liga("btnLeiUpdProxPend", "ir à próxima alteração sem decisão", () => leiUpdPularPara("pend"));
   liga("btnLeiUpdAceitar", "aceitar alteração", () => leiUpdAceitar());
   liga("btnLeiUpdPular", "pular alteração", () => leiUpdPular());
-  liga("btnLeiUpdFinalizar", "finalizar atualização", () => leiAtualizarAplicar());
+  /* FINALIZAR pede confirmação com as três contagens — "só os aceitos entram"
+   * tem que ser explícito antes de gravar, não um segredo de implementação. */
+  liga("btnLeiUpdFinalizar", "finalizar atualização", async () => {
+    if (!leiUpdComparo) return;
+    const a = leiUpdComparo.filter((x) => x.aceito).length;
+    if (!a) { uiAlert(t("lei_upd_nenhum_aceito")); return; }
+    const r = leiUpdComparo.filter((x) => x.recusado).length;
+    const p = leiUpdComparo.length - a - r;
+    if (!(await uiConfirm(t("lei_upd_conf", { a, r, p })))) return;
+    leiAtualizarAplicar();
+  });
+  liga("btnLeiUpdPrevia", "ver como vai ficar a lei com o aceito", () => leiUpdPreviaAbrir());
+  liga("btnLeiUpdPrevAnt", "alteração anterior da prévia", () => leiUpdPreviaNav(-1));
+  liga("btnLeiUpdPrevProx", "próxima alteração da prévia", () => leiUpdPreviaNav(1));
+  liga("btnLeiUpdPreviaX", "fechar prévia", () => { if ($("dlgLeiUpdPrevia")) $("dlgLeiUpdPrevia").close(); });
+  liga("btnLeiUpdPreviaSair", "voltar aos itens", () => { if ($("dlgLeiUpdPrevia")) $("dlgLeiUpdPrevia").close(); });
+  liga("btnLeiUpdCheia", "tela cheia na atualização", () => leiUpdCheiaTrocar());
+  /* fechar a janela por qualquer caminho (botões, fila, ESC) sai da tela cheia junto */
+  if ($("dlgLeiAtualizar")) $("dlgLeiAtualizar").addEventListener("close", () => {
+    $("dlgLeiAtualizar").classList.remove("lei-upd-cheia");
+    if (typeof telaCheiaSair === "function") telaCheiaSair("lei-upd");
+  });
+  /* setas do teclado navegam pelos itens enquanto a comparação está aberta
+   * (a prévia aberta tem prioridade e não navega os itens por baixo) */
+  if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("keydown", (ev) => {
+    const dg = $("dlgLeiAtualizar");
+    if (!dg || !dg.open || $("leiUpdPasso2").hidden) return;
+    if ($("dlgLeiUpdPrevia") && $("dlgLeiUpdPrevia").open) return;
+    if (ev.key === "ArrowRight") { leiUpdMover(1); ev.preventDefault(); }
+    else if (ev.key === "ArrowLeft") { leiUpdMover(-1); ev.preventDefault(); }
+  });
   liga("btnLeiUpdAceitarSeguros", "aceitar de uma vez os itens sem risco", () => leiUpdAceitarSeguros());
-  liga("btnLeiUpdIA", "pedir apoio da IA", () => leiUpdIA());
+  liga("btnLeiUpdIA", "pedir parecer da IA para as pendentes", () => leiUpdIA());
+  liga("btnLeiUpdIAAplicar", "aplicar o parecer da IA nas decisões", () => leiUpdIAAplicar());
   liga("btnLeiUpdIACopiar", "copiar prompt de apoio", () => {
     try { navigator.clipboard.writeText($("leiUpdPrompt").value); } catch (e) {}
     const b = $("btnLeiUpdIACopiar");
