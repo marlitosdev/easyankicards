@@ -8126,6 +8126,7 @@ function leiAtualizarComparar(opc) {
   leiUpdFonteGlobal = fonte;
   $("leiUpdPasso1").hidden = true;
   $("leiUpdPasso2").hidden = false;
+  leiUpdParecerFechar();
   leiUpdMostrar();
   leiFluxoComparacao(fonte, false, cmp.itens);
   leiReg("atualizacao", "comparação aberta", fonte + " · " + cmp.itens.length + " diferenças"
@@ -8185,6 +8186,7 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
   leiUpdFonteGlobal = fonte;
   $("leiUpdPasso1").hidden = true;
   $("leiUpdPasso2").hidden = false;
+  leiUpdParecerFechar();
   leiUpdMostrar();
   leiFluxoComparacao(fonte, true, itens);
   leiReg("atualizacao", "comparação de lei que altera aberta", fonte + " · " + itens.length + " artigos-alvo · "
@@ -8366,12 +8368,17 @@ function leiUpdMostrar() {
   }
 
   $("btnLeiUpdAceitar").textContent = t(item.aceito ? "lei_upd_aceito" : "lei_upd_aceitar");
-  $("leiUpdPrompt").hidden = true;
-  $("leiUpdPromptBarra").hidden = true;
-  $("leiUpdExplicaRot").hidden = true;
-  $("leiUpdExplica").hidden = true;
-  $("leiUpdExplica").value = item.explicacao || "";
+  /* (19.29.1) o pedido e a resposta da IA valem para TODAS as pendentes: andar
+   * entre os itens não os esconde nem apaga o que foi colado (antes, uma seta
+   * ou um toque na visão geral jogava fora a resposta inteira). */
   leiUpdVisaoPintar();
+}
+
+/* fecha e limpa a caixa do parecer — só numa comparação NOVA */
+function leiUpdParecerFechar() {
+  ["leiUpdPrompt", "leiUpdPromptBarra", "leiUpdExplicaRot", "leiUpdExplica"].forEach((id) => { if ($(id)) $(id).hidden = true; });
+  if ($("leiUpdPrompt")) $("leiUpdPrompt").value = "";
+  if ($("leiUpdExplica")) $("leiUpdExplica").value = "";
 }
 
 /* A LISTA COLORIDA de todos os itens, logo acima da faixa do item em exame.
@@ -8456,16 +8463,19 @@ function leiUpdPreviaAbrir() {
     $("leiUpdPrevResumo").textContent = "";
   } else {
     aceitos.forEach((it) => {
+      /* o mesmo critério da gravação (leiAtualizarAplicar): "revogado/vetado/suprimido
+       * (consta no texto novo)" também apaga o artigo — não pode aparecer como "muda" */
+      const ehRev = it.tipo === "revogado" || /_texto$/.test(it.tipo) || it.tipo === "anexo_rev";
       const d = document.createElement("div");
-      d.className = "lei-upd-prev-art" + (it.tipo === "revogado" ? " rev" : "");
+      d.className = "lei-upd-prev-art" + (ehRev ? " rev" : "");
       const rot = document.createElement("div");
       rot.className = "lei-upd-prev-rot";
       rot.textContent = (it.rotulo || "Art. " + it.numCru) + " — " + t("lei_upd_tipo_" + it.tipo)
         + (fonte(it) ? " · " + fonte(it) : "");
       d.append(rot);
       const tx = document.createElement("div");
-      if (it.tipo === "revogado") {
-        tx.textContent = it.antigo || "";
+      if (ehRev) {
+        tx.textContent = it.antigo || it.novo || "";
         tx.style.textDecoration = "line-through";
         tx.style.opacity = ".65";
       } else if (it.tipo === "novo") {
@@ -8507,20 +8517,29 @@ function leiUpdMover(delta) {
 
 function leiUpdAceitar() {
   if (!leiUpdComparo) return;
-  const item = leiUpdComparo[leiUpdIdx];
-  item.aceito = true;
-  item.recusado = false;
-  item.explicacao = String(($("leiUpdExplica") || {}).value || "").trim();
+  leiUpdDecidirAMao(leiUpdComparo[leiUpdIdx], true);
   leiUpdMostrar();
+}
+
+/* DECISÃO À MÃO. A caixa de texto agora guarda o parecer de TODAS as
+ * pendentes — copiá-la para o item (como antes, quando ela era a explicação
+ * de um artigo só) gravava o parecer inteiro como nota daquele artigo.
+ * Quem decide à mão revisou: o selo "decidido pela IA" sai; e, se a decisão
+ * CONTRARIA a da IA, o motivo dela também sai (senão o artigo aceito
+ * levaria como nota de estudo "RECUSAR — texto não confere"). */
+function leiUpdDecidirAMao(item, aceitar) {
+  if (!item) return;
+  if (item.viaIA && (aceitar ? item.recusado : item.aceito)) item.explicacao = "";
+  item.viaIA = false;
+  item.aceito = !!aceitar;
+  item.recusado = !aceitar;
 }
 
 /* RECUSAR é uma decisão, não um "depois": o artigo fica marcado como recusado
  * (e não entra na gravação), e a contagem mostra quantos ainda esperam decisão */
 function leiUpdPular() {
   if (!leiUpdComparo) return;
-  const item = leiUpdComparo[leiUpdIdx];
-  item.aceito = false;
-  item.recusado = true;
+  leiUpdDecidirAMao(leiUpdComparo[leiUpdIdx], false);
   if (leiUpdIdx < leiUpdComparo.length - 1) leiUpdMover(1);
   else leiUpdMostrar();
 }
@@ -8535,14 +8554,22 @@ function leiUpdIA() {
   const pendentes = leiUpdComparo.filter((it) => !it.aceito && !it.recusado);
   if (!pendentes.length) { toastMsg(t("lei_upd_ia_sem_pend"), 3000); return; }
   const l = leiDe(leiIdAtual);
-  const corta = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n);
+  /* (19.29.1) o corte é DITO à IA — antes ela recebia 320 caracteres sem
+   * saber que faltava o resto, e o critério "o texto não bate → RECUSAR"
+   * recusava artigo longo só por estar incompleto */
+  const corta = (s, n) => {
+    const x = String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+    return x.length <= n ? x : x.slice(0, n).trim() + " […" + t("lei_upd_ia_cortado", { n: x.length }) + "]";
+  };
+  /* os alertas vão no texto que a pessoa lê na tela, não no nome interno */
+  const alerta = (a) => String(t("lei_upd_al_" + a.k, a) || a.k).replace(/\s+/g, " ").trim();
   const blocos = pendentes.map((it, i) => {
     const rot = it.rotulo || "Art. " + it.numCru;
-    const al = (it.alertas || []).map((x) => x.k).join(", ");
+    const al = (it.alertas || []).map(alerta).join(" / ");
     return (i + 1) + ") " + rot + " — " + t("lei_upd_tipo_" + it.tipo)
-      + (al ? " · alertas do app: " + al : "")
-      + "\n   COMO ESTÁ: " + corta(it.antigo || "(não existia)", 320)
-      + "\n   COMO FICARIA: " + corta(it.novo || "(revogado)", 320);
+      + (al ? " · " + t("lei_upd_ia_alertas") + ": " + al : "")
+      + "\n   COMO ESTÁ: " + corta(it.antigo || "(não existia)", LEI_UPD_IA_CORTE)
+      + "\n   COMO FICARIA: " + corta(it.novo || "(revogado)", LEI_UPD_IA_CORTE);
   });
   $("leiUpdPrompt").value = t("lei_upd_ia_prompt", {
     lei: (l && l.nome) || "—",
@@ -8558,42 +8585,76 @@ function leiUpdIA() {
   leiReg("atualizacao", "parecer da IA pedido", pendentes.length + " item(ns) pendente(s)");
 }
 
-/* APLICAR O PARECER: lê a resposta da IA (uma decisão por linha, com o
- * rótulo do item) e marca aceitar/recusar nos itens ainda sem decisão.
- * O motivo vai junto — grava no artigo como nota de estudo. */
+const LEI_UPD_IA_CORTE = 900;
+const LEI_UPD_DEC_ACEITA = /\b(aceitar|aceito|aceita|aplicar|accept|accepted)\b/i;
+const LEI_UPD_DEC_RECUSA = /\b(recusar|recusado|recusada|recusa|pular|refuse|refused|reject|rejected)\b/i;
+const LEI_UPD_DEC_QUALQUER = /\b(aceitar|aceito|aceita|aplicar|accept|accepted|recusar|recusado|recusada|recusa|pular|refuse|refused|reject|rejected)\b/i;
+
+/* a chave de um rótulo de item: "Art. 35-A" → "35a", "art 35 A" → "35a",
+ * "Art. 1º" → "1", "ANEXO XVI" → "anexoxvi". Comparada por IGUALDADE —
+ * por isso "35" não casa com "35-A" e o número citado no motivo não conta. */
+function leiUpdChaveRotulo(s) {
+  return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\bart(igo)?s?\b\.?/g, "").replace(/[º°ª]/g, "").replace(/[^a-z0-9]+/g, "");
+}
+
+/* LÊ O PARECER: uma linha por item, "<rótulo> — <ACEITAR|RECUSAR> — <motivo>".
+ * O rótulo é só o que vem ANTES da decisão (o "Art. 35" citado no motivo de
+ * outro item não conta); a decisão é lida no campo dela — "ACEITO? Não:
+ * RECUSAR" tem as duas e fica AMBÍGUA (sem decisão), em vez de virar a
+ * primeira palavra que aparecer. Tolera "1)", negrito e crases da IA. */
+function leiUpdLerParecer(txt) {
+  const out = [];
+  String(txt || "").split(/\r?\n/).forEach((bruta) => {
+    const linha = bruta.replace(/[*_`#>]+/g, "").replace(/^\s*[-•]\s+/, "").replace(/^\s*\d{1,3}\s*[).]\s*/, "").trim();
+    if (!linha || !LEI_UPD_DEC_QUALQUER.test(linha)) return;
+    const campos = linha.split(/\s+[—–]\s+|\s+-\s+|\s*\|\s*|\t+/).map((x) => x.trim()).filter(Boolean);
+    let rotulo, decCampo, motivo;
+    if (campos.length >= 2 && LEI_UPD_DEC_QUALQUER.test(campos[1]) && !LEI_UPD_DEC_QUALQUER.test(campos[0])) {
+      rotulo = campos[0]; decCampo = campos[1]; motivo = campos.slice(2).join(" — ");
+    } else {
+      /* sem os travessões: "Art. 35: ACEITAR, porque…" */
+      const m = linha.match(LEI_UPD_DEC_QUALQUER);
+      rotulo = linha.slice(0, m.index).replace(/[\s:,;.—–-]+$/, "");
+      decCampo = m[0];
+      motivo = linha.slice(m.index + m[0].length).replace(/^[\s:,;.—–-]+/, "");
+    }
+    const aceita = LEI_UPD_DEC_ACEITA.test(decCampo), recusa = LEI_UPD_DEC_RECUSA.test(decCampo);
+    const chave = leiUpdChaveRotulo(rotulo);
+    if (!chave) return;
+    out.push({ chave, dec: aceita && recusa ? "?" : aceita ? "a" : "r", motivo: motivo.trim(), linha: bruta.trim() });
+  });
+  return out;
+}
+
+/* APLICAR O PARECER: marca aceitar/recusar nos itens ainda sem decisão.
+ * O que já foi decidido (à mão ou antes) não muda. O MOTIVO — sem o rótulo
+ * e a palavra da decisão — vira a nota de estudo do artigo. */
 function leiUpdIAAplicar() {
   if (!leiUpdComparo) return;
-  const txt = String(($("leiUpdExplica") || {}).value || "");
-  if (!txt.trim()) { toastMsg(t("lei_upd_ia_nada"), 3200); return; }
-  const normal = (s) => String(s).toLowerCase().replace(/[^a-z0-9à-ú]+/gi, " ").trim();
-  const linhas = txt.split("\n").map((x) => x.trim()).filter(Boolean);
-  let a = 0, r = 0;
+  const lidas = leiUpdLerParecer(($("leiUpdExplica") || {}).value);
+  if (!lidas.length) { toastMsg(t("lei_upd_ia_nada"), 3200); return; }
+  let a = 0, r = 0, amb = 0;
   leiUpdComparo.forEach((it) => {
     if (it.aceito || it.recusado) return; /* o que já foi decidido não muda */
-    const rotN = normal(it.rotulo || "Art. " + it.numCru);
-    const numN = normal(String(it.numCru));
-    for (const l of linhas) {
-      const ll = normal(l);
-      const borda = (p) => new RegExp("\\b" + p.replace(/\s+/g, "\\s+") + "\\b");
-      if (!borda(rotN).test(ll) && !borda(numN).test(ll)) continue;
-      const m = l.match(/\b(aceitar|aceito|aplicar|recusar|recusado|pular)\b/i);
-      if (!m) continue;
-      const dec = /recus|pular/i.test(m[1]);
-      it.aceito = !dec;
-      it.recusado = dec;
-      it.viaIA = true;
-      it.explicacao = l.length > 200 ? l.slice(0, 200).trim() + "…" : l;
-      if (dec) r++; else a++;
-      break;
-    }
+    const ch = [leiUpdChaveRotulo(it.rotulo || ""), leiUpdChaveRotulo(it.numCru)].filter(Boolean);
+    const p = lidas.filter((x) => ch.indexOf(x.chave) >= 0)[0];
+    if (!p) return;
+    if (p.dec === "?") { amb++; return; }
+    const dec = p.dec === "r";
+    it.aceito = !dec;
+    it.recusado = dec;
+    it.viaIA = true;
+    it.explicacao = p.motivo.length > 200 ? p.motivo.slice(0, 200).trim() + "…" : p.motivo;
+    if (dec) r++; else a++;
   });
-  if (!a && !r) { toastMsg(t("lei_upd_ia_nada"), 3200); return; }
+  if (!a && !r) { toastMsg(t(amb ? "lei_upd_ia_ambiguas" : "lei_upd_ia_nada", { n: amb }), 4200); return; }
   leiUpdMostrar();
   /* a revisão começa no que a IA decidiu — é o que merece olho humano */
   const primeiroIA = leiUpdComparo.findIndex((x) => x.viaIA);
   if (primeiroIA >= 0) leiUpdIrPara(primeiroIA);
-  toastMsg(t("lei_upd_ia_aplicado", { a, r }), 5600);
-  leiReg("atualizacao", "parecer da IA aplicado", a + " aceita(s), " + r + " recusada(s)");
+  toastMsg(t("lei_upd_ia_aplicado", { a, r }) + (amb ? " " + t("lei_upd_ia_ambiguas", { n: amb }) : ""), 5600);
+  leiReg("atualizacao", "parecer da IA aplicado", a + " aceita(s), " + r + " recusada(s)" + (amb ? ", " + amb + " ambígua(s)" : ""));
 }
 
 /* FINALIZAR — só aqui algo é gravado, e só os itens aceitos. A base
@@ -9322,6 +9383,11 @@ function leiIniciar() {
     const dg = $("dlgLeiAtualizar");
     if (!dg || !dg.open || $("leiUpdPasso2").hidden) return;
     if ($("dlgLeiUpdPrevia") && $("dlgLeiUpdPrevia").open) return;
+    /* (19.29.1) dentro de uma caixa de texto a seta move o CURSOR: antes ela
+     * trocava de item e levava junto a resposta da IA que estava sendo colada */
+    if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+    const alvo = ev.target || {};
+    if (/^(INPUT|TEXTAREA|SELECT)$/i.test(alvo.tagName || "") || alvo.isContentEditable) return;
     if (ev.key === "ArrowRight") { leiUpdMover(1); ev.preventDefault(); }
     else if (ev.key === "ArrowLeft") { leiUpdMover(-1); ev.preventDefault(); }
   });

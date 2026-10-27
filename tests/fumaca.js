@@ -850,6 +850,7 @@ function rodar(opc) {
     leiUpdAceitar, leiUpdPular, leiUpdIA, leiUpdIAAplicar, leiAtualizarAplicar,
     leiUpdComparoAtual: () => leiUpdComparo, leiUpdIdxAtual: () => leiUpdIdx,
     leiUpdIrPara, leiUpdPularPara, leiUpdPreviaAbrir, leiUpdPreviaNav, leiUpdCheiaTrocar,
+    leiUpdLerParecer, leiUpdChaveRotulo, leiUpdParecerFechar,
     leiPintarEdicaoLivre,
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,

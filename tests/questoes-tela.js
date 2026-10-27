@@ -16,7 +16,7 @@ const { rodar } = require("./fumaca.js");
 async function testes() {
   const falhas = [];
   const ok = (c, m) => { if (!c) falhas.push(m); };
-  const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8").replace(/\r\n/g, "\n"); /* a cópia de trabalho no Windows pode estar em CRLF */
 
   const montar = () => {
     const { api } = rodar();

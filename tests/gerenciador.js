@@ -1405,7 +1405,7 @@ async function testes() {
 
   /* ---- G13: no app ---- */
   {
-    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8").replace(/\r\n/g, "\n"); /* a cópia de trabalho no Windows pode estar em CRLF */
     const sw = fs.readFileSync(path.join(__dirname, "..", "docs", "sw.js"), "utf8");
     ok(/<script src="gerenciador\.js"><\/script>/.test(html) && /id="btnGerCartoes"/.test(html) && /id="dlgGerCartoes"/.test(html), "G13 falta o script, o botao ou a janela no index.html");
     ok(/"gerenciador\.js"/.test(sw), "G13a o modulo nao esta no cache offline");

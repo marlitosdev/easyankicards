@@ -437,9 +437,14 @@ async function testes() {
       "P4 o placeholder tambem nao fica em branco: " + JSON.stringify(api.$("leiUpdExplica").placeholder));
 
     /* o que a pessoa cola ali acompanha a decisao, sem entrar no texto do artigo */
-    api.$("leiUpdExplica").value = "A IA explicou que isso so' acrescenta um paragrafo novo.";
-    api.leiUpdAceitar();
-    ok(api.leiUpdComparoAtual()[0].explicacao === "A IA explicou que isso so' acrescenta um paragrafo novo.", "P5 a explicacao colada fica presa a decisao do item");
+    /* (19.29.1) a caixa é o PARECER de todas as pendentes: o motivo chega pela
+     * linha do item ("rótulo — ACEITAR — motivo"); aceitar à mão não copia a caixa */
+    api.$("leiUpdExplica").value = (item0.rotulo || "Art. " + item0.numCru)
+      + " — ACEITAR — A IA explicou que isso so' acrescenta um paragrafo novo.";
+    api.leiUpdIAAplicar();
+    ok(api.leiUpdComparoAtual()[0].aceito === true
+      && api.leiUpdComparoAtual()[0].explicacao === "A IA explicou que isso so' acrescenta um paragrafo novo.",
+      "P5 o motivo do parecer fica preso a decisao do item: " + JSON.stringify(api.leiUpdComparoAtual()[0].explicacao));
     ok(!/A IA explicou/.test(api.leiUpdComparoAtual()[0].novo), "P5a a explicacao NAO entra no texto proposto do artigo (nao muda a lei)");
     api.leiAtualizarAplicar();
     const dr = api.decLer().filter((x) => x.area === "versao")[0];

@@ -1503,6 +1503,176 @@ async function testes() {
        "U27i o motivo não chegou ao artigo efetivo (nota de estudo)");
   }
 
+  /* ---- U28 (19.29.1): o PARECER DA IA não decide o artigo errado nem grava
+   * nota errada. Casos achados na revisão da 19.29.0: o "art. 35" citado no
+   * motivo do 116 recusava o 35; "35-A" casava com o 35; mover o cursor com
+   * a seta trocava de item e apagava a resposta colada; aceitar à mão gravava
+   * o parecer inteiro (ou a recusa da IA) como nota de estudo. ---- */
+  {
+    const fimL = "Art. 115. Esta lei entrará em vigor em 1º de janeiro de 1964.";
+    const abrirCmp = (novo) => {
+      const { api } = rodar();
+      preparar(api, "Direito Financeiro", "Receita pública");
+      api.leiAbrir("Direito Financeiro", "Receita pública");
+      api.$("leiTexto").value = L4320;
+      api.leiGravar();
+      api.leiAtualizarAbrir();
+      api.$("leiUpdFonte").value = "EC 9/2024";
+      api.$("leiUpdTexto").value = novo;
+      api.leiAtualizarComparar();
+      return api;
+    };
+    const muda35 = (s) => s.replace("Art. 35. Pertencem ao exercício financeiro:",
+      "Art. 35. Pertencem ao exercício financeiro (redação dada pela EC 9):");
+    const com116 = muda35(L4320).replace(fimL, fimL + "\n\nArt. 116. Artigo acrescentado por lei posterior.");
+    const com35A = muda35(L4320).replace(fimL, "Art. 35-A. Artigo acrescentado por lei posterior.\n\n" + fimL);
+    const st = (api) => api.leiUpdComparoAtual().map((x) => (x.aceito ? "A" : x.recusado ? "R" : "-")).join("");
+
+    /* leitura pura do parecer */
+    const { api: api0 } = rodar();
+    const api0Chave = api0.leiUpdChaveRotulo, api0Ler = api0.leiUpdLerParecer;
+    ok(api0Chave("Art. 35-A") === "35a" && api0Chave("art 35 A") === "35a" && api0Chave("Art. 1º") === "1"
+       && api0Chave("Art. 35") !== api0Chave("Art. 35-A"), "U28a chave do rótulo: 35 e 35-A diferentes, variações iguais");
+    const lp = api0Ler("1) **Art. 35** — ACEITAR — redação nova\nArt. 116: RECUSAR, não confere\n"
+      + "Art. 9º — ACEITO? Não: RECUSAR — a EC não mexe nele\nobservação solta sem decisão");
+    ok(lp.length === 3 && lp[0].chave === "35" && lp[0].dec === "a" && lp[0].motivo === "redação nova"
+       && lp[1].chave === "116" && lp[1].dec === "r" && /não confere/.test(lp[1].motivo)
+       && lp[2].dec === "?", "U28b parecer lido (lista, negrito, dois-pontos, ambígua): " + JSON.stringify(lp));
+
+    /* S1: o número citado no MOTIVO de outro item não decide */
+    {
+      const api = abrirCmp(com116);
+      api.leiUpdIA();
+      api.$("leiUpdExplica").value = "Art. 116 — RECUSAR — repete o que já está no art. 35\nArt. 35 — ACEITAR — redação nova";
+      api.leiUpdIAAplicar();
+      ok(st(api) === "AR", "U28c o art. 35 citado no motivo do 116 decidiu o 35: " + st(api));
+      ok(api.leiUpdComparoAtual()[0].explicacao === "redação nova",
+         "U28d a nota guarda só o motivo, sem rótulo nem decisão: " + api.leiUpdComparoAtual()[0].explicacao);
+    }
+    /* S2: 35-A não casa com 35 */
+    {
+      const api = abrirCmp(com35A);
+      api.leiUpdIA();
+      api.$("leiUpdExplica").value = "Art. 35-A — RECUSAR — não confere com a base\nArt. 35 — ACEITAR — ok";
+      api.leiUpdIAAplicar();
+      ok(st(api) === "AR", "U28e 35-A decidiu o 35 (ou o contrário): " + st(api));
+    }
+    /* ambígua fica sem decisão */
+    {
+      const api = abrirCmp(muda35(L4320));
+      api.leiUpdIA();
+      api.$("leiUpdExplica").value = "Art. 35 — ACEITO? Não: RECUSAR — a EC não altera este artigo";
+      api.leiUpdIAAplicar();
+      ok(st(api) === "-", "U28f decisão ambígua virou decisão: " + st(api));
+    }
+    /* o já decidido à mão não muda, mesmo com o parecer dizendo o contrário */
+    {
+      const api = abrirCmp(com116);
+      api.leiUpdPular(); /* 35 recusado à mão */
+      api.leiUpdIA();
+      ok(!/Art\. 35\b/.test(api.$("leiUpdPrompt").value) && /Art\. 116/.test(api.$("leiUpdPrompt").value),
+         "U28g o pedido à IA leva só as pendentes");
+      api.$("leiUpdExplica").value = "Art. 35 — ACEITAR — ok\nArt. 116 — ACEITAR — ok";
+      api.leiUpdIAAplicar();
+      ok(st(api) === "RA", "U28h o parecer mudou uma decisão já tomada à mão: " + st(api));
+    }
+    /* navegar e as setas não apagam a resposta colada; a seta na caixa move só o cursor */
+    {
+      const api = abrirCmp(com116);
+      api.leiUpdIA();
+      const resp = "Art. 35 — ACEITAR — ok\nArt. 116 — RECUSAR — x";
+      api.$("leiUpdExplica").value = resp;
+      api.docDisparar("keydown", { key: "ArrowRight", target: api.$("leiUpdExplica"), preventDefault() {} });
+      ok(api.leiUpdIdxAtual() === 0, "U28i a seta dentro da caixa de texto trocou de item");
+      api.docDisparar("keydown", { key: "ArrowRight", target: api.$("leiUpdItem"), preventDefault() {} });
+      ok(api.leiUpdIdxAtual() === 1, "U28j a seta fora das caixas deixou de navegar");
+      api.docDisparar("keydown", { key: "ArrowLeft", shiftKey: true, target: api.$("leiUpdItem"), preventDefault() {} });
+      ok(api.leiUpdIdxAtual() === 1, "U28j2 shift+seta (selecionar texto) navegou");
+      api.leiUpdIrPara(0);
+      ok(api.$("leiUpdExplica").hidden === false && api.$("leiUpdExplica").value === resp && api.$("leiUpdPrompt").hidden === false,
+         "U28k navegar escondeu ou apagou a resposta colada");
+      /* uma comparação NOVA começa com a caixa limpa */
+      api.leiAtualizarAbrir();
+      api.$("leiUpdFonte").value = "EC 10/2024";
+      api.$("leiUpdTexto").value = com116;
+      ok(api.leiAtualizarComparar() === true, "U28l0 a segunda comparação não abriu");
+      ok(api.$("leiUpdExplica").hidden === true && api.$("leiUpdExplica").value === "", "U28l a caixa do parecer não fecha");
+    }
+    /* aceitar à mão: não copia a caixa; contrariar a IA tira o motivo dela e o selo */
+    {
+      const api = abrirCmp(com116);
+      api.leiUpdIA();
+      api.$("leiUpdExplica").value = "Art. 35 — ACEITAR — ok\nArt. 116 — RECUSAR — x";
+      api.leiUpdAceitar(); /* antes de aplicar o parecer */
+      ok(!api.leiUpdComparoAtual()[0].explicacao, "U28m aceitar à mão gravou o parecer colado como nota do artigo");
+    }
+    {
+      const api = abrirCmp(com116);
+      api.leiUpdIA();
+      api.$("leiUpdExplica").value = "Art. 35 — ACEITAR — redação nova\nArt. 116 — RECUSAR — texto não confere com a base";
+      api.leiUpdIAAplicar();
+      api.leiUpdIrPara(1);
+      api.leiUpdAceitar(); /* a pessoa discorda da recusa */
+      const c = api.leiUpdComparoAtual();
+      ok(c[1].aceito && !c[1].viaIA && !c[1].explicacao, "U28n aceitar à mão o que a IA recusou manteve o motivo da recusa ou o selo: "
+         + JSON.stringify({ via: c[1].viaIA, ex: c[1].explicacao }));
+      api.leiUpdIrPara(0);
+      api.leiUpdAceitar(); /* confirma o aceite da IA */
+      ok(c[0].aceito && !c[0].viaIA && c[0].explicacao === "redação nova", "U28o confirmar o aceite da IA perdeu o motivo ou manteve o selo");
+      /* FINALIZAR pergunta antes de gravar; "não" não grava */
+      const conduzir = async (promessa, resp) => {
+        const msgs = []; let pronto = false;
+        Promise.resolve(promessa).then(() => { pronto = true; }, () => { pronto = true; });
+        for (let i = 0; i < 80 && !pronto; i++) {
+          await new Promise((r) => setImmediate(r));
+          const m = api.$("uiModalMsg") ? api.$("uiModalMsg").textContent : "";
+          if (m && msgs[msgs.length - 1] !== m) msgs.push(m);
+          try { api._uiFechar(resp); } catch (e) {}
+          if (api.$("uiModalMsg")) api.$("uiModalMsg").textContent = "";
+        }
+        await promessa;
+        return msgs;
+      };
+      const m1 = await conduzir(api.$("btnLeiUpdFinalizar").onclick(), false);
+      ok(/2 itens ACEITOS/.test(m1.join(" ")) && !(api.leisLista()[0].alteracoes || {})["35"],
+         "U28p finalizar não perguntou ou gravou com 'não': " + m1.join(" | "));
+      await conduzir(api.$("btnLeiUpdFinalizar").onclick(), true);
+      const lei = api.leisLista()[0];
+      ok(((lei.alteracoes || {})["35"] || {}).explicacao === "redação nova" && !((lei.alteracoes || {})["116"] || {}).explicacao,
+         "U28q nota gravada errada: " + JSON.stringify(lei.alteracoes && Object.keys(lei.alteracoes).map((k) => k + ":" + lei.alteracoes[k].explicacao)));
+      /* a nota aparece embaixo do artigo na leitura */
+      api.leiTrocarModo("ler");
+      const notas = api.$("leiLeitura").querySelectorAll(".lei-nota-explica");
+      ok(notas.length === 1 && /redação nova/.test(notas[0].textContent), "U28r a nota 'por que mudou' não aparece na leitura");
+    }
+    /* "próxima com atenção" pula os seguros; o corte avisado à IA; tela cheia */
+    {
+      const api = abrirCmp(com116);
+      const c = api.leiUpdComparoAtual();
+      c[0].seguro = true; c[1].seguro = false;
+      api.leiUpdIrPara(1);
+      api.leiUpdPularPara("atencao");
+      ok(api.leiUpdIdxAtual() === 1, "U28s 'próxima com atenção' parou num item seguro");
+      c[0].novo = "Art. 35. " + "palavra ".repeat(200) + "FIM";
+      api.leiUpdIA();
+      ok(/cortado — \d+ caracteres no total/.test(api.$("leiUpdPrompt").value) && /não recuse só por estarem incompletos/.test(api.$("leiUpdPrompt").value),
+         "U28t o corte do texto não é dito à IA");
+      api.leiUpdCheiaTrocar(true);
+      ok(api.$("dlgLeiAtualizar").classList.contains("lei-upd-cheia"), "U28u a tela cheia não liga");
+      api.leiUpdCheiaTrocar(false);
+      ok(!api.$("dlgLeiAtualizar").classList.contains("lei-upd-cheia"), "U28u2 a tela cheia não desliga");
+    }
+    /* prévia: revogado "consta no texto" aparece como revogação */
+    {
+      const api = abrirCmp(com116);
+      const c = api.leiUpdComparoAtual();
+      c[0].tipo = "revogado_texto"; c[0].aceito = true;
+      api.leiUpdPreviaAbrir();
+      const art = api.$("leiUpdPrevCorpo").children[0];
+      ok(art && /\brev\b/.test(art.className), "U28v revogação 'consta no texto' aparece como mudança na prévia");
+    }
+  }
+
   /* ---- U25: a edição livre do texto inteiro só existe ANTES da
    * primeira gravação — depois disso "editar" vira só leitura, e a
    * marcação (que grava por outro caminho, direto no valor do campo)
