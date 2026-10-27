@@ -51,6 +51,7 @@ function plItemConta(i) {
     semana: i.semana === undefined ? null : i.semana,
     estado: i.estado || "",
     ehRevisao: !!i.ehRevisao,
+    andamento: !!i.andamento,
     fatiaDisc: i.fatiaDisc == null ? null : i.fatiaDisc,
     fase2: !!i.fase2,
   };
@@ -319,7 +320,7 @@ function plRelatorio(plano, r, diario, banco, cfg) {
     L.push([c.ordem, "r" + c.rodada, c.disciplina, c.topico,
             c.pesoDisc + "x" + c.pesoTop + "=" + c.bruto,
             c.prioridade, c.faixa, c.minutos + "min"
-            + (c.ehRevisao ? " (revisao)" : "")].join(" | "));
+            + (c.ehRevisao ? " (revisao)" : "") + (c.andamento ? " (em andamento)" : "")].join(" | "));
   });
   L.push("");
 

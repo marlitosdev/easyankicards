@@ -271,11 +271,8 @@ function hubPintarAgenda() {
    * com prova em 20 dias (urgencia 2) aparece com o dobro da densidade
    * de um com prova em um ano, sem que nenhum dos dois deixe de
    * intercalar as proprias disciplinas. */
-  linhas.sort((a, b) =>
-    (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0)
-    || ((a.ordemFila || 999) / (a.urgencia || 1))
-       - ((b.ordemFila || 999) / (b.urgencia || 1))
-    || b.ordem - a.ordem);
+  /* (v19.28.0) o tópico EM ANDAMENTO (começado e não registrado) vem antes até das revisões: terminar o que começou */
+  linhas.sort(hubOrdemAgenda);
 
   /* TIRADOS DA AGENDA: adiados com prazo em aberto e dispensados.
    * Some daqui, não do plano: o que sai por tempo volta sozinho quando o
@@ -449,6 +446,15 @@ function hubPintarAgenda() {
     cx.append(b);
   }
   box.append(cx);
+}
+
+/* a ordem das linhas da agenda: em andamento → revisão → posição no rodízio (dividida pela urgência) → peso */
+function hubOrdemAgenda(a, b) {
+  return (b.andamento ? 1 : 0) - (a.andamento ? 1 : 0)
+    || (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0)
+    || ((a.ordemFila || 999) / (a.urgencia || 1))
+       - ((b.ordemFila || 999) / (b.urgencia || 1))
+    || b.ordem - a.ordem;
 }
 
 /* Um só lugar mostra a semana. Quando a pessoa está dentro de um edital,

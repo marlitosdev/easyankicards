@@ -1411,8 +1411,13 @@ function montarPlano(r, opcoes) {
    * disciplina e entre as rodadas, mas a semana sai misturada. */
   /* a fila ordena pelo brutoOrdem — o peso da prova JÁ multiplicado pela
    * sua dificuldade. É o único lugar onde o seu julgamento manda. */
+  /* (v19.28.0) o que você COMEÇOU e não terminou vem primeiro na disciplina — ver edAndamentoPorTopico */
+  const anda = o.andamento !== undefined ? (o.andamento || {})
+    : edAndamentoPorTopico(typeof qhLerGravado === "function" ? qhLerGravado() : (typeof qhTodos === "function" ? qhTodos() : []), typeof rlsLerTudo === "function" ? rlsLerTudo() : {}, o.hoje,
+      (typeof edDiario !== "undefined" && edDiario) || []);
+  pendentes.forEach((i) => { const a = anda[i.topicoChave]; if (a) i.andamento = a; });
   const bruta = revVencidas.concat(pendentes)
-    .sort((a, b) => (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
+    .sort((a, b) => ((b.andamento ? 1 : 0) - (a.andamento ? 1 : 0)) || (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
   const porDisc = new Map();
   bruta.forEach((i) => {
     if (!porDisc.has(i.disciplina)) porDisc.set(i.disciplina, []);
@@ -2012,6 +2017,57 @@ const REV_DIAS = 7;    /* a 1ª revisão de um tópico "normal": 7 dias depois d
  * cada revisão empurra a próxima um degrau: 7, 15, 30, 60, 90 dias. O "Como foi?" (ou o acerto medido, S2) muda o degrau:
  * difícil volta um degrau (3, 7, 15…), fácil avança um (15, 30, 60…). nRev = quantas revisões já foram feitas (0 = só
  * estudado). Uma revisão sem data (dado antigo) não volta sozinha: ninguém sabe quando foi. */
+/* =====================================================================
+ * TÓPICO EM ANDAMENTO (v19.28.0)
+ *
+ * O RELATO (27/10): "uma disciplina desapareceu da agenda. Estava fazendo questões ontem mas não terminei. Também li
+ * parte do resumo. Hoje não apareceu e tem duas revisões do lugar dela." Era "Administração tributária municipal":
+ * 4 de 35 questões numa rodada aberta e 7 seções do resumo lidas em 25 e 26/10 — mas nada no diário. Para o plano o
+ * tópico continuava "nunca estudado"; de manhã venceram duas revisões da mesma disciplina, que passam à frente de
+ * assunto novo de peso igual, e ele caiu para a 3ª rodada (fora da lista curta da agenda).
+ *
+ * Em andamento = tópico AINDA NÃO REGISTRADO como estudado com atividade no app nos últimos ED_ANDAMENTO_DIAS dias:
+ * questões respondidas numa rodada do tópico (histórico de questões) ou seções do resumo marcadas como lidas — e sem
+ * registro no diário daquele dia em diante.
+ * Ele vai à frente na disciplina dele (antes das revisões) e no topo da agenda: terminar o que começou. Registrar o
+ * estudo tira o selo (o tópico passa a "feito"). Pura: recebe o histórico e as marcas.
+ * ===================================================================== */
+const ED_ANDAMENTO_DIAS = 7;
+function edAndamentoPorTopico(hist, lidas, hoje, diario) {
+  const agora = hoje ? new Date(String(hoje).length === 10 ? hoje + "T23:59:59" : hoje).getTime() : Date.now();
+  const limite = agora - ED_ANDAMENTO_DIAS * 86400000;
+  const quando = (s) => { const t = new Date(String(s || "").length === 10 ? s + "T12:00:00" : s).getTime(); return isNaN(t) ? null : t; };
+  const out = {};
+  const de = (k) => (out[k] = out[k] || { qFeitas: 0, qTotal: 0, secoes: 0, ultimo: "" });
+  (hist || []).forEach((b) => {
+    const k = String((b.filtro && b.filtro.chave) || (/^topico:/.test(b.escopo || "") ? b.escopo.slice(7) : "")).toLowerCase();
+    const t = quando(b.q);
+    if (!k || t === null || t < limite || t > agora || !(Number(b.feitas) > 0)) return;
+    const a = de(k);
+    if (!a.qEm || t > a.qEm) { a.qEm = t; a.qFeitas = Number(b.feitas) || 0; a.qTotal = Number(b.total) || 0; a.qAberta = !b.fim; }
+    if (!a.ultimo || b.q > a.ultimo) a.ultimo = String(b.q).slice(0, 10);
+  });
+  Object.keys(lidas || {}).forEach((k0) => {
+    const k = String(k0).toLowerCase();
+    const secs = lidas[k0] || {};
+    Object.keys(secs).forEach((s) => {
+      const t = quando(secs[s] && secs[s].em);
+      if (t === null || t < limite || t > agora) return;
+      const a = de(k);
+      a.secoes++;
+      if (!a.ultimo || secs[s].em > a.ultimo) a.ultimo = String(secs[s].em).slice(0, 10);
+    });
+  });
+  Object.keys(out).forEach((k) => { delete out[k].qEm; });
+  /* REGISTRADO NO DIÁRIO NO DIA DA ATIVIDADE OU DEPOIS: já foi resolvido pela pessoa (ex.: "Lançamento", 20/20 questões
+   * e registro no mesmo 20/10, com ramos deixados para depois) — não é "em andamento" */
+  (diario || []).forEach((x) => {
+    const k = String(x && x.c || "").toLowerCase();
+    if (out[k] && x.d && String(x.d).slice(0, 10) >= out[k].ultimo) delete out[k];
+  });
+  return out;
+}
+
 const REV_PASSOS = [3, 7, 15, 30, 60, 90];
 function edNivelDoFator(f) { const n = Number(f); return n > 1 ? "alta" : n > 0 && n < 1 ? "baixa" : "media"; }
 function edIntervaloRevisao(nRev, nivel) {

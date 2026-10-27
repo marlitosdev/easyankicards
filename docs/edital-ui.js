@@ -689,6 +689,17 @@ function edLinhaTopico(i, semDisciplina) {
     selo.title = t("ed_selo_revisao_ajuda");
     nome.append(selo);
   }
+  /* (v19.28.0) EM ANDAMENTO: começado nos últimos dias e ainda não registrado — o que já foi feito, para continuar */
+  if (i.andamento) {
+    const selo = document.createElement("span");
+    selo.className = "ed-selo-andamento";
+    const pr = [];
+    if (i.andamento.qFeitas) pr.push(t("ed_andamento_q", { f: i.andamento.qFeitas, t: i.andamento.qTotal || "?" }));
+    if (i.andamento.secoes) pr.push(t("ed_andamento_s", { n: i.andamento.secoes }));
+    selo.textContent = t("ed_selo_andamento") + (pr.length ? " · " + pr.join(" · ") : "");
+    selo.title = t("ed_selo_andamento_ajuda");
+    nome.append(selo);
+  }
   /* O SELO DO NÍVEL. Sem ele, a dificuldade mexeria na ordem da agenda
    * sem nada na tela explicando por quê — e ordem que muda sozinha é
    * ordem em que ninguém confia. Vencida aparece riscada: continua à

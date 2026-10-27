@@ -45,6 +45,10 @@ function qhGravar(gravar) {
 }
 
 function qhTodos() { return qhLista; }
+/* (v19.28.0) lê o histórico gravado SEM mexer na lista do módulo (o plano precisa dele antes de a aba de questões abrir) */
+function qhLerGravado() {
+  try { const v = JSON.parse(localStorage.getItem(QH_CHAVE) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
 
 function qhNovoId() {
   return "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
