@@ -2655,6 +2655,95 @@ async function testes() {
     }
   }
 
+  /* ---- G37: o player da Biblioteca — exibição mais clara (Sequência × Agendado), mover para outro
+   * tópico direto do cartão, e sem perder o editar/apagar/melhorar/criar que já existiam (v17.46.0) ---- */
+  {
+    const { a, iss, iptu } = montar();
+    a.estcModoForcar("agendado");
+    a.gerAbrirNoTopico("Trib", "ISS", { estudar: true });
+    ok(a.$("dlgGerEstudo").open === true && a.$("dlgGerCartoes").open === true, "G37 abre a biblioteca com o player por cima");
+
+    a.estcMenuMontar();
+    let disp = achar(a.$("estMenu"), (e) => cls(e, "est-menu-disp"))[0];
+    ok(!!disp, "G37a existe o grupo de exibição no menu");
+    let opts = Array.from(disp.children);
+    ok(opts.length === 2 && opts[0].textContent === a.t("est_m_seq") && opts[1].textContent === a.t("est_m_agd"),
+      "G37b Sequência e Agendado lado a lado: " + opts.map((o) => o.textContent).join(" | "));
+    ok(cls(opts[1], "ativa") && !cls(opts[0], "ativa"), "G37c o modo atual (agendado) vem destacado, não um rótulo só");
+    opts[0].onclick();
+    ok(a.estcModoAtual() === "sequencia", "G37d tocar em 'Sequência' troca o modo sem precisar ler o rótulo do outro");
+    a.estcMenuMontar();
+    disp = achar(a.$("estMenu"), (e) => cls(e, "est-menu-disp"))[0];
+    opts = Array.from(disp.children);
+    ok(cls(opts[0], "ativa") && !cls(opts[1], "ativa"), "G37e o destaque troca de lado com o modo");
+    opts[1].onclick();
+    ok(a.estcModoAtual() === "agendado", "G37f volta a agendado para o resto do teste");
+
+    /* a reorganização não tirou nada do menu, nem tornou indireto o que outros testes acham como
+     * filho direto de #estMenu (tests/questoes-ui.js K1e) */
+    a.estcMenuMontar();
+    const diretos = Array.from(a.$("estMenu").children).map((b) => b.textContent);
+    ["est_m_editar", "est_m_mover", "est_m_apagar", "est_m_melhorar", "est_m_criar"].forEach((k) => {
+      ok(diretos.indexOf(a.t(k)) >= 0, "G37g " + k + " continua filho direto do menu: " + diretos.join(" | "));
+    });
+
+    /* mover para outro tópico, direto do cartão que está sendo estudado */
+    const issAntes = a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iss } }).length;
+    const iptuAntes = a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iptu } }).length;
+    const itMover = Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_mover"));
+    ok(!!itMover, "G37h o menu oferece mover para outro tópico");
+    itMover.onclick();
+    ok(a.$("dlgGerEstudo").open === false && a.$("dlgGerDestino").open === true && a.$("gerDestTit").textContent === a.t("ger_dest_tit_1"),
+      "G37i mover fecha o player (como editar) e abre o destino só com este cartão: " + a.$("gerDestTit").textContent);
+    const destIptu = achar(a.$("gerDestLista"), (e) => cls(e, "ger-dest-item")).find((b) => /IPTU/.test(b.textContent));
+    ok(!!destIptu, "G37j o IPTU aparece como destino");
+    await conduzir(a, destIptu.onclick());
+    ok(a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iss } }).length === issAntes - 1
+      && a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iptu } }).length === iptuAntes + 1,
+      "G37k o cartão saiu do ISS e foi para o IPTU");
+  }
+
+  /* ---- G38: desfazer a última nota (uma vez só) e o aviso de cartão difícil ("leech") (v17.46.0) ---- */
+  {
+    const { a } = montar();
+    a.estcModoForcar("agendado");
+    a.gerAbrirNoTopico("Trib", "ISS", { estudar: true });
+    ok(a.estcAtual().rev === false, "G38 abre virado para a frente, sem resposta");
+    a.estcVirar();
+    ok(a.estcAtual().rev === true, "G38a virar mostra a resposta e libera notar");
+    const uid = a.estcAtual().un[a.estcAtual().i].id;
+    const novosAntes = a.estcDiaAtual().novos || 0;
+    ok(!a.estcRegsAtual()[uid], "G38b premissa: cartão novo, sem registro ainda");
+
+    a.estcNota(3); /* "Bom" */
+    ok(!!a.estcRegsAtual()[uid], "G38c notar grava o registro do cartão");
+    ok((a.estcDiaAtual().novos || 0) === novosAntes + 1, "G38d contou como um novo cartão visto hoje");
+    ok(!!a.estcUltimaAtual() && a.estcUltimaAtual().id === uid, "G38e guarda o que precisa para desfazer");
+
+    a.estcMenuMontar();
+    const itDesfazer = Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_desfazer"));
+    ok(!!itDesfazer, "G38f com uma nota recente, o menu oferece desfazer");
+    itDesfazer.onclick();
+    ok(!a.estcRegsAtual()[uid], "G38g desfazer tira o registro de um cartão que era novo");
+    ok((a.estcDiaAtual().novos || 0) === novosAntes, "G38h desfazer devolve a contagem de novos do dia");
+    ok(a.estcAtual().i >= 0 && a.estcAtual().un[a.estcAtual().i].id === uid && a.estcAtual().rev === true,
+      "G38i desfazer mostra de novo o mesmo cartão, já virado, pronto para notar outra vez");
+    ok(!a.estcUltimaAtual(), "G38j só dá para desfazer uma vez (não acumula)");
+    a.estcMenuMontar();
+    ok(Array.from(a.$("estMenu").children).every((b) => b.textContent !== a.t("est_m_desfazer")),
+      "G38k sem nota recente para desfazer, o item some do menu");
+
+    /* o aviso de cartão difícil ("leech"): a partir de ESTC_LEECH_LIMIAR lapsos, aparece junto do cartão */
+    const regs = a.estcRegsAtual();
+    regs[uid] = { s: "review", st: 0, iv: 4, ez: 2.5, due: Date.now() - 1000, n: 9, l: a.ESTC_LEECH_LIMIAR, h: [] };
+    a.estcPintar();
+    const aviso = achar(a.$("estCartao"), (e) => cls(e, "est-leech"))[0];
+    ok(!!aviso && aviso.textContent === a.t("est_leech", { n: a.ESTC_LEECH_LIMIAR }), "G38l o aviso de cartão difícil aparece com o número de vezes: " + (aviso && aviso.textContent));
+    regs[uid].l = a.ESTC_LEECH_LIMIAR - 1;
+    a.estcPintar();
+    ok(achar(a.$("estCartao"), (e) => cls(e, "est-leech")).length === 0, "G38m abaixo do limiar, o aviso não aparece");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

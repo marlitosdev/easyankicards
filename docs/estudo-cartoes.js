@@ -19,6 +19,10 @@ let estcUn = [], estcI = 0, estcRev = false, estcEsc = -1, estcSaiba = false, es
 /* MODO: "agendado" (De novo · Difícil · Bom · Fácil, com o agendador do Anki) ou "sequencia" (passar pela lista sem agenda) */
 const ESTC_CH_MODO = "eac_est_modo", ESTC_CH_REGS = "eac_cartao_estudo", ESTC_CH_DIA = "eac_cartao_estudo_dia", ESTC_CH_NOVOS = "eac_est_novos_dia";
 let estcModo = "agendado", estcRegs = {}, estcDia = { d: "", novos: 0 }, estcFila = null;
+/* a última nota dada no modo agendado, para dar para desfazer (uma vez só — v17.46.0) */
+let estcUltima = null;
+/* a partir de quantos "De novo" em revisão (lapsos) o cartão é avisado como difícil ("leech", no jeito do Anki) */
+const ESTC_LEECH_LIMIAR = 8;
 
 const ESTC_DICAS = {
   btnEstX: "est_tip_x", btnEstMais: "est_tip_mais", btnEstAnt: "est_tip_ant", btnEstProx: "est_tip_prox",
@@ -140,6 +144,8 @@ function estcPintar() {
   const onde = [u.nota.disciplina, u.nota.topico].filter(Boolean).join(" › ");
   $("estOnde").textContent = onde + (u.de > 1 ? " · " + t("est_lacuna", { n: u.cn, t: u.de }) : "");
   cx.append(gerEl("div", "est-cab", (c.titulo || "").trim() || u.nota.topico || u.nota.disciplina || ""));
+  const reg = estcRegs[u.id];
+  if (reg && (reg.l || 0) >= ESTC_LEECH_LIMIAR) cx.append(gerEl("div", "est-leech", t("est_leech", { n: reg.l })));
   const frente = gerEl("div", "est-frente");
   if (c.kind === "mc") {
     frente.append(gerEl("div", "est-txt", estcTxt(c.front)));
@@ -253,10 +259,27 @@ function estcNota(n) {
   const u = estcUn[estcI];
   if (!u) return;
   const antes = estcRegs[u.id];
+  estcUltima = { id: u.id, antes, diaNovosAntes: estcDia.novos || 0, esc: estcEsc };
   if (!antes) estcDia.novos = (estcDia.novos || 0) + 1;
   estcRegs[u.id] = agdResponder(antes, n, Date.now());
   estcSalvarAgenda();
   estcProxima();
+  estcPintar();
+}
+
+/* desfaz a última nota dada (uma vez só): devolve o cartão ao estado de antes e mostra-o de novo,
+ * virado, pronto para notar outra vez — para o toque errado em "De novo"/"Fácil" não ficar valendo. */
+function estcDesfazerNota() {
+  if (!estcUltima) return;
+  const { id, antes, diaNovosAntes, esc } = estcUltima;
+  estcUltima = null;
+  if (antes) estcRegs[id] = antes; else delete estcRegs[id];
+  estcDia.novos = diaNovosAntes;
+  estcSalvarAgenda();
+  const idx = estcUn.findIndex((x) => x.id === id);
+  if (idx < 0) { estcProxima(); estcPintar(); return; }
+  estcFila = agdFila(estcUn, estcRegs, estcDia, Date.now());
+  estcI = idx; estcRev = true; estcEsc = esc >= 0 ? esc : -1; estcSaiba = false;
   estcPintar();
 }
 
@@ -308,6 +331,7 @@ function estcFechar() { const d = $("dlgGerEstudo"); if (d && d.open) d.close();
 /* ao fechar o player, a biblioteca abre no cartão em que a pessoa parou */
 function estcAoFechar() {
   estcMenuFechar();
+  estcUltima = null;
   if (estcDeFora) { estcDeFora = null; return; }
   const u = estcUn[estcI];
   if (u && gerVis[u.pos] !== undefined && gerVis[u.pos] === gerNotas.indexOf(u.nota)) {
@@ -324,6 +348,7 @@ function estcAbrir(opt) {
   const posicoes = marcados || gerVis.map((_, p) => p);
   const lista = posicoes.map((pos) => ({ nota: gerNotas[gerVis[pos]], pos })).filter((x) => x.nota);
   estcDeFora = null;
+  estcUltima = null;
   estcUn = estcUnidades(lista);
   if (!estcUn.length) { uiAlert(t("est_vazio")); return false; }
   const puro = !marcados && gerPasta && gerPasta.chave && !gerPasta.ramo && !$("gerBusca").value && $("gerFiltro").value === "todos";
@@ -350,6 +375,7 @@ function estcAbrirLista(notas, opc) {
   estcUn = estcUnidades(lista);
   if (!estcUn.length) { uiAlert(t("est_vazio")); return false; }
   estcDeFora = { rotulo: o.rotulo || "" };
+  estcUltima = null;
   estcChave = "";
   estcI = 0;
   estcRev = false; estcEsc = -1; estcSaiba = false;
@@ -380,10 +406,25 @@ function estcMenuMontar() {
   const u = estcUn[estcI];
   if (!u) return;
   const item = (rot, fn) => { const b = gerEl("button", "est-menu-i", rot); b.type = "button"; b.onclick = () => { estcMenuFechar(); fn(); }; m.append(b); };
-  item(t(estcModo === "agendado" ? "est_m_modo_seq" : "est_m_modo_agd"), () => estcTrocarModo(estcModo === "agendado" ? "sequencia" : "agendado"));
+
+  /* exibição: Sequência × Agendado lado a lado, com o modo atual destacado — mais claro do que um único
+   * botão cujo rótulo muda (v17.46.0); a dica de cada lado mantém a frase completa de sempre */
+  const disp = gerEl("div", "est-menu-disp");
+  const optModo = (modo, rot, dica) => {
+    const b = gerEl("button", "est-menu-opt" + (estcModo === modo ? " ativa" : ""), rot);
+    b.type = "button"; b.title = dica;
+    b.onclick = () => { estcMenuFechar(); if (estcModo !== modo) estcTrocarModo(modo); };
+    return b;
+  };
+  disp.append(optModo("sequencia", t("est_m_seq"), t("est_m_modo_seq")), optModo("agendado", t("est_m_agd"), t("est_m_modo_agd")));
+  m.append(disp);
   if (estcModo === "agendado") item(t("est_m_novos", { n: AGD.novosDia }), estcMudarNovos);
+  m.append(gerEl("div", "est-menu-div"));
+
+  if (estcModo === "agendado" && estcUltima) item(t("est_m_desfazer"), estcDesfazerNota);
   if (!estcDeFora) {
     item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
+    item(t("est_m_mover"), () => { estcFechar(); gerFoco = u.pos; gerDestAbrir([u.nota]); });
     item(t("est_m_apagar"), estcApagar);
   }
   item(t("est_m_melhorar"), () => { estcFechar(); const pasta = typeof gerPasta !== "undefined" ? gerPasta : null; $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota], volta: { pasta } }); });
@@ -409,6 +450,7 @@ async function estcApagar() {
   const antes = gerNotas.length;
   await gerAcaoApagar([u.nota]);
   if (gerNotas.length === antes) return;           /* recusou a confirmação: nada mudou */
+  estcUltima = null;                                /* a lista mudou: a nota desfeita podia ser deste cartão */
   /* refaz a fila com o que a lista tem agora, no mesmo ponto */
   const lista = gerVis.map((idx, pos) => ({ nota: gerNotas[idx], pos }));
   estcUn = estcUnidades(lista);
