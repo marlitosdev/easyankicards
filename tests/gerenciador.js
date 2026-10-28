@@ -2817,6 +2817,32 @@ async function testes() {
     ok(btns.length === 2, "G40b a prévia devia oferecer lei e julgado, como o player: " + btns.length);
   }
 
+  /* ---- G41: a bolha da seleção, junto do trecho — sem precisar rolar até a barra fixa para achar
+   * onde vincular (v19.32.0) ---- */
+  {
+    const { a } = montar();
+    a.gerAbrirNoTopico("Trib", "ISS", { estudar: true });
+    a.estcVirar();
+    ok(a.estcAtual().rev === true, "G41 abriu e virou o cartão");
+    ok(a.$("estBolha").hidden === true, "G41a sem seleção, a bolha começa escondida");
+
+    const noTexto = a.$("estCartao").querySelector(".est-resp") || a.$("estCartao");
+    a.porSelecao(() => ({ rangeCount: 1, isCollapsed: false, anchorNode: noTexto, toString: () => "texto qualquer" }));
+    ok(a.estcBolhaAtualizar() === true, "G41b com uma seleção dentro do cartão, a bolha aparece");
+    ok(a.$("estBolha").hidden === false && a.$("estBolha").querySelectorAll("button").length === 2,
+      "G41c a bolha traz os dois botões, lei e julgado, como a barra fixa");
+
+    a.porSelecao(() => ({ rangeCount: 0, isCollapsed: true, removeAllRanges() {} }));
+    ok(a.estcBolhaAtualizar() === false && a.$("estBolha").hidden === true, "G41d sem seleção, a bolha some");
+
+    /* repintar o cartão (virar de novo, notar) esconde a bolha de antes: o texto por trás dela mudou */
+    a.porSelecao(() => ({ rangeCount: 1, isCollapsed: false, anchorNode: noTexto, toString: () => "texto qualquer" }));
+    a.estcBolhaAtualizar();
+    ok(a.$("estBolha").hidden === false, "G41e premissa: a bolha está visível antes de repintar");
+    a.estcPintar();
+    ok(a.$("estBolha").hidden === true, "G41f repintar o cartão esconde a bolha");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

@@ -1496,7 +1496,7 @@ dialog.lei-upd-cheia #leiUpdItem{flex:1 1 auto;min-height:0;overflow:auto}
 .mat-bolha .marca{margin:0}
 .mat-bolha.mat-bolha-doca{left:8px!important;right:8px;bottom:8px;top:auto!important;max-width:none;justify-content:center}
 .mat-bolha-dica{font-size:12px;color:var(--sutil)}
-#dlgMaterial .mat-bolha:not(.mat-bolha-doca){max-width:min(560px,94vw);width:max-content}
+#dlgMaterial .mat-bolha:not(.mat-bolha-doca),#dlgGerEstudo .mat-bolha:not(.mat-bolha-doca){max-width:min(560px,94vw);width:max-content}
 /* O TOPO EM UMA LINHA (v18.29.0): título à esquerda, ações à direita; "Aa" e "⋯" são menus suspensos */
 #dlgMaterial .mat-cab{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 6px;padding-bottom:6px;border-bottom:1px solid var(--borda)}
 .mat-cab-tit{flex:1 1 220px;min-width:0}
@@ -10324,6 +10324,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <div class="est-menu" id="estMenu" hidden></div>
   <div class="est-cartao" id="estCartao"></div>
+  <!-- A BOLHA DA SELEÇÃO, TAMBÉM NO CARTÃO (v19.32.0): os mesmos botões da barra fixa (citVincBarra), mas
+       junto do trecho selecionado — como no resumo (matBolha) — para quem selecionar algo não ter de
+       rolar até o fim da resposta para achar onde vincular. -->
+  <div class="mat-bolha" id="estBolha" role="toolbar" hidden></div>
   <div class="est-base">
     <button type="button" class="est-virar" id="btnEstVirar"></button>
     <!-- as quatro notas do agendador (aparecem depois de mostrar a resposta): o intervalo de cada uma em cima -->

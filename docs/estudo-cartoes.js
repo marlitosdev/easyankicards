@@ -139,6 +139,8 @@ function estcCitBase(nota) {
 function estcPintar() {
   const cx = $("estCartao");
   cx.innerHTML = "";
+  /* o cartão vai ser redesenhado: a seleção de antes (se houver) não é mais deste texto */
+  try { if ($("estBolha")) $("estBolha").hidden = true; } catch (e) {}
   if (estcModo === "agendado" && estcI < 0) { estcPintarFim(cx); return; }
   const u = estcUn[estcI];
   if (!u) return;
@@ -478,6 +480,68 @@ function estcEstudarTopico(disciplina, topico) {
   return mcEstudarDireto(disciplina, topico);
 }
 
+/* =====================================================================
+ * A BOLHA DA SELEÇÃO, TAMBÉM NO CARTÃO (v19.32.0)
+ *
+ * O relato real: selecionar "art. 130, § 1º, do ADCT" na resposta e tentar vincular não dava em nada visível, e
+ * sem aviso nenhum. Dois motivos se somavam: a barra fixa (citVincBarra) fica depois do "saiba mais", rolada para
+ * fora da vista — e o PRÓPRIO trecho já era um link automático (<button>): arrastar o dedo A PARTIR de um botão
+ * não inicia seleção de texto (o gesto vira "pressionar o botão", não "selecionar" — conferido à mão: a seleção
+ * fica vazia), então às vezes nem chegava a marcar nada, e por isso também não havia o que avisar.
+ *
+ * Esta bolha é a MESMA barra (citVincBarra), só que aparece JUNTO da seleção — como no resumo (matBolhaAtualizar)
+ * — para quem selecionar um trecho AINDA NÃO RECONHECIDO não ter de rolar até o fim da resposta para achar onde
+ * vincular. Some sozinha quando a seleção some. Ela NÃO resolve corrigir uma citação que JÁ é link: para essa, o
+ * caminho de sempre não depende de selecionar nada — tocar no PRÓPRIO link abre a prévia, com "ligar a outro
+ * julgado/lei" ou "desligar" (leiCitaOutro/leiCitaDesligar, jurCitOutro/jurCitDesligar); e a barra fixa também
+ * lista todas as citações do cartão com "este vínculo está errado", sem seleção nenhuma.
+ * ===================================================================== */
+function estcBolhaDoca() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+    return (window.innerWidth || 1000) < 700;
+  } catch (e) { return false; }
+}
+
+function estcBolhaAtualizar(selFake) {
+  const b = $("estBolha");
+  if (!b) return false;
+  let rect = null;
+  try {
+    const dlg = $("dlgGerEstudo");
+    const cx = $("estCartao");
+    const sel = selFake || (typeof window !== "undefined" && window.getSelection ? window.getSelection() : null);
+    if (dlg && dlg.open && estcRev && cx && sel && !sel.isCollapsed && String(sel).trim()
+        && sel.anchorNode && cx.contains && cx.contains(sel.anchorNode)) {
+      rect = sel.rangeCount && sel.getRangeAt ? sel.getRangeAt(0).getBoundingClientRect() : { top: 0, bottom: 0, left: 0, width: 0 };
+    }
+  } catch (e) { rect = null; }
+  const u = estcUn[estcI];
+  if (!rect || !u) { b.hidden = true; return false; }
+  b.innerHTML = "";
+  if (typeof citVincBarra === "function") {
+    const base = estcCitBase(u.nota);
+    const comentario = [estcTxt(u.nota.card.back), u.nota.card.more ? estcTxt(u.nota.card.more) : ""].filter(Boolean).join("\n");
+    const barra = citVincBarra(base, () => $("estCartao"), comentario);
+    if (barra) Array.from(barra.childNodes).forEach((el) => b.append(el));
+  }
+  if (!b.childNodes.length) { b.hidden = true; return false; }
+  b.hidden = false;
+  const doca = estcBolhaDoca();
+  if (b.classList) b.classList.toggle("mat-bolha-doca", doca);
+  if (!doca && b.style) {
+    const alto = (b.offsetHeight || 40), larg = (b.offsetWidth || 320);
+    const jan = (typeof window !== "undefined" && window.innerWidth) || 1000;
+    let topo = rect.top - alto - 8;
+    if (topo < 8) topo = rect.bottom + 8;
+    const esq = Math.max(8, Math.min(rect.left + (rect.width || 0) / 2 - larg / 2, jan - larg - 8));
+    b.style.top = Math.round(topo) + "px";
+    b.style.left = Math.round(esq) + "px";
+  }
+  return true;
+}
+
 if (typeof document !== "undefined" && $("dlgGerEstudo")) {
   $("btnEstX").onclick = estcFechar;
   $("btnEstAnt").onclick = () => estcIr(-1);
@@ -488,6 +552,23 @@ if (typeof document !== "undefined" && $("dlgGerEstudo")) {
   $("btnGerEstudar").onclick = () => estcAbrir({});
   const dlg = $("dlgGerEstudo");
   if (typeof dlg.addEventListener === "function") dlg.addEventListener("close", estcAoFechar);
+  /* a bolha da seleção (v19.32.0): aparece/atualiza com a seleção, some ao fechar o player */
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("selectionchange", () => { try { estcBolhaAtualizar(); } catch (e) {} });
+  }
+  if ($("estCartao") && $("estCartao").addEventListener) {
+    $("estCartao").addEventListener("scroll", () => { try { estcBolhaAtualizar(); } catch (e) {} });
+  }
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("resize", () => { try { estcBolhaAtualizar(); } catch (e) {} });
+  }
+  if (typeof dlg.addEventListener === "function") {
+    dlg.addEventListener("close", () => { if ($("estBolha")) $("estBolha").hidden = true; });
+  }
+  /* apertar um botão da bolha não pode desfazer a seleção que ele vai usar (como na bolha do resumo) */
+  if ($("estBolha") && $("estBolha").addEventListener) {
+    $("estBolha").addEventListener("mousedown", (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); });
+  }
   dlg.onkeydown = (ev) => {
     if (!ev) return;
     const alvo = ev.target && ev.target.tagName;
