@@ -1370,6 +1370,12 @@ function gerPintarPrevia() {
     const base = estcCitBase(n);
     base.aoVoltar = () => { try { if ($("dlgGerCartoes") && $("dlgGerCartoes").open) gerPintarPrevia(); } catch (e) {} };
     try { citLigarEm(cx, base); } catch (e) {}
+    /* corrigir um vínculo errado e ligar à mão o que a leitura automática não achou — a mesma ferramenta das
+     * questões e do resumo, aqui na prévia da Biblioteca (v19.31.0) */
+    if (typeof citVincBarra === "function") {
+      const barra = citVincBarra(base, () => cx, (typeof base.textoTodo === "function" ? base.textoTodo() : ""));
+      if (barra) cx.append(barra);
+    }
   }
   const def = ceDefeitos(n.card);
   const nivel = gerEl("div", "cq-onde");

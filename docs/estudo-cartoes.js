@@ -126,9 +126,13 @@ function estcSaibaMais(cx, more) {
 /* de onde vem o cartão, para a citação saber o tópico (e quais leis ele tem) */
 function estcCitBase(nota) {
   const n = nota || {};
+  const c = n.card || {};
   const bancada = typeof CQ_BANCADA !== "undefined" && n.chave === CQ_BANCADA;
   return { disciplina: bancada ? "" : (n.disciplina || ""), topico: bancada ? "" : (n.topico || ""),
     chave: bancada ? "" : (n.chave || ""), onde: "cartao",
+    /* o texto inteiro do cartão (frente, verso e "saiba mais"), para achar os OUTROS julgados citados nele (como no
+     * resumo, matCitBase) — sem isto o "criar os julgados citados" do cartão nunca achava nenhum */
+    textoTodo: () => [c.front, c.back, c.more].filter(Boolean).map(estcTxt).join("\n"),
     aoVoltar: () => { try { const d = $("dlgGerEstudo"); if (d && d.open) estcPintar(); } catch (e) {} } };
 }
 
@@ -189,10 +193,17 @@ function estcPintar() {
     }
     /* as citações de lei da resposta e do "saiba mais" viram links (só depois de
      * virar: na frente, abrir a lei entregaria a resposta) */
+    const baseCit = estcCitBase(u.nota);
     if (typeof citLigarEm === "function") {
-      const base = estcCitBase(u.nota);
-      try { citLigarEm(verso, base); } catch (e) {}
-      cx.querySelectorAll && cx.querySelectorAll(".est-saiba").forEach((el) => { try { citLigarEm(el, base); } catch (e) {} });
+      try { citLigarEm(verso, baseCit); } catch (e) {}
+      cx.querySelectorAll && cx.querySelectorAll(".est-saiba").forEach((el) => { try { citLigarEm(el, baseCit); } catch (e) {} });
+    }
+    /* corrigir um vínculo errado e ligar à mão o que a leitura automática não achou — a mesma ferramenta das
+     * questões e do resumo, só que sobre o texto deste cartão (v19.31.0) */
+    if (typeof citVincBarra === "function") {
+      const comentario = [estcTxt(c.back), c.more ? estcTxt(c.more) : ""].filter(Boolean).join("\n");
+      const barra = citVincBarra(baseCit, () => cx, comentario);
+      if (barra) cx.append(barra);
     }
   }
   estcPintarBase(u);

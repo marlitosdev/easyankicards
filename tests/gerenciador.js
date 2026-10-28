@@ -2744,6 +2744,79 @@ async function testes() {
     ok(achar(a.$("estCartao"), (e) => cls(e, "est-leech")).length === 0, "G38m abaixo do limiar, o aviso não aparece");
   }
 
+  /* ---- G39: a mesma ferramenta de vínculos (lei e julgado) das questões e do resumo, agora no
+   * cartão — remover/trocar um vínculo e ligar à mão um trecho selecionado (v19.31.0) ---- */
+  {
+    const { api: a } = rodar();
+    a.matIniciar(); a.leiIniciar();
+    const DISC = "Direito Tributário", TOP = "Tributos";
+    const ch = a.matChave(DISC, TOP);
+    a.leiGuardar({ id: "lei_ctn", nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", especie: "Lei", numero: "5.172",
+      texto: "Art. 134. Respondem solidariamente.\nArt. 135. São pessoalmente responsáveis os diretores." });
+    a.leiLigar("lei_ctn", ch);
+    a.leiGuardar({ id: "lei_outra", nome: "Lei 8.212/1991", especie: "Lei", numero: "8.212", texto: "Art. 135. Outra coisa." });
+    a.leiLigar("lei_outra", ch);
+    a.matGravarCartoes(ch, "Quem responde pela dívida? :: Os diretores (art. 135 do CTN), segundo a jurisprudência do STJ. :: x",
+      { disciplina: DISC, topico: TOP });
+    a.gerAbrirNoTopico(DISC, TOP, { estudar: true });
+    a.estcVirar();
+    ok(a.estcAtual().rev === true, "G39 abriu o player e virou o cartão");
+
+    const barraDe = () => a.$("estCartao").querySelectorAll(".cit-vinc-barra")[0];
+    const barra = barraDe();
+    ok(!!barra, "G39a a barra de vínculos apareceu junto da resposta");
+    const btns = Array.from(barra.querySelectorAll("button"));
+    ok(btns.length === 2 && btns[0].textContent === a.t("qs_vinc_btn") && btns[1].textContent === a.t("mat_bolha_jur_ligar"),
+      "G39b os dois botões, lei e julgado, com os rótulos de sempre: " + btns.map((b) => b.textContent).join(" | "));
+
+    /* o botão de lei abre a MESMA janela das questões e do resumo, falando de "cartão" */
+    btns[0].onclick();
+    ok(a.$("dlgQsVinc").open === true && a.$("qsVincTit").textContent === a.t("qs_vinc_titulo_car"),
+      "G39c o botão de lei não abriu a janela certa, com a fala de cartão: " + a.$("qsVincTit").textContent);
+    ok(/art\. 135 do CTN/.test(a.$("qsVincLista").textContent || ""), "G39d a citação do verso não apareceu na lista de vínculos");
+
+    /* "este vínculo está errado" troca a lei de destino — o mesmo corretor das questões/resumo */
+    const errado = a.$("qsVincLista").querySelectorAll("button").find((b) => b.textContent === a.t("qs_vinc_errado"));
+    ok(!!errado, "G39e falta 'este vínculo está errado' na citação do cartão");
+    errado.onclick();
+    ok(a.$("dlgQsVincEsc").open === true, "G39f 'está errado' não abriu a escolha da lei certa");
+    a.$("qsVincLei").value = "lei_outra";
+    a.$("qsVincArts").value = "135";
+    a.$("btnQsVincEscOk").onclick();
+    ok(a.$("dlgGerEstudo").open === true, "G39g corrigir o vínculo fechou o player sem motivo");
+
+    /* o cartão repintou sozinho (aoVoltar), e o link agora é permanente e abre a lei nova */
+    const link = a.$("estCartao").querySelectorAll("button.qs-lei-link-perm")[0];
+    ok(!!link && /Lei 8\.212\/1991/.test(link.title), "G39h o link do cartão não passou a apontar para a lei corrigida: " + (link && link.title));
+    ok(!!barraDe(), "G39i a barra de vínculos continua lá depois de repintar");
+
+    /* o botão de julgado: sem seleção, avisa; com um trecho selecionado, abre a MESMA escolha do resumo */
+    const btnJur = barraDe().querySelectorAll("button")[1];
+    btnJur.onclick();
+    ok(a.$("uiModal").open === true && a.$("uiModalMsg").textContent === a.t("car_vinc_sel_jur_vazio"),
+      "G39j sem seleção, devia avisar para selecionar um trecho primeiro: " + a.$("uiModalMsg").textContent);
+    a._uiFechar(true);
+    const noTexto = a.$("estCartao").querySelector(".est-just") || a.$("estCartao");
+    a.porSelecao(() => ({ rangeCount: 1, anchorNode: noTexto, toString: () => "segundo a jurisprudência do STJ" }));
+    barraDe().querySelectorAll("button")[1].onclick();
+    ok(a.$("dlgJurEscolher").open === true && a.$("jurEscTrecho").textContent === a.t("jur_esc_trecho", { t: "segundo a jurisprudência do STJ" }),
+      "G39k o botão de julgado não ligou o trecho selecionado à mesma escolha do resumo: " + a.$("jurEscTrecho").textContent);
+    a.$("dlgJurEscolher").close();
+  }
+
+  /* ---- G40: a mesma barra de vínculos, na prévia da Biblioteca (não só no player) ---- */
+  {
+    const { a } = montar();
+    a.gerAbrirNoTopico("Trib", "ISS", {});
+    const alvo = linhasDaLista(a).find((l) => /alíquota/.test(l.textContent));
+    ok(!!alvo, "G40 não achei o cartão da alíquota na lista");
+    alvo.onclick();
+    const barra = a.$("gerPrevia").querySelectorAll(".cit-vinc-barra")[0];
+    ok(!!barra, "G40a a prévia da Biblioteca também ganhou a barra de vínculos");
+    const btns = Array.from(barra.querySelectorAll("button"));
+    ok(btns.length === 2, "G40b a prévia devia oferecer lei e julgado, como o player: " + btns.length);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

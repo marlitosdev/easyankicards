@@ -2127,10 +2127,11 @@ function qsVincContexto(q) {
   return { ch, lista, doTopico };
 }
 
-/* o texto da janela fala do lugar de onde se veio: comentário (questão) ou resumo */
+/* o texto da janela fala do lugar de onde se veio: comentário (questão), resumo ou cartão (v19.31.0) */
 function qsVincT(chave, v) {
-  const res = qsVincCtx && qsVincCtx.q && qsVincCtx.q._onde === "resumo";
-  return t(res ? chave + "_res" : chave, v);
+  const onde = qsVincCtx && qsVincCtx.q && qsVincCtx.q._onde;
+  const suf = onde === "resumo" ? "_res" : onde === "cartao" ? "_car" : "";
+  return t(chave + suf, v);
 }
 
 function qsVincAbrir(q, el, selecao) {
@@ -2593,7 +2594,7 @@ function citConfirmarNaTela(trecho, msgOk) {
   const alvo = norm(trecho);
   setTimeout(() => {
     if (citUltimoDestaque && citUltimoDestaque.n) return;
-    const naTela = ["matLeitura", "leiLeitura", "qsSessCorpo"].some((id) => $(id) && norm($(id).textContent).indexOf(alvo) >= 0);
+    const naTela = ["matLeitura", "leiLeitura", "qsSessCorpo", "estCartao", "gerPrevia"].some((id) => $(id) && norm($(id).textContent).indexOf(alvo) >= 0);
     const partido = /\n/.test(String(trecho || "").trim());
     if (naTela || partido) {
       try { toastMsg(t("cit_vinc_invisivel", { tr: qsVincCurto(trecho) }), 9000); } catch (e) {}

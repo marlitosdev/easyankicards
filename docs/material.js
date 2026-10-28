@@ -1445,6 +1445,75 @@ function citNotaEl(link) {
   return s;
 }
 
+/* =====================================================================
+ * OS MESMOS VÍNCULOS DE LEI E DE JULGADO, NO CARTÃO (v19.31.0)
+ *
+ * O resumo e o comentário da questão já deixavam corrigir um vínculo errado
+ * ("este vínculo está errado", qsVincAbrir/qsVincEscolher) e ligar à mão um
+ * trecho que a leitura automática não reconheceu — de lei (qsVincAbrir) e de
+ * julgado (jurEscAbrir, hoje só na bolha de seleção do resumo). O cartão só
+ * tinha a leitura automática (citLigarEm): via o link, mas não tinha como
+ * corrigi-lo nem como ligar um trecho que ela não pegou.
+ *
+ * Esta barra é a MESMA ferramenta, com outra porta de entrada: "comentario"
+ * é o texto do verso (e do "saiba mais") no lugar do comentário da questão
+ * ou do resumo, e "_onde: cartao" avisa a janela de vínculos para falar de
+ * "cartão" em vez de "comentário"/"resumo" (qsVincT). aoVoltar repinta o
+ * próprio cartão depois de corrigir ou ligar.
+ *
+ * A seleção é capturada ao APERTAR o botão (mousedown/touchstart/pointerdown),
+ * como em qsVincBotao e na bolha do resumo: em alguns aparelhos o toque no
+ * botão tira a seleção antes do clique chegar.
+ * ===================================================================== */
+function citVincBarra(base, elGetter, comentario) {
+  if (typeof qsVincAbrir !== "function" || typeof qsVincSelecao !== "function") return null;
+  const b = base || {};
+  const barra = document.createElement("div");
+  barra.className = "cit-vinc-barra";
+
+  const bl = document.createElement("button");
+  bl.type = "button";
+  bl.className = "btn-min qs-vinc-btn";
+  bl.id = "btnCarVinc";
+  bl.textContent = t("qs_vinc_btn");
+  bl.title = t("car_vinc_btn_aj");
+  let selL = "";
+  const guardarL = () => { try { selL = qsVincSelecao(elGetter()); } catch (e) { selL = ""; } };
+  bl.onmousedown = guardarL; bl.ontouchstart = guardarL; bl.onpointerdown = guardarL;
+  bl.onclick = () => {
+    let s = selL;
+    if (!s) { try { s = qsVincSelecao(elGetter()); } catch (e) { s = ""; } }
+    selL = "";
+    qsVincAbrir({ disciplina: b.disciplina || "", topico: b.topico || "", comentario: comentario || "",
+      _aoVoltar: b.aoVoltar, _onde: "cartao" }, elGetter(), s);
+  };
+  barra.append(bl);
+
+  /* ligar um trecho a um julgado só faz sentido com tópico — é dali que vem
+   * a lista "deste tópico primeiro" (jurEscPintar); sem tópico (bancada) o
+   * botão nem aparece, como "criar mais cartões" já não aparece ali */
+  if (b.disciplina && b.topico && typeof jurEscAbrir === "function") {
+    const bj = document.createElement("button");
+    bj.type = "button";
+    bj.className = "btn-min qs-vinc-btn";
+    bj.id = "btnCarVincJur";
+    bj.textContent = t("mat_bolha_jur_ligar");
+    bj.title = t("mat_bolha_jur_ligar_aj");
+    let selJ = "";
+    const guardarJ = () => { try { selJ = qsVincSelecao(elGetter()); } catch (e) { selJ = ""; } };
+    bj.onmousedown = guardarJ; bj.ontouchstart = guardarJ; bj.onpointerdown = guardarJ;
+    bj.onclick = () => {
+      let s = selJ;
+      if (!s) { try { s = qsVincSelecao(elGetter()); } catch (e) { s = ""; } }
+      selJ = "";
+      if (!s) { try { uiAlert(t("car_vinc_sel_jur_vazio")); } catch (e) {} return; }
+      jurEscAbrir(s, { disciplina: b.disciplina, topico: b.topico, chave: b.chave, aoVoltar: b.aoVoltar });
+    };
+    barra.append(bj);
+  }
+  return barra;
+}
+
 function matCitIr(c, botao) {
   if (!matAtual) return;
   citIr(c, botao, matCitBase());
