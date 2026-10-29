@@ -2880,6 +2880,40 @@ async function testes() {
     a.$("dlgQsVinc").close();
   }
 
+  /* ---- G43: "relatar problema deste cartão" — um texto copiável com o cartão, os vínculos e a
+   * agenda, para reportar um defeito sem precisar de captura de tela (v19.34.0) ---- */
+  {
+    const { a } = montar();
+    a.leiIniciar();
+    a.leiGuardar({ id: "lei_adct", nome: "ADCT", apelido: "ADCT", especie: "Ato", numero: "", texto: "Art. 130. Texto." });
+    const chCF = a.matChave("CF/88", "Fixação de Alíquotas");
+    a.leiLigar("lei_adct", chCF);
+    a.matGravarCartoes(chCF, "Pergunta sobre o IBS? :: conforme o art. 130, § 1º, do ADCT.",
+      { disciplina: "CF/88", topico: "Fixação de Alíquotas" });
+    a.citVinculoSalvar({ trecho: "art. 130, § 1º, do ADCT", leiId: "lei_adct", artigos: [{ num: "130", numCru: "130, § 1º" }], chave: chCF });
+    a.gerAbrirNoTopico("CF/88", "Fixação de Alíquotas", { estudar: true });
+    a.estcVirar();
+
+    a.estcMenuMontar();
+    const itRelatar = Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_relatar"));
+    ok(!!itRelatar, "G43 falta 'relatar problema deste cartão' no menu");
+    itRelatar.onclick();
+    ok(a.$("dlgEstRelatar").open === true, "G43a o menu não abriu o relatório");
+
+    const txt = a.$("estRelatarTexto").value;
+    ok(/CF\/88.*Fixação de Alíquotas/.test(txt), "G43b o relatório não diz a disciplina/tópico: " + txt.slice(0, 120));
+    ok(/Pergunta sobre o IBS\?/.test(txt), "G43c o relatório não traz a frente do cartão");
+    ok(/conforme o art\. 130, § 1º, do ADCT/.test(txt), "G43d o relatório não traz a resposta do cartão");
+    ok(/art\. 130, § 1º, do ADCT.*lei_adct/.test(txt), "G43e o relatório não lista o vínculo de lei: " + txt);
+
+    ok(!!a.$("btnEstRelatarCopiar"), "G43f falta o botão de copiar");
+    a.$("btnEstRelatarCopiar").onclick();
+    a.$("btnEstRelatarFechar").onclick();
+    ok(a.$("dlgEstRelatar").open !== true, "G43g fechar não fechou o relatório");
+    /* o player continua aberto: relatar não deve atrapalhar o estudo */
+    ok(a.$("dlgGerEstudo").open === true, "G43h relatar fechou o player sem motivo");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

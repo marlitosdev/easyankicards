@@ -456,6 +456,67 @@ function estcMenuMontar() {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
     item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });
   }
+  item(t("est_m_relatar"), estcRelatarAbrir);
+}
+
+/* =====================================================================
+ * "RELATAR PROBLEMA DESTE CARTÃO" (v19.34.0)
+ *
+ * Diagnosticar um relato como "o vínculo existe mas não é clicável" (v19.33.0) levou várias rodadas de
+ * reprodução às cegas — screenshot, hipótese, Playwright — porque nada no app guardava, num texto só, o que
+ * o cartão tinha por dentro (frente crua com {{c1::…}}, se é lacuna ou básico) e o que os vínculos diziam
+ * sobre ele. O mesmo texto que eu pediria para reproduzir, pronto para colar.
+ *
+ * Mesma ideia do "registro dos resumos" (matLogTexto/matLogAbrir): um texto simples, copiável, sem telemetria
+ * nenhuma — tudo sai do que já está no aparelho (o cartão, os vínculos, o registro da agenda), nada é
+ * enviado a lugar nenhum sozinho.
+ * ===================================================================== */
+function estcRelatarTexto(u) {
+  if (!u) return "";
+  const n = u.nota, c = n.card;
+  const onde = [n.disciplina, n.topico].filter(Boolean).join(" › ") || "(bancada)";
+  const tipo = c.kind === "mc" ? "múltipla escolha" : (u.cn ? "lacuna (c" + u.cn + " de " + (u.de || 1) + ")" : "básico/certo-errado");
+  const linhas = [
+    "RELATÓRIO DO CARTÃO — v" + (typeof VERSAO !== "undefined" ? VERSAO : "?"),
+    new Date().toISOString(),
+    "",
+    onde,
+    "tipo: " + tipo + " · modo: " + estcModo + (estcRev ? " · virado" : " · não virado"),
+    "",
+    "FRENTE (como foi digitada, com {{c::}} se houver):",
+    String(c.front || "") || "(vazia)",
+    "",
+    "RESPOSTA:",
+    String(c.back || "") || "(vazia)",
+  ];
+  if (c.more) linhas.push("", "SAIBA MAIS:", String(c.more));
+  const chave = n.disciplina && n.topico && typeof matChave === "function" ? matChave(n.disciplina, n.topico) : "";
+  let vinc = [];
+  try { vinc = (typeof citVinculosLer === "function" ? citVinculosLer() : []).filter((v) => !v.chave || v.chave === chave); } catch (e) {}
+  if (vinc.length) {
+    linhas.push("", "VÍNCULOS (" + vinc.length + "):");
+    vinc.forEach((v) => {
+      const alvo = v.nenhum ? "desligado (fica como texto)"
+        : v.tipo === "jur" ? "julgado " + (v.jurId || "?")
+        : "lei " + (v.leiId || "?") + " · art. " + (v.artigos || []).map((a) => a.numCru).join(", ");
+      linhas.push("  · \"" + v.trecho + "\" → " + alvo + (v.chave ? " · só neste tópico" : " · todo o app"));
+    });
+  } else {
+    linhas.push("", "VÍNCULOS: nenhum para este tópico.");
+  }
+  if (estcModo === "agendado") {
+    const reg = estcRegs[u.id];
+    linhas.push("", "AGENDA: " + (reg ? JSON.stringify(reg) : "cartão novo, sem registro ainda"));
+  }
+  return linhas.join("\n");
+}
+
+function estcRelatarAbrir() {
+  const u = estcUn[estcI];
+  if (!u || !$("dlgEstRelatar")) return;
+  $("estRelatarTexto").value = estcRelatarTexto(u);
+  abrirModal("dlgEstRelatar");
+  try { reg("ESTUDO", "relatório do cartão aberto", [u.nota.disciplina, u.nota.topico].filter(Boolean).join(" › ")); } catch (e) {}
 }
 
 async function estcMudarNovos() {
@@ -580,6 +641,14 @@ if (typeof document !== "undefined" && $("dlgGerEstudo")) {
   if ($("estBolha") && $("estBolha").addEventListener) {
     $("estBolha").addEventListener("mousedown", (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); });
   }
+  /* "relatar problema deste cartão" (v19.34.0) */
+  if ($("btnEstRelatarCopiar")) {
+    $("btnEstRelatarCopiar").onclick = () => {
+      try { navigator.clipboard.writeText($("estRelatarTexto").value); } catch (e) {}
+      try { toast("est_rel_copiado"); } catch (e) {}
+    };
+  }
+  if ($("btnEstRelatarFechar")) $("btnEstRelatarFechar").onclick = () => $("dlgEstRelatar").close();
   dlg.onkeydown = (ev) => {
     if (!ev) return;
     const alvo = ev.target && ev.target.tagName;

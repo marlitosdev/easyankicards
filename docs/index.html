@@ -10346,6 +10346,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
+<!-- "RELATAR PROBLEMA DESTE CARTÃO" (v19.34.0): o texto do cartão, os vínculos e o estado da agenda, num
+     texto copiável — a mesma ideia do "registro dos resumos" (dlgMatLog), só que sobre um cartão só. -->
+<dialog id="dlgEstRelatar" class="ui-modal diag-modal">
+  <h3 data-i18n="est_rel_tit"></h3>
+  <p class="nota" data-i18n="est_rel_ajuda"></p>
+  <textarea id="estRelatarTexto" rows="16" readonly
+    style="width:100%;box-sizing:border-box;font-size:11px"></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnEstRelatarCopiar" data-i18n="mat_log_copiar"></button>
+    <button class="btn btn-cinza" id="btnEstRelatarFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <!-- COMO USAR A BIBLIOTECA, no telefone: uma folha por cima (o texto corrido empurrava a lista para fora da tela) -->
 <dialog id="dlgGerAjuda" class="ui-modal ger-ajuda">
   <div class="cov-cab">
