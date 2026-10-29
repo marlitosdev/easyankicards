@@ -193,17 +193,28 @@ function estcPintar() {
       sb.onclick = () => { estcSaiba = !estcSaiba; corpo.hidden = !estcSaiba; };
       cx.append(sb, corpo);
     }
-    /* as citações de lei da resposta e do "saiba mais" viram links (só depois de
-     * virar: na frente, abrir a lei entregaria a resposta) */
+    /* as citações de lei da resposta e do "saiba mais" viram links — básico e múltipla escolha continuam de fora
+     * da frente de propósito (K2b em tests/resumo-citacoes.js: "Segundo o art. 113 do CTN, a multa é?" não pode
+     * virar link nem depois de virar — a pergunta é igual antes e depois, e um link ali seria um atalho para
+     * ler o artigo em vez de responder).
+     *
+     * A LACUNA É DIFERENTE (v19.33.0): o texto AO REDOR do {{c1::...}} já está à vista desde o início — só o
+     * próprio buraco fica escondido ("[…]") — então uma citação ali não entrega nada que a pessoa ainda não via.
+     * O relato real: um vínculo criado para "art. 130, § 1º, do ADCT", que mora na frente ao lado da lacuna
+     * "{{c1::ano anterior}}", aparecia certo na lista "🔗 vínculos de lei" (que já lia o cartão inteiro) mas
+     * nunca ficava clicável — porque citLigarEm nunca rodava sobre a frente, nem na lacuna. Continua sem rodar
+     * ANTES de virar: só depois de revelada é que vale a pena tocar num link em vez de tentar responder. */
     const baseCit = estcCitBase(u.nota);
     if (typeof citLigarEm === "function") {
+      if (u.cn) { try { citLigarEm(frente, baseCit); } catch (e) {} }
       try { citLigarEm(verso, baseCit); } catch (e) {}
       cx.querySelectorAll && cx.querySelectorAll(".est-saiba").forEach((el) => { try { citLigarEm(el, baseCit); } catch (e) {} });
     }
     /* corrigir um vínculo errado e ligar à mão o que a leitura automática não achou — a mesma ferramenta das
-     * questões e do resumo, só que sobre o texto deste cartão (v19.31.0) */
+     * questões e do resumo, só que sobre o texto deste cartão (v19.31.0); o texto inteiro (frente + resposta +
+     * "saiba mais"), como a lista de citações encontradas também lê (v19.33.0) */
     if (typeof citVincBarra === "function") {
-      const comentario = [estcTxt(c.back), c.more ? estcTxt(c.more) : ""].filter(Boolean).join("\n");
+      const comentario = typeof baseCit.textoTodo === "function" ? baseCit.textoTodo() : estcTxt(c.back);
       const barra = citVincBarra(baseCit, () => cx, comentario);
       if (barra) cx.append(barra);
     }

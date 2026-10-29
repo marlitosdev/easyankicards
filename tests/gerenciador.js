@@ -2843,6 +2843,43 @@ async function testes() {
     ok(a.$("estBolha").hidden === true, "G41f repintar o cartão esconde a bolha");
   }
 
+  /* ---- G42: a citação da FRENTE de um cartão de lacuna também vira link, depois de virar (v19.33.0) ----
+   * O relato real: um vínculo de lei criado para um trecho que mora na frente (ao lado do {{c1::...}}, não
+   * dentro dele) aparecia certo na lista "🔗 vínculos de lei", mas nunca ficava clicável no cartão — porque
+   * citLigarEm só rodava sobre a resposta e o "saiba mais", nunca sobre a frente. */
+  {
+    const { a } = montar();
+    a.leiIniciar();
+    a.leiGuardar({ id: "lei_adct", nome: "ADCT - Ato das Disposições Constitucionais Transitórias", apelido: "ADCT",
+      especie: "Ato", numero: "", texto: "Art. 130. Texto do artigo 130." });
+    const chCF = a.matChave("CF/88", "Fixação de Alíquotas");
+    a.leiLigar("lei_adct", chCF);
+    a.matGravarCartoes(chCF,
+      "Quando se fixam as alíquotas? Devem ser fixadas no {{c1::ano anterior}} à vigência, conforme o art. 130, § 1º, do ADCT. :: justificativa aqui",
+      { disciplina: "CF/88", topico: "Fixação de Alíquotas" });
+    a.gerAbrirNoTopico("CF/88", "Fixação de Alíquotas", { estudar: true });
+
+    ok(a.estcAtual().rev === false, "G42 premissa: ainda não virou");
+    ok(achar(a.$("estCartao"), (e) => cls(e, "qs-lei-link")).length === 0,
+      "G42a antes de virar, a citação da frente NÃO é link (a dica ainda está escondida)");
+
+    a.estcVirar();
+    ok(a.estcAtual().rev === true, "G42b virou");
+    const linkNaFrente = achar(a.$("estCartao").querySelector(".est-frente"), (e) => cls(e, "qs-lei-link"))[0];
+    ok(!!linkNaFrente && linkNaFrente.textContent === "art. 130, § 1º, do ADCT",
+      "G42c depois de virar, a citação da frente vira link: " + (linkNaFrente && linkNaFrente.textContent));
+    ok(/ADCT/.test(linkNaFrente.title), "G42d o link da frente resolveu a lei certa: " + linkNaFrente.title);
+
+    /* e o vínculo de lei ("🔗 vínculos de lei") enxerga o texto inteiro — frente incluída —, não só a resposta */
+    const barraG42 = a.$("estCartao").querySelectorAll(".cit-vinc-barra")[0];
+    const btnVinc = barraG42 && barraG42.querySelectorAll("button")[0];
+    ok(!!btnVinc, "G42e2 falta o botão de vínculos de lei na barra");
+    btnVinc.onclick();
+    ok(/art\. 130, § 1º, do ADCT/.test(a.$("qsVincLista").textContent || ""),
+      "G42e a lista de vínculos não achou a citação que mora na frente: " + a.$("qsVincLista").textContent);
+    a.$("dlgQsVinc").close();
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
