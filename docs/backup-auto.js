@@ -380,6 +380,7 @@ async function bkaRenomearAparelho() {
 function bkaPintarTudo() {
   try { bkaPintar(); } catch (e) {}
   try { bkaBolhaPintar(); } catch (e) {}
+  try { if (typeof bkPintarSituacao === "function") bkPintarSituacao(); } catch (e) {}
   try { if (typeof atualizarSeloBase === "function") atualizarSeloBase(); } catch (e) {}
 }
 /* o que o selo do topo precisa dizer (null = nada a dizer, fica o selo de sempre) */
@@ -399,9 +400,11 @@ function bkaPintar() {
   const est = bkaEstado();
   const nota = (txt, cls) => { const p = document.createElement("div"); p.className = cls || "nota"; p.textContent = txt; cx.append(p); return p; };
   const linha = () => { const d = document.createElement("div"); d.className = "btn-linha"; cx.append(d); return d; };
-  const botao = (onde, txt, fn, cls, id, tip) => {
+  /* (19.42.0) cada botão com o que faz, embaixo do nome */
+  const botao = (onde, txt, fn, cls, id, tip, sub) => {
     const b = document.createElement("button");
-    b.type = "button"; b.className = cls || "btn btn-cinza"; b.textContent = txt;
+    b.type = "button"; b.className = (cls || "btn btn-cinza") + " bk-bt";
+    if (typeof bkBotaoRotulo === "function") bkBotaoRotulo(b, txt, sub); else b.textContent = txt;
     if (id) b.id = id;
     if (tip) b.title = tip;
     b.onclick = () => fn();
@@ -420,7 +423,7 @@ function bkaPintar() {
     botao(linha(), t("bka_conectar"), bkaConectar, "btn btn-verde", "btnBkaConectar");
   } else if (bkaPermissao && bkaPermissao !== "granted") {
     nota(t("bka_permissao"), "bk-aviso grave");
-    botao(linha(), t("bka_reconectar"), bkaReconectar, "btn btn-verde", "btnBkaReconectar");
+    botao(linha(), t("bka_reconectar"), bkaReconectar, "btn btn-verde", "btnBkaReconectar", "", t("bka_reconectar_sub"));
   }
   if (est.pausado) {
     const itens = (est.pausado.encolheu || []).map((x) => t("bka_pausado_item", { r: x.rotulo, de: x.de, para: x.para })).join("; ");
@@ -437,11 +440,20 @@ function bkaPintar() {
     botao(lm, t("bka_manter_deste"), bkaManterDesteAparelho, "btn btn-cinza", "btnBkaManterDeste", t("bka_manter_deste_tip"));
   }
   nota(est.ultimo && est.ultimo.nome ? t("bka_ultimo", { q: bkQuandoCurto(est.ultimo.quando), n: est.ultimo.nome }) : t("bka_ainda_nao"), "bk-txt bka-ultimo");
-  const l = linha();
-  if (bkaPasta) botao(l, t("bka_gravar_agora"), bkaGravarPedido, "btn btn-cinza", "btnBkaGravar");
-  botao(l, t("bka_renomear"), bkaRenomearAparelho, "btn btn-cinza", "btnBkaRenomear");
-  botao(l, t("bka_trocar"), bkaConectar, "btn btn-cinza", "btnBkaTrocar");
-  botao(l, t("bka_desligar"), bkaDesligar, "btn btn-cinza", "btnBkaDesligar");
+  if (bkaPasta) botao(linha(), t("bka_gravar_agora"), bkaGravarPedido, "btn btn-azul", "btnBkaGravar", "", t("bka_gravar_agora_sub"));
+  /* (19.42.0) O QUE É RARO fica recolhido: nome do aparelho, mudar a pasta, desligar */
+  const aj = document.createElement("details");
+  aj.className = "bka-ajustes";
+  const sm = document.createElement("summary");
+  sm.textContent = t("bka_ajustes");
+  aj.append(sm);
+  const l = document.createElement("div");
+  l.className = "btn-linha";
+  aj.append(l);
+  cx.append(aj);
+  botao(l, t("bka_renomear"), bkaRenomearAparelho, "btn btn-cinza", "btnBkaRenomear", "", t("bka_renomear_sub"));
+  botao(l, t("bka_trocar"), bkaConectar, "btn btn-cinza", "btnBkaTrocar", "", t("bka_trocar_sub"));
+  botao(l, t("bka_desligar"), bkaDesligar, "btn btn-cinza", "btnBkaDesligar", "", t("bka_desligar_sub"));
 }
 
 /* ---------------- (19.40.0) o balão ----------------
@@ -463,28 +475,36 @@ function bkaBolhaEstado() {
      * aparece quando ele envelhece, e tocar abre o painel (baixar / mandar para a nuvem) */
     let i = null;
     try { i = typeof idadeBase === "function" ? idadeBase() : null; } catch (e) { i = null; }
-    if (!i) return { k: "manual", ic: "💾", txt: t("bka_bolha_manual_nunca"), cls: "bb-alerta" };
-    if (i.dias >= BKA_BOLHA_DIAS_MANUAL) return { k: "manual", ic: "💾", txt: t("bka_bolha_manual", { n: i.dias }), cls: i.dias > 7 ? "bb-alerta" : "bb-aviso" };
+    if (!i) return { k: "manual", ic: "💾", rot: t("bka_rot_sem"), txt: t("bka_bolha_manual_nunca"), cls: "bb-alerta" };
+    if (i.dias >= BKA_BOLHA_DIAS_MANUAL) return { k: "manual", ic: "💾", rot: t("bka_rot_dias", { n: i.dias }), txt: t("bka_bolha_manual", { n: i.dias }), cls: i.dias > 7 ? "bb-alerta" : "bb-aviso" };
     return null;
   }
   const est = bkaEstado();
-  if (bkaBolhaMomento === "gravando") return { k: "gravando", ic: "💾", txt: t("bka_bolha_gravando"), cls: "bb-grav" };
+  if (bkaBolhaMomento === "gravando") return { k: "gravando", ic: "💾", rot: t("bka_rot_gravando"), txt: t("bka_bolha_gravando"), cls: "bb-grav" };
   const av = bkaAvisoDoSelo();
-  if (av) return { k: "problema", ic: "!", txt: av.txt, cls: av.cls === "sb-alerta" ? "bb-alerta" : "bb-aviso" };
-  if (!est.ligado) return { k: "desligado", ic: "💾", txt: t("bka_bolha_desligado"), cls: "bb-desl" };
-  if (bkaBolhaMomento === "gravou") return { k: "gravou", ic: "✓", txt: t("bka_bolha_gravou"), cls: "bb-ok" };
+  if (av) {
+    /* (19.41.0) a LEGENDA curta embaixo do círculo diz o problema sem precisar parar o mouse em cima */
+    const rot = est.pausado ? t("bka_rot_pausado") : est.erro ? t("bka_rot_erro")
+      : (!bkaPasta || (bkaPermissao && bkaPermissao !== "granted")) ? t("bka_rot_reconectar")
+      : est.travado ? t("bka_rot_travado") : t("bka_rot_mais_novo");
+    return { k: "problema", ic: "!", rot, txt: av.txt, cls: av.cls === "sb-alerta" ? "bb-alerta" : "bb-aviso" };
+  }
+  if (!est.ligado) return { k: "desligado", ic: "💾", rot: t("bka_rot_off"), txt: t("bka_bolha_desligado"), cls: "bb-desl" };
+  if (bkaBolhaMomento === "gravou") return { k: "gravou", ic: "✓", rot: t("bka_rot_salvo"), txt: t("bka_bolha_gravou"), cls: "bb-ok" };
   return null;
 }
 function bkaBolhaPosLer() {
   try { const p = JSON.parse(localStorage.getItem(BKA_BOLHA_POS) || "null"); if (p && isFinite(p.x) && isFinite(p.y)) return p; } catch (e) {}
   return { x: 1, y: 1 };              /* fração da área livre: canto de baixo, à direita */
 }
+const BKA_BOLHA_MEDIDAS = { tam: 46, mx: 44, my: 12, rodape: 36 };
 function bkaBolhaPosicionar(el, p) {
   const w = (typeof window !== "undefined" && window.innerWidth) || 1024, h = (typeof window !== "undefined" && window.innerHeight) || 768;
-  const tam = 46, m = 12;
+  /* (19.41.0) a área livre desconta a LEGENDA embaixo do círculo (mais larga que ele): no canto ela não é cortada */
+  const { tam, mx, my, rodape } = BKA_BOLHA_MEDIDAS;
   const x = Math.max(0, Math.min(1, p.x)), y = Math.max(0, Math.min(1, p.y));
-  el.style.left = Math.round(m + x * Math.max(0, w - tam - 2 * m)) + "px";
-  el.style.top = Math.round(m + y * Math.max(0, h - tam - 2 * m)) + "px";
+  el.style.left = Math.round(mx + x * Math.max(0, w - tam - 2 * mx)) + "px";
+  el.style.top = Math.round(my + y * Math.max(0, h - tam - my - rodape)) + "px";
 }
 function bkaBolhaCriar() {
   let el = $("bkaBolha");
@@ -498,7 +518,11 @@ function bkaBolhaCriar() {
   const ic = document.createElement("span");
   ic.className = "bka-bolha-ic";
   ic.setAttribute("aria-hidden", "true");
-  el.append(ic);
+  /* a legenda: "Backup auto OFF", "Reconectar", "Salvando…" — embaixo do círculo */
+  const rot = document.createElement("span");
+  rot.className = "bka-bolha-rot";
+  rot.setAttribute("aria-hidden", "true");
+  el.append(ic, rot);
   document.body.append(el);
   bkaBolhaPosicionar(el, bkaBolhaPosLer());
   /* ARRASTAR × TOCAR: andou mais de 5px, é arrasto (e não abre nada); senão, é toque e abre o painel */
@@ -520,8 +544,9 @@ function bkaBolhaCriar() {
   const soltar = () => {
     if (!ini) return;
     if (moveu) {
-      const w = window.innerWidth, h = window.innerHeight, tam = 46, m = 12;
-      const p = { x: (el.offsetLeft - m) / Math.max(1, w - tam - 2 * m), y: (el.offsetTop - m) / Math.max(1, h - tam - 2 * m) };
+      const w = window.innerWidth, h = window.innerHeight;
+      const { tam, mx, my, rodape } = BKA_BOLHA_MEDIDAS;
+      const p = { x: (el.offsetLeft - mx) / Math.max(1, w - tam - 2 * mx), y: (el.offsetTop - my) / Math.max(1, h - tam - my - rodape) };
       p.x = Math.max(0, Math.min(1, p.x)); p.y = Math.max(0, Math.min(1, p.y));
       try { localStorage.setItem(BKA_BOLHA_POS, JSON.stringify(p)); } catch (e) {}
       bkaBolhaPosicionar(el, p);
@@ -541,7 +566,14 @@ function bkaBolhaCriar() {
   return el;
 }
 function bkaBolhaTocar() {
-  try { reg("BACKUP", "balão do backup tocado", (bkaBolhaEstado() || {}).k || "-"); } catch (e) {}
+  const st = bkaBolhaEstado() || {};
+  try { reg("BACKUP", "balão do backup tocado", (st.k || "-") + (st.rot ? " · " + st.rot : "")); } catch (e) {}
+  /* (19.42.0) RECONECTAR A UM TOQUE: com a pasta guardada e só a permissão vencida, o toque no balão é o gesto que o
+   * navegador exige — o pedido dele abre direto, sem passar pelo painel (eram três toques) */
+  const est = bkaEstado();
+  if (st.k === "problema" && est.ligado && bkaPasta && bkaPermissao && bkaPermissao !== "granted" && !est.pausado && !est.erro) {
+    return bkaReconectar();
+  }
   if (typeof bkAbrirPainel === "function") bkAbrirPainel();
 }
 /* momento: "gravando" | "gravou" | "" (só repinta) */
@@ -560,6 +592,7 @@ function bkaBolhaPintar(momento) {
   if (!st) return null;
   el.className = "bka-bolha " + st.cls;
   el.firstChild.textContent = st.ic;
+  if (el.children[1]) el.children[1].textContent = st.rot || "";
   el.title = st.txt + (st.k === "gravando" ? "" : " · " + t("bka_bolha_tocar"));
   el.setAttribute("aria-label", el.title);
   return st;

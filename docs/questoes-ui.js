@@ -3579,10 +3579,73 @@ function qsUiListaFiltrada() {
   return qsFiltrar(filtro);
 }
 
+/* =====================================================================
+ * (19.41.0) FILTROS QUE CONVERSAM ENTRE SI
+ *
+ * Cada filtro mostra só as opções que TÊM questão dentro dos OUTROS filtros já escolhidos, com quantas: escolher
+ * "Direito Financeiro" deixa no tópico só os tópicos que têm questão de Direito Financeiro (antes a lista seguia
+ * com os 12 tópicos do bloco tributário, todos levando a uma tela vazia). Uma escolha que deixou de ter questão
+ * continua à vista com "(0)", para a pessoa ver por que a lista esvaziou — e o tópico que não pertence mais à
+ * disciplina escolhida é desmarcado sozinho (o filtro de baixo depende do de cima).
+ * ===================================================================== */
+/* as <option> de um select (também dentro de <optgroup>), sem depender de .options */
+function qsUiOpcoesDoSelect(sel) {
+  const out = [];
+  const anda = (el) => Array.from((el && el.children) || []).forEach((c) => {
+    if (String(c.tagName || "").toUpperCase() === "OPTION") out.push(c); else anda(c);
+  });
+  anda(sel);
+  return out;
+}
+/* as questões que passam por TODOS os filtros menos os de `exceto` */
+function qsUiBaseSem(exceto) {
+  const f = Object.assign({}, qsUiFiltro);
+  (exceto || []).forEach((k) => { f[k] = (k === "soIneditas" || k === "soErradas") ? false : ""; });
+  if (f.edital && !f.chave) {
+    const ks = [];
+    qsUiTopicosDoEdital(f.edital).forEach((g) => g.itens.forEach((it) => ks.push(qsChaveNormal(it.chave))));
+    f.chaves = ks;
+  }
+  delete f.edital;
+  return qsFiltrar(f);
+}
+function qsUiContarPor(lista, campo) {
+  const c = {};
+  lista.forEach((q) => { const v = String(q[campo] || "").trim(); if (v) c[v] = (c[v] || 0) + 1; });
+  return c;
+}
+/* um <select> com "todos" + as opções com contagem; a escolhida fica mesmo com 0 */
+function qsUiOpcoesContadas(id, contagem, rotTodos, atual, rotulo) {
+  const s = $(id);
+  if (!s) return;
+  s.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = rotTodos;
+  s.append(o0);
+  const vals = Object.keys(contagem);
+  if (atual && vals.indexOf(atual) < 0) vals.push(atual);
+  vals.sort((a, b) => String(rotulo ? rotulo(a) : a).localeCompare(String(rotulo ? rotulo(b) : b))).forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = (rotulo ? rotulo(v) : v) + " (" + (contagem[v] || 0) + ")";
+    if (v === atual) o.selected = true;
+    s.append(o);
+  });
+  s.value = atual || "";
+}
+
 function qsUiPintarEditais() {
   const sel = $("qsFEdital");
   if (!sel) return;
   const lista = (typeof editais !== "undefined" ? editais : []) || [];
+  /* quantas questões de cada edital, dentro dos outros filtros (menos tópico e ramo, que dependem do edital) */
+  const base = qsUiBaseSem(["edital", "chave", "ramo"]);
+  const conta = {};
+  lista.forEach((e) => {
+    const ks = {};
+    qsUiTopicosDoEdital(e.id).forEach((g) => g.itens.forEach((it) => { ks[qsChaveNormal(it.chave)] = 1; }));
+    conta[e.id] = base.filter((q) => ks[qsChaveNormal(q.chave || "")]).length;
+  });
   sel.innerHTML = "";
   const o0 = document.createElement("option");
   o0.value = ""; o0.textContent = t("qs_todos_editais");
@@ -3590,12 +3653,13 @@ function qsUiPintarEditais() {
   lista.forEach((e) => {
     const o = document.createElement("option");
     o.value = e.id;
-    o.textContent = e.nome;
+    o.textContent = e.nome + " (" + (conta[e.id] || 0) + ")";
     if (e.id === qsUiFiltro.edital) o.selected = true;
     sel.append(o);
   });
-  /* com um edital só, escolher entre "todos" e "ele" não muda nada */
+  /* com um edital só (ou nenhum), escolher entre "todos" e "ele" não muda nada */
   sel.hidden = lista.length < 2;
+  if ($("qsCampoEdital")) $("qsCampoEdital").hidden = sel.hidden;
 }
 
 function qsUiPintarTopicos() {
@@ -3606,15 +3670,19 @@ function qsUiPintarTopicos() {
   o0.value = ""; o0.textContent = t("qs_todos_topicos");
   sel.append(o0);
 
-  /* quantas questões existem por tópico: um tópico sem questão nenhuma
-   * na lista é uma escolha que leva a uma tela vazia */
+  /* quantas questões existem por tópico DENTRO dos outros filtros (edital, disciplina, banca, tipo…): um tópico sem
+   * questão nenhuma ali é uma escolha que leva a uma tela vazia */
+  const base = qsUiBaseSem(["chave", "ramo"]);
   const conta = {};
   let semTopico = 0;
-  qsTodas().forEach((q) => {
+  base.forEach((q) => {
     const k = qsChaveNormal(q.chave || "");
     if (k) conta[k] = (conta[k] || 0) + 1; else semTopico++;
   });
-  /* (19.39.0) as questões SEM tópico também se acham: uma opção própria, no topo */
+  /* o tópico escolhido que não tem mais questão (a disciplina mudou, por exemplo) é desmarcado: depende do de cima */
+  const atual = qsUiFiltro.chave;
+  if (atual && atual !== QS_SEM_TOPICO && !conta[qsChaveNormal(atual)]) { qsUiFiltro.chave = ""; qsUiFiltro.ramo = ""; }
+  if (atual === QS_SEM_TOPICO && !semTopico) { qsUiFiltro.chave = ""; }
   if (semTopico) {
     const os = document.createElement("option");
     os.value = QS_SEM_TOPICO;
@@ -3622,15 +3690,12 @@ function qsUiPintarTopicos() {
     if (qsUiFiltro.chave === QS_SEM_TOPICO) os.selected = true;
     sel.append(os);
   }
-
-  /* (19.39.0) SEM EDITAL ESCOLHIDO, os tópicos vêm das próprias questões, agrupados pela DISCIPLINA — antes não havia
-   * lista nenhuma, e "biblioteca de questões com filtro por tópico" exigia escolher um edital primeiro. Com edital, os
-   * blocos do edital como cabeçalho (como sempre). */
+  /* com edital: os blocos do edital como cabeçalho. Sem edital: os tópicos das próprias questões, por disciplina */
   let grupos = qsUiFiltro.edital ? qsUiTopicosDoEdital(qsUiFiltro.edital) : [];
   if (!qsUiFiltro.edital) {
     const porDisc = new Map();
     const vistos = {};
-    qsTodas().forEach((q) => {
+    base.forEach((q) => {
       const k = qsChaveNormal(q.chave || "");
       if (!k || vistos[k]) return;
       vistos[k] = true;
@@ -3641,16 +3706,14 @@ function qsUiPintarTopicos() {
     grupos = [...porDisc.entries()].sort((a, b) => a[0].localeCompare(b[0]))
       .map(([d, its]) => ({ grupo: d, itens: its.sort((a, b) => a.nome.localeCompare(b.nome)) }));
   }
-  sel.hidden = !grupos.length && !semTopico;
-  if (!grupos.length && !semTopico) { qsUiFiltro.chave = ""; return; }
-
+  let algumTopico = false;
   grupos.forEach((g) => {
     const og = document.createElement("optgroup");
     og.label = g.grupo;
     let algum = false;
     g.itens.forEach((it) => {
       const n = conta[qsChaveNormal(it.chave)] || 0;
-      if (!n) return;                 /* tópico sem questão não entra */
+      if (!n) return;                 /* tópico sem questão (nestes filtros) não entra */
       algum = true;
       const o = document.createElement("option");
       o.value = it.chave;
@@ -3658,21 +3721,103 @@ function qsUiPintarTopicos() {
       if (qsChaveNormal(it.chave) === qsChaveNormal(qsUiFiltro.chave)) o.selected = true;
       og.append(o);
     });
-    if (algum) sel.append(og);
+    if (algum) { sel.append(og); algumTopico = true; }
   });
+  sel.hidden = !algumTopico && !semTopico;
+  if (sel.hidden) qsUiFiltro.chave = "";
+  sel.value = qsUiFiltro.chave && qsUiOpcoesDoSelect(sel).some((o) => o.value === qsUiFiltro.chave) ? qsUiFiltro.chave
+    : (qsUiOpcoesDoSelect(sel).filter((o) => qsChaveNormal(o.value) === qsChaveNormal(qsUiFiltro.chave))[0] || {}).value || "";
+  if ($("qsCampoTopico")) $("qsCampoTopico").hidden = sel.hidden;
+}
+
+/* disciplina, banca e tipo: as opções com quantas têm dentro dos outros filtros */
+function qsUiPintarFacetas() {
+  qsUiOpcoesContadas("qsFDisc", qsUiContarPor(qsUiBaseSem(["disciplina"]), "disciplina"), t("qs_todas_disc"), qsUiFiltro.disciplina);
+  qsUiOpcoesContadas("qsFBanca", qsUiContarPor(qsUiBaseSem(["banca"]), "banca"), t("qs_todas_bancas"), qsUiFiltro.banca);
+  if ($("qsCampoBanca")) $("qsCampoBanca").hidden = !qsBancas().length;
+  const st = $("qsFTipo");
+  if (st) {
+    const c = qsUiContarPor(qsUiBaseSem(["tipo"]), "tipo");
+    qsUiOpcoesDoSelect(st).forEach((o) => {
+      if (!o.value) { o.textContent = t("qs_todos_tipos"); return; }
+      o.textContent = t("qs_tipo_" + o.value) + " (" + (c[o.value] || 0) + ")";
+    });
+    st.value = qsUiFiltro.tipo || "";
+  }
+}
+
+/* OS FILTROS ATIVOS, em etiquetas: cada uma diz o que está filtrando e sai com o ✕; "limpar" tira todos */
+function qsUiPintarChips() {
+  const cx = $("qsChips");
+  const f = qsUiFiltro;
+  const chips = [];
+  if (f.edital) { const e = ((typeof editais !== "undefined" ? editais : []) || []).filter((x) => x.id === f.edital)[0]; chips.push(["edital", t("qs_f_edital"), e ? e.nome : f.edital]); }
+  if (f.disciplina) chips.push(["disciplina", t("qs_f_disc"), f.disciplina]);
+  if (f.chave) {
+    const op = $("qsFTopico") ? qsUiOpcoesDoSelect($("qsFTopico")).filter((o) => o.value === f.chave)[0] : null;
+    chips.push(["chave", t("qs_f_topico"), f.chave === QS_SEM_TOPICO ? t("qs_sem_topico_chip") : (op ? op.textContent.replace(/\s*\(\d+\)$/, "") : f.chave)]);
+  }
+  if (f.ramo) chips.push(["ramo", t("qs_f_ramo"), f.ramo === "_sem" ? t("qs_f_ramo_sem") : (($("qsFRamo") && qsUiOpcoesDoSelect($("qsFRamo")).filter((o) => o.value === f.ramo)[0]) || {}).textContent || f.ramo]);
+  if (f.banca) chips.push(["banca", t("qs_f_banca"), f.banca]);
+  if (f.tipo) chips.push(["tipo", t("qs_f_tipo"), t("qs_tipo_" + f.tipo)]);
+  if (f.soIneditas) chips.push(["soIneditas", t("qs_f_situacao"), t("qs_so_ineditas")]);
+  if (f.soErradas) chips.push(["soErradas", t("qs_f_situacao"), t("qs_so_erradas")]);
+  if (f.busca) chips.push(["busca", t("qs_f_busca"), "“" + f.busca + "”"]);
+  if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").hidden = !chips.length;
+  if (!cx) return chips.length;
+  cx.innerHTML = "";
+  cx.hidden = !chips.length;
+  chips.forEach(([k, rot, val]) => {
+    const c = document.createElement("span");
+    c.className = "qs-chip";
+    const b = document.createElement("b");
+    b.textContent = rot + ":";
+    const v = document.createElement("span");
+    v.textContent = val;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "qs-chip-x";
+    x.textContent = "✕";
+    x.title = t("qs_f_tirar", { f: rot });
+    x.setAttribute("aria-label", x.title);
+    x.onclick = () => qsUiTirarFiltro(k);
+    c.append(b, v, x);
+    cx.append(c);
+  });
+  return chips.length;
+}
+/* tirar um filtro (o de cima leva junto os que dependem dele) */
+function qsUiTirarFiltro(k) {
+  const dep = { edital: ["edital", "chave", "ramo"], disciplina: ["disciplina"], chave: ["chave", "ramo"] };
+  (dep[k] || [k]).forEach((x) => { qsUiFiltro[x] = (x === "soIneditas" || x === "soErradas") ? false : ""; });
+  qsUiFiltrosNaTela();
+  qsUiRender();
+}
+function qsUiLimparFiltros() {
+  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "" };
+  qsUiFiltrosNaTela();
+  qsUiRender();
+}
+/* os campos que não são redesenhados pelo render (caixas e busca) acompanham o filtro */
+function qsUiFiltrosNaTela() {
+  if ($("qsFIneditas")) $("qsFIneditas").checked = !!qsUiFiltro.soIneditas;
+  if ($("qsFErradas")) $("qsFErradas").checked = !!qsUiFiltro.soErradas;
+  if ($("qsBusca")) $("qsBusca").value = qsUiFiltro.busca || "";
 }
 
 function qsUiRender() {
   const box = $("qsLista");
   if (!box) return;
+  /* a ordem importa: o tópico depende do edital e da disciplina; as contagens, de tudo */
   qsUiPintarEditais();
   qsUiPintarTopicos();
   const ramosDoFiltro = qsUiPintarRamos();
+  if ($("qsCampoRamo")) $("qsCampoRamo").hidden = !ramosDoFiltro.length;
   const memoRamos = {};
   /* (v18.57.0) um índice só dos cartões nascidos de questões, para os selos da lista */
   const indCartoes = qsCartoesIndice();
-  qsUiOpcoesDe("qsFDisc", qsDisciplinas(), t("qs_todas_disc"), qsUiFiltro.disciplina);
-  qsUiOpcoesDe("qsFBanca", qsBancas(), t("qs_todas_bancas"), qsUiFiltro.banca);
+  qsUiPintarFacetas();
+  const ativos = qsUiPintarChips();
 
   /* o filtro de edital vira um CONJUNTO DE CHAVES aqui, não lá dentro:
    * o banco de questões não precisa saber o que é um edital */
@@ -3699,6 +3844,15 @@ function qsUiRender() {
     p.className = "esq-vazio";
     p.textContent = qsTodas().length ? t("qs_sem_resultado") : t("qs_vazio");
     box.append(p);
+    /* a lista esvaziou por causa dos filtros: o caminho de volta fica ali mesmo */
+    if (qsTodas().length && ativos) {
+      const bl = document.createElement("button");
+      bl.type = "button";
+      bl.className = "btn btn-cinza qs-vazio-limpar";
+      bl.textContent = t("qs_f_limpar_tudo");
+      bl.onclick = () => qsUiLimparFiltros();
+      p.append(document.createElement("br"), bl);
+    }
     return;
   }
   lista.slice(0, 200).forEach((q) => {
@@ -4066,7 +4220,7 @@ function qsUiLerFiltros() {
   qsUiFiltro = {
     ramo: ramoSel,
     edital: ($("qsFEdital") || {}).value || "",
-    chave: ($("qsFTopico") || {}).value || "",
+    chave: (($("qsFTopico") || {}).hidden ? "" : ($("qsFTopico") || {}).value) || "",
     disciplina: ($("qsFDisc") || {}).value || "",
     banca: ($("qsFBanca") || {}).value || "",
     tipo: ($("qsFTipo") || {}).value || "",
@@ -4455,6 +4609,7 @@ function qsUiIniciar() {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();
   });
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();
+  if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").onclick = () => qsUiLimparFiltros();
   if ($("btnQsDesfazer")) $("btnQsDesfazer").onclick = () => qsUiDesfazer();
   if ($("btnMatQuestoes")) $("btnMatQuestoes").onclick = () => qsUiResponderDoTopico();
   if ($("btnQsCriarDaSessao")) {

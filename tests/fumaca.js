@@ -682,6 +682,7 @@ function rodar(opc) {
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
     bkaBolhaPintar, bkaBolhaEstado, bkaBolhaTocar, bkaManterDesteAparelho,
+    qsUiOpcoesDoSelect, qsUiLimparFiltros, qsUiTirarFiltro,
     resBibAbrir, resBibPintar, resBibDefinir: (o) => { Object.assign(resBib, o); resBibPintar(); }, matGravarCartoes,
     matChaveViva, matChaveNormal, leiJurLadoALado,
     matObter, concursoAtual, matParaHtml, matAgrupado, matTrocarModo,

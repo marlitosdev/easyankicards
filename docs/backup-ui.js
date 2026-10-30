@@ -453,6 +453,62 @@ async function bkPintarAntes() {
   return L.length;
 }
 
+/* (19.42.0) o nome do botão e, embaixo, o que ele faz */
+function bkBotaoRotulo(b, tit, sub) {
+  if (!b) return;
+  b.textContent = "";
+  const a = document.createElement("span");
+  a.className = "bk-bt-tit";
+  a.textContent = tit;
+  b.append(a);
+  if (sub) {
+    const c = document.createElement("span");
+    c.className = "bk-bt-sub";
+    c.textContent = sub;
+    b.append(c);
+  }
+}
+
+/* (19.42.0) A SITUAÇÃO, no topo do painel: uma frase, na cor dela, e a ÚNICA ação que falta (quando falta) */
+function bkSituacao() {
+  const auto = typeof bkaPodeAutomatico === "function" && bkaPodeAutomatico();
+  if (auto) {
+    const est = bkaEstado();
+    const av = bkaAvisoDoSelo();
+    if (!est.ligado) return { st: "st-aviso", txt: t("bk_sit_auto_off"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
+    if (av) {
+      if (!bkaPasta) return { st: "st-alerta", txt: t("bka_pasta_perdida"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
+      if (bkaPermissao && bkaPermissao !== "granted") return { st: "st-alerta", txt: t("bk_sit_permissao"), acao: t("bka_reconectar"), fn: bkaReconectar };
+      if (est.pausado) return { st: "st-alerta", txt: t("bk_sit_pausado") };
+      if (est.erro) return { st: "st-alerta", txt: t("bka_erro", { e: est.erro.msg }), acao: t("bk_sit_tentar"), fn: bkaGravarPedido };
+      if (bkaMaisNovo) return { st: est.travado ? "st-alerta" : "st-aviso", txt: av.txt, acao: t("bka_ver_mais_novo"), fn: bkaVerMaisNovo };
+      return { st: "st-aviso", txt: av.txt };
+    }
+    return { st: "st-ok", txt: t("bk_sit_auto_ok", { p: est.pasta || (bkaPasta && bkaPasta.name) || "?" }) };
+  }
+  const i = idadeBase();
+  if (!i) return { st: "st-alerta", txt: t("bk_sit_nunca") };
+  if (i.dias > 7) return { st: "st-alerta", txt: t("bk_sit_velho", { n: i.dias }) };
+  if (i.dias >= 3) return { st: "st-aviso", txt: t("bk_sit_velho", { n: i.dias }) };
+  return { st: "st-ok", txt: t("bk_sit_manual_ok") };
+}
+function bkPintarSituacao() {
+  const cx = $("bkSituacao");
+  if (!cx) return null;
+  let s = null;
+  try { s = bkSituacao(); } catch (e) { s = null; }
+  if (!s) return null;
+  cx.className = "bk-situacao " + s.st;
+  $("bkSitTxt").textContent = s.txt;
+  const b = $("btnBkSitAcao");
+  if (b) {
+    b.hidden = !s.acao;
+    b.textContent = s.acao || "";
+    b.onclick = s.fn ? () => s.fn() : null;
+  }
+  return s;
+}
+
 function bkPintarPainel() {
   const r = resumoAtual();
   if ($("bkAgora")) {
@@ -477,6 +533,8 @@ function bkPintarPainel() {
   bkPintarAntes().catch(() => {});
   try { if (typeof bkaPintar === "function") bkaPintar(); } catch (e) {}
   bkPintarBotoes();
+  bkPintarSituacao();
+  if ($("btnBkCarregar")) bkBotaoRotulo($("btnBkCarregar"), t("bk_carregar"), t("bk_carregar_sub"));
 }
 
 /* ---------------------------------------------------------------------
@@ -543,11 +601,13 @@ function bkPintarBotoes() {
   const bre = $("btnBkRegravar");
 
   if (bn) {
-    /* SÓ APARECE QUANDO FAZ ALGO DIFERENTE de baixar. */
+    /* SÓ APARECE QUANDO FAZ ALGO DIFERENTE de baixar. (19.42.0) "bk_nuvem" não existia: no celular o botão dizia
+     * o nome da chave; a do compartilhamento é "bk_salvar_nuvem" */
     bn.hidden = modo === "download";
-    bn.textContent = t(modo === "compartilhar" ? "bk_nuvem" : "bk_pasta");
+    if (modo === "compartilhar") bkBotaoRotulo(bn, t("bk_salvar_nuvem"), t("bk_salvar_nuvem_sub"));
+    else bkBotaoRotulo(bn, t("bk_pasta"), t("bk_pasta_sub"));
   }
-  if (bb) bb.textContent = t("bk_baixar");
+  if (bb) bkBotaoRotulo(bb, t("bk_baixar"), t("bk_baixar_sub"));
   const bj = $("btnBkBaixarJson");
   if (bj) bj.hidden = !bkPodeCompactar();
   if (exp) exp.textContent = t("bk_guardar_exp_" + modo);
@@ -557,7 +617,7 @@ function bkPintarBotoes() {
      * guardar a permissão sozinho. */
     const nome = bkPastaNome();
     bre.hidden = !nome;
-    bre.textContent = t("bk_regravar", { n: nome });
+    bkBotaoRotulo(bre, t("bk_regravar", { n: nome }), t("bk_regravar_sub"));
   }
 }
 
@@ -596,6 +656,7 @@ function bkIniciar() {
   if ($("btnBkRegravar")) $("btnBkRegravar").onclick = bkRegravar;
   $("btnBkCarregar").onclick = bkAbrirArquivo;
   $("btnBkFechar").onclick = () => $("dlgBackup").close();
+  if ($("btnBkX")) $("btnBkX").onclick = () => $("dlgBackup").close();
   $("bkArquivo").onchange = (e) => bkLerArquivo(e.target.files && e.target.files[0]);
   $("btnBkConfAplicar").onclick = bkConfirmarRestauro;
   $("btnBkConfCancelar").onclick = () => { bkPendente = null; bkPendenteExato = null; $("dlgBkConf").close(); };

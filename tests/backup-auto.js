@@ -103,7 +103,7 @@ async function testes() {
     const { api } = preparar({ semSuporte: true });
     api.bkPintarPainel();
     ok(/não deixa o app gravar sozinho/.test(corpo(api)) && !api.$("btnBkaConectar"), "U1 sem showDirectoryPicker: explica e não oferece conectar");
-    ok(!api.$("btnBkBaixar").hidden && /Baixar arquivo/.test(api.$("btnBkBaixar").textContent), "M1 o 'Baixar arquivo' continua no painel");
+    ok(!api.$("btnBkBaixar").hidden && /Baixar uma cópia/.test(api.$("btnBkBaixar").textContent), "M1 o 'Baixar uma cópia' continua no painel");
   }
 
   /* ---- conectar, gravar, nada mudou, mudou ---- */

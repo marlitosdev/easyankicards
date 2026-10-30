@@ -66,6 +66,7 @@ async function testes() {
     api.bkaBolhaPintar();
     ok(bolha(api) && bolha(api).hidden === false && /bb-desl/.test(bolha(api).className) && /desligado/.test(bolha(api).title),
       "B1 desligado: o balao fica a vista, tracejado, dizendo que esta desligado: " + (bolha(api) && bolha(api).title));
+    ok(bolha(api).children[1] && bolha(api).children[1].textContent === "Backup auto OFF", "B1b a legenda embaixo do circulo diz 'Backup auto OFF'");
     /* os adiados (o ✓ "por um instante") ficam presos para o teste ver cada momento */
     api.segurarAdiados();
     const p = api.bkaConectar();
@@ -141,13 +142,37 @@ async function testes() {
     ok(r3.ok, "T6 depois disso, o periodico segue gravando (o arquivo ignorado nao trava de novo): " + JSON.stringify(r3));
   }
 
+  /* ---- 19.42.0: o painel começa pela SITUAÇÃO, e o balão reconecta a um toque ---- */
+  {
+    const { api } = preparar();
+    api.bkPintarPainel();
+    ok(/st-aviso/.test(api.$("bkSituacao").className) && /desligado/.test(api.$("bkSitTxt").textContent) && api.$("btnBkSitAcao").hidden === false && /Escolher a pasta/.test(api.$("btnBkSitAcao").textContent),
+      "S1 desligado: a situacao no topo diz e oferece a acao: " + api.$("bkSitTxt").textContent);
+    ok(!api.$("bkAgora"), "S2 'O que esta no aplicativo agora' saiu do painel");
+    ok(/vai para a pasta de downloads/.test(api.$("btnBkBaixar").textContent) && /mostra antes o que muda/.test(api.$("btnBkCarregar").textContent), "S3 cada botao diz o que faz embaixo do nome");
+  }
+  {
+    const { api, P } = preparar();
+    await conduzir(api, api.bkaConectar());
+    api.bkPintarPainel();
+    ok(/st-ok/.test(api.$("bkSituacao").className) && api.$("btnBkSitAcao").hidden === true, "S4 ligado e em dia: situacao verde, sem acao");
+    ok(api.$("bkaCorpo").querySelectorAll(".bka-ajustes").length === 1 && api.$("btnBkaDesligar") && api.$("btnBkaRenomear"), "S5 nome, mudar pasta e desligar ficam em 'Ajustes', recolhidos");
+    P.perm = "prompt"; P.resposta = "denied";
+    await api.bkaGravarAgora("periódico");
+    api.bkPintarPainel();
+    ok(/st-alerta/.test(api.$("bkSituacao").className) && /Permitir de novo/.test(api.$("btnBkSitAcao").textContent), "S6 permissao vencida: a situacao oferece 'Permitir de novo'");
+    P.resposta = "granted";
+    const r = await conduzir(api, api.bkaBolhaTocar());
+    ok(r && r.ok !== undefined && P.perm === "granted" && api.$("dlgBackup").open !== true, "S7 com a permissao vencida, tocar no balao ja pede a permissao (sem abrir o painel): " + JSON.stringify(r));
+  }
+
   /* ---- a posição arrastada fica guardada ---- */
   {
     const { api, L } = preparar();
     L.setItem("eac_bka_bolha_pos", JSON.stringify({ x: 0, y: 0 }));
     api.bkaBolhaPintar();
     const el = bolha(api);
-    ok(el && el.style.left === "12px" && el.style.top === "12px", "P1 a posicao guardada vale ao desenhar: " + (el && el.style.left + "," + el.style.top));
+    ok(el && el.style.left === "44px" && el.style.top === "12px", "P1 a posicao guardada vale ao desenhar: " + (el && el.style.left + "," + el.style.top));
   }
 
   return Object.assign(falhas, { quantas: n });

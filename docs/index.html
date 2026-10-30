@@ -1684,6 +1684,11 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
   font-size:20px;font-weight:800;cursor:pointer;touch-action:none;user-select:none;border:2px solid var(--borda);
   background:var(--panel);color:var(--texto);box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .2s, transform .15s}
 .bka-bolha[hidden]{display:none}
+.bka-bolha-ic{line-height:1}
+.bka-bolha-rot{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:800;
+  letter-spacing:.2px;padding:1px 7px;border-radius:999px;background:var(--panel);border:1px solid currentColor;line-height:1.5;pointer-events:none}
+.bka-bolha-rot:empty{display:none}
+.bka-bolha.bb-desl .bka-bolha-rot{color:var(--texto)}
 .bka-bolha:hover{transform:scale(1.06)}
 .bka-bolha.arrastando{cursor:grabbing;transform:scale(1.1);transition:none}
 .bka-bolha.bb-grav{border-color:var(--info)}
@@ -2551,6 +2556,31 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 /* CADA CONTROLE NA MESMA LARGURA DA SUA COLUNA, em vez do texto da opção
    decidir sozinho quanto espaço tomar — era o que fazia "todas as
    disciplinas" virar uma fileira inteira para si e empurrar o resto. */
+/* (19.41.0) a biblioteca de questões: painel de filtros + resultados */
+.qs-bib{display:grid;grid-template-columns:minmax(210px,260px) minmax(0,1fr);gap:16px;align-items:start;margin-top:8px}
+.qs-bib-filtros{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--borda);border-radius:12px;position:sticky;top:8px}
+.qs-bib-ftit{display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.4px;color:var(--sutil)}
+.qs-bib-ftit .btn-link{text-transform:none;letter-spacing:0;font-weight:600}
+.qs-campo{display:flex;flex-direction:column;gap:3px;margin:0;min-width:0;border:0;padding:0}
+.qs-campo[hidden]{display:none}
+.qs-campo-rot{font-size:11.5px;font-weight:700;color:var(--sutil);padding:0}
+.qs-campo select,.qs-campo input:not([type=checkbox]){width:100%;box-sizing:border-box}
+.qs-situacao .qs-chk{display:flex;flex-direction:row;align-items:center;gap:6px}
+.qs-situacao .qs-chk input{width:auto;margin:0;flex:0 0 auto}
+.qs-situacao{display:flex;flex-direction:column;gap:4px}
+.qs-situacao .qs-chk{font-size:13px;color:var(--texto)}
+.qs-bib-res{min-width:0;display:flex;flex-direction:column;gap:8px}
+.qs-busca-cx .mat-busca{margin:0}
+.qs-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.qs-chips[hidden]{display:none}
+.qs-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 4px 3px 10px;border:1px solid var(--info);border-radius:999px;background:color-mix(in srgb,var(--info) 10%,transparent);color:var(--texto);max-width:100%}
+.qs-chip b{font-weight:700;color:var(--sutil)}
+.qs-chip-x{border:0;background:none;color:var(--sutil);cursor:pointer;font-size:14px;line-height:1;padding:2px 6px;border-radius:999px}
+.qs-chip-x:hover{color:var(--texto);background:var(--campo)}
+.qs-bib-res .qs-barra{margin:0;padding:8px 0;border-bottom:1px solid var(--borda)}
+.qs-resumo{flex:1 1 200px;font-size:13px;color:var(--sutil)}
+.qs-vazio-limpar{margin-top:8px}
+@media (max-width:760px){.qs-bib{grid-template-columns:minmax(0,1fr)}.qs-bib-filtros{position:static;display:grid;grid-template-columns:1fr 1fr}.qs-bib-ftit,.qs-situacao{grid-column:1/-1}}
 .qs-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
   gap:6px;margin:8px 0}
 .qs-filtros select{width:100%}
@@ -3210,6 +3240,22 @@ dialog.mat-amplo{max-height:96vh}
   border:1px solid var(--borda);border-radius:999px;padding:3px 10px;
   flex:0 0 auto}
 .vk-cab-log:hover{color:var(--texto);background:var(--campo)}
+/* (19.42.0) o painel do backup: a situação no topo e cada botão com o que faz embaixo do nome */
+.bk-situacao{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--borda);background:var(--campo);margin:6px 0 4px}
+.bk-situacao.st-ok{border-color:var(--verde);background:color-mix(in srgb,var(--verde) 10%,var(--campo))}
+.bk-situacao.st-aviso{border-color:var(--atencao);background:color-mix(in srgb,var(--atencao) 12%,var(--campo))}
+.bk-situacao.st-alerta{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 12%,var(--campo))}
+.bk-sit-txt{font-size:14px;font-weight:700;line-height:1.45}
+.bk-sit-ultimo{white-space:pre-line;margin:0}
+.bk-sit-acao{align-self:flex-start}
+.bk-bts{display:flex;flex-wrap:wrap;gap:6px}
+.bk-bt{display:inline-flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.bk-bt-tit{font-weight:700}
+.bk-bt-sub{font-size:10.5px;font-weight:500;opacity:.85}
+.bka-ajustes{margin-top:6px}
+.bka-ajustes>summary,.bk-mais>summary{cursor:pointer;font-size:12.5px;color:var(--sutil)}
+.bk-mais{display:block}
+.bk-mais[open]>summary{margin-bottom:6px}
 .bk-bloco{padding:9px 11px;border-radius:9px;background:var(--campo);
   border:1px solid var(--borda);margin:0 0 8px}
 /* AS ÚLTIMAS CÓPIAS, com a carregada em destaque. */
@@ -6471,56 +6517,67 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnQsDesfazer" data-i18n="qs_desfazer"
       title="Tira do banco as questões que acabaram de entrar."></button>
   </div>
-  <div class="qs-filtros">
-    <!-- ACHAR QUESTÃO PELO EDITAL, NÃO SÓ PELA DISCIPLINA.
-         Disciplina é o nome que a questão carrega; o edital é a lista
-         que você está estudando. Com dois ou três concursos, "todas as
-         questões de Direito Financeiro" mistura recortes de bancas e
-         cargos diferentes — e a pergunta real é sempre "o que eu tenho
-         PARA ESTE edital?".
-         O tópico vem em seguida, já filtrado pelo edital escolhido, e
-         com os BLOCOS do edital como cabeçalho: é assim que a lista de
-         232 tópicos vira navegável. -->
-    <select id="qsFEdital" title="Filtra pelas questões dos tópicos deste edital."></select>
-    <select id="qsFTopico" title="Um tópico do edital escolhido. Os blocos do edital aparecem como cabeçalho."></select>
-    <select id="qsFRamo" hidden data-i18n-title="qs_f_ramo_tip"></select>
-    <select id="qsFDisc" title="Filtra por disciplina."></select>
-    <select id="qsFBanca" title="Filtra por banca examinadora."></select>
-    <select id="qsFTipo" title="Certo/errado ou múltipla escolha.">
-      <option value="" data-i18n="qs_todos_tipos"></option>
-      <option value="ce" data-i18n="qs_tipo_ce"></option>
-      <option value="me" data-i18n="qs_tipo_me"></option>
-    </select>
-  </div>
-  <!-- "O QUE FILTRAR" (os selects acima) separado de "QUAIS DELAS"
-       (interruptores) e da busca — três gestos diferentes, três linhas. -->
-  <div class="qs-chks">
-    <label class="qs-chk" title="Só as que você nunca respondeu."><input type="checkbox" id="qsFIneditas"><span data-i18n="qs_so_ineditas"></span></label>
-    <label class="qs-chk" title="Só aquelas em que você errou da última vez — é onde o estudo rende mais."><input type="checkbox" id="qsFErradas"><span data-i18n="qs_so_erradas"></span></label>
-  </div>
-  <input id="qsBusca" class="mat-busca" type="search" placeholder="buscar no enunciado" title="Procura no texto do enunciado.">
-  <!-- HISTÓRICO DOS BLOCOS. Fica recolhido: é consulta, não é o gesto
-       do dia. Aberto, mostra o que foi feito e permite refazer o mesmo
-       recorte — que é o que distingue um histórico de um placar. -->
-  <details id="qsHist" class="qs-hist">
-    <summary><span data-i18n="qs_hist_titulo"></span>
-      <span class="nota" id="qsHistResumo"></span></summary>
-    <div id="qsHistLista" class="qs-hist-lista"></div>
-    <div class="qs-hist-rodape">
-      <button class="btn-min btn-min-perigo" id="btnQsHistLimpar"
-        data-i18n="qs_hist_limpar"
-        title="Apaga o histórico dos blocos. As questões e o seu desempenho em cada uma não são tocados."></button>
+  <!-- (19.41.0) A BIBLIOTECA DE QUESTÕES em duas colunas: à esquerda o PAINEL DE FILTROS, cada campo com o seu
+       rótulo, na ordem em que um depende do outro (edital → disciplina → tópico → ramo), e cada opção com quantas
+       questões tem DENTRO dos outros filtros já escolhidos — opção sem questão não aparece, e escolher a disciplina
+       limita os tópicos a ela. À direita, a busca, os filtros ativos (removíveis um a um), a ação e a lista.
+       No celular, uma coluna só. -->
+  <div class="qs-bib">
+    <aside class="qs-bib-filtros" aria-labelledby="qsFiltrosTit">
+      <div class="qs-bib-ftit">
+        <span id="qsFiltrosTit" data-i18n="qs_f_tit"></span>
+        <button type="button" class="btn-link" id="btnQsLimparFiltros" data-i18n="qs_f_limpar" hidden></button>
+      </div>
+      <label class="qs-campo" id="qsCampoEdital"><span class="qs-campo-rot" data-i18n="qs_f_edital"></span>
+        <select id="qsFEdital" data-i18n-title="qs_f_edital_tip"></select></label>
+      <label class="qs-campo" id="qsCampoDisc"><span class="qs-campo-rot" data-i18n="qs_f_disc"></span>
+        <select id="qsFDisc" data-i18n-title="qs_f_disc_tip"></select></label>
+      <label class="qs-campo" id="qsCampoTopico"><span class="qs-campo-rot" data-i18n="qs_f_topico"></span>
+        <select id="qsFTopico" data-i18n-title="qs_f_topico_tip"></select></label>
+      <label class="qs-campo" id="qsCampoRamo" hidden><span class="qs-campo-rot" data-i18n="qs_f_ramo"></span>
+        <select id="qsFRamo" hidden data-i18n-title="qs_f_ramo_tip"></select></label>
+      <label class="qs-campo" id="qsCampoBanca"><span class="qs-campo-rot" data-i18n="qs_f_banca"></span>
+        <select id="qsFBanca" data-i18n-title="qs_f_banca_tip"></select></label>
+      <label class="qs-campo" id="qsCampoTipo"><span class="qs-campo-rot" data-i18n="qs_f_tipo"></span>
+        <select id="qsFTipo" data-i18n-title="qs_f_tipo_tip">
+          <option value="" data-i18n="qs_todos_tipos"></option>
+          <option value="ce" data-i18n="qs_tipo_ce"></option>
+          <option value="me" data-i18n="qs_tipo_me"></option>
+        </select></label>
+      <fieldset class="qs-campo qs-situacao">
+        <legend class="qs-campo-rot" data-i18n="qs_f_situacao"></legend>
+        <label class="qs-chk" title="Só as que você nunca respondeu."><input type="checkbox" id="qsFIneditas"><span data-i18n="qs_so_ineditas"></span></label>
+        <label class="qs-chk" title="Só aquelas em que você errou da última vez — é onde o estudo rende mais."><input type="checkbox" id="qsFErradas"><span data-i18n="qs_so_erradas"></span></label>
+      </fieldset>
+    </aside>
+    <div class="qs-bib-res">
+      <label class="qs-campo qs-busca-cx"><span class="qs-campo-rot" data-i18n="qs_f_busca"></span>
+        <input id="qsBusca" class="mat-busca" type="search" data-i18n-ph="qs_f_busca_ph" placeholder="procurar no enunciado" title="Procura no texto do enunciado."></label>
+      <div class="qs-chips" id="qsChips" hidden></div>
+      <div class="qs-barra">
+        <span class="qs-resumo" id="qsResumo"></span>
+        <button class="btn btn-verde" id="btnQsResponderTudo"
+          title="Responde, em sequência, todas as questões que passaram no filtro."></button>
+        <button class="btn btn-roxo" id="btnQsLigarRamos" hidden data-i18n-title="qs_ligar_btn_tip"></button>
+        <button class="btn-min" id="btnQsCriarDaAba" data-i18n="qs_como_criar"
+          title="Explica onde se criam questões."></button>
+      </div>
+      <!-- HISTÓRICO DOS BLOCOS. Fica recolhido: é consulta, não é o gesto
+           do dia. Aberto, mostra o que foi feito e permite refazer o mesmo
+           recorte — que é o que distingue um histórico de um placar. -->
+      <details id="qsHist" class="qs-hist">
+        <summary><span data-i18n="qs_hist_titulo"></span>
+          <span class="nota" id="qsHistResumo"></span></summary>
+        <div id="qsHistLista" class="qs-hist-lista"></div>
+        <div class="qs-hist-rodape">
+          <button class="btn-min btn-min-perigo" id="btnQsHistLimpar"
+            data-i18n="qs_hist_limpar"
+            title="Apaga o histórico dos blocos. As questões e o seu desempenho em cada uma não são tocados."></button>
+        </div>
+      </details>
+      <div id="qsLista" class="qs-lista-aba"></div>
     </div>
-  </details>
-  <div class="qs-barra">
-    <button class="btn btn-verde" id="btnQsResponderTudo"
-      title="Responde, em sequência, todas as questões que passaram no filtro acima."></button>
-    <button class="btn btn-roxo" id="btnQsLigarRamos" hidden data-i18n-title="qs_ligar_btn_tip"></button>
-    <button class="btn btn-cinza" id="btnQsCriarDaAba" data-i18n="qs_como_criar"
-      title="Explica onde se criam questões."></button>
-    <span class="nota" id="qsResumo"></span>
   </div>
-  <div id="qsLista" class="qs-lista-aba"></div>
 </section>
 
 <section id="secFerramentas" data-modo="ferramentas" hidden>
@@ -10797,56 +10854,51 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <dialog id="dlgBackup" class="ui-modal">
-  <h3 data-i18n="bk_tit"></h3>
-  <p class="nota" data-i18n="bk_ajuda"></p>
-  <div class="bk-bloco">
-    <div class="bk-rot" data-i18n="bk_agora_rot"></div>
-    <div id="bkAgora" class="bk-txt"></div>
+  <!-- (19.42.0) O PAINEL DO BACKUP, na ordem do uso: a SITUAÇÃO no topo (uma frase, na cor dela, com a única ação que
+       falta), o automático (no computador), a cópia à mão, restaurar — e, recolhido, o que é raro (as cópias de
+       antes, o .json). "O que está no aplicativo agora" saiu: as contagens só servem na hora de restaurar, e a
+       conferência do restauro já as mostra lado a lado. -->
+  <div class="vka-cab">
+    <h3 data-i18n="bk_tit"></h3>
+    <button type="button" class="dlg-x" id="btnBkX" data-i18n-title="help_close">&#10006;</button>
   </div>
-  <div class="bk-bloco">
-    <div class="bk-rot" data-i18n="bk_ultimo_rot"></div>
-    <div id="bkUltimo" class="bk-txt"></div>
+  <div class="bk-situacao" id="bkSituacao" role="status">
+    <div class="bk-sit-txt" id="bkSitTxt"></div>
+    <div class="bk-sit-ultimo nota" id="bkUltimo"></div>
+    <button type="button" class="btn btn-verde bk-sit-acao" id="btnBkSitAcao" hidden></button>
   </div>
-
-  <!-- AS ÚLTIMAS CÓPIAS. Só aparece quando há mais de uma: com uma só,
-       a linha do "último backup" acima já disse tudo. -->
-  <div id="bkHist" class="bk-hist" hidden></div>
-  <!-- (v19.15.0) AS CÓPIAS DE ANTES DO RESTAURO: cada restauro guarda antes o que havia; daqui dá para voltar. -->
-  <div id="bkAntes" class="bk-hist bk-antes" hidden></div>
-  <div class="bk-passo">
-    <b data-i18n="bk_p1_tit"></b>
-    <!-- O TEXTO DIZ O QUE ESTE NAVEGADOR FAZ, e é pintado pelo JS: numa
-         janela sem seletor de pasta nem compartilhamento, prometer
-         "escolha uma pasta" seria mentira. -->
-    <span class="nota" id="bkGuardarExp"></span>
-    <div class="btn-linha">
-      <button class="btn btn-verde" id="btnBkSalvarNuvem" hidden></button>
-      <button class="btn btn-cinza" id="btnBkBaixar"></button>
-      <!-- REGRAVAR NA MESMA PASTA. Só existe depois de haver uma pasta
-           escolhida nesta sessão, e é a melhor resposta para "salvei
-           três vezes hoje e não sei qual é qual": passa a haver um
-           arquivo só, sempre o mesmo. -->
-      <button class="btn btn-cinza" id="btnBkRegravar" hidden></button>
-    </div>
-    <!-- (v19.16.0) o backup sai compactado (.json.gz); o .json de sempre continua à mão -->
-    <button type="button" class="btn-link bk-json" id="btnBkBaixarJson" data-i18n="bk_baixar_json" data-i18n-title="bk_baixar_json_tip" hidden></button>
-  </div>
-  <!-- (v19.17.0) BACKUP AUTOMÁTICO NUMA PASTA — um caminho A MAIS; os botões de guardar acima continuam iguais.
-       O conteúdo é pintado por bkaPintar (backup-auto.js) conforme o estado: sem suporte, desligado, ligado, pausado. -->
+  <!-- (v19.17.0) BACKUP AUTOMÁTICO NUMA PASTA — pintado por bkaPintar (backup-auto.js) conforme o estado -->
   <div class="bk-passo bka-bloco" id="bkaBloco">
     <b data-i18n="bka_tit"></b>
     <div id="bkaCorpo"></div>
   </div>
   <div class="bk-passo">
-    <b data-i18n="bk_p2_tit"></b>
-    <span class="nota" data-i18n="bk_p2_txt"></span>
-    <div class="btn-linha">
-      <button class="btn btn-azul" id="btnBkCarregar" data-i18n="bk_carregar"></button>
+    <b data-i18n="bk_p1_tit"></b>
+    <!-- O TEXTO DIZ O QUE ESTE NAVEGADOR FAZ, e é pintado pelo JS -->
+    <span class="nota" id="bkGuardarExp"></span>
+    <div class="btn-linha bk-bts">
+      <button class="btn btn-verde bk-bt" id="btnBkSalvarNuvem" hidden></button>
+      <button class="btn btn-cinza bk-bt" id="btnBkBaixar"></button>
+      <!-- REGRAVAR NA MESMA PASTA: só depois de haver um arquivo escolhido nesta sessão -->
+      <button class="btn btn-cinza bk-bt" id="btnBkRegravar" hidden></button>
     </div>
-    <!-- (v19.16.0) sem filtro de tipo: o arquivo vem como .json, .json.gz ou sem extensão (e-mail, WhatsApp) — quem decide
-         é a assinatura do conteúdo, e um arquivo que não serve é recusado com a mensagem de sempre -->
+  </div>
+  <div class="bk-passo">
+    <b data-i18n="bk_p2_tit"></b>
+    <div class="btn-linha bk-bts">
+      <button class="btn btn-azul bk-bt" id="btnBkCarregar"></button>
+    </div>
+    <!-- sem filtro de tipo: .json, .json.gz ou sem extensão (e-mail, WhatsApp) — quem decide é a assinatura do conteúdo -->
     <input type="file" id="bkArquivo" style="display:none">
   </div>
+  <details class="bk-passo bk-mais" id="bkMais">
+    <summary data-i18n="bk_mais_tit"></summary>
+    <!-- AS ÚLTIMAS CÓPIAS (só com mais de uma) e AS DE ANTES DO RESTAURO (daqui dá para voltar) -->
+    <div id="bkHist" class="bk-hist" hidden></div>
+    <div id="bkAntes" class="bk-hist bk-antes" hidden></div>
+    <!-- (v19.16.0) o backup sai compactado (.json.gz); o .json de sempre continua à mão -->
+    <button type="button" class="btn-link bk-json" id="btnBkBaixarJson" data-i18n="bk_baixar_json" data-i18n-title="bk_baixar_json_tip" hidden></button>
+  </details>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnBkFechar" data-i18n="help_close"></button>
   </div>

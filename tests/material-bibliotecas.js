@@ -86,6 +86,40 @@ async function testes() {
     ok(api.qsFiltrar({ chave: "__sem_topico__" }).map((x) => x.id).join() === "d", "Q5 o filtro 'sem topico' mostra so' as sem topico");
   }
 
+  /* ---- 19.41.0: os filtros da biblioteca de questões conversam entre si ---- */
+  {
+    const r = rodar(); const api = r.api; api.matIniciar();
+    api.qsUiIniciar();
+    const q = (id, chave, disc, top, banca, tipo) => ({ id, chave, disciplina: disc, topico: top, banca: banca || "", tipo: tipo || "ce", enunciado: "Enunciado " + id, gabarito: "C", tentativas: [] });
+    api.qsBancoForcar([q("a", "tributário›princípios", "Tributário", "Princípios", "FGV"), q("b", "tributário›imunidades", "Tributário", "Imunidades", "FGV", "me"),
+      q("c", "financeiro›orçamento", "Financeiro", "Orçamento", "Cebraspe"), q("d", "", "Financeiro", "")]);
+    api.trocarModo("questoes");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    ok(["qs_f_edital", "qs_f_disc", "qs_f_topico", "qs_f_banca", "qs_f_tipo", "qs_f_situacao", "qs_f_busca"].every((k) => html.indexOf('data-i18n="' + k + '"') > 0),
+      "F1 cada campo de filtro tem rotulo");
+    const textos = (id) => api.qsUiOpcoesDoSelect(api.$(id)).map((o) => o.textContent);
+    ok(textos("qsFDisc").some((x) => /^Tributário \(2\)$/.test(x)) && textos("qsFDisc").some((x) => /^Financeiro \(2\)$/.test(x)), "F2 as disciplinas mostram quantas questoes tem: " + textos("qsFDisc").join(" | "));
+    api.$("qsFDisc").value = "Financeiro"; api.qsUiLerFiltros();
+    const tops = textos("qsFTopico");
+    ok(tops.some((x) => /Orçamento \(1\)/.test(x)) && !tops.some((x) => /Princípios|Imunidades/.test(x)) && tops.some((x) => /sem tópico \(1\)/.test(x)),
+      "F3 escolher a disciplina limita os topicos aos dela: " + tops.join(" | "));
+    ok(textos("qsFBanca").join("|") === "todas as bancas|Cebraspe (1)", "F4 a banca tambem so' mostra o que existe dentro da disciplina: " + textos("qsFBanca").join("|"));
+    /* tópico de outra disciplina é desmarcado sozinho */
+    api.$("qsFDisc").value = ""; api.qsUiLerFiltros();
+    api.$("qsFTopico").value = "tributário›princípios"; api.qsUiLerFiltros();
+    api.$("qsFDisc").value = "Financeiro"; api.qsUiLerFiltros();
+    ok(api.qsUiListaFiltrada().length === 2, "F5 trocar para uma disciplina que nao tem o topico escolhido desmarca o topico: " + api.qsUiListaFiltrada().length);
+    const chips = () => api.$("qsChips").querySelectorAll(".qs-chip");
+    ok(api.$("qsChips").hidden === false && chips().length === 1 && /Disciplina:Financeiro/.test(chips()[0].textContent.replace(/\s+/g, "")), "F6 os filtros ativos aparecem em etiquetas: " + chips().map((c) => c.textContent).join(" | "));
+    chips()[0].querySelectorAll(".qs-chip-x")[0].onclick();
+    ok(api.qsUiListaFiltrada().length === 4 && api.$("qsChips").hidden === true, "F7 o ✕ da etiqueta tira o filtro");
+    api.$("qsFTipo").value = "me"; api.qsUiLerFiltros();
+    api.$("qsFBanca").value = "Cebraspe"; api.qsUiLerFiltros();
+    ok(/Nenhuma questão passa/.test(api.$("qsLista").textContent) && api.$("qsLista").querySelectorAll(".qs-vazio-limpar").length === 1, "F8 lista vazia por causa dos filtros oferece 'limpar os filtros'");
+    api.$("btnQsLimparFiltros").onclick();
+    ok(api.qsUiListaFiltrada().length === 4 && api.$("btnQsLimparFiltros").hidden === true, "F9 'limpar' tira todos os filtros");
+  }
+
   /* ---- 4: o "Continuar" à parte, em links ---- */
   ok(/\.mat-recentes\{[^}]*border:1px dashed/.test(html) && /\.mat-rec-link\{[^}]*background:none;border:0/.test(html),
     "C1 o 'Continuar' e' uma faixa a parte, com links sem contorno de botao");

@@ -243,7 +243,7 @@ async function testes() {
   /* ---- onde ficou a base: código, não texto traduzido ---- */
   {
     const { api, L } = preparar();
-    ok(api.bkOndeTexto("arquivo") === "restaurada de arquivo" && api.bkOndeTexto("restaurada de arquivo") === "restaurada de arquivo" && api.bkOndeTexto(null) === "pasta de downloads",
+    ok(api.bkOndeTexto("arquivo") === "restaurada de arquivo" && api.bkOndeTexto("restaurada de arquivo") === "restaurada de arquivo" && api.bkOndeTexto(null) === "na pasta de downloads",
       "O1 o código vira texto; o texto já gravado (versões antigas) aparece como está, sem 'bk_onde_'");
     api.bkAntesLojaDefinir(memoria());
     const bk = api.montarBackup();
