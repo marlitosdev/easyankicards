@@ -656,6 +656,7 @@ function leiLocDefinir(sim) {
   try { localStorage.setItem(LEI_LOC_CHAVE, sim ? "1" : "0"); } catch (e) {}
   leiLocPintarBotao();
   leiLocAtualizar();
+  leiCitaLocAtualizar();
   try { leiReg("leitura", sim ? "localizador ligado" : "localizador desligado", ""); } catch (e) {}
   if (!sim) { try { toastMsg(t("lei_loc_desligado"), 4500); } catch (e) {} }
   return sim;
@@ -689,7 +690,13 @@ function leiLocCadeia(cx, y) {
   const bloco = leiBlocoAte(cx, y);
   if (!bloco || !bloco._lei) return [];
   const corpo = Array.from(bloco.children || []).filter((c) => /\blei-art-txt\b/.test(String(c.className || "")))[0];
-  const linhas = corpo ? Array.from(corpo.children || []) : [];
+  const cad = leiLocCadeiaLinhas(corpo ? Array.from(corpo.children || []) : [], y, bloco._lei.rotulo);
+  if (cad.length) cad[0].bloco = bloco;
+  return cad;
+}
+
+/* a mesma conta sobre as linhas de UM artigo (a 1ª é o caput): serve à leitura e à prévia da citação */
+function leiLocCadeiaLinhas(linhas, y, rotuloArt) {
   if (!linhas.length || linhas[0].getBoundingClientRect().top >= y) return [];
   const pilha = [];
   let k = 1;
@@ -710,7 +717,7 @@ function leiLocCadeia(cx, y) {
   if (!pilha.length && linhas[linhas.length - 1].getBoundingClientRect().bottom <= y) return [];
   const caput = String(linhas[0].textContent || "").replace(/\s+/g, " ").trim();
   const ini = caput.replace(/^art(?:igo)?\.?\s*[\dº°o]+(?:\s*-\s*[A-Z])?\s*[.\-–—]?\s*/i, "");
-  const cad = [{ nivel: 0, rotulo: bloco._lei.rotulo, txt: ini, el: linhas[0], bloco }];
+  const cad = [{ nivel: 0, rotulo: rotuloArt, txt: ini, el: linhas[0] }];
   pilha.forEach((p) => cad.push({ nivel: p.nivel, rotulo: p.rot.rotulo.replace(/\s*[-–—.:)]\s*$/, ""), txt: p.txt.slice(p.rot.len).trim(), el: p.el }));
   /* mais fundo que o limite: o artigo e os níveis mais perto de onde se está */
   return cad.length > LEI_LOC_MAX ? [cad[0]].concat(cad.slice(cad.length - (LEI_LOC_MAX - 1))) : cad;
@@ -729,26 +736,51 @@ function leiLocAtualizar() {
   if (!cx || cx.hidden || !leiLocLigado() || !leiFlutAtivo || leiModo !== "ler") return esconder();
   const r = cx.getBoundingClientRect();
   if (!r.height) return esconder();
-  /* a faixa cobre o topo da leitura: o que está embaixo DELA também já saiu de vista. Duas voltas bastam: a
-   * altura da faixa depende de quantas linhas ela tem, e as linhas dependem da altura. */
-  let cad = leiLocCadeia(cx, r.top + 4);
+  const cad = leiLocMontar(caixa, cx, (y) => leiLocCadeia(cx, y), () => { linha.hidden = false; });
+  return cad.length ? cad : esconder();
+}
+
+/* a faixa cobre o topo do que rola: o que está embaixo DELA também já saiu de vista. Duas voltas bastam: a
+ * altura da faixa depende de quantas linhas ela tem, e as linhas dependem da altura. */
+function leiLocMontar(caixa, cx, calc, mostrar) {
+  const topo = cx.getBoundingClientRect().top;
+  let cad = calc(topo + 4);
   let alt = 0;
   for (let volta = 0; volta < 2 && cad.length; volta++) {
     leiLocDesenhar(caixa, cad, cx);
-    linha.hidden = false;
+    mostrar();
     const a2 = caixa.offsetHeight || cad.length * 22;
     if (a2 === alt) break;
     alt = a2;
-    const nova = leiLocCadeia(cx, r.top + alt);
+    const nova = calc(topo + alt);
     /* a faixa cobriria o resto do artigo: fica a de antes (sumir e voltar a cada pixel seria pior) */
     if (!nova.length) break;
     if (nova.length === cad.length && nova.every((x, i) => x.el === cad[i].el)) break;
     cad = nova;
   }
-  if (!cad.length) return esconder();
-  leiLocDesenhar(caixa, cad, cx);
-  linha.hidden = false;
+  if (cad.length) { leiLocDesenhar(caixa, cad, cx); mostrar(); }
   return cad;
+}
+
+/* (19.43.0) O LOCALIZADOR NA PRÉVIA DA CITAÇÃO: o artigo citado aparece inteiro numa caixa que rola — no art. 156-A
+ * da CF são telas e telas de incisos. A mesma faixa, presa no topo da caixa. */
+let leiCitaLocQuadro = 0;
+function leiCitaLocAgendar() {
+  if (leiCitaLocQuadro) return;
+  const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (f) => setTimeout(f, 16);
+  leiCitaLocQuadro = raf(() => { leiCitaLocQuadro = 0; leiCitaLocAtualizar(); }) || 1;
+}
+
+function leiCitaLocAtualizar() {
+  const nav = $("leiCitaLoc"), p = $("leiCitaPreviewTexto");
+  if (!nav || !p) return [];
+  const esconder = () => { nav.hidden = true; return []; };
+  const al = leiCitaPreviewAlvo;
+  if (!leiLocLigado() || !al || !al.art || !$("dlgLeiCitaPreview") || !$("dlgLeiCitaPreview").open) return esconder();
+  if (!p.getBoundingClientRect().height) return esconder();
+  const linhas = Array.from(p.children || []);
+  const cad = leiLocMontar(nav, p, (y) => leiLocCadeiaLinhas(linhas, y, al.art.rotulo), () => { nav.hidden = false; });
+  return cad.length ? cad : esconder();
 }
 
 function leiLocDesenhar(caixa, cad, cx) {
@@ -2853,10 +2885,13 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     leiCitaTrechoPintar(art, un, linhas);
     const p = $("leiCitaPreviewTexto");
     p.textContent = "";
+    /* (19.43.0) uma linha por bloco: é por elas que o localizador sabe em que § e inciso a leitura está */
     linhas.forEach((l, i) => {
-      if (alvo.has(i)) { const m = document.createElement("mark"); m.className = "lei-cita-alvo"; m.textContent = l; p.append(m); }
-      else p.append(document.createTextNode(l));
-      if (i < linhas.length - 1) p.append(document.createTextNode("\n"));
+      const d = document.createElement("div");
+      d.className = "lei-cita-l";
+      if (alvo.has(i)) { const m = document.createElement("mark"); m.className = "lei-cita-alvo"; m.textContent = l; d.append(m); }
+      else d.textContent = l;
+      p.append(d);
     });
   }
   leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null };
@@ -2866,6 +2901,8 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   abrirModal("dlgLeiCitaPreview");
   /* o artigo inteiro rola até a parte citada */
   try { const m = $("leiCitaPreviewTexto").querySelector("mark.lei-cita-alvo"); if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" }); } catch (e) {}
+  if ($("leiCitaPreviewTexto")) $("leiCitaPreviewTexto").onscroll = leiCitaLocAgendar;
+  leiCitaLocAgendar();
   try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru + (c.mesmaLei ? " (desta lei)" : "")); }
   catch (e) {}
 }

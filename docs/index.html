@@ -743,6 +743,31 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .lei-cita-link.lei-cita-interna{text-decoration-style:dotted}
 .lei-cita-preview-txt{white-space:pre-wrap;max-height:40vh;overflow:auto;
   border:1px solid var(--borda);border-radius:6px;padding:8px 10px}
+/* (19.43.0) A PRÉVIA É PARA LER: janela mais larga, o artigo ocupa toda a altura que sobra (sem caixa de 40vh dentro
+ * de uma janela que também rola), trecho e nota enxutos, e os botões numa fileira só — os do link à esquerda,
+ * "abrir a lei inteira" e "fechar" à direita. */
+dialog.ui-modal.lei-cita-dlg{max-width:760px;max-height:94dvh;padding:14px 16px 12px}
+dialog.ui-modal.lei-cita-dlg[open]{display:flex;flex-direction:column}
+.lei-cita-dlg h3{margin:0 0 2px;font-size:15px}
+.lei-cita-dlg #leiCitaPreviewArtigo{margin:0 0 6px}
+.lei-cita-dlg .lei-cita-trecho{padding:7px 10px;margin:2px 0 8px;max-height:26dvh;overflow:auto;flex:0 0 auto}
+.lei-cita-dlg .lei-cita-trecho-txt{font-size:15px;line-height:1.45}
+.lei-cita-dlg .lei-cita-nota{flex:0 0 auto;padding:4px 8px;margin:0 0 8px}
+.lei-cita-dlg .lei-cita-nota-txt{font-size:12.5px}
+.lei-cita-dlg .lei-cita-nota-ver{align-items:center}
+.lei-cita-txt-cx{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.lei-cita-dlg .lei-cita-preview-txt{flex:1 1 auto;min-height:28dvh;max-height:none;font-size:15px;line-height:1.55;padding:8px 12px}
+.lei-cita-l{min-height:.6em;margin:0 0 6px}
+.lei-cita-loc{top:1px;left:1px;right:12px;border-radius:6px 0 0 0}
+.lei-cita-loc[hidden]{display:none}
+.lei-cita-dlg .dlg-rodape{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-top:10px;padding-top:0;border-top:0}
+.lei-cita-dlg .dlg-rodape .btn{padding:7px 12px;font-size:13px;margin:0}
+.lei-cita-dlg #btnLeiCitaOutro{order:1}
+.lei-cita-dlg #btnLeiCitaDesligar{order:2;margin-right:auto}
+.lei-cita-dlg #btnLeiCitaPreviewAbrir{order:3}
+.lei-cita-dlg #btnLeiCitaPreviewFechar{order:4}
+@media (max-width:600px){dialog.ui-modal.lei-cita-dlg{width:calc(100% - 16px);padding:12px}
+  .lei-cita-dlg .dlg-rodape .btn{padding:7px 10px;font-size:12.5px}}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
    acréscimo seu, não como parte do material original. */
 .mat-leitura .mat-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.10);
@@ -9268,7 +9293,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 
-<dialog id="dlgLeiCitaPreview" class="ui-modal">
+<dialog id="dlgLeiCitaPreview" class="ui-modal lei-cita-dlg">
   <h3 id="leiCitaPreviewTitulo"></h3>
   <p class="nota" id="leiCitaPreviewArtigo"></p>
   <!-- (v18.49.0) o vínculo é seu: desde quando e onde vale -->
@@ -9296,7 +9321,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <textarea id="leiCitaNotaPrompt" rows="3" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
     </div>
   </div>
-  <p id="leiCitaPreviewTexto" class="lei-cita-preview-txt"></p>
+  <!-- (19.43.0) o artigo inteiro, uma linha por bloco, com o localizador preso no topo da caixa -->
+  <div class="lei-cita-txt-cx">
+    <nav class="lei-loc lei-cita-loc" id="leiCitaLoc" aria-label="Localizador" hidden></nav>
+    <div id="leiCitaPreviewTexto" class="lei-cita-preview-txt"></div>
+  </div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiCitaPreviewAbrir"
       data-i18n="lei_cita_abrir_lei"></button>

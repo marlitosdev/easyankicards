@@ -750,7 +750,7 @@ function rodar(opc) {
       return { hoje: gerLogSoHoje, erros: gerLogSoErros, tipo: gerLogTipo };
     },
     qsUiRender, qsUiLerFiltros, qsUiListaFiltrada, qsUiTopicosDoEdital,
-    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRefsRelativas, leiRelativasResolver, leiLocAtualizar, leiLocDefinir, leiLocLigado, leiLocCadeia, leiRetomar, leiContinuarLei,
+    leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRefsRelativas, leiRelativasResolver, leiLocAtualizar, leiLocDefinir, leiLocLigado, leiLocCadeia, leiCitaLocAtualizar, leiRetomar, leiContinuarLei,
     leiOpcDaLei, leiAjusteRecusar, leiAjusteDecidir, leiAjusteFrase, leiAjusteVistos, leiLerLei, leiIrDados, leiEhAlteradora, leiParcelaCitada, leiRegioesCitadas, leiLerCitacoes, leiAlvoDaAlteracao, leiLinhaFechaCitacao, leiLinhaCitacaoInteira, leiMarcaDoFecho, leiContaAspas,
     toast, toastMsg, leiPreAvisar, leiPreCancelar, leiLinhaDeConteudo, leiDupSoConferir, leiRevogacaoDaLinha, leiRevogacaoDoArtigo, leiRevogacaoDoAnexo, leiOptLinhaRev, leiPintarAnexos, leiAnexosAlternar, leiAnexosOcultosLer,
     leiMarcarTachado, leiSegmentosDoHtml, leiTirarTachado, leiDocxXmlParaHtml, leiTextoDeDocx, leiTipoDeArquivo, leiArtigoRevogado, leiContarRevogados, leiSemDispositivosRevogados, leiHtmlParaTexto, leiCharsetDoHtml, leiDecodificarArquivoHtml, leiTextoDeArquivoHtml, leiArquivoHtmlLido, leiInserirNoCampo, leiIrUnidadesEl, leiIrChipEl, leiCitacaoPreviewAbrir, leiTrocarModo, leiPreIdentificadoresEl, leiUpdPrimeiroAtencao, leiUpdAceitarSeguros, leiTirarMarcasTachado, leiAcharTachados, leiColarComTachado, leiPreOriginal, leiPreConfirmar, leiPreAceita,

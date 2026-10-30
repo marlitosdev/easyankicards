@@ -80,6 +80,19 @@ async function testes() {
   api.leiLocDefinir(true);
   ok(api.leiLocLigado() && api.$("leiLocLinha").hidden === false && /ligado/.test(api.$("btnLeiLoc").textContent), "D3 religado em exibicao, a faixa volta: " + api.$("btnLeiLoc").textContent);
 
+  /* ---- 4: a prévia da citação tem o mesmo localizador ---- */
+  noV.onclick({ stopPropagation() {} });
+  const pv = api.$("leiCitaPreviewTexto");
+  const pls = Array.from(pv.children).filter((c) => /lei-cita-l/.test(c.className || ""));
+  ok(api.$("dlgLeiCitaPreview").open && pls.length === LEI.split("\n").length - 1 && pls.some((d) => d.children[0] && /lei-cita-alvo/.test(d.children[0].className)),
+    "V1 a previa abre com uma linha por bloco e o inciso V marcado: " + pls.length);
+  pv._rect = { top: 300, left: 0, width: 500, height: 300 };
+  pls.forEach((d, i) => { d._rect = { top: i === pls.length - 1 ? 900 : 300 - 30 * 6 + 5 + i * 30, left: 0, width: 500, height: 28 }; });
+  const cp = api.leiCitaLocAtualizar();
+  ok(api.$("leiCitaLoc").hidden === false && cp.map((c) => c.rotulo).slice(0, 2).join(" › ") === "Art. 1º › § 1º", "V2 rolando a previa, a faixa diz artigo e §: " + cp.map((c) => c.rotulo).join(" › "));
+  pls.forEach((d, i) => { d._rect = { top: 310 + i * 30, left: 0, width: 500, height: 28 }; });
+  ok(api.leiCitaLocAtualizar().length === 0 && api.$("leiCitaLoc").hidden === true, "V3 com o comeco do artigo a vista, a faixa some");
+
   return Object.assign(falhas, { quantas: n });
 }
 
