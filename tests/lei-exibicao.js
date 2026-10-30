@@ -59,7 +59,7 @@ async function testes() {
     const ini = html.indexOf('id="leiGavExibir"');
     const corpo = html.slice(ini, html.indexOf("<!-- SÓ EDITÁVEL", ini));
     const linhas = corpo.split('<div class="lei-pop-linha">').slice(1);
-    ok(linhas.length === 3, "P3 tres linhas (leitura ampliada, letra, janela): " + linhas.length);
+    ok(linhas.length === 4, "P3 quatro linhas (leitura ampliada, letra, janela, localizador): " + linhas.length);
     ok(/id="btnLeiCheia"/.test(linhas[0])
       && ["btnLeiMenor", "btnLeiMaior", "btnLeiFonteReset", "leiFonteAtual"].every((id) => linhas[1].indexOf('id="' + id + '"') >= 0)
       && ["btnLeiJanelaMenos", "btnLeiJanelaMais", "leiJanelaNome"].every((id) => linhas[2].indexOf('id="' + id + '"') >= 0), "P3a cada controle na sua linha");

@@ -268,6 +268,9 @@ async function testes() {
     api.qsVincAbrir({ disciplina: DISC, topico: TOP, comentario: "art. 3º do CTN" }, null, "");
     ok(/comentário/.test(api.$("qsVincTit").textContent || ""), "R16a nas questões o título deixou de falar de comentário");
     ok(!!api.$("btnMatVinc"), "R16b o botão 🔗 vínculos de lei não está na barra da leitura");
+    /* (19.43.0) a mesma citação duas vezes ("art." na resposta, "Art." no saiba mais) é um item só, com a contagem */
+    api.qsVincAbrir({ disciplina: DISC, topico: TOP, comentario: "Resposta (art. 156-A, § 5º, II, da CF/88). Literalidade — Art. 156-A, § 5º, II, da CF/88: texto." }, null, "");
+    ok(Array.from(api.$("qsVincLista").children).filter((c) => /qsVincCit_/.test(c.id || "")).length === 1 && /2 vezes/.test(api.$("qsVincCit_0").textContent), "R16c a mesma citação repetida vira um item com 'aparece 2 vezes': " + (api.$("qsVincCit_0") && api.$("qsVincCit_0").textContent));
   }
 
   /* R17: quem repinta na volta da lei — questão × resumo */

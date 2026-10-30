@@ -2305,6 +2305,76 @@ function leiEstruturaArtigo(texto, opc) {
   return { caput, unidades, linhas: linhas.length };
 }
 
+/* =====================================================================
+ * (19.43.0) AS REFERÊNCIAS AO PRÓPRIO ARTIGO: "ressalvado o disposto no inciso V", "o § 2º", "a alínea b"
+ *
+ * A lei cita as partes do MESMO artigo sem repetir o número dele, e o leitor de citações só via "art. N". Aqui saem as
+ * referências soltas: inciso(s), §(§)/parágrafo único e alínea, com "do § 1º" / "do caput" / "do inciso II" quando a
+ * frase diz de qual parte. Fica de fora o que aponta para OUTRO artigo ou lei ("inciso V do art. 155", "§ 2º da Lei…",
+ * "art. 155, § 2º") e o rótulo com que a própria linha começa ("§ 1º O imposto…", "Parágrafo único."). Quem desenha
+ * decide o resto pelo lugar: "no inciso V" escrito dentro do § 1º é o inciso V do § 1º (leiRelativasResolver).
+ * ===================================================================== */
+function leiRefsRelativas(txt) {
+  const s = String(txt || "");
+  const out = [];
+  const ROM = "[IVXLC]{1,7}(?:-[A-Z])?";
+  const NPAR = "\\d{1,3}\\s*[ºo°]?(?:-[A-Z])?";
+  const PAR = "§\\s*" + NPAR + "|par[áa]grafo\\s+[úu]nico";
+  const fimPal = "(?![A-Za-zÀ-ú0-9])";
+  const lista = (n) => "(" + n + "(?:\\s*(?:,|e|ou|a)\\s+" + n + ")*)";
+  /* a alínea primeiro: "alínea b do inciso II" é uma referência só, e não "inciso II" sozinho */
+  const moldes = [
+    { tipo: "alinea", re: new RegExp("\\b[Aa]l[íi]nea\\s+[\"“']?([a-z])[\"”']?" + fimPal + "(?:\\s+do\\s+inciso\\s+(" + ROM + ")" + fimPal + ")?", "g") },
+    { tipo: "inciso", re: new RegExp("\\b[Ii]ncisos?\\s+" + lista(ROM) + fimPal + "(?:\\s+d[oa]\\s+(caput|" + PAR + ")" + fimPal + ")?", "g") },
+    /* "§ 5º, III": o inciso do parágrafo, numa referência só */
+    { tipo: "paragrafo", re: new RegExp("(?:§§?\\s*" + lista(NPAR) + "|([Pp]ar[áa]grafo\\s+[úu]nico))" + fimPal + "(?:\\s*,\\s*(" + ROM + ")(?=\\s*[;,.)]|\\s*$))?", "g") },
+  ];
+  /* depois da referência: "do art. 155", "da Lei…", "desta Constituição" — é de outro lugar */
+  const fora = /^\s*,?\s*(?:d[oa]s?|n[oa]s?|pel[oa]s?)\s+(?:mesm[oa]\s+)?(?:art(?:igo)?s?\b|arts?\.|lei\b|leis\b|constitui|c[óo]digo|decreto|adct|ato\s+das|emenda|resolu|regimento|medida|estatuto|consolida)/i;
+  const foraDesta = /^\s*,?\s*dest[ae]\s+(?:lei|constitui|c[óo]digo|decreto|emenda)/i;
+  /* antes: "art. 155, § 2º, X" — a parte de uma citação de artigo */
+  const antesArt = /\bart(?:igo)?s?\.?\s*\d{1,4}\s*[ºo°]?(?:-[A-Z])?\s*,?\s*(?:(?:§\s*\d{1,3}\s*[ºo°]?(?:-[A-Z])?|par[áa]grafo\s+[úu]nico|inciso\s+[IVXLC]+|[IVXLC]{1,7})\s*,?\s*)*$/i;
+  const romanos = (t) => {
+    const ns = String(t).split(/\s*(?:,|\be\b|\bou\b)\s*/).filter(Boolean);
+    const r = [];
+    ns.forEach((x) => {
+      const m = x.match(/^([IVXLC]+(?:-[A-Z])?)\s+a\s+([IVXLC]+)$/);
+      if (m && leiRomanoValor(m[1]) && leiRomanoValor(m[2]) && leiRomanoValor(m[2]) - leiRomanoValor(m[1]) < 30) {
+        for (let v = leiRomanoValor(m[1]); v <= leiRomanoValor(m[2]); v++) r.push(leiValorRomano(v));
+      } else x.split(/\s+a\s+/).forEach((y) => { if (/^[IVXLC]+(?:-[A-Z])?$/.test(y)) r.push(y); });
+    });
+    return r;
+  };
+  const pars = (t) => (String(t).match(/\d{1,3}\s*[ºo°]?(?:-[A-Z])?/g) || []).map((x) => x.replace(/\s+/g, ""));
+  const doPar = (x) => (!x ? null : /caput/i.test(x) ? "caput" : /[úu]nico/i.test(x) ? "único" : pars(x)[0] || null);
+  moldes.forEach(({ tipo, re }) => {
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const ini = m.index, fim = ini + m[0].length;
+      if (fora.test(s.slice(fim, fim + 70)) || foraDesta.test(s.slice(fim, fim + 40))) continue;
+      if (antesArt.test(s.slice(Math.max(0, ini - 60), ini))) continue;
+      if (out.some((o) => o.ini < fim && ini < o.fim)) continue;
+      const r = { ini, fim, texto: m[0], tipo, incisos: [], paragrafos: [], alineas: [], base: null };
+      if (tipo === "inciso") {
+        r.incisos = romanos(m[1]);
+        r.base = doPar(m[2]);
+        if (r.base && r.base !== "caput") r.paragrafos = [r.base];
+      } else if (tipo === "alinea") {
+        r.alineas = [m[1]];
+        if (m[2]) { r.incisos = [m[2]]; r.base = "inciso"; }
+      } else {
+        /* o rótulo da própria linha ("§ 1º O imposto…", "Parágrafo único.") não é referência */
+        if (!s.slice(0, ini).trim()) continue;
+        r.paragrafos = m[2] ? ["único"] : pars(m[1]);
+        if (m[3] && r.paragrafos.length === 1) { r.incisos = [m[3]]; r.base = r.paragrafos[0]; }
+      }
+      if (!r.incisos.length && !r.paragrafos.length && !r.alineas.length) continue;
+      out.push(r);
+    }
+  });
+  return out.sort((a, b) => a.ini - b.ini);
+}
+
 /* "§ 4º-A" · "inciso II do § 5º" · "alínea c do inciso II" — para a tela dizer
  * de qual pedaço se fala */
 function leiRotuloDaUnidade(u) {

@@ -2218,6 +2218,16 @@ function qsVincPintar() {
       cx.append(card);
     });
   } catch (e) {}
+  /* (19.43.0) A MESMA CITAÇÃO DUAS VEZES (na resposta e no "saiba mais", "art." e "Art.") é UM item: o vínculo é guardado
+   * pelo trecho sem maiúsculas nem espaços (citChave), então corrigir uma corrige as duas — listar duas era ruído */
+  const vezes = new Map();
+  cits = cits.filter((ct) => {
+    const k = citChave(ct.texto) + "|" + (ct.vinculoK || "");
+    if (vezes.has(k)) { vezes.get(k)._vezes++; return false; }
+    vezes.set(k, ct);
+    ct._vezes = 1;
+    return true;
+  });
   cits.forEach((ct, i) => {
     const alvo = qsUiLeiAlvo(ct, lista, doTopico);
     const card = document.createElement("div");
@@ -2231,7 +2241,8 @@ function qsVincPintar() {
     meta.textContent = (alvo.lei ? t("qs_vinc_abre", { l: alvo.lei.nome, a: ct.numCru || "—" })
       : t("qs_vinc_sem_lei", { l: ct.rotulo || "?" }))
       + (alvo.deduzida ? " · " + t("qs_vinc_deduzida", { l: ct.rotuloDeduzido }) : "")
-      + (ct.permanente ? " · " + t("qs_vinc_permanente") + " · " + t(ct.soTopico ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") : "");
+      + (ct.permanente ? " · " + t("qs_vinc_permanente") + " · " + t(ct.soTopico ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") : "")
+      + (ct._vezes > 1 ? " · " + t("qs_vinc_vezes", { n: ct._vezes }) : "");
     const ac = document.createElement("div");
     ac.className = "lei-bib-acoes";
     const errado = document.createElement("button");

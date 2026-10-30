@@ -614,20 +614,174 @@ function leiMarcadorMudar(alvo, opc) {
 function leiArtigoDoTopo() {
   const cx = $("leiLeitura");
   if (!cx || cx.hidden) return null;
+  const caixa = cx.getBoundingClientRect();
+  const el = leiBlocoAte(cx, caixa.top + 24);
+  return el ? el._lei : null;
+}
+
+/* o bloco de artigo cujo começo é o último a já ter passado da linha y (null sem artigos) */
+function leiBlocoAte(cx, y) {
   const els = Array.from(cx.querySelectorAll(".lei-art")).filter((e) => e._lei);
   if (!els.length) return null;
-  const caixa = cx.getBoundingClientRect();
   /* SEM LAYOUT (o diálogo ainda fechado, ou a leitura escondida) toda medida é zero e "o último que
    * passou do topo" seria o ÚLTIMO artigo da lei: o começo é a resposta certa */
-  if (!caixa.height) return els[0]._lei;
-  const topo = caixa.top + 24;
+  if (!cx.getBoundingClientRect().height) return els[0];
   let lo = 0, hi = els.length - 1, achou = 0;
   while (lo <= hi) {
     const meio = (lo + hi) >> 1;
-    if (els[meio].getBoundingClientRect().top <= topo) { achou = meio; lo = meio + 1; }
+    if (els[meio].getBoundingClientRect().top <= y) { achou = meio; lo = meio + 1; }
     else hi = meio - 1;
   }
-  return els[achou]._lei;
+  return els[achou];
+}
+
+/* =====================================================================
+ * (19.43.0) O LOCALIZADOR: EM QUE PARTE DO ARTIGO LONGO EU ESTOU
+ *
+ * No meio do art. 156-A da CF (dezenas de incisos, em vários parágrafos) o inciso na tela não diz de qual parágrafo
+ * ele é, nem de qual artigo. O localizador é uma faixa fina presa no topo da leitura, com o artigo e, embaixo dele,
+ * só as partes que JÁ COMEÇARAM ACIMA da tela — empilhadas pela hierarquia (artigo › § › inciso › alínea), uma
+ * linha cada, cortada com "…". Some quando o começo do artigo está à vista (não há onde se perder) e cada linha leva
+ * de volta ao começo daquela parte. Liga e desliga no × da própria faixa e em "exibição"; a escolha fica guardada.
+ * ===================================================================== */
+const LEI_LOC_CHAVE = "eac_lei_localizador";
+const LEI_LOC_MAX = 4;          /* o artigo e no máximo três níveis: mais que isso tomaria a leitura */
+let leiLocQuadro = 0;
+
+function leiLocLigado() {
+  try { return localStorage.getItem(LEI_LOC_CHAVE) !== "0"; } catch (e) { return true; }
+}
+
+function leiLocDefinir(sim) {
+  try { localStorage.setItem(LEI_LOC_CHAVE, sim ? "1" : "0"); } catch (e) {}
+  leiLocPintarBotao();
+  leiLocAtualizar();
+  try { leiReg("leitura", sim ? "localizador ligado" : "localizador desligado", ""); } catch (e) {}
+  if (!sim) { try { toastMsg(t("lei_loc_desligado"), 4500); } catch (e) {} }
+  return sim;
+}
+
+function leiLocPintarBotao() {
+  const b = $("btnLeiLoc");
+  if (!b) return;
+  const sim = leiLocLigado();
+  b.textContent = t(sim ? "lei_loc_on" : "lei_loc_off");
+  b.setAttribute("aria-pressed", sim ? "true" : "false");
+  b.className = "btn-min" + (sim ? " btn-min-ok" : "");
+}
+
+/* uma linha do artigo entra na pilha se começa com rótulo (§, inciso, alínea, item): tira da pilha o que é do mesmo
+ * nível ou abaixo. Linha sem rótulo é continuação da parte aberta. */
+function leiLocEmpilhar(pilha, linha) {
+  const txt = String(linha.textContent || "").replace(/\s+/g, " ").trim();
+  let rot = null;
+  try { rot = leiLerRotulo(txt); } catch (e) { rot = null; }
+  if (!rot) return null;
+  const nivel = rot.tipo === "paragrafo" ? 1 : rot.tipo === "inciso" ? 2 : rot.tipo === "alinea" ? 3 : 4;
+  while (pilha.length && pilha[pilha.length - 1].nivel >= nivel) pilha.pop();
+  const p = { nivel, rot, el: linha, txt };
+  pilha.push(p);
+  return p;
+}
+
+/* a cadeia do que já começou acima da linha y: [{nivel, rotulo, txt, el}] — vazia se o começo do artigo está à vista */
+function leiLocCadeia(cx, y) {
+  const bloco = leiBlocoAte(cx, y);
+  if (!bloco || !bloco._lei) return [];
+  const corpo = Array.from(bloco.children || []).filter((c) => /\blei-art-txt\b/.test(String(c.className || "")))[0];
+  const linhas = corpo ? Array.from(corpo.children || []) : [];
+  if (!linhas.length || linhas[0].getBoundingClientRect().top >= y) return [];
+  const pilha = [];
+  let k = 1;
+  for (; k < linhas.length; k++) {
+    if (linhas[k].getBoundingClientRect().top >= y) break;
+    leiLocEmpilhar(pilha, linhas[k]);
+  }
+  /* a última parte já acabou e a seguinte (ainda inteira na tela) é irmã ou tia dela: não é mais onde se está */
+  const ult = pilha[pilha.length - 1];
+  if (ult && ult.el.getBoundingClientRect().bottom <= y) {
+    const prox = linhas[k];
+    let rp = null;
+    try { rp = prox ? leiLerRotulo(String(prox.textContent || "").replace(/\s+/g, " ").trim()) : null; } catch (e) { rp = null; }
+    const np = rp ? (rp.tipo === "paragrafo" ? 1 : rp.tipo === "inciso" ? 2 : rp.tipo === "alinea" ? 3 : 4) : 99;
+    if (!prox || np <= ult.nivel) pilha.pop();
+  }
+  /* o artigo também acabou (só sobra o espaço até o próximo): nada a mostrar */
+  if (!pilha.length && linhas[linhas.length - 1].getBoundingClientRect().bottom <= y) return [];
+  const caput = String(linhas[0].textContent || "").replace(/\s+/g, " ").trim();
+  const ini = caput.replace(/^art(?:igo)?\.?\s*[\dº°o]+(?:\s*-\s*[A-Z])?\s*[.\-–—]?\s*/i, "");
+  const cad = [{ nivel: 0, rotulo: bloco._lei.rotulo, txt: ini, el: linhas[0], bloco }];
+  pilha.forEach((p) => cad.push({ nivel: p.nivel, rotulo: p.rot.rotulo.replace(/\s*[-–—.:)]\s*$/, ""), txt: p.txt.slice(p.rot.len).trim(), el: p.el }));
+  /* mais fundo que o limite: o artigo e os níveis mais perto de onde se está */
+  return cad.length > LEI_LOC_MAX ? [cad[0]].concat(cad.slice(cad.length - (LEI_LOC_MAX - 1))) : cad;
+}
+
+function leiLocAgendar() {
+  if (leiLocQuadro) return;
+  const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (f) => setTimeout(f, 16);
+  leiLocQuadro = raf(() => { leiLocQuadro = 0; leiLocAtualizar(); }) || 1;
+}
+
+function leiLocAtualizar() {
+  const linha = $("leiLocLinha"), caixa = $("leiLoc"), cx = $("leiLeitura");
+  if (!linha || !caixa) return [];
+  const esconder = () => { linha.hidden = true; return []; };
+  if (!cx || cx.hidden || !leiLocLigado() || !leiFlutAtivo || leiModo !== "ler") return esconder();
+  const r = cx.getBoundingClientRect();
+  if (!r.height) return esconder();
+  /* a faixa cobre o topo da leitura: o que está embaixo DELA também já saiu de vista. Duas voltas bastam: a
+   * altura da faixa depende de quantas linhas ela tem, e as linhas dependem da altura. */
+  let cad = leiLocCadeia(cx, r.top + 4);
+  let alt = 0;
+  for (let volta = 0; volta < 2 && cad.length; volta++) {
+    leiLocDesenhar(caixa, cad, cx);
+    linha.hidden = false;
+    const a2 = caixa.offsetHeight || cad.length * 22;
+    if (a2 === alt) break;
+    alt = a2;
+    const nova = leiLocCadeia(cx, r.top + alt);
+    /* a faixa cobriria o resto do artigo: fica a de antes (sumir e voltar a cada pixel seria pior) */
+    if (!nova.length) break;
+    if (nova.length === cad.length && nova.every((x, i) => x.el === cad[i].el)) break;
+    cad = nova;
+  }
+  if (!cad.length) return esconder();
+  leiLocDesenhar(caixa, cad, cx);
+  linha.hidden = false;
+  return cad;
+}
+
+function leiLocDesenhar(caixa, cad, cx) {
+  caixa.innerHTML = "";
+  cad.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lei-loc-l lei-loc-n" + p.nivel;
+    b.id = "leiLoc_" + i;
+    const rot = document.createElement("b");
+    rot.textContent = p.rotulo;
+    b.append(rot, document.createTextNode(" " + p.txt));
+    b.title = t("lei_loc_ir", { u: p.rotulo });
+    b.onclick = () => {
+      /* leva o começo daquela parte para logo abaixo das linhas que ficam acima dela na faixa */
+      try {
+        const alvo = i === 0 && p.bloco ? p.bloco : p.el;
+        const h = caixa.offsetHeight && cad.length ? caixa.offsetHeight / cad.length : 22;
+        cx.scrollTop += alvo.getBoundingClientRect().top - cx.getBoundingClientRect().top - i * h - 4;
+      } catch (e) {}
+      leiLocAgendar();
+    };
+    caixa.append(b);
+  });
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "lei-loc-x";
+  x.id = "btnLeiLocFechar";
+  x.textContent = "×";
+  x.title = t("lei_loc_fechar");
+  x.setAttribute("aria-label", t("lei_loc_fechar"));
+  x.onclick = () => leiLocDefinir(false);
+  caixa.append(x);
 }
 
 function leiFlutAvisar(tipo, d) {
@@ -646,9 +800,12 @@ function leiFlutLimpar() {
   clearTimeout(leiFlutTimer);
   const linha = $("leiFlutLinha");
   if (linha) linha.hidden = true;
+  if ($("leiLocLinha")) $("leiLocLinha").hidden = true;
 }
 
 function leiFlutAtualizar() {
+  /* o localizador anda junto: repintar, trocar de modo e rolar passam todos por aqui */
+  leiLocAgendar();
   const linha = $("leiFlutLinha"), b = $("btnLeiFlut");
   if (!linha || !b) return;
   if (!leiFlutAtivo || leiModo !== "ler") { linha.hidden = true; return; }
@@ -2149,6 +2306,7 @@ function leiPintarLeitura() {
      * art. 5º da Lei 8.666" passa a abrir um preview daquele artigo,
      * sem sair da leitura atual (ver leiLigarCitacoesEm). */
     leiLigarCitacoesEm(corpo, a.num, false, l);
+    try { leiRelativasResolver(corpo, a); } catch (e) {}
 
     bloco.append(cab);
     if (chips) bloco.append(chips);
@@ -2520,6 +2678,17 @@ function leiCitarNoTexto(noTexto, origemNum, lei) {
     c.mesmaLei = true;
     return true;
   });
+  /* (19.43.0) "no inciso V", "o § 2º", "a alínea b" — a parte DESTE artigo (leiRefsRelativas); qual § ou inciso, quem
+   * decide é o lugar da frase no artigo (leiRelativasResolver, depois de desenhado) */
+  if (mesma && origemNum && mesma.nums.has(origemNum) && typeof leiRefsRelativas === "function") {
+    try {
+      leiRefsRelativas(txt).forEach((r) => {
+        if (cits.some((c) => c.ini < r.fim && r.ini < c.fim)) return;
+        cits.push(Object.assign(r, { num: origemNum, numCru: origemNum, rotulo: "", mesmaLei: true, relativa: true }));
+      });
+      cits.sort((x, y) => x.ini - y.ini);
+    } catch (e) {}
+  }
   /* (v18.47.0) OS VÍNCULOS MANUAIS valem aqui também (eac_cit_vinculos): o trecho ligado à mão vira link, o desligado
    * deixa de ser. Do tópico aberto; aberta pela Biblioteca (sem tópico), só os de todo o app. */
   try {
@@ -2555,7 +2724,43 @@ function leiCitacaoBotao(c, origemNum) {
     leiCitacaoPreviewAbrir(c, origemNum, { ctx: leiCtxDoLeitor(), lei: c.mesmaLei ? leiDe(leiIdAtual) : undefined });
   };
   if (c.mesmaLei) { b.className += " lei-cita-interna"; b.title = t("lei_cita_interna_ajuda", { a: c.numCru || c.num }); }
+  if (c.relativa && !c.permanente) { b.className += " lei-cita-rel"; b.title = t("lei_cita_rel_ajuda", { u: c.texto }); }
+  b._cit = c;
   return b;
+}
+
+/* (19.43.0) A REFERÊNCIA SOLTA GANHA O LUGAR DE ONDE FOI ESCRITA. "Ressalvado o disposto no inciso V", dentro do § 1º,
+ * é o inciso V DO § 1º — e só o caput, se o § não tiver inciso V. Percorre as linhas do artigo desenhado com a mesma
+ * pilha do localizador (leiLocPilhaDe) e acerta o endereço de cada link relativo ali dentro. */
+function leiRelativasResolver(corpo, art) {
+  if (!corpo || !corpo.children || !art || !art.texto) return 0;
+  let n = 0;
+  const tem = (sub) => { try { return leiAcharUnidades(art.texto, sub).length > 0; } catch (e) { return false; } };
+  const pilha = [];
+  Array.from(corpo.children).forEach((linha, i) => {
+    if (i > 0) leiLocEmpilhar(pilha, linha);
+    const par = pilha.filter((p) => p.rot.tipo === "paragrafo")[0];
+    const inc = pilha.filter((p) => p.rot.tipo === "inciso")[0];
+    const chPar = par ? (par.rot.unico ? "único" : par.rot.valor + "º" + (par.rot.sufixo ? "-" + par.rot.sufixo : "")) : "";
+    const chInc = inc ? leiValorRomano(inc.rot.valor) + (inc.rot.sufixo || "") : "";
+    const bs = [];
+    const descer = (el) => Array.from((el && el.children) || []).forEach((x) => {
+      if (/\blei-cita-rel\b/.test(String(x.className || ""))) bs.push(x); else descer(x);
+    });
+    descer(linha);
+    bs.forEach((b) => {
+      const c = b._cit;
+      if (!c || !c.relativa) return;
+      if (c.tipo === "inciso" && !c.base && chPar) {
+        const sub = { paragrafos: [chPar], incisos: c.incisos, alineas: [] };
+        if (tem(sub)) { c.paragrafos = [chPar]; n++; }
+      } else if (c.tipo === "alinea" && !c.base && chInc) {
+        const sub = { paragrafos: chPar ? [chPar] : [], incisos: [chInc], alineas: c.alineas };
+        if (tem(sub)) { c.paragrafos = sub.paragrafos; c.incisos = [chInc]; n++; }
+      }
+    });
+  });
+  return n;
 }
 /* (v19.5.0) a lei aberta, para a citação interna: os números de artigo que existem nela (uma vez por versão do texto) */
 let leiMesmaLeiCache = null;
@@ -9451,7 +9656,9 @@ function leiIniciar() {
   /* mexer na letra ou na janela pode deslocar o botão: o pop-over acompanha */
   if ($("leiGavExibir")) $("leiGavExibir").onclick = () => leiGavetaPosicionar();
   /* o botão flutuante do marcador acompanha a rolagem da leitura */
-  if ($("leiLeitura")) $("leiLeitura").onscroll = leiFlutAgendar;
+  if ($("leiLeitura")) $("leiLeitura").onscroll = () => { leiFlutAgendar(); leiLocAgendar(); };
+  liga("btnLeiLoc", "localizador (exibição)", () => leiLocDefinir(!leiLocLigado()));
+  leiLocPintarBotao();
   liga("btnLeiFilaMais", "leis deste tópico", () => { leiFilaAberta = !leiFilaAberta; leiFilaAplicar(); });
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
