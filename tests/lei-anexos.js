@@ -177,13 +177,15 @@ async function testes() {
     ok(/ANEXO I\b/.test(api.$("leiUpdTexto").value) && /TABELA DE ALÍQUOTAS/.test(api.$("leiUpdTexto").value), "U1a o texto colado continua inteiro na caixa");
     const it = api.leiUpdComparoAtual();
     ok(it.map((x) => x.num).join() === "162,ANEXO:VI,ANEXO:VII,ANEXO:XI", "U2 os anexos entram na lista de decisao: " + it.map((x) => x.num));
-    api.leiUpdMover(1);
-    const txt = api.$("leiUpdItem").textContent || "";
-    ok(/Anexo VI — tabela substituída/.test(txt), "U3 o titulo diz 'Anexo VI', nao 'Art. VI': " + txt.slice(0, 90));
+    api.leiUpdIrPara(1);
+    /* (19.35.0) o nome do item e o que ele faz estão na faixa do item em exame (o título repetido saiu) */
+    const faixa = () => api.$("leiUpdAtualNum").textContent + " — " + api.$("leiUpdAtualInfo").textContent;
+    const txt = faixa() + " " + (api.$("leiUpdItem").textContent || "");
+    ok(/Anexo VI — substitui a tabela inteira do anexo/.test(txt), "U3 o titulo diz 'Anexo VI', nao 'Art. VI': " + txt.slice(0, 90));
     ok(/1,00%/.test(txt) && /2,00%/.test(txt), "U3a a tabela antiga e a nova aparecem na tela");
     ok(achar(api.$("leiUpdItem"), (c) => /lei-upd-al/.test(c.className || "")).some((c) => /SUBSTITUI o antigo por inteiro/.test(c.textContent)), "U3b o alerta 'a tabela substitui por inteiro' aparece");
     api.leiUpdMover(2);
-    ok(/Anexo XI — anexo revogado/.test(api.$("leiUpdItem").textContent || ""), "U4 o Anexo XI aparece como revogado");
+    ok(/Anexo XI — revoga o anexo/.test(faixa()), "U4 o Anexo XI aparece como revogado");
     ok(!achar(api.$("leiUpdItem"), (c) => c.id === "leiUpdProposto").length, "U4a nao ha caixa de edicao de mesclagem para anexo");
     /* decisao: aceita o VI, recusa o VII, deixa o XI sem decidir */
     api.leiUpdMover(-2);

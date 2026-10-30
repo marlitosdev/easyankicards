@@ -1414,10 +1414,14 @@ async function testes() {
        "U26d a faixa do item em exame não mostra o artigo");
 
     /* visão geral: uma linha por item, cinza (sem decisão) no início */
+    /* (19.35.0) a lista é agrupada (cabeçalho de grupo + itens): procura-se o item pelo artigo */
     const visao = api.$("leiUpdVisao");
-    ok(visao.children.length === 2, "U26e a visão geral não lista os 2 itens");
-    ok((visao.children[0].className || "").indexOf("st-pend") >= 0,
+    const linhas = () => visao.querySelectorAll(".lei-upd-visao-item");
+    const linha = (art) => linhas().filter((c) => (c.textContent || "").indexOf(art) >= 0)[0] || {};
+    ok(linhas().length === 2, "U26e a visão geral não lista os 2 itens");
+    ok((linha("Art. 35").className || "").indexOf("st-pend") >= 0,
        "U26f itens sem decisão deveriam vir em cinza");
+    ok(visao.querySelectorAll(".lei-upd-grp").length >= 1, "U26f2 a lista tem cabeçalho de grupo");
 
     /* saltos: ir direto a um item e pular para a próxima pendente */
     api.leiUpdIrPara(1);
@@ -1430,9 +1434,9 @@ async function testes() {
     api.leiUpdAceitar();           /* item 0 (art. 35) aceito */
     api.leiUpdMover(1);
     api.leiUpdPular();             /* item 1 (art. 116) recusado */
-    ok((visao.children[0].className || "").indexOf("st-aceito") >= 0,
+    ok((linha("Art. 35").className || "").indexOf("st-aceito") >= 0,
        "U26i o aceito não ficou verde na visão geral");
-    ok((visao.children[1].className || "").indexOf("st-recusado") >= 0,
+    ok((linha("Art. 116").className || "").indexOf("st-recusado") >= 0,
        "U26j o recusado não ficou vermelho na visão geral");
     ok(/finalizar e gravar os 1 aceito/.test(api.$("btnLeiUpdFinalizar").textContent),
        "U26k o botão de finalizar não mostra quantos vão entrar");

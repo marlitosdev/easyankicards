@@ -103,7 +103,7 @@ async function testes() {
     const it = a.leiUpdComparoAtual() || [];
     ok(it.length === 2 && it[0].tipo === "revogado_texto" && it[1].tipo === "vetado_texto", "U2 os arts. 6º e 7º mudam, como 'revogado_texto'/'vetado_texto': " + JSON.stringify(it.map((x) => [x.num, x.tipo])));
     a.leiUpdMostrar();
-    const titulo = a.$("leiUpdItem").querySelector(".duv-titulo").textContent;
+    const titulo = (a.$("leiUpdAtualNum").textContent + " — " + a.$("leiUpdAtualInfo").textContent);
     ok(/^Art\. 6º — revogado \(consta no texto novo\) · Lei Complementar nº 227, de 2026$/.test(titulo), "U3 o titulo mostra o tipo E a fonte do texto: " + titulo);
     const lados = achar(a.$("leiUpdItem"), (c) => cls(c, "lei-upd-lado"));
     ok(lados.length === 2 && lados[0].textContent === it[0].antigo && lados[1].textContent === novoArr[5], "U4 os dois lados mostram o texto por inteiro");
@@ -113,7 +113,7 @@ async function testes() {
     /* fonte VAZIA (o VETADO do art. 7º nao tem "pela ...") nao deixa um " · " sobrando no titulo */
     a.leiUpdMover(1);
     a.leiUpdMostrar();
-    const titulo7 = a.$("leiUpdItem").querySelector(".duv-titulo").textContent;
+    const titulo7 = (a.$("leiUpdAtualNum").textContent + " — " + a.$("leiUpdAtualInfo").textContent);
     ok(titulo7 === "Art. 7º — vetado (consta no texto novo)", "U7 sem fonte, o titulo nao sobra com ' · ' vazio: " + JSON.stringify(titulo7));
   }
 

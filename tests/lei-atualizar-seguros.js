@@ -196,10 +196,10 @@ async function testes() {
     const idxNaoSeguro = api.leiUpdComparoAtual().findIndex((i) => i.num === "4");
     api.leiUpdMoverPara ? null : null;
     while (api.leiUpdIdxAtual() !== idxNaoSeguro) api.leiUpdMover(api.leiUpdIdxAtual() < idxNaoSeguro ? 1 : -1);
-    ok(/precisa de atenção/.test(api.$("leiUpdItem").querySelector(".duv-titulo").textContent), "T4 o titulo do item arriscado mostra 'precisa de atenção': " + api.$("leiUpdItem").querySelector(".duv-titulo").textContent);
+    ok(/precisa de atenção/.test((api.$("leiUpdAtualNum").textContent + " — " + api.$("leiUpdAtualInfo").textContent + " · " + api.$("leiUpdAtualSt").textContent)), "T4 o titulo do item arriscado mostra 'precisa de atenção': " + (api.$("leiUpdAtualNum").textContent + " — " + api.$("leiUpdAtualInfo").textContent + " · " + api.$("leiUpdAtualSt").textContent));
     const idxSeguro = api.leiUpdComparoAtual().findIndex((i) => i.num === "2");
     while (api.leiUpdIdxAtual() !== idxSeguro) api.leiUpdMover(api.leiUpdIdxAtual() < idxSeguro ? 1 : -1);
-    ok(!/precisa de atenção/.test(api.$("leiUpdItem").querySelector(".duv-titulo").textContent), "T5 o item seguro NAO mostra o aviso");
+    ok(!/precisa de atenção/.test((api.$("leiUpdAtualNum").textContent + " — " + api.$("leiUpdAtualInfo").textContent + " · " + api.$("leiUpdAtualSt").textContent)), "T5 o item seguro NAO mostra o aviso");
     /* depois de aceitar todos os seguros, a barra some */
     api.leiUpdAceitarSeguros();
     ok(api.$("leiUpdSegurosBar").hidden === true, "T6 sem nenhum seguro pendente, a barra some");

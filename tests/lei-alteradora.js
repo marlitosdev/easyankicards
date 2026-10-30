@@ -236,6 +236,10 @@ async function testes() {
     ok(it.map((x) => x.num).join(",") === "5,162,248,ANEXO:XI" && !it.some((x) => x.num === "300"), "U2b os itens sao so os artigos citados (e o Anexo que a lei manda revogar): " + it.map((x) => x.num + ":" + x.tipo));
     ok(it.filter((x) => x.tipo === "revogado").length === 1 && it.filter((x) => x.tipo === "revogado")[0].num === "5", "U2c so o art. 5 (mandado revogar) e' 'revogado'");
     ok(api.leiUpdModoAusentesAtual() === "presentes", "U2d nunca revoga por ausencia");
+    /* (19.35.0) a tela abre no primeiro item que precisa de atenção, não no primeiro da lista */
+    ok(api.leiUpdIdxAtual() === api.leiUpdComparoAtual().findIndex((x) => x.seguro === false && !(x.alertas || []).some((y) => y.k === "sem_efeito")),
+      "U2e abre no primeiro que precisa de atencao: " + api.leiUpdIdxAtual());
+    api.leiUpdIrPara(0);
     /* o texto proposto é editável e vale ao aceitar */
     api.leiUpdMover(1);
     ok(api.leiUpdIdxAtual() === 1, "U3 (indice)");
@@ -244,7 +248,8 @@ async function testes() {
     ta.value = ta.value + "\n§6º Parágrafo que eu mesmo acrescentei.";
     ta.oninput();
     ok(/§6º Parágrafo que eu mesmo/.test(api.leiUpdComparoAtual()[1].novo), "U3b a edicao do texto proposto vale");
-    ok(achar(api.$("leiUpdItem"), (c) => /lei-upd-al/.test(c.className || "")).some((c) => /trechos do artigo/.test(c.textContent)), "U3c o alerta 'alteracao so de trechos' aparece");
+    /* (19.35.0) o alerta "alteração só de trechos" saiu (aparecia em todo item parcial): quem diz que o texto é editável é o título do artigo inteiro */
+    ok(achar(api.$("leiUpdItem"), (c) => c.tagName === "SUMMARY" || /summary/i.test(c.tagName || "")).some((c) => /editar o texto proposto/.test(c.textContent)), "U3c o artigo inteiro avisa que o texto proposto e' editavel");
     ok(/Anexo/.test(api.$("leiUpdItem").textContent || ""), "U3d o aviso dos Anexos aparece na tela: " + (api.$("leiUpdItem").textContent || "").slice(-200));
     api.leiUpdAceitar();
     api.leiUpdMover(1);

@@ -296,7 +296,7 @@ async function testes() {
     ok(api.leiAtualizarComparar() === true && api.$("dlgLeiLado").open !== true && api.$("leiUpdPasso2").hidden === false, "C8 caixa desmarcada: comparar vai direto para a comparacao por artigo");
   }
   {
-    /* modo so alteracoes: o painel abre so para LER, e prosseguir continua o fluxo */
+    /* (19.35.0) modo so alteracoes: SEM o painel (o diff de lei inteira contra a lei que altera nao dizia nada) — vai direto aos artigos */
     const api = iniciar();
     const base = "Art. 5º. Tributo é toda prestação pecuniária.\nArt. 162. Os contribuintes devem se inscrever.\n§ 1º A inscrição é obrigatória.";
     const l = api.leiGuardar({ nome: "LC 015/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: base });
@@ -308,11 +308,10 @@ async function testes() {
       "Art. 1º A Lei Complementar nº 015 de 05 de janeiro de 2009, passa a vigorar com as seguintes alterações:",
       "“ Art. 162 [...]", "§4º Novo parágrafo da lei. (AC)", "Art. 2º Esta Lei entra em vigor."].join("\n");
     api.leiAtualizarComparar();
-    ok(api.$("dlgLeiLado").open === true && api.$("leiUpdPasso2").hidden === true, "M1 no modo so alteracoes o comparar tambem abre o painel");
-    ok(api.$("leiLadoGrade").querySelectorAll(".lei-lado-acoes").length === 0 && api.$("btnLeiLadoRestaurar").hidden === true, "M1a mas SO para ler: sem escolha por linha");
-    ok(api.$("btnLeiLadoProsseguir").hidden === false, "M1b e com prosseguir");
-    api.$("btnLeiLadoProsseguir").onclick();
-    ok(api.$("leiUpdPasso2").hidden === false && api.leiUpdComparoAtual().some((x) => x.num === "162"), "M2 prosseguir segue para a comparacao das alteracoes por artigo");
+    ok(api.$("dlgLeiLado").open !== true && api.$("leiUpdPasso2").hidden === false, "M1 no modo so alteracoes o comparar vai direto, sem o lado a lado");
+    ok(api.$("leiUpdLadoAutoCx").hidden === true, "M1a a caixa do lado a lado some nesse modo");
+    ok(api.$("btnLeiUpdLado2").hidden === true, "M1b e o botao 'ver lado a lado' tambem");
+    ok(api.leiUpdComparoAtual().some((x) => x.num === "162"), "M2 a comparacao das alteracoes por artigo abre");
   }
 
   return Object.assign(falhas, { quantas: n });

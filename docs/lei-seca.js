@@ -2876,17 +2876,25 @@ function leiItensDaAlteradora(l, par) {
 
   itens.sort((x, y) => leiNumOrdem(x.num) - leiNumOrdem(y.num));
   itens.forEach((it) => {
+    /* (19.35.0) o "(AC)" de um dispositivo que JÁ EXISTE com o mesmo texto não é conflito: é a mesma lei
+     * aplicada de novo. Com o artigo idêntico ao vigente, o "já existia" não diz nada — o item é "já aplicada" */
+    /* "igual" ignora a nota de vigência: o "(Incluído por LC 95/2022)" que a mescla pendura no § que já estava lá
+     * não é conteúdo novo */
+    const soNota = (x) => String(x || "").replace(/\((?:Reda[çc][ãa]o dada|Inclu[íi]d[oa]|Acrescid[oa]|Renumerad[oa])[^)]*\)/gi, "")
+      .replace(/\((?:NR|AC)\)/gi, "").replace(/\s+/g, " ").trim();
+    const igual = it.novo === it.antigo || (!!it.antigo && soNota(it.novo) === soNota(it.antigo));
+    if (it.tipo !== "revogado" && igual) it.problemas = it.problemas.filter((p) => p.k !== "ja_existia");
     const al = [];
     if (it.parcial) al.push({ k: "parcial", sev: "info" });
     it.problemas.forEach((p) => al.push({ k: p.k, sev: "alerta", u: p.unidade }));
     const ult = leiDataUltimaAlteracao(l, it.num);
     if (ult && it.dataLei && it.dataLei < ult) al.push({ k: "fora_ordem", sev: "alerta", d1: it.dataLei, d2: ult });
     if (it.tipo === "revogado") al.push({ k: "revogado_pela_lei", sev: "info" });
-    else if (it.novo === it.antigo && !it.problemas.length) al.push({ k: "sem_efeito", sev: "aviso" });
+    else if (igual && !it.problemas.length) al.push({ k: "sem_efeito", sev: "aviso" });
     /* a nota "(Redação dada por LC 145/2024)" acrescentada pela mescla não conta como número que mudou */
     const semNota = (x) => String(x).replace(/\((?:Reda[çc][ãa]o dada|Inclu[íi]do|Revogado)[^)]*\)/gi, "")
       .replace(/§+\s*\d{1,3}[ºo°]?(?:-[A-Z])?/g, "");        /* o rótulo do parágrafo também não é "número que mudou" */
-    const base = (it.tipo === "revogado" || it.novo === it.antigo) ? [] : leiAlertasDaMudanca(
+    const base = (it.tipo === "revogado" || igual) ? [] : leiAlertasDaMudanca(
       { tipo: it.tipo, antigo: semNota(it.antigo), novo: semNota(it.novo), num: it.num }, {}).filter((a) => a.k !== "so_anotacao" && a.k !== "menor" && a.k !== "outro");
     it.alertas = al.concat(base);
   });

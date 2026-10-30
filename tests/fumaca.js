@@ -851,6 +851,7 @@ function rodar(opc) {
     leiUpdComparoAtual: () => leiUpdComparo, leiUpdIdxAtual: () => leiUpdIdx,
     leiUpdIrPara, leiUpdPularPara, leiUpdPreviaAbrir, leiUpdPreviaNav, leiUpdCheiaTrocar,
     leiUpdLerParecer, leiUpdChaveRotulo, leiUpdParecerFechar,
+    leiUpdDispositivosDif, leiUpdResumoItem, leiUpdAlertasJuntos, leiUpdJaAplicada, leiUpdDispensarJaAplicadas, leiUpdCheiaPreferida, leiUpdGrupo,
     leiPintarEdicaoLivre,
     leiLigarCitacoesEm, leiCitarNoTexto, leiCitacaoBotao,
     leiCitacaoPreviewAbrir, leiCitacaoPreviewAbrirLeiInteira,
