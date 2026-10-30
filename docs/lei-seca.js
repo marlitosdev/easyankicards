@@ -2411,6 +2411,24 @@ function leiRepetidosNoArtigo(texto, ignorar, opc) {
   return grupos;
 }
 
+/* (19.37.0) O QUE A PESSOA JÁ CORRIGIU NÃO É MAIS REPETIDO. Os repetidos DENTRO de um artigo ("inciso I aparece 2
+ * vezes") são lidos no texto GUARDADO; quem corrige em "editar" grava a redação nova como ALTERAÇÃO do artigo, por
+ * cima — o texto guardado continua com os dois "I." e o aviso não sumia nunca (art. 433-S do CTM de Caruaru,
+ * renumerado à mão para II). Com alteração no artigo, vale a redação dela: revogado ou sem a repetição, o grupo sai. */
+function leiRepetidosVigentes(l, grupos) {
+  const alt = (l && l.alteracoes) || {};
+  return (grupos || []).filter((g) => {
+    if (!g || !g.intra) return true;
+    const n = String(g.num || "");
+    const i = n.indexOf("#");
+    if (i < 0) return true;
+    const ov = alt[leiNumNormal(n.slice(0, i))];
+    if (!ov) return true;
+    if (ov.revogado) return false;
+    return leiRepetidosNoArtigo(String(ov.texto || "")).some((x) => x.intra && String(x.num).slice(String(x.num).indexOf("#")) === n.slice(i));
+  });
+}
+
 /* =====================================================================
  * A LEI QUE ALTERA OUTRA — ler as alterações e propor o texto novo
  *

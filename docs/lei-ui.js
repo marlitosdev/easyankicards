@@ -997,9 +997,10 @@ function leiRepetidosDaLei(l) {
   if (!l || !String(l.texto || "").trim()) return [];
   const rec = l.ajustesRecusados || {};
   const chave = l.id + "|" + leiHashTexto(l.texto) + "|" + (l.repetidosOk || []).join(",")
-    + "|" + Object.keys(rec).filter((k) => rec[k]).sort().join(",");
+    + "|" + Object.keys(rec).filter((k) => rec[k]).sort().join(",")
+    + "|" + leiHashTexto(JSON.stringify(l.alteracoes || {}));
   if (leiRepetidosMemo.chave !== chave) {
-    leiRepetidosMemo = { chave, grupos: leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l)) };
+    leiRepetidosMemo = { chave, grupos: leiRepetidosVigentes(l, leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l))) };
   }
   return leiRepetidosMemo.grupos;
 }
@@ -1009,7 +1010,7 @@ function leiRevisarRepetidos() {
   if (leiSujo && leiIdAtual) leiGravar();
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   if (!l) return false;
-  const grupos = leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l));
+  const grupos = leiRepetidosVigentes(l, leiDuplicados(l.texto, l.repetidosOk, leiOpcDaLei(l)));
   if (!grupos.length) { leiPintar(); return false; }
   /* uma alteração já registrada para o número NÃO é sobrescrita: guardar a
    * redação nova como "alteração" apagaria a que a pessoa fez à mão */

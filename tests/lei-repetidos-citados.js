@@ -185,6 +185,25 @@ async function testes() {
     ok(d && (d.repetidosOk || []).indexOf(num) >= 0, "O2a revisar escolhendo 'manter todas' de proposito: entra em repetidosOk");
   }
 
+  /* ---- 5 (19.37.0): a repetição corrigida em "editar" (vira ALTERAÇÃO do artigo) não continua apontada ---- */
+  {
+    const api = iniciar();
+    const T = ["Art. 433-S. O lançamento da taxa ocorrerá:",
+      "I. no primeiro exercício, na data da autorização;",
+      "I. nos exercícios subsequentes, conforme o Calendário Fiscal;",
+      "III. em qualquer exercício, na data da nova autorização.",
+      "Art. 434. Outro artigo."].join("\n");
+    const art = T.split("\nArt. 434")[0];
+    const l = api.leiGuardar({ id: "lei_rep_ed", nome: "Lei 1/2009", especie: "Lei", numero: "1", ano: "2009", texto: T });
+    const antes = api.leiRepetidosDaLei(api.leiDe(l.id));
+    ok(antes.length === 1 && antes[0].intra, "E1 o inciso I repetido e' apontado: " + antes.map((g) => g.num));
+    api.leiArtigoAlterar(l.id, "433-S", { texto: art.replace("I. nos exercícios", "II. nos exercícios"), fonteAlteracao: "" });
+    const depois = api.leiRepetidosDaLei(api.leiDe(l.id));
+    ok(depois.length === 0, "E2 renumerado em 'editar' (alteracao do artigo), o aviso some: " + depois.map((g) => g.num));
+    api.leiArtigoAlterar(l.id, "433-S", { texto: art + " ",fonteAlteracao: "" });
+    ok(api.leiRepetidosDaLei(api.leiDe(l.id)).length === 1, "E3 se a redacao editada ainda repete, o aviso continua");
+  }
+
   /* ---- 4: os textos ---- */
   {
     const chaves = ["lei_dup_resumo_conf", "lei_dup_fraca_conf", "lei_dup_fraca_intra", "lei_dup_conferir_sm", "lei_dup_conferir_ajuda"];
