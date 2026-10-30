@@ -22,7 +22,10 @@ async function testes() {
     const msgs = [];
     let pronto = false;
     Promise.resolve(promessa).then(() => { pronto = true; }, () => { pronto = true; });
-    for (let i = 0; i < 80 && !pronto; i++) {
+    /* por TEMPO, não por número de voltas: o gzip (CompressionStream) roda fora do laço de eventos e, com a máquina
+     * ocupada (a suíte inteira), atravessa mais de 80 voltas — e o uiAlert que vem depois dele ficava sem resposta */
+    const ate = Date.now() + 20000;
+    while (!pronto && Date.now() < ate) {
       await new Promise((r) => setImmediate(r));
       const m = api.$("uiModalMsg") ? api.$("uiModalMsg").textContent : "";
       if (m && msgs[msgs.length - 1] !== m) msgs.push(m);
