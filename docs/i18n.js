@@ -2864,6 +2864,7 @@ const UI = {
   "qs_todos_tipos": "todos os tipos",
   "qs_todos_editais": "todos os editais",
   "qs_todos_topicos": "todos os tópicos",
+  "qs_sem_topico": "— sem tópico ({n})",
   "qs_todas_disc": "todas as disciplinas",
   "qs_todas_bancas": "todas as bancas",
   "qs_so_ineditas": "só inéditas",
@@ -6352,6 +6353,7 @@ const UI = {
 
   "qs_todos_editais": "all syllabi",
   "qs_todos_topicos": "all topics",
+  "qs_sem_topico": "— no topic ({n})",
 
   "qs_fonte_caderno": "from my notebook (NotebookLM)",
   "qs_ver_prompt": "show the prompt",

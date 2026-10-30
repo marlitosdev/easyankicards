@@ -3606,20 +3606,43 @@ function qsUiPintarTopicos() {
   o0.value = ""; o0.textContent = t("qs_todos_topicos");
   sel.append(o0);
 
-  const grupos = qsUiFiltro.edital ? qsUiTopicosDoEdital(qsUiFiltro.edital) : [];
-  /* SEM EDITAL ESCOLHIDO NÃO HÁ LISTA DE TÓPICOS. Juntar os tópicos de
-   * três editais numa lista só devolveria o amontoado que este filtro
-   * existe para desfazer. */
-  sel.hidden = !grupos.length;
-  if (!grupos.length) { qsUiFiltro.chave = ""; return; }
-
   /* quantas questões existem por tópico: um tópico sem questão nenhuma
    * na lista é uma escolha que leva a uma tela vazia */
   const conta = {};
+  let semTopico = 0;
   qsTodas().forEach((q) => {
     const k = qsChaveNormal(q.chave || "");
-    if (k) conta[k] = (conta[k] || 0) + 1;
+    if (k) conta[k] = (conta[k] || 0) + 1; else semTopico++;
   });
+  /* (19.39.0) as questões SEM tópico também se acham: uma opção própria, no topo */
+  if (semTopico) {
+    const os = document.createElement("option");
+    os.value = QS_SEM_TOPICO;
+    os.textContent = t("qs_sem_topico", { n: semTopico });
+    if (qsUiFiltro.chave === QS_SEM_TOPICO) os.selected = true;
+    sel.append(os);
+  }
+
+  /* (19.39.0) SEM EDITAL ESCOLHIDO, os tópicos vêm das próprias questões, agrupados pela DISCIPLINA — antes não havia
+   * lista nenhuma, e "biblioteca de questões com filtro por tópico" exigia escolher um edital primeiro. Com edital, os
+   * blocos do edital como cabeçalho (como sempre). */
+  let grupos = qsUiFiltro.edital ? qsUiTopicosDoEdital(qsUiFiltro.edital) : [];
+  if (!qsUiFiltro.edital) {
+    const porDisc = new Map();
+    const vistos = {};
+    qsTodas().forEach((q) => {
+      const k = qsChaveNormal(q.chave || "");
+      if (!k || vistos[k]) return;
+      vistos[k] = true;
+      const d = String(q.disciplina || "").trim() || "—";
+      if (!porDisc.has(d)) porDisc.set(d, []);
+      porDisc.get(d).push({ chave: q.chave, nome: String(q.topico || "").trim() || q.chave });
+    });
+    grupos = [...porDisc.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([d, its]) => ({ grupo: d, itens: its.sort((a, b) => a.nome.localeCompare(b.nome)) }));
+  }
+  sel.hidden = !grupos.length && !semTopico;
+  if (!grupos.length && !semTopico) { qsUiFiltro.chave = ""; return; }
 
   grupos.forEach((g) => {
     const og = document.createElement("optgroup");

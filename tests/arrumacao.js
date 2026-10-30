@@ -400,13 +400,14 @@ async function testes() {
     ok(/Receita/.test(api.qsUiListaFiltrada()[0].enunciado),
        "A6l o filtro de topico trouxe a questao errada");
 
-    /* SEM EDITAL ESCOLHIDO NÃO HÁ LISTA DE TÓPICOS: juntar os topicos de
-     * tres editais devolveria o amontoado que este filtro desfaz. */
+    /* (19.39.0) SEM EDITAL ESCOLHIDO a lista de tópicos continua, agrupada pela DISCIPLINA das questões (não pelos
+     * blocos de três editais misturados): a biblioteca de questões filtra por tópico sem exigir edital antes. */
     selE.value = "";
     selT.value = "";
     api.qsUiLerFiltros();
-    ok(api.$("qsFTopico").hidden === true,
-       "A6m sem edital escolhido a lista de topicos continuou visivel");
+    const gruposSemEdital = api.$("qsFTopico").querySelectorAll("optgroup").map((g) => g.label);
+    ok(api.$("qsFTopico").hidden === false && gruposSemEdital.length >= 1,
+       "A6m sem edital escolhido, a lista de topicos vem agrupada por disciplina: " + gruposSemEdital.join(" | "));
     ok(api.qsUiListaFiltrada().length === 3,
        "A6n tirar os filtros nao devolveu todas as questoes: "
        + api.qsUiListaFiltrada().length);

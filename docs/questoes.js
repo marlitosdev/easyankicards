@@ -41,7 +41,13 @@ function qsCarregar(lerLoja) {
   /* (v19.18.0) moram no IndexedDB: chegam em segundo plano — até lá, gravar é recusado (ver idb-questoes.js) */
   if (!lerLoja && typeof qsNoIdb === "function" && qsNoIdb()) {
     qsBanco = [];
-    qsIdbCarregar((v) => { qsBanco = v; });
+    /* (19.39.0) e REDESENHA a tela de Questões quando chegam: ela era montada antes, vazia ("Nenhuma questão
+     * ainda"), e só se refazia ao mexer num filtro — com 595 questões no banco */
+    qsIdbCarregar((v) => {
+      qsBanco = v;
+      try { if (typeof qsUiRender === "function") qsUiRender(); } catch (e) {}
+      try { if (typeof qsUiPintarBotaoResumo === "function") qsUiPintarBotaoResumo(); } catch (e) {}
+    });
     return qsBanco;
   }
   let cru = null;
@@ -820,10 +826,13 @@ function qsApagar(id, gravar) {
 /* ---------------------------------------------------------------------
  * ESCOLHER O QUE RESPONDER
  * ------------------------------------------------------------------- */
+const QS_SEM_TOPICO = "__sem_topico__";
 function qsFiltrar(f) {
   const o = f || {};
   return qsBanco.filter((q) => {
-    if (o.chave && q.chave !== o.chave
+    /* (19.39.0) "sem tópico": as que não estão ligadas a tópico nenhum */
+    if (o.chave === QS_SEM_TOPICO) { if (String(q.chave || "").trim()) return false; }
+    else if (o.chave && q.chave !== o.chave
         && qsChaveNormal(q.chave) !== qsChaveNormal(o.chave)) return false;
     /* CONJUNTO de chaves — é assim que "só as questões deste edital"
      * funciona sem que o banco de questões precise saber o que é um

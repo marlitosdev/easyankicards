@@ -70,6 +70,22 @@ async function testes() {
     ok(!erro && api.$("secQuestoes").hidden === false, "Q2 tocar abre a tela de Questoes (sem erro): " + (erro && erro.message));
   }
 
+  /* ---- 19.39.0: a biblioteca de questões lista as com e sem tópico, e filtra por tópico sem escolher edital ---- */
+  {
+    const r = rodar(); const api = r.api; api.matIniciar();
+    const q = (id, chave, disc, top) => ({ id, chave, disciplina: disc, topico: top, tipo: "ce", enunciado: "Enunciado " + id, gabarito: "C", tentativas: [] });
+    api.qsBancoForcar([q("a", "tributário›princípios", "Tributário", "Princípios"), q("b", "tributário›princípios", "Tributário", "Princípios"),
+      q("c", "financeiro›orçamento", "Financeiro", "Orçamento"), q("d", "", "", "")]);
+    api.trocarModo("questoes");
+    ok(/4/.test(api.$("qsResumo").textContent) && !/Nenhuma questão ainda/.test(api.$("qsLista").textContent),
+      "Q3 abrir a tela de Questoes mostra o banco (com e sem topico): " + api.$("qsResumo").textContent);
+    const sel = api.$("qsFTopico");
+    const opts = sel.querySelectorAll("option").map((o) => o.textContent);
+    ok(sel.hidden === false && opts.some((x) => /sem tópico \(1\)/.test(x)) && opts.some((x) => /Princípios \(2\)/.test(x)) && opts.some((x) => /Orçamento \(1\)/.test(x)),
+      "Q4 sem edital escolhido, a lista de topicos vem das questoes, com 'sem topico': " + opts.join(" | "));
+    ok(api.qsFiltrar({ chave: "__sem_topico__" }).map((x) => x.id).join() === "d", "Q5 o filtro 'sem topico' mostra so' as sem topico");
+  }
+
   /* ---- 4: o "Continuar" à parte, em links ---- */
   ok(/\.mat-recentes\{[^}]*border:1px dashed/.test(html) && /\.mat-rec-link\{[^}]*background:none;border:0/.test(html),
     "C1 o 'Continuar' e' uma faixa a parte, com links sem contorno de botao");
