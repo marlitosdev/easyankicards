@@ -2465,8 +2465,11 @@ function leiCabecalhosAlteradora(s) {
    * se a vizinha (B; D ou F; N ou P) aparece no mesmo número.
    * (v18.65.0) Com os PDFs da LC 145/2024 de Caruaru: o sufixo também vem com HÍFEN depois da letra
    * ("Art. 356. A - São responsáveis…"), e o cabeçalho pode vir depois de uma palavra em MAIÚSCULAS sem
-   * pontuação ("§ 2º REVOGADO Art. 4º A Lei Complementar…", na LC 95/2022). */
-  const re = /(^|\n|[.:;)\]”"]\s+|[A-ZÀ-Ú]{3,}\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})(?:([A-Z])(?![A-Za-zÀ-ú])|\s*([ºo°ª]?)(?:-([A-Z])(?![A-Za-zÀ-ú]))?(\.\s+([A-Z])(?=\s+[A-ZÀ-Ú(\["“]|\s*[-–—]\s))?)(?!\d)/g;
+   * pontuação ("§ 2º REVOGADO Art. 4º A Lei Complementar…", na LC 95/2022).
+   * (19.36.0) E com ESPAÇO depois do hífen: "Art. 343- A. As taxas…" (LC 145/2024). Lido como "Art. 343" de caput
+   * "A. As taxas…", o texto do 343-A foi gravado POR CIMA do art. 343. O espaço só vale com o hífen colado no número
+   * e a letra seguida de ponto — "Art. 5- A lei…" continua sendo o art. 5. */
+  const re = /(^|\n|[.:;)\]”"]\s+|[A-ZÀ-Ú]{3,}\s+)(["“]?\s*)(Arts?\.?|Artigo)\s*(\d{1,4})(?:([A-Z])(?![A-Za-zÀ-ú])|\s*([ºo°ª]?)(?:[-–](?:[ \t]+(?=[A-Z]\.\s))?([A-Z])(?![A-Za-zÀ-ú]))?(\.\s+([A-Z])(?=\s+[A-ZÀ-Ú(\["“]|\s*[-–—]\s))?)(?!\d)/g;
   const hs = [];
   let m;
   while ((m = re.exec(s)) !== null) {
@@ -2585,6 +2588,8 @@ function leiMesclarFragmento(baseTexto, bloco, opc) {
       nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico })));
   const problemas = [];
   const nota = (acao) => (fonte ? (acao === "ac" ? " (Incluído por " : " (Redação dada por ") + fonte + ")" : "");
+  /* (19.36.0) o trecho DA LEI ALTERADORA que deu origem a cada problema — o aviso mostra de onde veio */
+  const trechoDe = (u) => (String(u.rotulo || "").trim() + " " + (u.acao === "rev" ? "(Revogado)" : String(u.texto || "").trim())).trim();
   let mudou = 0;
   if (bloco.caputTexto && bloco.caputAcao === "nr") { L[0].texto = bloco.caputTexto + nota("nr"); mudou++; }
   /* Num mesmo bloco podem vir "§1º Novo. (AC)" e "§1º (Revogado)":
@@ -2605,18 +2610,18 @@ function leiMesclarFragmento(baseTexto, bloco, opc) {
     const i = L.findIndex((x) => x.chave === u.chave && x.tipo === u.tipo);
     if (u.acao === "rev") {
       if (i >= 0) { L[i].texto = "(Revogado" + (fonte ? " por " + fonte : "") + ")"; mudou++; }
-      else if (!repostos[u.tipo + "|" + u.chave]) problemas.push({ k: "nao_achou", unidade: rot });
+      else if (!repostos[u.tipo + "|" + u.chave]) problemas.push({ k: "nao_achou", unidade: rot, trecho: trechoDe(u) });
       return;
     }
     const acao = u.acao === "sem" ? (i >= 0 ? "nr" : "ac") : u.acao;
     if (i >= 0) {
       const estavaRevogado = /^\(Revogado\b/i.test(String(L[i].texto || "").trim());
-      if (acao === "ac" && !estavaRevogado) problemas.push({ k: "ja_existia", unidade: rot });
+      if (acao === "ac" && !estavaRevogado) problemas.push({ k: "ja_existia", unidade: rot, trecho: trechoDe(u), atual: String(L[i].texto || "") });
       L[i].texto = u.texto + nota(acao);
       mudou++;
       return;
     }
-    if (acao === "nr") problemas.push({ k: "nao_existia", unidade: rot });
+    if (acao === "nr") problemas.push({ k: "nao_existia", unidade: rot, trecho: trechoDe(u) });
     L.splice(leiPosicaoDeInsercao(L, u), 0, { tipo: u.tipo, chave: u.chave, rotulo: u.rotulo,
       texto: u.texto + nota("ac"), nivel: u.nivel, valor: u.valor, sufixo: u.sufixo, unico: u.unico });
     mudou++;
@@ -2710,7 +2715,11 @@ function leiLerAlteradora(texto, alvo) {
       leiDiretivasDoArtigoProprio(h.seg, alvo, par);
       return;
     }
-    par.blocos.push({ num: h.num, numCru: h.numCru, corpo: h.seg, bloco: leiLerBlocoAlterado(h.seg) });
+    const bloco = leiLerBlocoAlterado(h.seg);
+    /* (19.36.0) o ponto do cabeçalho ("Art. 343-A. As taxas…") ficava no caput: "Art. 343-A. . As taxas…". Só UM
+     * ponto (ou traço) seguido de espaço e texto — "..." é marca de omissão e fica */
+    if (bloco && typeof bloco.caputTexto === "string") bloco.caputTexto = bloco.caputTexto.replace(/^\s*[.\-–—](?!\.)\s+(?=[A-Za-zÀ-ú"“(])/, "");
+    par.blocos.push({ num: h.num, numCru: h.numCru, corpo: h.seg, bloco });
   });
   return par;
 }
@@ -2810,6 +2819,21 @@ function leiItensDaAlteradora(l, par) {
   const efetivos = leiArtigosEfetivos(l);
   const porNum = {};
   efetivos.forEach((a) => { if (!porNum[a.num]) porNum[a.num] = a; });
+  /* (19.36.0) A REDAÇÃO GRAVADA É DE OUTRO ARTIGO: antes desta versão, "Art. 343- A. As taxas…" (LC 145/2024)
+   * era lido como art. 343 de caput "A. As taxas…" — e quem aceitou ficou com o texto do 343-A POR CIMA do 343
+   * ("Art. 343. A. As taxas…"). Se a lei alteradora traz justamente o 343-A, a mescla parte da redação ORIGINAL
+   * do 343 (o que estava antes da troca) e o item avisa: aceitar devolve o 343 ao lugar certo. */
+  const trocados = {};
+  Object.keys(porNum).forEach((num) => {
+    const a = porNum[num];
+    if (!a.alterado || !a.textoOriginal) return;
+    const m = String(a.texto || "").match(/^\s*Art\.?\s*\d{1,4}[ºo°]?\s*\.\s*([A-Z])\s*[.\-–]\s/);
+    if (!m) return;
+    const irmao = leiNumNormal(num + "-" + m[1]);
+    if (!(par.blocos || []).some((b) => b.num === irmao)) return;
+    trocados[num] = { irmao: num + "-" + m[1], fonte: a.fonteAlteracao || "" };
+    porNum[num] = Object.assign({}, a, { texto: a.textoOriginal, alterado: false });
+  });
   const correndo = {};                 /* o texto de cada artigo, conforme as alterações já lidas */
   const itens = [];
   const porItem = {};
@@ -2885,8 +2909,14 @@ function leiItensDaAlteradora(l, par) {
     const igual = it.novo === it.antigo || (!!it.antigo && soNota(it.novo) === soNota(it.antigo));
     if (it.tipo !== "revogado" && igual) it.problemas = it.problemas.filter((p) => p.k !== "ja_existia");
     const al = [];
+    if (trocados[it.num]) {
+      /* o "como está" mostra o que está GRAVADO hoje (o texto trocado), para a pessoa ver o que sai */
+      it.base = it.antigo;
+      it.antigo = (efetivos.filter((a) => a.num === it.num)[0] || {}).texto || it.antigo;
+      al.push({ k: "base_trocada", sev: "alerta", a: it.numCru, b: trocados[it.num].irmao, f: trocados[it.num].fonte });
+    }
     if (it.parcial) al.push({ k: "parcial", sev: "info" });
-    it.problemas.forEach((p) => al.push({ k: p.k, sev: "alerta", u: p.unidade }));
+    it.problemas.forEach((p) => al.push({ k: p.k, sev: "alerta", u: p.unidade, trecho: p.trecho || "", atual: p.atual || "" }));
     const ult = leiDataUltimaAlteracao(l, it.num);
     if (ult && it.dataLei && it.dataLei < ult) al.push({ k: "fora_ordem", sev: "alerta", d1: it.dataLei, d2: ult });
     if (it.tipo === "revogado") al.push({ k: "revogado_pela_lei", sev: "info" });

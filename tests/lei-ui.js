@@ -1438,7 +1438,7 @@ async function testes() {
        "U26i o aceito não ficou verde na visão geral");
     ok((linha("Art. 116").className || "").indexOf("st-recusado") >= 0,
        "U26j o recusado não ficou vermelho na visão geral");
-    ok(/finalizar e gravar os 1 aceito/.test(api.$("btnLeiUpdFinalizar").textContent),
+    ok(/gravar os 1 aceitos na lei/.test(api.$("btnLeiUpdFinalizar").textContent),
        "U26k o botão de finalizar não mostra quantos vão entrar");
 
     /* prévia: só o aceito aparece, com o que muda marcado */
@@ -1588,6 +1588,10 @@ async function testes() {
       api.$("leiUpdExplica").value = resp;
       api.docDisparar("keydown", { key: "ArrowRight", target: api.$("leiUpdExplica"), preventDefault() {} });
       ok(api.leiUpdIdxAtual() === 0, "U28i a seta dentro da caixa de texto trocou de item");
+      /* (19.36.0) o parecer abre numa janela por cima: com ela aberta, a seta não mexe nos itens de baixo */
+      api.docDisparar("keydown", { key: "ArrowRight", target: api.$("leiUpdItem"), preventDefault() {} });
+      ok(api.leiUpdIdxAtual() === 0 && api.$("dlgLeiUpdIA").open === true, "U28i2 com a janela do parecer aberta, a seta nao troca o item de baixo");
+      api.$("btnLeiUpdIAFechar").onclick();
       api.docDisparar("keydown", { key: "ArrowRight", target: api.$("leiUpdItem"), preventDefault() {} });
       ok(api.leiUpdIdxAtual() === 1, "U28j a seta fora das caixas deixou de navegar");
       api.docDisparar("keydown", { key: "ArrowLeft", shiftKey: true, target: api.$("leiUpdItem"), preventDefault() {} });

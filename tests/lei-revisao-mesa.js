@@ -95,7 +95,9 @@ async function testes() {
     ok(linhas.length === 1 && /IPCA/.test(linhas[0].textContent) && /Selic/.test(linhas[0].textContent), "F4 so' o inciso II aparece, com antes e depois: " + linhas.map((x) => x.textContent).join(" | "));
     ok(linhas[0].querySelectorAll(".lei-upd-entra").length > 0 && linhas[0].querySelectorAll(".lei-upd-sai").length > 0, "F4a o que entra e o que sai vem marcado");
     const det = api.$("leiUpdItem").querySelectorAll(".lei-upd-inteiro")[0];
-    ok(det && det.open !== true && (det.querySelectorAll ? det.querySelectorAll(".lei-upd-lado").length === 1 : true), "F5 o artigo inteiro fica recolhido, com um lado so' (a caixa editavel faz as vezes do 'como ficaria')");
+    ok(det && det.open !== true && det.querySelectorAll(".lei-upd-lado").length === 2, "F5 o artigo inteiro fica recolhido, com os dois lados");
+    ok(det.querySelectorAll(".lei-upd-sai").length > 0 && det.querySelectorAll(".lei-upd-entra").length > 0, "F5a no artigo inteiro, o que sai em vermelho e o que entra em verde");
+    ok(det.querySelectorAll(".lei-upd-editar").length === 1, "F5b a caixa para editar vem recolhida, por ultimo");
     ok(api.$("leiUpdVisao").querySelectorAll(".lei-upd-grp").length >= 1, "F6 a lista lateral tem grupos");
     ok(api.$("leiUpdBarra") && typeof api.$("leiUpdBarra").title === "string" && /sem decisão/.test(api.$("leiUpdBarra").title), "F7 a barra do andamento diz o que falta: " + (api.$("leiUpdBarra") && api.$("leiUpdBarra").title));
 
@@ -116,6 +118,71 @@ async function testes() {
     ok(api.$("btnLeiUpdDispensarJa").hidden === true, "J7 o botao some depois de usado");
   }
 
+  /* ---- 19.36.0: "Art. 343- A." (LC 145/2024) e o 343 gravado por cima ---- */
+  {
+    const api = iniciar();
+    const BASE343 = ["Art. 343. O exercício regular do poder de polícia dá origem às seguintes taxas:",
+      "I. Taxa de Licença para Localização e Funcionamento;", "II. Taxa de Fiscalização de Atividades;",
+      "III. Taxa de Fiscalização de Obras;", "IV. Taxa de Fiscalização de Publicidade;", "V. Taxa de Fiscalização Sanitária;", "Art. 344. É irrelevante para a incidência das taxas."].join("\n");
+    const l = api.leiGuardar({ id: "lei_343", nome: "Lei Complementar 15/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: BASE343 });
+    /* o estrago de antes: o 343-A gravado POR CIMA do 343 */
+    api.leiArtigoAlterar(l.id, "343", { texto: "Art. 343. A. As taxas decorrentes de serviços públicos compreendem: (Redação dada por LC 145/2024)\nI - coleta de resíduos sólidos; (Incluído por LC 145/2024)", fonteAlteracao: "LC 145/2024" });
+    const LC145 = ["LEI COMPLEMENTAR Nº 145, DE 23 DE DEZEMBRO DE 2024", "Altera a Lei Complementar nº 15, de 05 de janeiro de 2009.",
+      "Art. 1º A Lei Complementar nº 015 de 05 de janeiro de 2009, passa a vigorar com as seguintes alterações:",
+      "Art. 343.", "I. Taxa de Fiscalização de Localização e Funcionamento (TLF); (NR)", "II. (Revogado)", "V. Taxa de Vigilância Sanitária (TVS); (NR)", "(...)",
+      "Art. 343- A. As taxas decorrentes de serviços públicos compreendem:", "(AC)", "I - coleta de resíduos sólidos; (AC)",
+      "Art. 2º Esta Lei Complementar entra em vigor na data de sua publicação."].join("\n");
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdModoAlt").checked = true; api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdFonte").value = "LC 145/2024";
+    api.$("leiUpdTexto").value = LC145;
+    api.leiAtualizarComparar();
+    const it = api.leiUpdComparoAtual() || [];
+    const i343 = it.filter((x) => x.num === "343")[0] || {}, i343a = it.filter((x) => x.num === "343-A")[0];
+    ok(!!i343a && i343a.tipo === "novo" && /^Art\. 343-A\. As taxas/.test(i343a.novo), "B1 o 343-A vira item proprio (artigo novo), sem ponto duplicado: " + (i343a && i343a.novo.slice(0, 40)) + " / " + it.map((x) => x.num));
+    ok((i343.alertas || []).some((a) => a.k === "base_trocada"), "B2 o 343 avisa que o gravado e' o texto do 343-A: " + (i343.alertas || []).map((a) => a.k));
+    ok(/poder de polícia/.test(i343.novo || "") && /Vigilância Sanitária/.test(i343.novo || "") && !/As taxas decorrentes/.test(i343.novo || ""),
+      "B3 a proposta do 343 parte da redacao ORIGINAL (poder de policia), com o V novo: " + String(i343.novo || "").slice(0, 160));
+    ok(/As taxas decorrentes/.test(i343.antigo || ""), "B4 o 'como esta' mostra o que esta gravado hoje (o texto trocado)");
+    ok(!(i343.alertas || []).some((a) => a.k === "nao_existia"), "B5 sem o falso 'inciso V nao existe'");
+    api.leiUpdIrPara(it.indexOf(i343));
+    ok(/343-A/.test(api.$("leiUpdItem").textContent), "B6 o aviso na tela cita o 343-A");
+  }
+
+  /* ---- 19.36.0: o aviso diz DE ONDE veio o trecho ---- */
+  {
+    const api = iniciar();
+    const l = api.leiGuardar({ id: "lei_or", nome: "Lei Complementar 15/2009", especie: "Lei Complementar", numero: "15", ano: "2009",
+      texto: "Art. 50. Os prazos:\nI - trinta dias;\nII - sessenta dias.\nArt. 51. Outro." });
+    api.leiAbrir("Direito", "T", l.id);
+    api.leiAtualizarAbrir();
+    api.$("leiUpdModoAlt").checked = true; api.$("leiUpdModoAlt").onchange();
+    api.$("leiUpdFonte").value = "LC 9/2030";
+    api.$("leiUpdTexto").value = ["LEI COMPLEMENTAR Nº 9, DE 01 DE JANEIRO DE 2030", "Altera a Lei Complementar nº 15, de 2009.",
+      "Art. 1º A Lei Complementar nº 15 passa a vigorar com as seguintes alterações:", "Art. 50. [...]", "IV - noventa dias. (NR)",
+      "Art. 2º Esta Lei entra em vigor."].join("\n");
+    api.leiAtualizarComparar();
+    const al = api.$("leiUpdItem").querySelectorAll(".lei-upd-al-origem");
+    ok(al.length >= 1 && /noventa dias/.test(al[0].textContent) && /LC 9\/2030/.test(al[0].textContent), "O1 o aviso mostra o trecho e a lei de onde veio: " + al.map((x) => x.textContent).join(" | "));
+  }
+
+  /* ---- 19.36.0: a janela do parecer da IA, em passos ---- */
+  {
+    const api = iniciar();
+    const l = api.leiGuardar({ id: "lei_ia", nome: "Lei Complementar 15/2009", especie: "Lei Complementar", numero: "15", ano: "2009", texto: BASE });
+    abrirLC95(api, l.id);
+    ok(/sem decisão/.test(api.$("btnLeiUpdIA").textContent) && /sem decisão/.test(api.$("leiUpdFalta").textContent), "I1 o botao da IA e o rodape dizem quantos faltam: " + api.$("btnLeiUpdIA").textContent + " / " + api.$("leiUpdFalta").textContent);
+    api.$("btnLeiUpdIA").onclick();
+    ok(api.$("dlgLeiUpdIA").open === true && /3 item/.test(api.$("leiUpdIATit").textContent), "I2 o parecer abre numa janela propria: " + api.$("leiUpdIATit").textContent);
+    api.$("leiUpdExplica").value = "Art. 96 — ACEITAR — ok\nArt. 106 — RECUSAR — confira";
+    ok(api.leiUpdIAContar() === 2 && /2 decisão/.test(api.$("leiUpdIALidas").textContent) && /2/.test(api.$("btnLeiUpdIAAplicar").textContent),
+      "I3 antes de aplicar, diz quantas decisoes reconheceu: " + api.$("leiUpdIALidas").textContent);
+    api.$("btnLeiUpdIAAplicar").onclick();
+    ok(api.$("dlgLeiUpdIA").open !== true, "I4 aplicar fecha a janela");
+    ok(api.leiUpdComparoAtual().filter((x) => x.viaIA).length === 2, "I5 as duas decisoes da IA entram, marcadas 'pela IA'");
+    ok(/btn-azul/.test(api.$("btnLeiUpdFinalizar").className), "I6 gravar continua azul enquanto falta decidir");
+  }
   /* ---- 6: tela cheia lembrada ---- */
   {
     const api = iniciar();

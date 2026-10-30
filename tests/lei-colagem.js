@@ -665,7 +665,7 @@ async function testes() {
        "U12 texto completo e da mesma lei foi interrompido por conferencia");
     ok(a.leiUpdComparoAtual().length === 1, "U12a devia haver 1 diferenca: " + a.leiUpdComparoAtual().length);
     /* e o item mostra o texto INTEIRO e as palavras que mudaram marcadas */
-    const marc = achar(a.$("leiUpdItem"), (c) => /lei-upd-marca/.test(c.className || "")).map((c) => c.textContent);
+    const marc = achar(a.$("leiUpdItem"), (c) => /lei-upd-(marca|entra)/.test(c.className || "")).map((c) => c.textContent);
     ok(marc.indexOf("modificado") >= 0, "U12b a palavra que mudou nao veio marcada: " + JSON.stringify(marc));
   }
 

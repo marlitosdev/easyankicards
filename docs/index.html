@@ -1432,6 +1432,20 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
  * atual e prévia do texto final. */
 .lei-upd-nav{flex-wrap:wrap}
 .lei-upd-conta{font-weight:700;min-width:110px;text-align:center}
+.lei-upd-topo2{display:flex;align-items:center;gap:10px;margin:0 0 6px}
+.lei-upd-topo2 .lei-upd-barra{flex:1 1 auto;margin:0}
+.lei-upd-decide{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 0 10px;padding:6px 8px;border:1px solid var(--borda);border-radius:10px}
+.lei-upd-decide-rot{font-weight:700}
+.lei-upd-decide .btn{padding:6px 14px}
+.lei-upd-decide-nav{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-left:auto}
+.lei-upd-rodape{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.lei-upd-rodape-ferr,.lei-upd-rodape-acao{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.lei-upd-falta{margin-right:4px}
+.lei-upd-ia-passos{margin:8px 0;padding-left:22px;display:flex;flex-direction:column;gap:14px}
+.lei-upd-ia-passos>li::marker{font-weight:800;color:var(--info)}
+.lei-upd-ia-ptit{font-weight:700;margin-bottom:6px}
+.lei-upd-ia-ver>summary{cursor:pointer;margin:4px 0}
+dialog.lei-upd-ia[open]{width:min(760px,96vw)}
 .lei-upd-mesa{display:grid;grid-template-columns:minmax(160px,210px) minmax(0,1fr);gap:12px;align-items:start}
 .lei-upd-corpo{min-width:0}
 .lei-upd-visao-cx{margin:0 0 8px;position:sticky;top:0}
@@ -1489,6 +1503,11 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .lei-upd-inteiro>summary{cursor:pointer}
 .lei-upd-gerais{margin-top:8px}
 .lei-upd-gerais>summary{cursor:pointer}
+.lei-upd-al-origem{margin-top:4px;padding-left:8px;border-left:2px solid currentColor;color:var(--texto);font-size:12px}
+.lei-upd-al-origem q{font-style:italic}
+.lei-upd-al-rot{font-weight:700;color:var(--sutil)}
+.lei-upd-editar{margin-top:6px}
+.lei-upd-editar>summary{cursor:pointer}
 .lei-upd-ia-nota{margin:6px 0;padding:6px 10px;border:1px solid var(--info);border-radius:8px;font-size:12.5px;background:color-mix(in srgb,var(--info) 8%,transparent)}
 .lei-upd-atual.ja{border-style:dashed}
 .lei-upd-prev-corpo{max-height:55vh;overflow:auto;white-space:pre-wrap;font-size:12.5px;line-height:1.55}
@@ -9253,23 +9272,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 
   <div id="leiUpdPasso2" hidden>
-    <div class="mat-topo lei-upd-nav">
-      <button class="btn-min" id="btnLeiUpdAnterior" data-i18n="lei_upd_ant">&#8592;</button>
-      <span class="nota lei-upd-conta" id="leiUpdConta"></span>
-      <button class="btn-min" id="btnLeiUpdProximo" data-i18n="lei_upd_prox">&#8594;</button>
-      <button class="btn-min" id="btnLeiUpdProxAt" data-i18n="lei_upd_prox_at"></button>
-      <button class="btn-min" id="btnLeiUpdProxPend" data-i18n="lei_upd_prox_pend"></button>
-      <span class="mat-topo-dir nota" id="leiUpdResumo"></span>
+    <!-- (19.36.0) TOPO: o andamento e os atalhos de lote. A navegação item a item
+         e a decisão ficam JUNTO DO ITEM (abaixo); o rodapé só fecha o fluxo. -->
+    <div class="lei-upd-topo2">
+      <span class="nota" id="leiUpdResumo"></span>
+      <div class="lei-upd-barra" id="leiUpdBarra" role="img"></div>
     </div>
     <div class="lei-upd-seguros" id="leiUpdSegurosBar" hidden>
       <span class="nota" id="leiUpdSegurosTxt"></span>
       <button class="btn-min" id="btnLeiUpdAceitarSeguros"></button>
       <button class="btn-min" id="btnLeiUpdDispensarJa" hidden></button>
     </div>
-    <!-- (19.35.0) a barra do andamento e a lista SEMPRE à vista, agrupada pelo
-         que cada item pede: o que precisa de você, o que a IA decidiu e falta
-         conferir, o que não tem risco e o que você já decidiu -->
-    <div class="lei-upd-barra" id="leiUpdBarra" role="img"></div>
     <div class="lei-upd-mesa">
     <aside class="lei-upd-visao-cx" id="leiUpdVisaoCx">
       <div class="nota" id="leiUpdVisaoTit"></div>
@@ -9281,33 +9294,78 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <span class="lei-upd-atual-info nota" id="leiUpdAtualInfo"></span>
       <span class="lei-upd-st" id="leiUpdAtualSt"></span>
     </div>
+    <!-- a DECISÃO deste item, logo abaixo do nome dele: aceitar / recusar, e andar -->
+    <div class="lei-upd-decide" id="leiUpdDecide">
+      <span class="lei-upd-decide-rot nota" data-i18n="lei_upd_este_item"></span>
+      <button class="btn btn-verde" id="btnLeiUpdAceitar" data-i18n="lei_upd_aceitar" data-i18n-title="lei_upd_aceitar_tip"></button>
+      <button class="btn btn-cinza" id="btnLeiUpdPular" data-i18n="lei_upd_pular" data-i18n-title="lei_upd_pular_tip"></button>
+      <span class="lei-upd-decide-nav">
+        <button class="btn-min" id="btnLeiUpdAnterior" data-i18n="lei_upd_ant">&#8592;</button>
+        <span class="nota lei-upd-conta" id="leiUpdConta"></span>
+        <button class="btn-min" id="btnLeiUpdProximo" data-i18n="lei_upd_prox">&#8594;</button>
+        <button class="btn-min" id="btnLeiUpdProxAt" data-i18n="lei_upd_prox_at"></button>
+        <button class="btn-min" id="btnLeiUpdProxPend" data-i18n="lei_upd_prox_pend"></button>
+      </span>
+    </div>
     <div id="leiUpdItem"></div>
-
-    <div class="mat-topo">
-      <button class="btn-min" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
-      <button class="btn-min" id="btnLeiUpdLado2" data-i18n="lei_lado_btn"></button>
-    <button type="button" class="btn-min lei-fx-btn" id="btnLeiUpdFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
-    <button class="btn-min" id="btnLeiRelUpd" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
-    </div>
-    <textarea id="leiUpdPrompt" rows="6" readonly hidden
-      style="width:100%;box-sizing:border-box"></textarea>
-    <div class="mat-topo" id="leiUpdPromptBarra" hidden>
-      <button class="btn-min" id="btnLeiUpdIACopiar" data-i18n="lei_cloze_copiar"></button>
-      <button class="btn-min" id="btnLeiUpdIAAplicar" data-i18n="lei_upd_ia_aplicar"></button>
-    </div>
-    <label class="nota" id="leiUpdExplicaRot" hidden></label>
-    <textarea id="leiUpdExplica" rows="4" hidden
-      style="width:100%;box-sizing:border-box"></textarea>
     </div>
     </div>
 
-    <div class="dlg-rodape">
-      <button class="btn btn-cinza" id="btnLeiUpdPular" data-i18n="lei_upd_pular"></button>
-      <button class="btn btn-verde" id="btnLeiUpdAceitar" data-i18n="lei_upd_aceitar"></button>
-      <button class="btn btn-azul" id="btnLeiUpdPrevia" data-i18n="lei_upd_previa"></button>
-      <button class="btn btn-azul" id="btnLeiUpdFinalizar" data-i18n="lei_upd_finalizar"></button>
-      <button class="btn btn-cinza" id="btnLeiUpdFechar2" data-i18n="help_close"></button>
+    <!-- RODAPÉ: o que vale para a atualização INTEIRA. Ferramentas à esquerda, discretas;
+         à direita, na ordem de uso: pedir ajuda à IA, conferir o resultado, gravar. -->
+    <div class="dlg-rodape lei-upd-rodape">
+      <span class="lei-upd-rodape-ferr">
+        <button class="btn-min" id="btnLeiUpdFechar2" data-i18n="help_close"></button>
+        <button class="btn-min" id="btnLeiUpdLado2" data-i18n="lei_lado_btn"></button>
+        <button type="button" class="btn-min lei-fx-btn" id="btnLeiUpdFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
+        <button class="btn-min" id="btnLeiRelUpd" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado."></button>
+      </span>
+      <span class="lei-upd-rodape-acao">
+        <span class="nota lei-upd-falta" id="leiUpdFalta"></span>
+        <button class="btn btn-cinza" id="btnLeiUpdIA" data-i18n="lei_upd_ia"></button>
+        <button class="btn btn-cinza" id="btnLeiUpdPrevia" data-i18n="lei_upd_previa"></button>
+        <button class="btn btn-azul" id="btnLeiUpdFinalizar" data-i18n="lei_upd_finalizar"></button>
+      </span>
     </div>
+  </div>
+</dialog>
+
+<!-- (19.36.0) PARECER DA IA: uma janela própria, em três passos — copiar o pedido,
+     colar a resposta, aplicar. Antes eram duas caixas que se abriam no meio do item. -->
+<dialog id="dlgLeiUpdIA" class="ui-modal diag-modal lei-upd-ia">
+  <div class="vka-cab">
+    <h3 id="leiUpdIATit" data-i18n="lei_upd_ia_tit"></h3>
+    <button type="button" class="dlg-x" id="btnLeiUpdIAX" data-i18n-title="help_close">&#10006;</button>
+  </div>
+  <p class="nota" data-i18n="lei_upd_ia_intro"></p>
+  <ol class="lei-upd-ia-passos">
+    <li>
+      <div class="lei-upd-ia-ptit" data-i18n="lei_upd_ia_p1"></div>
+      <div class="mat-topo" id="leiUpdPromptBarra" hidden>
+        <button class="btn btn-azul" id="btnLeiUpdIACopiar" data-i18n="lei_upd_ia_copiar"></button>
+        <span class="nota" id="leiUpdPromptInfo"></span>
+      </div>
+      <details class="lei-upd-ia-ver">
+        <summary class="nota" data-i18n="lei_upd_ia_ver"></summary>
+        <textarea id="leiUpdPrompt" rows="8" readonly hidden style="width:100%;box-sizing:border-box"></textarea>
+      </details>
+    </li>
+    <li>
+      <div class="lei-upd-ia-ptit" data-i18n="lei_upd_ia_p2"></div>
+      <label class="nota" id="leiUpdExplicaRot" for="leiUpdExplica" hidden></label>
+      <textarea id="leiUpdExplica" rows="8" hidden style="width:100%;box-sizing:border-box"></textarea>
+      <div class="mat-topo">
+        <button class="btn-min" id="btnLeiUpdIAColar" data-i18n="lei_upd_ia_colar"></button>
+        <span class="nota" id="leiUpdIALidas" role="status"></span>
+      </div>
+    </li>
+    <li>
+      <div class="lei-upd-ia-ptit" data-i18n="lei_upd_ia_p3"></div>
+    </li>
+  </ol>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLeiUpdIAFechar" data-i18n="help_close"></button>
+    <button class="btn btn-azul" id="btnLeiUpdIAAplicar" data-i18n="lei_upd_ia_aplicar"></button>
   </div>
 </dialog>
 

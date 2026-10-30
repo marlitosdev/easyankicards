@@ -8330,8 +8330,10 @@ function leiUpdAlertasJuntos(it) {
   const ordem = [];
   (it.alertas || []).forEach((a) => {
     if (calados[a.k]) return;
-    if (!por[a.k]) { por[a.k] = Object.assign({}, a, { us: [] }); ordem.push(a.k); }
+    if (!por[a.k]) { por[a.k] = Object.assign({}, a, { us: [], trechos: [] }); ordem.push(a.k); }
     if (a.u) por[a.k].us.push(a.u);
+    /* (19.36.0) de onde veio: o trecho da lei alteradora (e o que está gravado hoje, quando há) */
+    if (a.trecho && !por[a.k].trechos.some((x) => x.trecho === a.trecho)) por[a.k].trechos.push({ u: a.u || "", trecho: a.trecho, atual: a.atual || "" });
   });
   return ordem.map((k) => {
     const a = por[k];
@@ -8355,7 +8357,10 @@ function leiUpdMostrar() {
   const re = leiUpdComparo.filter((x) => x.recusado).length;
   $("leiUpdResumo").textContent = t("lei_upd_placar",
     { a: ac, r: re, p: leiUpdComparo.length - ac - re });
-  const dif = (item.tipo === "mudou" && item.antigo && item.novo) ? leiUpdDispositivosDif(item.antigo, item.novo) : null;
+  /* (19.36.0) com a redação gravada TROCADA (o 343-A por cima do 343), o que muda se mede contra a ORIGINAL — senão
+   * tudo aparece como mudança; o "como está" (o que sai) continua no artigo inteiro e o aviso explica */
+  const difBase = item.base || item.antigo;
+  const dif = (item.tipo === "mudou" && difBase && item.novo) ? leiUpdDispositivosDif(difBase, item.novo) : null;
   /* faixa do item em exame: número grande, O QUE A ALTERAÇÃO FAZ e a decisão em cor */
   if ($("leiUpdAtual")) {
     const st = item.aceito ? "st-aceito" : item.recusado ? "st-recusado" : "st-pend";
@@ -8368,10 +8373,16 @@ function leiUpdMostrar() {
     $("leiUpdAtualSt").textContent = item.jaAplicada ? t("lei_upd_st_ja") : item.aceito ? t("lei_upd_ok")
       : item.recusado ? t("lei_upd_recusada") : leiUpdPrecisaAtencao(item) ? t("lei_upd_atencao_badge") : t("lei_upd_st_pend");
   }
+  const pendTot = leiUpdComparo.length - ac - re;
   if ($("btnLeiUpdFinalizar")) {
     $("btnLeiUpdFinalizar").textContent = ac ? t("lei_upd_finalizar_n", { n: ac })
       : t("lei_upd_finalizar");
+    /* (19.36.0) GRAVAR fica verde (o passo final) quando não falta decidir nada e há o que gravar */
+    $("btnLeiUpdFinalizar").className = "btn " + (ac && !pendTot ? "btn-verde" : "btn-azul");
   }
+  /* o que falta, ao lado do gravar: o que fica de fora se gravar agora */
+  if ($("leiUpdFalta")) $("leiUpdFalta").textContent = pendTot ? t("lei_upd_falta", { p: pendTot }) : t("lei_upd_falta_zero");
+  if ($("btnLeiUpdIA")) $("btnLeiUpdIA").textContent = pendTot ? t("lei_upd_ia_n", { n: pendTot }) : t("lei_upd_ia");
   /* a barra dos atalhos de lote: aceitar os sem risco, dispensar os já aplicados */
   const segPend = leiUpdComparo.filter((x) => x.seguro && !x.aceito && !x.recusado).length;
   const atnPend = leiUpdComparo.filter(leiUpdPrecisaAtencao).length;
@@ -8398,10 +8409,41 @@ function leiUpdMostrar() {
   if (als.length) {
     const bx = document.createElement("div");
     bx.className = "lei-upd-als";
+    const fonteIt = item.fonteItem || leiUpdFonteGlobal || "";
     als.forEach((a) => {
       const d = document.createElement("div");
       d.className = "lei-upd-al " + a.sev;
-      d.textContent = t("lei_upd_al_" + a.k, a);
+      const msg = document.createElement("div");
+      msg.textContent = t("lei_upd_al_" + a.k, a);
+      d.append(msg);
+      /* DE ONDE SAIU: o dispositivo da lei alteradora, entre aspas, e — no conflito — a redação gravada hoje */
+      (a.trechos || []).slice(0, 8).forEach((x) => {
+        const o = document.createElement("div");
+        o.className = "lei-upd-al-origem";
+        const r = document.createElement("span");
+        r.className = "lei-upd-al-rot";
+        r.textContent = t("lei_upd_al_origem", { f: fonteIt || "—", a: rotuloAtual, u: x.u }) + " ";
+        const q = document.createElement("q");
+        q.textContent = leiUpdSemNota(x.trecho) || x.trecho;
+        o.append(r, q);
+        if (x.atual) {
+          const h = document.createElement("div");
+          const rh = document.createElement("span");
+          rh.className = "lei-upd-al-rot";
+          rh.textContent = t("lei_upd_al_hoje") + " ";
+          const qh = document.createElement("q");
+          qh.textContent = leiUpdSemNota(x.atual);
+          h.append(rh, qh);
+          o.append(h);
+        }
+        d.append(o);
+      });
+      if ((a.trechos || []).length > 8) {
+        const mais = document.createElement("div");
+        mais.className = "lei-upd-al-origem";
+        mais.textContent = t("lei_upd_al_mais", { n: a.trechos.length - 8 });
+        d.append(mais);
+      }
       bx.append(d);
     });
     cx.append(bx);
@@ -8492,26 +8534,32 @@ function leiUpdMostrar() {
    * (19.35.0) Já aplicada: os dois lados são iguais — vai só um. Com o texto editável (parcial), o
    * "como ficaria" seria a mesma coisa que a caixa logo abaixo — vai só a caixa. */
   const editavel = item.parcial && item.tipo !== "revogado";
-  const lados = [["cm_mel_antes", item.antigo, "qm-antes", item.novo, "lei_upd_nao_existia"],
-    ["cm_mel_depois", item.novo, "qm-depois", item.antigo, "lei_upd_revogado_texto"]]
-    .slice(0, leiUpdJaAplicada(item) || editavel ? 1 : 2);
-  lados.forEach(([rot, txt, cls, contra, faltaChave]) => {
+  /* (19.36.0) os DOIS lados de novo, com as diferenças em cor: no "como está", em vermelho riscado o que sai; no
+   * "como ficaria", em verde o que entra. A nota de vigência "(Incluído por…)" não conta como diferença (senão
+   * cada linha ficaria verde). A caixa para editar vem por último, recolhida — ela não tem cor. */
+  const notas = (x) => (String(x || "").match(/\((?:Reda[çc][ãa]o dada|Inclu[íi]d[oa]|Revogad[oa]|Acrescid[oa])[^)]*\)/gi) || []).join(" ");
+  const lados = [["cm_mel_antes", item.antigo, "qm-antes", item.novo, "lei_upd_nao_existia", "lei-upd-sai"],
+    ["cm_mel_depois", item.novo, "qm-depois", item.antigo, "lei_upd_revogado_texto", "lei-upd-entra"]]
+    .slice(0, leiUpdJaAplicada(item) ? 1 : 2);
+  lados.forEach(([rot, txt, cls, contra, faltaChave, marca]) => {
     const r1 = document.createElement("div");
     r1.className = "qm-rot";
     r1.textContent = t(rot);
     const d = document.createElement("div");
     d.className = "qm-lado lei-upd-lado " + cls + (txt ? "" : " nota");
     if (!txt) d.textContent = t(faltaChave);
-    else if (item.tipo === "mudou" || (item.tipo === "anexo_subst" && item.antigo)) leiMarcarDiferencas(d, txt, contra);
+    else if ((item.tipo === "mudou" && !leiUpdJaAplicada(item)) || (item.tipo === "anexo_subst" && item.antigo)) leiMarcarDiferencas(d, txt, contra + " " + notas(txt), marca);
     else d.textContent = String(txt);
     inteiro.append(r1, d);
   });
 
   /* PARCIAL: o texto proposto é uma MESCLA — a pessoa pode conferir e corrigir antes de aceitar */
   if (editavel) {
-    const rot = document.createElement("div");
-    rot.className = "qm-rot";
-    rot.textContent = t("lei_upd_proposto");
+    const ed = document.createElement("details");
+    ed.className = "lei-upd-editar";
+    const es = document.createElement("summary");
+    es.className = "qm-rot";
+    es.textContent = t("lei_upd_proposto");
     const ta = document.createElement("textarea");
     ta.id = "leiUpdProposto";
     ta.rows = 8;
@@ -8519,7 +8567,8 @@ function leiUpdMostrar() {
     ta.style.boxSizing = "border-box";
     ta.value = item.novo;
     ta.oninput = () => { item.novo = ta.value; };
-    inteiro.append(rot, ta);
+    ed.append(es, ta);
+    inteiro.append(ed);
   }
   cx.append(inteiro);
 
@@ -8558,6 +8607,7 @@ function leiUpdMostrar() {
 
 /* fecha e limpa a caixa do parecer — só numa comparação NOVA */
 function leiUpdParecerFechar() {
+  { const d = $("dlgLeiUpdIA"); if (d && d.open) { try { d.close(); } catch (e) { d.open = false; } } }
   ["leiUpdPrompt", "leiUpdPromptBarra", "leiUpdExplicaRot", "leiUpdExplica"].forEach((id) => { if ($(id)) $(id).hidden = true; });
   if ($("leiUpdPrompt")) $("leiUpdPrompt").value = "";
   if ($("leiUpdExplica")) $("leiUpdExplica").value = "";
@@ -8805,7 +8855,34 @@ function leiUpdIA() {
   $("leiUpdExplicaRot").hidden = false;
   $("leiUpdExplica").placeholder = t("lei_upd_explica_ph");
   $("leiUpdExplica").hidden = false;
+  /* (19.36.0) numa janela própria, em passos: copiar o pedido, colar a resposta, aplicar */
+  if ($("leiUpdIATit")) $("leiUpdIATit").textContent = t("lei_upd_ia_tit_n", { n: pendentes.length });
+  if ($("leiUpdPromptInfo")) $("leiUpdPromptInfo").textContent = t("lei_upd_ia_info", { n: pendentes.length });
+  leiUpdIAContar();
+  const dg = $("dlgLeiUpdIA");
+  if (dg && !dg.open) { try { if (dg.showModal) dg.showModal(); else dg.open = true; } catch (e) { dg.open = true; } }
   leiReg("atualizacao", "parecer da IA pedido", pendentes.length + " item(ns) pendente(s)");
+}
+
+/* enquanto a resposta é colada: quantas decisões o app reconhece nela, para quantas pendentes — antes de aplicar */
+function leiUpdIAContar() {
+  const el = $("leiUpdIALidas");
+  const b = $("btnLeiUpdIAAplicar");
+  if (!el || !leiUpdComparo) return 0;
+  const txt = String(($("leiUpdExplica") || {}).value || "");
+  const lidas = txt.trim() ? leiUpdLerParecer(txt) : [];
+  const pend = leiUpdComparo.filter((it) => !it.aceito && !it.recusado);
+  let casam = 0, amb = 0;
+  pend.forEach((it) => {
+    const ch = [leiUpdChaveRotulo(it.rotulo || ""), leiUpdChaveRotulo(it.numCru)].filter(Boolean);
+    const p = lidas.filter((x) => ch.indexOf(x.chave) >= 0)[0];
+    if (!p) return;
+    if (p.dec === "?") amb++; else casam++;
+  });
+  el.textContent = !txt.trim() ? t("lei_upd_ia_lidas_vazio")
+    : t("lei_upd_ia_lidas", { n: casam, p: pend.length }) + (amb ? " · " + t("lei_upd_ia_ambiguas", { n: amb }) : "");
+  if (b) b.textContent = casam ? t("lei_upd_ia_aplicar_n", { n: casam }) : t("lei_upd_ia_aplicar");
+  return casam;
 }
 
 const LEI_UPD_IA_CORTE = 900;
@@ -8878,6 +8955,7 @@ function leiUpdIAAplicar() {
   if (primeiroIA >= 0) leiUpdIrPara(primeiroIA);
   toastMsg(t("lei_upd_ia_aplicado", { a, r }) + (amb ? " " + t("lei_upd_ia_ambiguas", { n: amb }) : ""), 5600);
   leiReg("atualizacao", "parecer da IA aplicado", a + " aceita(s), " + r + " recusada(s)" + (amb ? ", " + amb + " ambígua(s)" : ""));
+  { const d = $("dlgLeiUpdIA"); if (d && d.open) { try { d.close(); } catch (e) { d.open = false; } } }
 }
 
 /* FINALIZAR — só aqui algo é gravado, e só os itens aceitos. A base
@@ -9580,7 +9658,12 @@ function leiIniciar() {
   liga("btnLeiUpdProximo", "próximo artigo da comparação", () => leiUpdMover(1));
   liga("btnLeiUpdProxAt", "ir à próxima alteração com atenção", () => leiUpdPularPara("atencao"));
   liga("btnLeiUpdProxPend", "ir à próxima alteração sem decisão", () => leiUpdPularPara("pend"));
-  liga("btnLeiUpdAceitar", "aceitar alteração", () => leiUpdAceitar());
+  /* (19.36.0) o botão faz o mesmo que a tecla A: aceita e já vai ao próximo sem decisão */
+  liga("btnLeiUpdAceitar", "aceitar alteração", () => {
+    const eraAceito = leiUpdComparo && leiUpdComparo[leiUpdIdx] && leiUpdComparo[leiUpdIdx].aceito;
+    leiUpdAceitar();
+    if (!eraAceito && leiUpdComparo && leiUpdComparo.some((x) => !x.aceito && !x.recusado)) leiUpdPularPara("pend");
+  });
   liga("btnLeiUpdPular", "pular alteração", () => leiUpdPular());
   /* FINALIZAR pede confirmação com as três contagens — "só os aceitos entram"
    * tem que ser explícito antes de gravar, não um segredo de implementação. */
@@ -9611,6 +9694,7 @@ function leiIniciar() {
     const dg = $("dlgLeiAtualizar");
     if (!dg || !dg.open || $("leiUpdPasso2").hidden) return;
     if ($("dlgLeiUpdPrevia") && $("dlgLeiUpdPrevia").open) return;
+    if ($("dlgLeiUpdIA") && $("dlgLeiUpdIA").open) return;
     /* (19.29.1) dentro de uma caixa de texto a seta move o CURSOR: antes ela
      * trocava de item e levava junto a resposta da IA que estava sendo colada */
     if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
@@ -9626,6 +9710,16 @@ function leiIniciar() {
   liga("btnLeiUpdAceitarSeguros", "aceitar de uma vez os itens sem risco", () => leiUpdAceitarSeguros());
   liga("btnLeiUpdIA", "pedir parecer da IA para as pendentes", () => leiUpdIA());
   liga("btnLeiUpdIAAplicar", "aplicar o parecer da IA nas decisões", () => leiUpdIAAplicar());
+  const iaFechar = () => { const d = $("dlgLeiUpdIA"); if (d && d.open) { try { d.close(); } catch (e) { d.open = false; } } };
+  liga("btnLeiUpdIAX", "fechar o parecer da IA", iaFechar);
+  liga("btnLeiUpdIAFechar", "fechar o parecer da IA", iaFechar);
+  liga("btnLeiUpdIAColar", "colar a resposta da IA", async () => {
+    try {
+      const txt = await navigator.clipboard.readText();
+      if (txt) { $("leiUpdExplica").value = txt; leiUpdIAContar(); }
+    } catch (e) { try { $("leiUpdExplica").focus(); } catch (x) {} toastMsg(t("lei_upd_ia_colar_falhou"), 3500); }
+  });
+  if ($("leiUpdExplica")) $("leiUpdExplica").addEventListener("input", () => leiUpdIAContar());
   liga("btnLeiUpdIACopiar", "copiar prompt de apoio", () => {
     try { navigator.clipboard.writeText($("leiUpdPrompt").value); } catch (e) {}
     const b = $("btnLeiUpdIACopiar");
