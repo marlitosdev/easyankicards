@@ -64,6 +64,10 @@ async function testes() {
   {
     const r = rodar(); const api = r.api; api.matIniciar();
     ok(typeof api.$("btnMatQsBanco").onclick === "function", "Q1 o botao da aba Questoes esta ligado");
+    /* (19.38.1) o botão chamava o "trocarModo" LOCAL do resumo (ler/editar) e quebrava sem resumo aberto */
+    let erro = null;
+    try { api.$("btnMatQsBanco").onclick(); } catch (e) { erro = e; }
+    ok(!erro && api.$("secQuestoes").hidden === false, "Q2 tocar abre a tela de Questoes (sem erro): " + (erro && erro.message));
   }
 
   /* ---- 4: o "Continuar" à parte, em links ---- */

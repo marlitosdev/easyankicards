@@ -3948,7 +3948,9 @@ function matIniciar() {
   /* (19.38.0) as "bibliotecas" das abas Resumos e Questões, no modelo da de Cartões */
   matBotao("btnMatResDuvidas", "biblioteca de resumos (aba Resumos)", () => resBibAbrir());
   resBibLigar();
-  matBotao("btnMatQsBanco", "banco de questões (aba Questões)", () => { if (typeof trocarModo === "function") trocarModo("questoes"); });
+  /* (19.38.1) a troca de TELA (modos.js). A função de ler/editar o resumo, mais abaixo, também se chamava
+   * "trocarModo" — o botão pegava a dela e quebrava sem resumo aberto ("reading 'chave'"); ela virou matLerEditarTrocar */
+  matBotao("btnMatQsBanco", "biblioteca de questões (aba Questões)", () => { if (typeof trocarModo === "function") trocarModo("questoes"); });
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
   matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);
   matBotao("btnMatProva", "modo prova", matAlternarProva);
@@ -4079,13 +4081,13 @@ function matIniciar() {
   }
   $("btnMatColarOk").onclick = () => matAplicarColagem($("matColarTexto").value);
   $("btnMatColarFechar").onclick = () => $("dlgMatColar").close();
-  const trocarModo = () => {
+  const matLerEditarTrocar = () => {
     if (matModo === "editar") matGravar(matAtual.chave, $("matTexto").value,
       { disciplina: matAtual.disciplina, topico: matAtual.topico });
     matTrocarModo(matModo === "editar" ? "ler" : "editar");
   };
-  $("btnMatModo").onclick = trocarModo;
-  if ($("btnMatModoTopo")) $("btnMatModoTopo").onclick = trocarModo;
+  $("btnMatModo").onclick = matLerEditarTrocar;
+  if ($("btnMatModoTopo")) $("btnMatModoTopo").onclick = matLerEditarTrocar;
   $("btnMatAmpliar").onclick = () => matAmpliar(true);
   if ($("btnMatJanNormal")) $("btnMatJanNormal").onclick = () => matAmpliar(false);
   if ($("matFonteVal")) $("matFonteVal").onclick = matFonteZerar;
