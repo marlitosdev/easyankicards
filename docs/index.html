@@ -3137,10 +3137,15 @@ dialog.mat-amplo{max-height:96vh}
 .lei-bolha[hidden]{display:none}
 .lei-cita-link.lei-cita-perm{text-decoration-style:double}
 /* JM7 */
-.mat-recentes{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0}
+.mat-recentes{display:flex;flex-wrap:wrap;gap:2px 0;align-items:baseline;margin:4px 0 14px;padding:6px 10px;font-size:12px;line-height:1.5;
+  border:1px dashed var(--borda);border-radius:8px;background:color-mix(in srgb,var(--info) 5%,transparent)}
 .mat-recentes[hidden]{display:none}
-.mat-rec-rot{font-size:12px;font-weight:700;color:var(--sutil)}
-.mat-rec{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.mat-rec-rot{font-size:12px;font-weight:700;color:var(--sutil);margin-right:6px}
+.mat-rec{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* (19.38.0) "Continuar" como links discretos, não como mais uma fileira de botões */
+.mat-rec-link{background:none;border:0;padding:0 2px;margin:0;font:inherit;font-size:12px;color:var(--sutil);cursor:pointer;border-radius:3px}
+.mat-rec-link:hover,.mat-rec-link:focus-visible{color:var(--texto);text-decoration:underline}
+.mat-rec-link+.mat-rec-link::before{content:"·";display:inline-block;margin:0 6px 0 4px;color:var(--borda);text-decoration:none}
 .mat-sub-est{color:var(--texto)}
 .mat-sem-cx{border-top:1px dashed var(--borda);margin-top:6px;padding-top:2px}
 .mat-sem-cab{color:var(--sutil)}
@@ -4280,6 +4285,16 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
    da mesma linha do cabeçalho, em vez de gastar uma linha própria. */
 .jur-acoes{display:flex;gap:2px;margin-left:auto}
 /* JM3 — biblioteca de julgados */
+#dlgResBib{width:min(900px,96vw)}
+#dlgResBib.res-bib-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box;display:flex;flex-direction:column}
+#dlgResBib.res-bib-cheia[open] .jur-bib-lista{max-height:none;flex:1 1 auto;min-height:0}
+.res-bib-item{display:block;width:100%;text-align:left;cursor:pointer;background:none;color:var(--texto);font:inherit;border:1px solid var(--borda);border-radius:9px;padding:7px 10px}
+.res-bib-item:hover,.res-bib-item:focus-visible{border-color:var(--info);background:color-mix(in srgb,var(--info) 6%,transparent)}
+.res-bib-top{font-weight:700;font-size:14px}
+.res-bib-meta{font-size:11.5px;color:var(--sutil);margin-top:2px}
+.res-bib-duv{color:var(--atencao);font-weight:700}
+.res-bib-trecho{font-size:12.5px;margin-top:4px;color:var(--sutil)}
+.res-bib-trecho mark{background:rgba(250,204,21,.32);color:inherit;border-radius:3px;padding:0 1px}
 #dlgJurBib{width:min(900px,96vw)}
 .jur-bib-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}
 .jur-bib-barra input[type=search]{flex:1 1 220px;min-width:0;box-sizing:border-box}
@@ -6756,17 +6771,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min btn-min-ok" id="btnPacote" data-i18n="pac_btn" data-i18n-title="pac_btn_aj"></button>
       <button type="button" class="btn-min" id="btnPacoteImportar" data-i18n="pac_importar_btn" data-i18n-title="pac_importar_btn_aj"></button>
     </div>
+    <!-- (19.38.0) cada aba abre a SUA biblioteca do mesmo jeito que a de Cartões: um botão grande, com o nome e,
+         embaixo, o que se faz lá. A explicação que ficava solta ao lado virou a dica do botão. -->
     <div class="mat-ferr" id="matFerrLei" hidden>
-      <button class="btn-min" id="btnMatLeis" data-i18n="lei_bib_btn"
-        title="Abre a biblioteca das suas leis: cada lei existe uma vez só, e daqui se vê onde ela é usada."></button>
-      <span class="nota" data-i18n="mat_ferr_lei_exp"></span>
+      <button type="button" class="btn btn-azul btn-biblioteca" id="btnMatLeis" data-i18n-title="mat_ferr_lei_exp"><span class="bib-tit" data-i18n="mat_bib_lei"></span><span class="bib-sub" data-i18n="mat_bib_lei_sub"></span></button>
     </div>
     <div class="mat-ferr" id="matFerrJuris" hidden>
-      <button type="button" class="btn-min btn-min-ok" id="btnMatJurBib" data-i18n="jur_bib_btn" data-i18n-title="jur_bib_btn_aj"></button>
-      <span class="nota" data-i18n="mat_ferr_juris_exp"></span>
+      <button type="button" class="btn btn-azul btn-biblioteca" id="btnMatJurBib" data-i18n-title="mat_ferr_juris_exp"><span class="bib-tit" data-i18n="mat_bib_juris"></span><span class="bib-sub" data-i18n="mat_bib_juris_sub"></span></button>
     </div>
-    <p class="nota mat-ferr" id="matFerrResumo" hidden data-i18n="mat_ferr_resumo_exp"></p>
-    <p class="nota mat-ferr" id="matFerrQuestoes" hidden data-i18n="mat_ferr_questoes_exp"></p>
+    <div class="mat-ferr" id="matFerrResumo" hidden>
+      <button type="button" class="btn btn-azul btn-biblioteca" id="btnMatResDuvidas" data-i18n-title="mat_ferr_resumo_exp"><span class="bib-tit" data-i18n="mat_bib_resumo"></span><span class="bib-sub" data-i18n="mat_bib_resumo_sub"></span></button>
+    </div>
+    <div class="mat-ferr" id="matFerrQuestoes" hidden>
+      <button type="button" class="btn btn-azul btn-biblioteca" id="btnMatQsBanco" data-i18n-title="mat_ferr_questoes_exp"><span class="bib-tit" data-i18n="mat_bib_questoes"></span><span class="bib-sub" data-i18n="mat_bib_questoes_sub"></span></button>
+    </div>
     <div id="matLista" class="mat-caixa"></div>
     <!-- o registro técnico dos resumos: serve para relatar problema, não para estudar — fica no rodapé, discreto -->
     <div class="mat-rodape"><button type="button" class="btn-link" id="btnMatLogAba" data-i18n="mat_log_btn"></button></div>
@@ -8961,6 +8979,37 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="btn-min" id="btnJurAudFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
+<!-- (19.38.0) BIBLIOTECA DE RESUMOS: todos os resumos num lugar só, no modelo da de julgados — busca no tópico e no
+     texto, filtros de edital e disciplina, ordem, e o que cada um tem (tamanho, última mudança, dúvidas). Tocar abre
+     o resumo para ler. Nada é editado aqui. -->
+<dialog id="dlgResBib" class="ui-modal diag-modal res-bib">
+  <div class="vka-cab">
+    <h3 data-i18n="res_bib_tit"></h3>
+    <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnResBibCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
+    <button type="button" class="dlg-x" id="btnResBibX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" id="resBibConta" role="status"></p>
+  <div class="jur-bib-barra">
+    <input type="search" id="resBibBusca" data-i18n-ph="res_bib_busca_ph" placeholder="procurar">
+    <select id="resBibEdital" data-i18n-title="res_bib_edital_aj"></select>
+    <select id="resBibDisc" data-i18n-title="res_bib_disc_aj"></select>
+    <select id="resBibSit" data-i18n-title="res_bib_sit_aj">
+      <option value="" data-i18n="res_bib_sit_todos"></option>
+      <option value="duvidas" data-i18n="res_bib_sit_duvidas"></option>
+      <option value="curtos" data-i18n="res_bib_sit_curtos"></option>
+    </select>
+    <select id="resBibOrdem" data-i18n-title="res_bib_ordem_aj">
+      <option value="topico" data-i18n="res_bib_ordem_topico"></option>
+      <option value="recente" data-i18n="res_bib_ordem_recente"></option>
+      <option value="tamanho" data-i18n="res_bib_ordem_tamanho"></option>
+    </select>
+  </div>
+  <div id="resBibLista" class="jur-bib-lista"></div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-cinza" id="btnResBibFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgJurBib" class="ui-modal diag-modal jur-bib">
   <div class="vka-cab">
     <h3 data-i18n="jur_bib_tit"></h3>

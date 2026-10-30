@@ -3945,6 +3945,10 @@ function matIniciar() {
     };
   }
   matBotao("btnDuvidas", "minhas dúvidas", matDuvidasAbrir);
+  /* (19.38.0) as "bibliotecas" das abas Resumos e Questões, no modelo da de Cartões */
+  matBotao("btnMatResDuvidas", "biblioteca de resumos (aba Resumos)", () => resBibAbrir());
+  resBibLigar();
+  matBotao("btnMatQsBanco", "banco de questões (aba Questões)", () => { if (typeof trocarModo === "function") trocarModo("questoes"); });
   matBotao("btnMatConsertar", "consertar marcação", matConsertarAbrir);
   matBotao("btnMatDicas", "recolher/expandir dicas", matAlternarDicas);
   matBotao("btnMatProva", "modo prova", matAlternarProva);
@@ -6589,7 +6593,9 @@ function matPintarRecentes() {
   lista.forEach((r, i) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "mat-slot mat-rec slot-" + r.tipo;
+    /* (19.38.0) LINK, não botão: com o mesmo contorno dos botões de material e das abas, o "Continuar" parecia mais
+     * uma fileira de ações e a tela virava um mar de pílulas. Texto discreto, separado por "·", sublinhado ao passar. */
+    b.className = "mat-rec mat-rec-link rec-" + r.tipo;
     b.id = "btnMatRecente_" + i;
     b.textContent = (MAT_ICONE[r.tipo] || "•") + " " + r.topico;
     b.title = t("mat_rec_tip", { tp: t("mat_tipo_" + r.tipo), d: r.disciplina, t: r.topico, q: r.q ? new Date(r.q).toLocaleString() : "" });
@@ -6777,4 +6783,171 @@ function matPintarSemMaterial(box) {
     });
   }
   box.append(cx);
+}
+
+/* =====================================================================
+ * (19.38.0) BIBLIOTECA DE RESUMOS
+ *
+ * Os resumos só se achavam pela estante, tópico a tópico. Aqui ficam todos, como a biblioteca de julgados e a de
+ * cartões: procurar no tópico E no texto (com o trecho achado à vista), filtrar por edital e disciplina, ver os que
+ * têm dúvida marcada ou são curtos, ordenar. Tocar abre o resumo para ler. Tela cheia lembrada, como a de julgados.
+ * ===================================================================== */
+const RES_BIB_CH_CHEIA = "eac_res_bib_cheia";
+let resBib = { busca: "", edital: "", disc: "", sit: "", ordem: "topico" };
+function resBibCheiaPreferida() { try { return localStorage.getItem(RES_BIB_CH_CHEIA) !== "0"; } catch (e) { return true; } }
+function resBibCheiaTrocar(sim, lembrar) {
+  const dlg = $("dlgResBib");
+  if (!dlg) return false;
+  const quer = sim === undefined ? !dlg.classList.contains("res-bib-cheia") : !!sim;
+  dlg.classList.toggle("res-bib-cheia", quer);
+  const b = $("btnResBibCheia");
+  if (b) { b.textContent = t(quer ? "dom_cheia_sair" : "dom_cheia"); if (b.setAttribute) b.setAttribute("aria-pressed", String(quer)); }
+  if (quer) { if (typeof telaCheiaPedir === "function") telaCheiaPedir("resbib", () => { if (dlg.classList.contains("res-bib-cheia")) resBibCheiaTrocar(false, false); }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("resbib");
+  if (lembrar) { try { localStorage.setItem(RES_BIB_CH_CHEIA, quer ? "1" : "0"); } catch (e) {} }
+  return quer;
+}
+
+/* só o que tem RESUMO escrito (a estante também mostra tópicos só com cartões ou julgados) */
+function resBibTodos() {
+  return matLista().filter((x) => String(x.texto || "").trim());
+}
+const RES_BIB_CURTO = 120;          /* palavras: abaixo disso o resumo provavelmente ainda é um esboço */
+function resBibPalavras(x) { return (String(x.texto || "").match(/\S+/g) || []).length; }
+
+function resBibAbrir(opc) {
+  if (!$("dlgResBib")) return false;
+  const o = opc || {};
+  /* entra com o filtro que estava no Material de estudo: quem filtrou por um edital quer ver os resumos dele */
+  resBib = { busca: o.busca || "", edital: o.edital !== undefined ? o.edital : (typeof matFEdital === "string" ? matFEdital : ""),
+    disc: o.disc !== undefined ? o.disc : (typeof matFDisc === "string" ? matFDisc : ""), sit: "", ordem: resBib.ordem || "topico" };
+  resBibCheiaTrocar(resBibCheiaPreferida(), false);
+  $("resBibBusca").value = resBib.busca;
+  $("resBibSit").value = resBib.sit;
+  $("resBibOrdem").value = resBib.ordem;
+  resBibPintar();
+  abrirModal("dlgResBib");
+  try { reg("MATERIAL", "biblioteca de resumos aberta", resBibTodos().length + " resumos"); } catch (e) {}
+  return true;
+}
+
+function resBibPintar() {
+  if (!$("dlgResBib")) return;
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const todos = resBibTodos();
+  /* os selects só com o que existe, com quantos */
+  const opcoes = (sel, campo, valor, rotTodos) => {
+    if (!sel) return;
+    const cont = {};
+    todos.forEach((x) => { const v = String(x[campo] || "").trim(); if (v) cont[v] = (cont[v] || 0) + 1; });
+    sel.innerHTML = "";
+    const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t(rotTodos); sel.append(o0);
+    Object.keys(cont).sort((a, b) => a.localeCompare(b)).forEach((v) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = v + " (" + cont[v] + ")"; sel.append(o);
+    });
+    /* o filtro herdado do Material pode ser só um pedaço do nome: casa com a primeira opção que o contém */
+    const alvo = norm(valor);
+    const achada = alvo ? Object.keys(cont).filter((v) => norm(v) === alvo)[0] || Object.keys(cont).filter((v) => norm(v).indexOf(alvo) >= 0)[0] : "";
+    sel.value = achada || "";
+    return sel.value;
+  };
+  resBib.edital = opcoes($("resBibEdital"), "concurso", resBib.edital, "res_bib_edital_todos") || "";
+  resBib.disc = opcoes($("resBibDisc"), "disciplina", resBib.disc, "res_bib_disc_todas") || "";
+  const duvidasDe = {};
+  try { matDuvidas().forEach((d) => { duvidasDe[d.chave] = (duvidasDe[d.chave] || 0) + 1; }); } catch (e) {}
+  const f = norm(resBib.busca);
+  const lista = todos.filter((x) => {
+    if (resBib.edital && String(x.concurso || "").trim() !== resBib.edital) return false;
+    if (resBib.disc && String(x.disciplina || "").trim() !== resBib.disc) return false;
+    if (resBib.sit === "duvidas" && !duvidasDe[x.chave]) return false;
+    if (resBib.sit === "curtos" && resBibPalavras(x) >= RES_BIB_CURTO) return false;
+    if (f && norm(x.topico + " " + x.disciplina + " " + (x.concurso || "") + " " + x.texto).indexOf(f) < 0) return false;
+    return true;
+  });
+  const ordem = {
+    topico: (a, b) => String(a.disciplina || "").localeCompare(String(b.disciplina || "")) || String(a.topico || "").localeCompare(String(b.topico || "")),
+    recente: (a, b) => String(b.tocado || "").localeCompare(String(a.tocado || "")),
+    tamanho: (a, b) => resBibPalavras(b) - resBibPalavras(a),
+  }[resBib.ordem] || (() => 0);
+  lista.sort(ordem);
+  const discs = new Set(lista.map((x) => x.disciplina || ""));
+  $("resBibConta").textContent = t("res_bib_conta", { n: lista.length, d: discs.size, t: todos.length });
+  const cx = $("resBibLista");
+  cx.innerHTML = "";
+  if (!lista.length) {
+    const v = document.createElement("p");
+    v.className = "nota";
+    v.textContent = t(todos.length ? "res_bib_nada" : "res_bib_vazia");
+    cx.append(v);
+    return;
+  }
+  let grupo = null;
+  lista.forEach((x) => {
+    /* agrupado pela disciplina só na ordem por tópico — nas outras ordens o grupo partiria a sequência */
+    if (resBib.ordem === "topico" && grupo !== (x.disciplina || "")) {
+      grupo = x.disciplina || "";
+      const g = document.createElement("div");
+      g.className = "jur-bib-grupo";
+      g.textContent = grupo || "—";
+      cx.append(g);
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "res-bib-item";
+    const tt = document.createElement("div");
+    tt.className = "res-bib-top";
+    tt.textContent = "📄 " + (x.topico || "—");
+    const meta = document.createElement("div");
+    meta.className = "res-bib-meta";
+    const partes = [];
+    if (resBib.ordem !== "topico" && x.disciplina) partes.push(x.disciplina);
+    if (x.concurso) partes.push(x.concurso);
+    partes.push(t("res_bib_palavras", { n: resBibPalavras(x) }));
+    if (x.tocado) { try { partes.push(t("res_bib_tocado", { d: new Date(x.tocado).toLocaleDateString() })); } catch (e) {} }
+    meta.textContent = partes.join(" · ");
+    if (duvidasDe[x.chave]) {
+      const dv = document.createElement("span");
+      dv.className = "res-bib-duv";
+      dv.textContent = " · " + t("res_bib_duvidas", { n: duvidasDe[x.chave] });
+      meta.append(dv);
+    }
+    b.append(tt, meta);
+    /* o trecho onde a busca achou a palavra no TEXTO (no tópico, o título já mostra) */
+    if (f) {
+      const txt = String(x.texto || "").replace(/\s+/g, " ");
+      const i = norm(txt).indexOf(f);
+      if (i >= 0 && norm(x.topico).indexOf(f) < 0) {
+        const tr = document.createElement("div");
+        tr.className = "res-bib-trecho";
+        const ini = Math.max(0, i - 60), fim = Math.min(txt.length, i + f.length + 80);
+        tr.append(document.createTextNode((ini ? "…" : "") + txt.slice(ini, i)));
+        const m = document.createElement("mark");
+        m.textContent = txt.slice(i, i + f.length);
+        tr.append(m, document.createTextNode(txt.slice(i + f.length, fim) + (fim < txt.length ? "…" : "")));
+        b.append(tr);
+      }
+    }
+    b.title = t("res_bib_abrir_aj");
+    b.onclick = () => {
+      try { $("dlgResBib").close(); } catch (e) {}
+      matAbrirEditor({ disciplina: x.disciplina, nome: x.topico, chave: x.chave }, "ler");
+    };
+    cx.append(b);
+  });
+}
+
+function resBibLigar() {
+  if (!$("dlgResBib")) return;
+  const fechar = () => { try { $("dlgResBib").close(); } catch (e) {} };
+  if ($("btnResBibX")) $("btnResBibX").onclick = fechar;
+  if ($("btnResBibFechar")) $("btnResBibFechar").onclick = fechar;
+  if ($("btnResBibCheia")) $("btnResBibCheia").onclick = () => resBibCheiaTrocar(undefined, true);
+  if ($("resBibBusca")) $("resBibBusca").addEventListener("input", () => { resBib.busca = $("resBibBusca").value; resBibPintar(); });
+  [["resBibEdital", "edital"], ["resBibDisc", "disc"], ["resBibSit", "sit"], ["resBibOrdem", "ordem"]].forEach(([id, campo]) => {
+    if ($(id)) $(id).addEventListener("change", () => { resBib[campo] = $(id).value; resBibPintar(); });
+  });
+  $("dlgResBib").addEventListener("close", () => {
+    $("dlgResBib").classList.remove("res-bib-cheia");
+    if (typeof telaCheiaSair === "function") telaCheiaSair("resbib");
+  });
 }
