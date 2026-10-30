@@ -170,7 +170,13 @@ async function bkaRodar(agora) {
 /* ---------------- gravar ---------------- */
 function bkaGravarAgora(motivo, opc) {
   if (bkaGravando) return bkaGravando;
-  bkaGravando = bkaGravarDeVerdade(motivo || "", opc || {}).finally(() => { bkaGravando = null; });
+  /* (19.40.0) o balão: "salvando…" enquanto grava; depois ✓ por um instante (ou o aviso, se falhou) */
+  const est0 = bkaEstado();
+  const vaiGravar = !!(est0.ligado && bkaPasta);
+  if (vaiGravar) bkaBolhaPintar("gravando");
+  bkaGravando = bkaGravarDeVerdade(motivo || "", opc || {})
+    .then((r) => { if (vaiGravar) bkaBolhaPintar(r && r.ok && !r.igual ? "gravou" : ""); return r; })
+    .finally(() => { bkaGravando = null; });
   return bkaGravando;
 }
 async function bkaGravarDeVerdade(motivo, o) {
@@ -182,6 +188,23 @@ async function bkaGravarDeVerdade(motivo, o) {
   try { await bkEsperarDados(); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
   const hash = bkaHash(JSON.stringify(bk.dados));
   if (!o.forcar && est.ultimo && est.ultimo.hash === hash) return { ok: true, igual: true };
+  /* (19.40.0) NÃO SOBREPOR O MAIS NOVO. Cada aparelho grava o SEU arquivo — nunca apaga o do outro —, mas um aparelho
+   * desatualizado que segue gravando deixa o arquivo DELE como o mais novo da pasta, e o outro aparelho passa a ver
+   * "backup mais novo" com dados velhos (e pode restaurá-los). Havendo um backup de outro aparelho mais novo que a
+   * base daqui, o automático PARA até a pessoa conferir: restaurar o outro, ou dizer "manter os deste aparelho". */
+  if (!o.ignorarMaisNovo) {
+    try { await bkaProcurarMaisNovo(); } catch (e) {}
+    if (bkaMaisNovo) {
+      if (!est.travado || est.travado.nome !== bkaMaisNovo.nome) {
+        est.travado = { nome: bkaMaisNovo.nome, aparelho: bkaMaisNovo.aparelho, quando: new Date(bkaMaisNovo.quando).toISOString() };
+        bkaEstadoGravar(est);
+        reg("BACKUP", "automático parado: há backup mais novo de outro aparelho", bkaMaisNovo.aparelho + " · " + bkaMaisNovo.nome);
+      }
+      bkaPintarTudo();
+      return { ok: false, razao: "mais_novo", aparelho: bkaMaisNovo.aparelho };
+    }
+    if (est.travado) { delete est.travado; bkaEstadoGravar(est); }
+  }
   /* a mesma situação que já pausou: não grava outro "encolheu" a cada 30 minutos */
   if (!o.aceitarEncolhido && est.pausado && est.pausado.hash === hash) return { ok: false, razao: "encolheu", jaGravado: true };
   const agora = new Date(bkaRelogio());
@@ -251,6 +274,7 @@ async function bkaProcurarMaisNovo() {
       const m = bkaLerNome(nome);
       if (!m || m.encolheu || m.aparelho === meu) continue;
       const f = await h.getFile();
+      if (est.ignorado && est.ignorado.nome === nome && f.lastModified <= est.ignorado.quando) continue;
       if (f.lastModified > base + 60000 && (!melhor || f.lastModified > melhor.quando)) melhor = { aparelho: m.aparelho, quando: f.lastModified, nome, handle: h };
     }
   } catch (e) { melhor = null; }
@@ -311,8 +335,26 @@ async function bkaReconectar() {
   return r;
 }
 async function bkaGravarPedido() {
+  if (bkaMaisNovo) {
+    const ok = await uiConfirm(t("bka_conf_sobrepor", { a: bkaMaisNovo.aparelho }));
+    if (!ok) return { ok: false, razao: "cancelado" };
+    return bkaManterDesteAparelho();
+  }
   const r = await bkaGravarAgora("pedido", { gesto: true, forcar: true });
   if (r.ok) await uiAlert(t("bka_gravado", { n: r.nome }));
+  return r;
+}
+/* A PESSOA CONFERIU e quer seguir com os dados DESTE aparelho: o arquivo do outro fica (nada é apagado), deixa de ser
+ * "mais novo" para este aparelho, e o automático volta a gravar */
+async function bkaManterDesteAparelho() {
+  const est = bkaEstado();
+  if (bkaMaisNovo) est.ignorado = { nome: bkaMaisNovo.nome, quando: bkaMaisNovo.quando };
+  delete est.travado;
+  bkaEstadoGravar(est);
+  try { reg("BACKUP", "mantidos os dados deste aparelho", bkaMaisNovo ? bkaMaisNovo.aparelho + " · " + bkaMaisNovo.nome : ""); } catch (e) {}
+  bkaMaisNovo = null;
+  const r = await bkaGravarAgora("mantidos os deste aparelho", { gesto: true, forcar: true, ignorarMaisNovo: true });
+  bkaPintarTudo();
   return r;
 }
 async function bkaAceitarEncolhido() {
@@ -337,6 +379,7 @@ async function bkaRenomearAparelho() {
 /* ---------------- a tela ---------------- */
 function bkaPintarTudo() {
   try { bkaPintar(); } catch (e) {}
+  try { bkaBolhaPintar(); } catch (e) {}
   try { if (typeof atualizarSeloBase === "function") atualizarSeloBase(); } catch (e) {}
 }
 /* o que o selo do topo precisa dizer (null = nada a dizer, fica o selo de sempre) */
@@ -346,7 +389,7 @@ function bkaAvisoDoSelo() {
   if (est.pausado) return { txt: t("bka_selo_pausado"), cls: "sb-alerta" };
   if (est.erro) return { txt: t("bka_selo_erro"), cls: "sb-alerta" };
   if (!bkaPasta || (bkaPermissao && bkaPermissao !== "granted")) return { txt: t("bka_selo_reconectar"), cls: "sb-aviso" };
-  if (bkaMaisNovo) return { txt: t("bka_selo_mais_novo", { a: bkaMaisNovo.aparelho }), cls: "sb-aviso" };
+  if (bkaMaisNovo) return { txt: t(est.travado ? "bka_selo_travado" : "bka_selo_mais_novo", { a: bkaMaisNovo.aparelho }), cls: est.travado ? "sb-alerta" : "sb-aviso" };
   return null;
 }
 function bkaPintar() {
@@ -388,7 +431,10 @@ function bkaPintar() {
   if (bkaMaisNovo) {
     const d = new Date(bkaMaisNovo.quando);
     nota(t("bka_mais_novo", { a: bkaMaisNovo.aparelho, q: bkQuandoCurto(d.toISOString()) }) + (bkaMaisNovo.localMudou ? " " + t("bka_mais_novo_local") : ""), "bk-aviso bka-mais-novo");
-    botao(linha(), t("bka_ver_mais_novo"), bkaVerMaisNovo, "btn btn-azul", "btnBkaVerMaisNovo");
+    if (est.travado) nota(t("bka_travado", { a: bkaMaisNovo.aparelho }), "bk-aviso grave bka-travado");
+    const lm = linha();
+    botao(lm, t("bka_ver_mais_novo"), bkaVerMaisNovo, "btn btn-azul", "btnBkaVerMaisNovo");
+    botao(lm, t("bka_manter_deste"), bkaManterDesteAparelho, "btn btn-cinza", "btnBkaManterDeste", t("bka_manter_deste_tip"));
   }
   nota(est.ultimo && est.ultimo.nome ? t("bka_ultimo", { q: bkQuandoCurto(est.ultimo.quando), n: est.ultimo.nome }) : t("bka_ainda_nao"), "bk-txt bka-ultimo");
   const l = linha();
@@ -398,9 +444,131 @@ function bkaPintar() {
   botao(l, t("bka_desligar"), bkaDesligar, "btn btn-cinza", "btnBkaDesligar");
 }
 
+/* ---------------- (19.40.0) o balão ----------------
+ * Um círculo pequeno, por cima de tudo, que a pessoa arrasta para onde quiser (a posição fica guardada):
+ *  · aparece por um instante enquanto o backup automático grava ("salvando…" girando) e depois ✓;
+ *  · fica à vista enquanto há algo a resolver — desligado, pasta perdida, permissão vencida, pausado, falhou, outro
+ *    aparelho mais novo — na cor do problema;
+ *  · tocar (sem arrastar) abre o painel do backup, onde se configura, liga, reconecta ou ajusta.
+ * Sem o recurso no navegador (iPhone, Firefox), não aparece: não há o que configurar.
+ * ------------------------------------------------------ */
+const BKA_BOLHA_POS = "eac_bka_bolha_pos";
+let bkaBolhaTimer = null;
+let bkaBolhaMomento = "";           /* "gravando" | "gravou" | "" */
+/* o que o balão diz agora: null = some */
+const BKA_BOLHA_DIAS_MANUAL = 3;    /* sem o automático: depois de quantos dias sem backup o balão aparece */
+function bkaBolhaEstado() {
+  if (!bkaPodeAutomatico()) {
+    /* NO CELULAR (e no Firefox) o navegador não deixa gravar sozinho numa pasta: o balão cuida do backup MANUAL —
+     * aparece quando ele envelhece, e tocar abre o painel (baixar / mandar para a nuvem) */
+    let i = null;
+    try { i = typeof idadeBase === "function" ? idadeBase() : null; } catch (e) { i = null; }
+    if (!i) return { k: "manual", ic: "💾", txt: t("bka_bolha_manual_nunca"), cls: "bb-alerta" };
+    if (i.dias >= BKA_BOLHA_DIAS_MANUAL) return { k: "manual", ic: "💾", txt: t("bka_bolha_manual", { n: i.dias }), cls: i.dias > 7 ? "bb-alerta" : "bb-aviso" };
+    return null;
+  }
+  const est = bkaEstado();
+  if (bkaBolhaMomento === "gravando") return { k: "gravando", ic: "💾", txt: t("bka_bolha_gravando"), cls: "bb-grav" };
+  const av = bkaAvisoDoSelo();
+  if (av) return { k: "problema", ic: "!", txt: av.txt, cls: av.cls === "sb-alerta" ? "bb-alerta" : "bb-aviso" };
+  if (!est.ligado) return { k: "desligado", ic: "💾", txt: t("bka_bolha_desligado"), cls: "bb-desl" };
+  if (bkaBolhaMomento === "gravou") return { k: "gravou", ic: "✓", txt: t("bka_bolha_gravou"), cls: "bb-ok" };
+  return null;
+}
+function bkaBolhaPosLer() {
+  try { const p = JSON.parse(localStorage.getItem(BKA_BOLHA_POS) || "null"); if (p && isFinite(p.x) && isFinite(p.y)) return p; } catch (e) {}
+  return { x: 1, y: 1 };              /* fração da área livre: canto de baixo, à direita */
+}
+function bkaBolhaPosicionar(el, p) {
+  const w = (typeof window !== "undefined" && window.innerWidth) || 1024, h = (typeof window !== "undefined" && window.innerHeight) || 768;
+  const tam = 46, m = 12;
+  const x = Math.max(0, Math.min(1, p.x)), y = Math.max(0, Math.min(1, p.y));
+  el.style.left = Math.round(m + x * Math.max(0, w - tam - 2 * m)) + "px";
+  el.style.top = Math.round(m + y * Math.max(0, h - tam - 2 * m)) + "px";
+}
+function bkaBolhaCriar() {
+  let el = $("bkaBolha");
+  if (el) return el;
+  if (typeof document === "undefined" || !document.body) return null;
+  el = document.createElement("button");
+  el.type = "button";
+  el.id = "bkaBolha";
+  el.className = "bka-bolha";
+  el.hidden = true;
+  const ic = document.createElement("span");
+  ic.className = "bka-bolha-ic";
+  ic.setAttribute("aria-hidden", "true");
+  el.append(ic);
+  document.body.append(el);
+  bkaBolhaPosicionar(el, bkaBolhaPosLer());
+  /* ARRASTAR × TOCAR: andou mais de 5px, é arrasto (e não abre nada); senão, é toque e abre o painel */
+  let ini = null, moveu = false;
+  el.addEventListener("pointerdown", (ev) => {
+    ini = { x: ev.clientX, y: ev.clientY, l: el.offsetLeft, t: el.offsetTop };
+    moveu = false;
+    try { el.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  el.addEventListener("pointermove", (ev) => {
+    if (!ini) return;
+    const dx = ev.clientX - ini.x, dy = ev.clientY - ini.y;
+    if (!moveu && Math.abs(dx) + Math.abs(dy) < 5) return;
+    moveu = true;
+    el.classList.add("arrastando");
+    el.style.left = (ini.l + dx) + "px";
+    el.style.top = (ini.t + dy) + "px";
+  });
+  const soltar = () => {
+    if (!ini) return;
+    if (moveu) {
+      const w = window.innerWidth, h = window.innerHeight, tam = 46, m = 12;
+      const p = { x: (el.offsetLeft - m) / Math.max(1, w - tam - 2 * m), y: (el.offsetTop - m) / Math.max(1, h - tam - 2 * m) };
+      p.x = Math.max(0, Math.min(1, p.x)); p.y = Math.max(0, Math.min(1, p.y));
+      try { localStorage.setItem(BKA_BOLHA_POS, JSON.stringify(p)); } catch (e) {}
+      bkaBolhaPosicionar(el, p);
+    }
+    el.classList.remove("arrastando");
+    ini = null;
+  };
+  el.addEventListener("pointerup", soltar);
+  el.addEventListener("pointercancel", soltar);
+  el.addEventListener("click", (ev) => {
+    if (moveu) { moveu = false; ev.preventDefault(); return; }
+    bkaBolhaTocar();
+  });
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("resize", () => bkaBolhaPosicionar(el, bkaBolhaPosLer()));
+  }
+  return el;
+}
+function bkaBolhaTocar() {
+  try { reg("BACKUP", "balão do backup tocado", (bkaBolhaEstado() || {}).k || "-"); } catch (e) {}
+  if (typeof bkAbrirPainel === "function") bkAbrirPainel();
+}
+/* momento: "gravando" | "gravou" | "" (só repinta) */
+function bkaBolhaPintar(momento) {
+  if (momento !== undefined) {
+    bkaBolhaMomento = momento;
+    if (bkaBolhaTimer) { clearTimeout(bkaBolhaTimer); bkaBolhaTimer = null; }
+    /* o ✓ fica só um instante */
+    if (momento === "gravou") bkaBolhaTimer = setTimeout(() => { bkaBolhaMomento = ""; bkaBolhaPintar(); }, 2500);
+  }
+  const el = bkaBolhaCriar();
+  if (!el) return null;
+  if (!el.classList.contains("arrastando")) bkaBolhaPosicionar(el, bkaBolhaPosLer());
+  const st = bkaBolhaEstado();
+  el.hidden = !st;
+  if (!st) return null;
+  el.className = "bka-bolha " + st.cls;
+  el.firstChild.textContent = st.ic;
+  el.title = st.txt + (st.k === "gravando" ? "" : " · " + t("bka_bolha_tocar"));
+  el.setAttribute("aria-label", el.title);
+  return st;
+}
+
 /* ---------------- começar ---------------- */
 async function bkaIniciar() {
   bkaPintar();
+  try { bkaBolhaPintar(); } catch (e) {}
   if (!bkaPodeAutomatico() || !bkaEstado().ligado) return;
   try { bkaPasta = await bkaPastaLoja().ler(); } catch (e) { bkaPasta = null; }
   if (bkaPasta) await bkaPermitido(false);

@@ -89,6 +89,8 @@ function atualizarSeloBase() {
   if (typeof medirCabecalho === "function") {
     try { medirCabecalho(); } catch (e) {}
   }
+  /* (19.40.0) o balão acompanha o selo (no celular, é ele quem lembra do backup manual) */
+  try { if (typeof bkaBolhaPintar === "function") bkaBolhaPintar(); } catch (e) {}
 }
 
 /* Quem já usava o app antes do backup existir não tem "eac_backup_em", e o

@@ -1679,6 +1679,22 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
 .pas-ren{flex:1}
 /* (v19.17.0) backup automático numa pasta */
+/* (19.40.0) o balão do backup automático: círculo arrastável, por cima de tudo */
+.bka-bolha{position:fixed;z-index:9000;width:46px;height:46px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;
+  font-size:20px;font-weight:800;cursor:pointer;touch-action:none;user-select:none;border:2px solid var(--borda);
+  background:var(--panel);color:var(--texto);box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .2s, transform .15s}
+.bka-bolha[hidden]{display:none}
+.bka-bolha:hover{transform:scale(1.06)}
+.bka-bolha.arrastando{cursor:grabbing;transform:scale(1.1);transition:none}
+.bka-bolha.bb-grav{border-color:var(--info)}
+.bka-bolha.bb-grav::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid transparent;border-top-color:var(--info);animation:bkaGira 1s linear infinite}
+.bka-bolha.bb-ok{border-color:var(--verde);color:var(--verde)}
+.bka-bolha.bb-aviso{border-color:var(--atencao);color:var(--atencao);background:color-mix(in srgb,var(--atencao) 14%,var(--panel))}
+.bka-bolha.bb-alerta{border-color:var(--erro);color:var(--erro);background:color-mix(in srgb,var(--erro) 14%,var(--panel));animation:bkaPulsa 2s ease-in-out infinite}
+.bka-bolha.bb-desl{opacity:.75;border-style:dashed}
+@keyframes bkaGira{to{transform:rotate(360deg)}}
+@keyframes bkaPulsa{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--erro) 25%,transparent)}}
+@media (prefers-reduced-motion:reduce){.bka-bolha.bb-grav::after,.bka-bolha.bb-alerta{animation:none}}
 .bka-bloco #bkaCorpo{display:flex;flex-direction:column;gap:6px;margin-top:4px}
 .bka-pausado{white-space:pre-line}
 .bka-mais-novo{border-color:var(--info,#3b82f6)}
