@@ -25,8 +25,8 @@
  *
  * Agora os três andam juntos, e o invariante E16 (tests/estrutura.js)
  * derruba a suíte se um deles ficar para trás. */
-const CACHE = "easyankicards-v19.46.0";
-const SW_VERSION = "19.46.0";
+const CACHE = "easyankicards-v19.48.0";
+const SW_VERSION = "19.48.0";
 const SHELL = [
   "./", "index.html", "app.js", "parser.js", "anki.js", "i18n.js", "modos.js",
   "edital.js", "edital-vert.js", "edital-vert-ui.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-catalogo.js", "juris-ia.js", "ia-consumo.js", "juris-ui.js", "pastas.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js",

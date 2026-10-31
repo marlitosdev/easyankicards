@@ -1416,15 +1416,38 @@ function montarPlano(r, opcoes) {
     : edAndamentoPorTopico(typeof qhLerGravado === "function" ? qhLerGravado() : (typeof qhTodos === "function" ? qhTodos() : []), typeof rlsLerTudo === "function" ? rlsLerTudo() : {}, o.hoje,
       (typeof edDiario !== "undefined" && edDiario) || []);
   pendentes.forEach((i) => { const a = anda[i.topicoChave]; if (a) i.andamento = a; });
+  /* só a revisão com data (que de fato venceu) fura a vez; a marca antiga, sem data, segue pelo peso, como sempre */
+  const revDatada = (i) => (i.ehRevisao && i.dias !== null && i.dias !== undefined ? 1 : 0);
+  /* (19.47.0) a revisão vencida vem primeiro DENTRO da disciplina dela (reaprender custa mais que manter), e não à
+   * frente da agenda inteira: lá ela furava o rodízio, e quem só estudou uma disciplina via só revisões dela no topo */
   const bruta = revVencidas.concat(pendentes)
-    .sort((a, b) => ((b.andamento ? 1 : 0) - (a.andamento ? 1 : 0)) || (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
+    .sort((a, b) => ((b.andamento ? 1 : 0) - (a.andamento ? 1 : 0)) || (revDatada(b) - revDatada(a)) || (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
   const porDisc = new Map();
   bruta.forEach((i) => {
     if (!porDisc.has(i.disciplina)) porDisc.set(i.disciplina, []);
     porDisc.get(i.disciplina).push(i);
   });
+  /* (19.48.0) O MODO DE ESTUDO (avançar · equilibrado · consolidar), por disciplina — ver edAplicarModo. Só quando o
+   * chamador passa o.modos (a agenda passa o que a pessoa escolheu); sem ele, a ordem é a de sempre. */
+  const modoDe = o.modos ? edModoResolver(o.modos, s ? s.dias : null) : null;
+  if (modoDe) porDisc.forEach((lista, d) => porDisc.set(d, edAplicarModo(lista, modoDe(d))));
   /* disciplinas entram no rodízio na ordem da sua fatia da prova */
-  const ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
+  let ordemDisc = [...porDisc.keys()].sort((a, b) => (fatia[b] || 0) - (fatia[a] || 0));
+  /* (19.47.0) O RODÍZIO COM MEMÓRIA. O plano é refeito do zero a cada registro, e a 1ª rodada sempre abria pela
+   * disciplina de maior fatia: terminado um assunto de Tributário (42% da prova), o topo da agenda era outro de
+   * Tributário — com 2.507 min nela e zero em todas as outras. Agora, com estudo registrado nos últimos 14 dias, a
+   * rodada abre pela disciplina mais ATRASADA (fatia da prova − fatia do seu tempo), e a disciplina da sessão de HOJE
+   * não abre a rodada seguinte. Dentro de cada disciplina nada muda: o mais pesado primeiro. */
+  const recente = o.tempoRecente !== undefined ? o.tempoRecente
+    : edTempoRecente((typeof edDiario !== "undefined" && edDiario) || [], Object.keys(fatia), o.hoje);
+  const equilibrio = edEquilibrio(fatia, recente);
+  if (recente && recente.total >= ED_RECENTE_MIN && ordemDisc.length > 1) {
+    const desv = {};
+    equilibrio.forEach((x) => { desv[x.disciplina] = x.desvio; });
+    ordemDisc.sort((a, b) => (desv[a] || 0) - (desv[b] || 0) || (fatia[b] || 0) - (fatia[a] || 0));
+    if (recente.hoje && ordemDisc[0] === recente.hoje) ordemDisc = [ordemDisc[1], ordemDisc[0]].concat(ordemDisc.slice(2));
+    ordemDisc.forEach((d, k) => { (porDisc.get(d) || []).forEach((it) => { it.equilibrio = equilibrio.find((x) => x.disciplina === d) || null; it.posDisc = k; }); });
+  }
   /* ---- TRAVA ANTI-ELIMINAÇÃO, COM TETO ----
    *
    * Uma disciplina de bloco com corte, cuja cobertura ou cujo acerto
@@ -1588,6 +1611,11 @@ function montarPlano(r, opcoes) {
      * liberação e a trava já leram estes blocos, e a tela tem de ver
      * exatamente o que elas viram. */
     blocos,
+    /* (19.47.0) fatia da prova × fatia do seu tempo nos últimos 14 dias, por disciplina (a mais atrasada primeiro) */
+    equilibrio, recente,
+    /* (19.48.0) o modo de estudo de cada disciplina ({modo, auto, sugerido}) e o que a data sugere */
+    modos: modoDe ? [...porDisc.keys()].reduce((acc, d) => { acc[d] = modoDe(d); return acc; }, {}) : null,
+    modoSugerido: edModoAuto(s ? s.dias : null),
     /* a fatia da prova é EXATA quando o edital trouxe os números */
     fatiaExata: exata,
     /* qual fase este plano representa, e o que existe do outro lado */
@@ -2098,6 +2126,108 @@ function edMarcaDoDiario(diario, chave) {
   let n = 0;
   for (let k = doTop.length - 1; k >= 0 && doTop[k].a === "revisado"; k--) n++;
   return n > 1 ? { e: "revisado", d: ant.d, n } : { e: "revisado", d: ant.d };
+}
+
+/* =====================================================================
+ * (19.48.0) O MODO DE ESTUDO: AVANÇAR, EQUILIBRADO OU CONSOLIDAR
+ *
+ * Revisar ou aprender coisa nova é a decisão que mais pesa na reta de um concurso, e a resposta muda com a distância
+ * da prova: longe, o que rende é cobrir o edital; perto, o ganho de assunto novo cai e o de revisar (com questões e
+ * cartões — recuperação ativa) sobe. A pessoa escolhe o modo, no geral e por disciplina; "automático" segue a data:
+ *   · mais de 90 dias → AVANÇAR: assunto novo pelo peso; a revisão entra pelo peso dela, quando vence;
+ *   · de 31 a 90 dias → EQUILIBRADO: a cada dois assuntos novos, uma revisão;
+ *   · 30 dias ou menos → CONSOLIDAR: revisões primeiro; de assunto novo, só o de peso alto ainda intocado, em sessão
+ *     mais curta; o resto do novo vai para o fim da disciplina.
+ * Em qualquer modo: o que está EM ANDAMENTO vem primeiro, e a revisão MUITO atrasada (o dobro do intervalo) também —
+ * é a trava contra perder o que já foi estudado. O rodízio entre disciplinas não muda.
+ * ===================================================================== */
+const ED_MODOS = ["avancar", "equilibrado", "consolidar"];
+function edModoAuto(diasProva) {
+  if (diasProva === null || diasProva === undefined) return "equilibrado";
+  return diasProva > 90 ? "avancar" : diasProva > 30 ? "equilibrado" : "consolidar";
+}
+/* modos = {geral: "auto"|modo, disc: {nome: modo}} → (disciplina) → {modo, auto (bool), sugerido} */
+function edModoResolver(modos, diasProva) {
+  const sug = edModoAuto(diasProva);
+  const geral = modos && ED_MODOS.indexOf(modos.geral) >= 0 ? modos.geral : null;
+  const disc = (modos && modos.disc) || {};
+  return (d) => {
+    const m = ED_MODOS.indexOf(disc[d]) >= 0 ? disc[d] : geral;
+    return { modo: m || sug, auto: !m, sugerido: sug };
+  };
+}
+function edRevMuitoAtrasada(i) {
+  if (!i.ehRevisao || i.dias === null || i.dias === undefined) return false;
+  return i.dias >= 2 * edIntervaloRevisao(i.revisado ? (i.nRev || 1) : 0, edNivelDoFator(i.fator));
+}
+/* a lista de UMA disciplina (já na ordem de peso), reordenada pelo modo; cada item leva o modo (i.modoRitmo) */
+function edAplicarModo(lista, m) {
+  const modo = (m && m.modo) || "equilibrado";
+  const anda = [], urgente = [], revs = [], novos = [];
+  lista.forEach((i) => {
+    i.modoRitmo = modo;
+    if (i.andamento) anda.push(i);
+    else if (edRevMuitoAtrasada(i)) urgente.push(i);
+    else if (i.ehRevisao) revs.push(i);
+    else novos.push(i);
+  });
+  let meio;
+  if (modo === "avancar") {
+    meio = revs.concat(novos).sort((a, b) => (b.brutoOrdem - a.brutoOrdem) || (a.ehRevisao ? -1 : 1));
+  } else if (modo === "consolidar") {
+    /* de novo, só o pesado e intocado — e numa sessão um degrau mais curta: é o primeiro contato, não o domínio */
+    const entra = novos.filter((i) => i.faixa === "alta" && !(i.ramosFeitos > 0));
+    const depois = novos.filter((i) => entra.indexOf(i) < 0);
+    entra.forEach((i) => {
+      if (i.ramos && i.ramos.length) return;     /* o tempo do tópico com ramos é o dos ramos: não se mexe */
+      const k = ED_FAIXAS.findIndex((f) => f.id === i.faixa);
+      if (k >= 0 && k < ED_FAIXAS.length - 1) { i.minutosAntesModo = i.minutos; i.minutos = ED_FAIXAS[k + 1].minutos; }
+    });
+    meio = revs.concat(entra, depois);
+  } else {
+    meio = [];
+    let r = 0, k = 0;
+    while (k < novos.length || r < revs.length) {
+      for (let c = 0; c < 2 && k < novos.length; c++) meio.push(novos[k++]);
+      if (r < revs.length) meio.push(revs[r++]);
+    }
+  }
+  return anda.concat(urgente, meio);
+}
+
+/* (19.47.0) O TEMPO DE VERDADE, POR DISCIPLINA: minutos do diário nos últimos `dias` dias, só das disciplinas deste
+ * edital ("pendente" não é estudo). `hoje` = a disciplina da última sessão registrada HOJE (ou ""). */
+const ED_RECENTE_DIAS = 14;
+const ED_RECENTE_MIN = 60;      /* menos de uma hora registrada não é amostra: o rodízio fica como era */
+function edTempoRecente(diario, discs, hojeIso, dias) {
+  const hoje = hojeIso || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10));
+  const ini = new Date(hoje + "T00:00:00");
+  ini.setDate(ini.getDate() - ((dias || ED_RECENTE_DIAS) - 1));
+  const iniIso = ini.getFullYear() + "-" + String(ini.getMonth() + 1).padStart(2, "0") + "-" + String(ini.getDate()).padStart(2, "0");
+  const minDe = {};
+  const nome = {};
+  (discs || []).forEach((d) => { minDe[d] = 0; nome[cqNormalSeguro(d)] = d; });
+  let total = 0, ultHoje = "";
+  (diario || []).forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente" || x.d < iniIso || x.d > hoje) return;
+    const d = nome[cqNormalSeguro(x.disc)];
+    if (!d) return;
+    const m = Number(x.m) || 0;
+    minDe[d] += m; total += m;
+    if (x.d === hoje && m > 0) ultHoje = d;
+  });
+  return { min: minDe, total, hoje: ultHoje, dias: dias || ED_RECENTE_DIAS };
+}
+function cqNormalSeguro(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
+
+/* fatia da prova × fatia do tempo: [{disciplina, prova, tempo, desvio (tempo − prova, em pontos), min}], o mais atrasado primeiro */
+function edEquilibrio(fatia, recente) {
+  const total = (recente && recente.total) || 0;
+  return Object.keys(fatia || {}).map((d) => {
+    const min = recente && recente.min ? recente.min[d] || 0 : 0;
+    const tempo = total ? Math.round((min / total) * 100) : 0;
+    return { disciplina: d, prova: fatia[d] || 0, tempo, desvio: tempo - (fatia[d] || 0), min };
+  }).sort((a, b) => a.desvio - b.desvio || b.prova - a.prova);
 }
 
 function motivarItem(i, fatiaDisc) {

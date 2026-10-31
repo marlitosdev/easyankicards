@@ -297,7 +297,10 @@ function plRelatorio(plano, r, diario, banco, cfg) {
     + " | fase: " + (plano.fase ? plano.fase.n : 1));
   L.push("orcamento: " + plano.porSemana + " min/semana x "
     + plano.semanas + " semanas = " + (plano.orcamento || 0) + " min");
+  /* (19.47.0) tópico com ramos só conta como estudado com TODOS os ramos: os começados aparecem à parte */
+  const parciais = (plano.itens || []).filter((i) => !i.feito && i.ramos && i.ramos.length && (i.ramosFeitos || 0) > 0).length;
   L.push("topicos: " + plano.total + " | estudados: " + plano.feitos
+    + (parciais ? " | com ramos comecados: " + parciais : "")
     + " | nao cabem: " + (plano.fora || []).length);
   L.push("fatia da prova: " + (plano.fatiaExata
     ? "EXATA (numeros do edital)" : "ESTIMADA (peso 1-5)"));
@@ -312,6 +315,18 @@ function plRelatorio(plano, r, diario, banco, cfg) {
   });
   L.push("");
 
+  if (plano.equilibrio && plano.recente) {
+    L.push("== EQUILIBRIO PROVA x TEMPO (" + plano.recente.dias + " dias, " + plano.recente.total + " min) — "
+      + (plano.recente.total >= ED_RECENTE_MIN ? "ORDENA O RODIZIO" : "amostra pequena, rodizio pela fatia") + " ==");
+    L.push("disciplina | prova% | tempo% | desvio | min" + (plano.recente.hoje ? " | (hoje: " + plano.recente.hoje + ")" : ""));
+    plano.equilibrio.forEach((x) => L.push([x.disciplina, x.prova + "%", x.tempo + "%", (x.desvio > 0 ? "+" : "") + x.desvio + "pp", x.min].join(" | ")));
+    L.push("");
+  }
+  if (plano.modos) {
+    L.push("== MODO DE ESTUDO (sugerido pela data: " + (plano.modoSugerido || "?") + ") ==");
+    Object.keys(plano.modos).forEach((d) => L.push(d + " | " + plano.modos[d].modo + (plano.modos[d].auto ? " (automatico)" : " (escolhido)")));
+    L.push("");
+  }
   L.push("== SEMANA 1, NA ORDEM ==");
   L.push("# | rodada | disciplina | topico | pesoD x pesoT = bruto"
     + " | prio | faixa | min");
@@ -320,7 +335,8 @@ function plRelatorio(plano, r, diario, banco, cfg) {
     L.push([c.ordem, "r" + c.rodada, c.disciplina, c.topico,
             c.pesoDisc + "x" + c.pesoTop + "=" + c.bruto,
             c.prioridade, c.faixa, c.minutos + "min"
-            + (c.ehRevisao ? " (revisao)" : "") + (c.andamento ? " (em andamento)" : "")].join(" | "));
+            + (c.ehRevisao ? " (revisao)" : "") + (c.andamento ? " (em andamento)" : "")
+            + (i.modoRitmo ? " [" + i.modoRitmo + "]" : "")].join(" | "));
   });
   L.push("");
 
@@ -586,8 +602,10 @@ function plContexto() {
   const r = lerEdital(e.texto || "");
   const cfg = r.cfg || {};
   const s = typeof edSituacao === "function" ? edSituacao(e) : { prova: cfg.prova };
+  /* (19.48.0) o mesmo modo de estudo da agenda: o raio-X explica a ordem que a pessoa vê */
   const plano = montarPlano(r, {
     horas: cfg.horas || 10, prova: s.prova, feitos: e.progresso || {},
+    modos: typeof hubModosLer === "function" ? hubModosLer() : undefined,
   });
   return { plano, r, cfg, editalId: e.id, nome: e.nome || cfg.concurso || "",
            quantos: ativos.length };

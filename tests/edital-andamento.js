@@ -102,7 +102,7 @@ async function testes() {
   {
     const L = [{ nome: "nova", ordemFila: 1, ordem: 9 }, { nome: "rev", ehRevisao: true, ordemFila: 2, ordem: 5 },
       { nome: "andamento", andamento: { qFeitas: 4 }, ordemFila: 15, ordem: 1 }, { nome: "rev2", ehRevisao: true, ordemFila: 8, ordem: 5 }];
-    ok(L.slice().sort(api.hubOrdemAgenda).map((x) => x.nome).join(",") === "andamento,rev,rev2,nova", "A6 agenda: em andamento antes das revisões: " + L.slice().sort(api.hubOrdemAgenda).map((x) => x.nome).join(","));
+    ok(L.slice().sort(api.hubOrdemAgenda).map((x) => x.nome).join(",") === "andamento,nova,rev,rev2", "A6 (19.47.0) agenda: em andamento primeiro; a revisão segue a vez dela no rodízio (já vem na frente dentro da disciplina, no plano): " + L.slice().sort(api.hubOrdemAgenda).map((x) => x.nome).join(","));
   }
 
   /* ---- A4: o selo na linha e o Raio-X ---- */

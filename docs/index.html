@@ -1855,6 +1855,24 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .lei-onde-txt{font-size:12px;color:var(--sutil)}
 /* O BOTÃO FLUTUANTE: uma pílula no canto de baixo da leitura, ancorada numa linha de altura zero */
 .lei-flut-linha{position:relative;height:0;margin:0;padding:0;z-index:6}
+/* (19.47.0) agenda: ritmo real, equilíbrio prova × tempo, selo "atrasada" */
+.hub-ritmo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:9px;
+  border:1px solid var(--atencao);background:rgba(245,158,11,.10)}
+.hub-ritmo.hub-ritmo-on{border-color:var(--borda);background:none}
+.hub-equil{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:6px 0 2px;font-size:12px}
+.hub-equil-rot{color:var(--sutil);font-weight:700}
+.hub-equil-c{padding:1px 8px;border-radius:999px;border:1px solid var(--borda);white-space:nowrap}
+.hub-equil-atras{border-color:var(--atencao);color:var(--atencao)}
+.hub-equil-sobra{color:var(--sutil)}
+.hub-modo{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:6px 0 2px;font-size:12.5px}
+.hub-modo-rot{font-weight:700;color:var(--sutil)}
+.hub-modo select{font:inherit;padding:2px 6px;border-radius:7px}
+.hub-modo-disc{flex-basis:100%;font-size:12px}
+.hub-modo-disc summary{cursor:pointer;color:var(--sutil);font-weight:700;width:max-content}
+.hub-modo-lin{display:flex;gap:8px;align-items:center;justify-content:space-between;max-width:460px;padding:2px 0 2px 14px}
+.hub-modo-lin label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-selo-modo{font-size:11px;font-weight:700;color:var(--info);border:1px solid var(--info);border-radius:999px;padding:0 7px;margin-left:6px;white-space:nowrap}
+.ed-selo-atraso{font-size:11px;font-weight:700;color:var(--atencao);border:1px solid var(--atencao);border-radius:999px;padding:0 7px;margin-left:6px;white-space:nowrap}
 /* (19.43.0) o localizador: faixa fina no topo da leitura, uma linha por nível, cortada com "…" */
 .lei-loc-linha{position:relative;height:0;margin:0;padding:0;z-index:5}
 .lei-loc-linha[hidden]{display:none}

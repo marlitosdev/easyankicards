@@ -4891,6 +4891,8 @@ function edRender() {
   const plano = montarPlano(r, {
     horas: Number($("edHoras").value) || r.cfg.horas,
     prova: $("edProva").value, feitos: edProgresso,
+    /* (19.48.0) a mesma ordem da agenda: o modo de estudo escolhido lá */
+    modos: typeof hubModosLer === "function" ? hubModosLer() : undefined,
   });
   const itens = plano.itens;
   const s = semanasAte($("edProva").value);

@@ -221,7 +221,16 @@ function hubPintarAgenda() {
   cx.append(cab);
   const filtroEd = hubFiltroEdital(todosAtivos);
   if (filtroEd) cx.append(filtroEd);
+  hubRitmoAvisar = null;
 
+  /* (19.47.0) O RITMO DE VERDADE. O plano contava as horas do edital (25h/semana) e o diário mostrava ~10h30: a lista
+   * do que "cabe até a prova" era otimista e nada dizia isso. Com duas semanas ou mais de registro e o ritmo abaixo de
+   * 75% do planejado, a agenda avisa e oferece planejar com o ritmo real (a escolha fica guardada; volta num toque). */
+  const ritmo = hubRitmoReal();
+  const usarReal = hubRitmoRealLigado() && ritmo.min > 0;
+  const equilibrios = [];
+  const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
+  let modoSugerido = "";
   /* pega a fila da semana de cada edital ativo e junta */
   const linhas = [];
   ativos.forEach((e) => {
@@ -229,8 +238,15 @@ function hubPintarAgenda() {
     const r = lerEdital(e.texto || "");
     const cfg = r.cfg || {};
     const plano = montarPlano(r, {
-      horas: cfg.horas || 10, prova: s.prova, feitos: e.progresso || {},
+      horas: usarReal ? ritmo.min / 60 : (cfg.horas || 10), prova: s.prova, feitos: e.progresso || {},
+      modos: hubModosLer(),
     });
+    Object.keys(plano.modos || {}).forEach((d) => { if (!modosVistos[d]) modosVistos[d] = plano.modos[d]; });
+    /* com dois editais, o rótulo do automático fala do de prova mais próxima (o modo mais "fechado") */
+    const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
+    if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
+    if (plano.recente && plano.recente.total >= ED_RECENTE_MIN) equilibrios.push({ nome: e.nome || cfg.concurso || "", eq: plano.equilibrio || [] });
+    if (!usarReal && ritmo.semanas >= 2 && ritmo.min > 0 && (cfg.horas || 10) * 60 * 0.75 > ritmo.min) hubRitmoAvisar = { real: ritmo.min, plano: (cfg.horas || 10) * 60 };
     const sem = semanaAtual(plano) || [];
     const u = edUrgencia(s);
     sem.forEach((i) => {
@@ -317,6 +333,45 @@ function hubPintarAgenda() {
     ].filter(Boolean).join(" · ");
     cx.append(av);
   }
+
+  /* o ritmo: aviso (planejado acima do real) ou lembrete (planejando com o real) */
+  if (hubRitmoAvisar || usarReal) {
+    const av = document.createElement("div");
+    av.className = "ed-caixa-sub hub-ritmo" + (usarReal ? " hub-ritmo-on" : "");
+    av.id = "hubRitmo";
+    const tx = document.createElement("span");
+    tx.textContent = usarReal ? t("hub_ritmo_usando", { r: horasTexto(ritmo.min) })
+      : t("hub_ritmo_aviso", { r: horasTexto(hubRitmoAvisar.real), p: horasTexto(hubRitmoAvisar.plano) });
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (usarReal ? "" : " btn-min-ok");
+    b.id = "btnHubRitmo";
+    b.textContent = t(usarReal ? "hub_ritmo_voltar" : "hub_ritmo_usar", { r: horasTexto(ritmo.min) });
+    b.title = t("hub_ritmo_tip");
+    b.onclick = () => { hubRitmoRealDefinir(!usarReal); hubPintarAgenda(); };
+    av.append(tx, b);
+    cx.append(av);
+  }
+  cx.append(hubModoControles(modosVistos, modoSugerido));
+  /* (19.47.0) A FAIXA DO EQUILÍBRIO: fatia da prova × fatia do seu tempo (14 dias), as disciplinas mais desviadas */
+  equilibrios.forEach((q) => {
+    const fora = q.eq.filter((x) => Math.abs(x.desvio) >= 5);
+    if (!fora.length) return;
+    const fx = document.createElement("div");
+    fx.className = "hub-equil";
+    fx.title = t("hub_equil_tip");
+    const rot = document.createElement("span");
+    rot.className = "hub-equil-rot";
+    rot.textContent = t("hub_equil_rot") + (equilibrios.length > 1 ? " · " + q.nome : "");
+    fx.append(rot);
+    fora.slice(0, 4).concat(fora.length > 4 ? [fora[fora.length - 1]] : []).forEach((x) => {
+      const c = document.createElement("span");
+      c.className = "hub-equil-c " + (x.desvio < 0 ? "hub-equil-atras" : "hub-equil-sobra");
+      c.textContent = t("hub_equil_item", { d: x.disciplina, p: x.prova, t: x.tempo });
+      fx.append(c);
+    });
+    cx.append(fx);
+  });
 
   const sub = document.createElement("div");
   sub.className = "ed-caixa-sub";
@@ -433,6 +488,23 @@ function hubPintarAgenda() {
       d.title = t("ed_volta_fase2");
       alvo.append(d);
     }
+    /* (19.48.0) o modo explica a revisão e a sessão curta */
+    if (i.modoRitmo && (i.ehRevisao || i.minutosAntesModo)) {
+      const mq = document.createElement("span");
+      mq.className = "ed-selo-modo";
+      mq.textContent = t(i.ehRevisao ? "hub_modo_selo_rev" : "hub_modo_selo_curta", { m: t("hub_modo_" + i.modoRitmo) });
+      mq.title = t("hub_modo_tip_" + i.modoRitmo);
+      (li.querySelector(".ed-item-porque") || alvo).append(mq);
+    }
+    /* (19.47.0) POR QUE AGORA: a disciplina está atrás do que vale na prova */
+    if (i.equilibrio && i.equilibrio.desvio <= -10) {
+      const q = document.createElement("span");
+      q.className = "ed-selo-atraso";
+      q.textContent = t("hub_atraso_sinal", { p: i.equilibrio.prova, t: i.equilibrio.tempo });
+      q.title = t("hub_atraso_tip", { d: i.disciplina, p: i.equilibrio.prova, t: i.equilibrio.tempo });
+      /* na linha do motivo ("Português · peso 5 · …"): é a resposta a "por que este agora" */
+      (li.querySelector(".ed-item-porque") || alvo).append(q);
+    }
     li.append();
     cx.append(li);
   });
@@ -448,10 +520,104 @@ function hubPintarAgenda() {
   box.append(cx);
 }
 
-/* a ordem das linhas da agenda: em andamento → revisão → posição no rodízio (dividida pela urgência) → peso */
+/* (19.48.0) O MODO DE ESTUDO escolhido: {geral: "auto"|modo, disc: {nome: modo}} — um só para a agenda inteira */
+const HUB_MODO = "eac_ag_modo";
+function hubModosLer() {
+  try {
+    const v = JSON.parse(localStorage.getItem(HUB_MODO) || "null");
+    if (v && typeof v === "object") return { geral: v.geral || "auto", disc: v.disc && typeof v.disc === "object" ? v.disc : {} };
+  } catch (e) {}
+  return { geral: "auto", disc: {} };
+}
+function hubModosGravar(v) {
+  try { localStorage.setItem(HUB_MODO, JSON.stringify(v)); } catch (e) {}
+}
+function hubModoDefinir(disc, modo) {
+  const v = hubModosLer();
+  if (!disc) v.geral = modo || "auto";
+  else if (!modo || modo === "geral") delete v.disc[disc];
+  else v.disc[disc] = modo;
+  hubModosGravar(v);
+  try { reg("EDITAL", "modo de estudo", (disc || "geral") + " → " + (modo || "auto")); } catch (e) {}
+  return v;
+}
+/* a linha "Modo de estudo": o geral (com o que a data sugere) e, recolhido, o de cada disciplina */
+function hubModoControles(modosVistos, sugerido) {
+  const v = hubModosLer();
+  const cx = document.createElement("div");
+  cx.className = "hub-modo";
+  cx.id = "hubModo";
+  const rot = document.createElement("label");
+  rot.className = "hub-modo-rot";
+  rot.textContent = t("hub_modo_rot");
+  rot.htmlFor = "hubModoGeral";
+  rot.title = t("hub_modo_ajuda");
+  const sel = document.createElement("select");
+  sel.id = "hubModoGeral";
+  const opt = (s0, val, txt) => { const o = document.createElement("option"); o.value = val; o.textContent = txt; s0.append(o); };
+  opt(sel, "auto", t("hub_modo_auto", { m: t("hub_modo_" + (sugerido || "equilibrado")) }));
+  ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(sel, m, t("hub_modo_" + m)));
+  sel.value = v.geral || "auto";
+  sel.title = t("hub_modo_tip_" + (sel.value === "auto" ? (sugerido || "equilibrado") : sel.value));
+  sel.onchange = () => { hubModoDefinir("", sel.value); hubPintarAgenda(); };
+  cx.append(rot, sel);
+  const discs = Object.keys(modosVistos || {});
+  if (discs.length) {
+    const det = document.createElement("details");
+    det.className = "hub-modo-disc";
+    det.id = "hubModoDisc";
+    const nOver = discs.filter((d) => v.disc[d]).length;
+    const sm = document.createElement("summary");
+    sm.textContent = t("hub_modo_por_disc") + (nOver ? " (" + nOver + ")" : "");
+    det.append(sm);
+    if (nOver) det.open = true;
+    discs.forEach((d, k) => {
+      const lin = document.createElement("div");
+      lin.className = "hub-modo-lin";
+      const nm = document.createElement("label");
+      nm.textContent = d;
+      nm.htmlFor = "hubModoDisc_" + k;
+      const s2 = document.createElement("select");
+      s2.id = "hubModoDisc_" + k;
+      opt(s2, "geral", t("hub_modo_como_geral"));
+      ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(s2, m, t("hub_modo_" + m)));
+      s2.value = v.disc[d] || "geral";
+      s2.onchange = () => { hubModoDefinir(d, s2.value); hubPintarAgenda(); };
+      lin.append(nm, s2);
+      det.append(lin);
+    });
+    cx.append(det);
+  }
+  return cx;
+}
+
+/* (19.47.0) o ritmo real: média de minutos por semana nas últimas 4 semanas com registro (a mesma conta do painel de ritmo) */
+let hubRitmoAvisar = null;
+const HUB_RITMO_REAL = "eac_ag_ritmo_real";
+function hubRitmoReal() {
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  const porSemana = {};
+  diario.forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
+    const k = edSemanaCalendario(x.d).ini;
+    porSemana[k] = (porSemana[k] || 0) + (Number(x.m) || 0);
+  });
+  const hoje = typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10);
+  const atual = edSemanaCalendario(hoje).ini;
+  /* a semana em curso fica de fora: pela metade, ela puxaria a média para baixo */
+  const ks = Object.keys(porSemana).filter((k) => k < atual && porSemana[k] > 0).sort().slice(-4);
+  return { min: ks.length ? Math.round(ks.reduce((a, k) => a + porSemana[k], 0) / ks.length) : 0, semanas: ks.length };
+}
+function hubRitmoRealLigado() { try { return localStorage.getItem(HUB_RITMO_REAL) === "1"; } catch (e) { return false; } }
+function hubRitmoRealDefinir(sim) {
+  try { localStorage.setItem(HUB_RITMO_REAL, sim ? "1" : "0"); } catch (e) {}
+  try { reg("EDITAL", sim ? "agenda planejada com o ritmo real" : "agenda de volta às horas do edital", ""); } catch (e) {}
+}
+
+/* a ordem das linhas da agenda: em andamento → posição no rodízio (dividida pela urgência) → peso. (19.47.0) A revisão
+ * já vem na frente DENTRO da disciplina dela (montarPlano); passá-la à frente de tudo aqui desfazia o rodízio. */
 function hubOrdemAgenda(a, b) {
   return (b.andamento ? 1 : 0) - (a.andamento ? 1 : 0)
-    || (b.ehRevisao ? 1 : 0) - (a.ehRevisao ? 1 : 0)
     || ((a.ordemFila || 999) / (a.urgencia || 1))
        - ((b.ordemFila || 999) / (b.urgencia || 1))
     || b.ordem - a.ordem;
