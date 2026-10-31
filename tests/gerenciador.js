@@ -2692,15 +2692,35 @@ async function testes() {
     const iptuAntes = a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iptu } }).length;
     const itMover = Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_mover"));
     ok(!!itMover, "G37h o menu oferece mover para outro tópico");
+    const frenteAntes = a.estcAtual().un[a.estcAtual().i].nota.card.front;
+    const nAntes = a.estcAtual().un.length;
     itMover.onclick();
-    ok(a.$("dlgGerEstudo").open === false && a.$("dlgGerDestino").open === true && a.$("gerDestTit").textContent === a.t("ger_dest_tit_1"),
-      "G37i mover fecha o player (como editar) e abre o destino só com este cartão: " + a.$("gerDestTit").textContent);
+    ok(a.$("dlgGerEstudo").open === true && a.$("dlgGerDestino").open === true && a.$("gerDestTit").textContent === a.t("ger_dest_tit_1"),
+      "G37i (19.45.0) mover abre o destino POR CIMA do player, que continua aberto: " + a.$("gerDestTit").textContent);
     const destIptu = achar(a.$("gerDestLista"), (e) => cls(e, "ger-dest-item")).find((b) => /IPTU/.test(b.textContent));
     ok(!!destIptu, "G37j o IPTU aparece como destino");
     await conduzir(a, destIptu.onclick());
     ok(a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iss } }).length === issAntes - 1
       && a.gerFiltrar(a.cqLerBiblioteca(), { pasta: { chave: iptu } }).length === iptuAntes + 1,
       "G37k o cartão saiu do ISS e foi para o IPTU");
+    const ag = a.estcAtual(), uAg = ag.un[ag.i];
+    ok(a.$("dlgGerEstudo").open === true && ag.un.length === nAntes && uAg && uAg.nota.card.front === frenteAntes && uAg.nota.chave === iptu,
+      "G37l (19.45.0) movido, o estudo segue no mesmo cartão (agora no IPTU), com a lista inteira: " + (uAg && uAg.nota.chave));
+
+    /* editar pelo player: salvar (ou cancelar) reabre o estudo no mesmo cartão, com o texto novo */
+    a.estcMenuMontar();
+    Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_editar")).onclick();
+    ok(a.$("dlgGerEstudo").open === false && /ISS/.test(a.$("gerEditor").value), "G37m editar leva ao editor da Biblioteca, com o cartão (já no IPTU): " + a.$("gerEditor").value);
+    const linha = a.$("gerEditor").value;
+    a.$("gerEditor").value = linha.replace(/ :: /, " (editado) :: ");
+    a.$("btnGerEditSalvar").onclick();
+    const ed = a.estcAtual(), uEd = ed.un[ed.i];
+    ok(a.$("dlgGerEstudo").open === true && uEd && /\(editado\)/.test(uEd.nota.card.front) && ed.un.length === nAntes,
+      "G37n salvo, o estudo reabre no mesmo cartão, já editado: " + (uEd && uEd.nota.card.front));
+    a.estcMenuMontar();
+    Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_editar")).onclick();
+    a.$("btnGerEditCancelar").onclick();
+    ok(a.$("dlgGerEstudo").open === true && a.estcAtual().un[a.estcAtual().i].nota.card.front === uEd.nota.card.front, "G37o cancelar a edição também volta ao estudo");
   }
 
   /* ---- G38: desfazer a última nota (uma vez só) e o aviso de cartão difícil ("leech") (v17.46.0) ---- */

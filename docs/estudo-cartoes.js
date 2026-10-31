@@ -447,11 +447,22 @@ function estcMenuMontar() {
 
   if (estcModo === "agendado" && estcUltima) item(t("est_m_desfazer"), estcDesfazerNota);
   if (!estcDeFora) {
-    item(t("est_m_editar"), () => { estcFechar(); gerFoco = u.pos; if (gerEhCelular()) gerVista("previa"); gerAcaoEditar(); });
-    item(t("est_m_mover"), () => { estcFechar(); gerFoco = u.pos; gerDestAbrir([u.nota]); });
+    /* (19.45.0) editar, mover e melhorar VOLTAM AO ESTUDO, no mesmo cartão: antes fechavam o player e deixavam a
+     * pessoa na Biblioteca, tendo de reabrir a lista e achar de novo onde estava */
+    item(t("est_m_editar"), () => {
+      estcPausa = estcFoto(u.nota); estcFechar();
+      if (!estcFocarNaBiblioteca(u.nota)) { estcAposEditar(null, null); return; }
+      if (gerEhCelular()) gerVista("previa"); gerAcaoEditar();
+    });
+    /* mover nem fecha o player: a janela do destino abre por cima dele */
+    item(t("est_m_mover"), () => { gerDestAbrir([u.nota], { aoMover: (r) => estcAposMover(r) }); });
     item(t("est_m_apagar"), estcApagar);
   }
-  item(t("est_m_melhorar"), () => { estcFechar(); const pasta = typeof gerPasta !== "undefined" ? gerPasta : null; $("dlgGerCartoes").close(); ceAbrir({ notas: [u.nota], volta: { pasta } }); });
+  item(t("est_m_melhorar"), () => {
+    const estudo = estcDeFora ? null : estcFoto(u.nota);
+    estcFechar(); const pasta = typeof gerPasta !== "undefined" ? gerPasta : null; $("dlgGerCartoes").close();
+    ceAbrir({ notas: [u.nota], volta: { pasta, estudo } });
+  });
   if (u.nota.chave !== CQ_BANCADA) {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
     item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });
@@ -543,6 +554,104 @@ async function estcApagar() {
   estcI = Math.min(estcI, estcUn.length - 1); estcRev = false; estcEsc = -1; estcSaiba = false;
   if (estcModo === "agendado") estcProxima();
   estcPintar();
+}
+
+/* =====================================================================
+ * (19.45.0) A LISTA EM ESTUDO SOBREVIVE A MOVER, EDITAR E MELHORAR UM CARTÃO
+ *
+ * O relato: "ao mover o cartão para outro tópico, a lista que eu estudava fecha e caio na Biblioteca". Agora:
+ *  · mover abre o destino POR CIMA do player; movido, o player segue no mesmo cartão (já com o tópico novo);
+ *  · editar usa o editor da Biblioteca (é lá que ele mora) e, ao salvar ou cancelar, o estudo reabre no cartão;
+ *  · melhorar leva a foto do estudo junto e, ao voltar da tela de melhorar, reabre a lista no mesmo ponto.
+ * Depois de cada mudança a Biblioteca relê os cartões (objetos novos): a lista em estudo troca cada cartão pelo
+ * seu equivalente novo, achado pelo conteúdo — o editado, pelo texto que acabou de ser salvo.
+ * ===================================================================== */
+let estcPausa = null;    /* a foto do estudo enquanto o cartão é editado na Biblioteca */
+
+function estcFoto(nota) {
+  return { un: estcUn, i: estcI, chave: estcChave, rev: estcRev, nota };
+}
+
+function estcChaveCard(c) { return [c.kind || "", c.front || "", c.back || ""].join("\u0001"); }
+
+/* troca as notas da lista pelas que a Biblioteca tem agora; `trocas` (nota velha → card novo) é o que foi editado */
+function estcRefrescar(trocas) {
+  const notas = typeof gerNotas !== "undefined" ? gerNotas : [];
+  const porCard = new Map();
+  notas.forEach((n, idx) => { if (n && n.card) porCard.set(estcChaveCard(n.card), idx); });
+  const atual = estcUn[estcI];
+  const novaDe = new Map();
+  const lista = [];
+  estcUn.forEach((u) => {
+    if (novaDe.has(u.nota)) return;
+    const card = (trocas && trocas.get(u.nota)) || u.nota.card;
+    const idx = porCard.get(estcChaveCard(card));
+    const nova = idx === undefined ? u.nota : notas[idx];
+    novaDe.set(u.nota, nova);
+    const pos = idx === undefined || typeof gerVis === "undefined" ? -1 : gerVis.indexOf(idx);
+    lista.push({ nota: nova, pos });
+  });
+  estcUn = estcUnidades(lista);
+  if (!estcUn.length) return false;
+  const alvo = atual ? novaDe.get(atual.nota) : null;
+  let k = alvo ? estcUn.findIndex((u) => u.nota === alvo && u.cn === atual.cn) : -1;
+  if (k < 0 && alvo) k = estcUn.findIndex((u) => u.nota === alvo);
+  estcI = k >= 0 ? k : Math.min(Math.max(estcI, 0), estcUn.length - 1);
+  return true;
+}
+
+/* põe o foco da Biblioteca neste cartão — na pasta dele, se ele não está na lista de agora (foi movido, p. ex.) */
+function estcFocarNaBiblioteca(nota) {
+  const idx = gerNotas.indexOf(nota);
+  if (idx < 0) return false;
+  let pos = gerVis.indexOf(idx);
+  if (pos < 0 && nota.chave) {
+    gerPasta = { chave: nota.chave };
+    try { gerAbrirCaminho(nota.chave); } catch (e) {}
+    gerRefiltrar(); gerPintar();
+    pos = gerVis.indexOf(idx);
+  }
+  if (pos < 0) return false;
+  gerFoco = pos; gerEditando = false;
+  return true;
+}
+
+/* reabre o player a partir de uma foto (editar, melhorar) */
+function estcRetomar(foto, trocas) {
+  if (!foto || !foto.un || !foto.un.length) return false;
+  estcUn = foto.un; estcI = foto.i; estcChave = foto.chave || "";
+  estcDeFora = null; estcUltima = null;
+  if (!estcRefrescar(trocas)) return false;
+  estcModo = estcModoLer();
+  if (estcModo === "agendado") estcCarregarAgenda();
+  estcRev = !!foto.rev; estcEsc = -1; estcSaiba = false;
+  dicasDosBotoes(ESTC_DICAS);
+  estcPintar();
+  abrirModal("dlgGerEstudo");
+  try { matReg("estudo", "estudo retomado depois de mexer no cartão", estcUn.length + " cartões · no " + (estcI + 1)); } catch (e) {}
+  return true;
+}
+
+/* chamado pela Biblioteca ao salvar (card novo) ou cancelar (null) a edição: só se for o cartão que saiu do estudo */
+function estcAposEditar(nota, cardNovo) {
+  const p = estcPausa;
+  if (!p || (nota && nota !== p.nota)) return false;
+  estcPausa = null;
+  return estcRetomar(p, cardNovo ? new Map([[p.nota, cardNovo]]) : null);
+}
+
+/* movido com o player aberto: a lista continua, no mesmo cartão */
+function estcAposMover(r) {
+  const d = $("dlgGerEstudo");
+  if (!d || !d.open) return false;
+  estcUltima = null;
+  if (!estcRefrescar(null)) { estcFechar(); return false; }
+  estcPintar();
+  try {
+    if (r && r.ligados !== undefined) toastMsg(t("ger_feito_ramo", { n: r.ligados, m: r.movidos }), 3500);
+    else if (r) toastMsg(t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou }), 3500);
+  } catch (e) {}
+  return true;
 }
 
 /* ---- entrada pela agenda: a biblioteca abre na pasta do tópico e já começa a estudar ---- */

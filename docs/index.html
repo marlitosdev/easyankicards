@@ -5536,8 +5536,33 @@ dialog.ger-dest-dlg[open]{display:flex;flex-direction:column;width:min(620px,96v
 .ger-dest-item[disabled]{opacity:.5;cursor:default}
 .ger-dest-cam{font-size:12px;color:var(--sutil)}
 .ger-dest-nome{font-weight:700}
-.ger-dest-item.ger-dest-ramo{margin-left:22px;min-height:40px;border-style:dashed}
-.ger-dest-item.ger-dest-ramo .ger-dest-nome{font-weight:600}
+.ger-dest-item.ger-dest-ramo{margin-left:34px;min-height:36px;border-style:dashed;padding:5px 10px}
+.ger-dest-item.ger-dest-ramo .ger-dest-nome{font-weight:600;font-size:.95em}
+/* (19.46.0) fichas de edital, disciplina como cabeçalho, tópico como linha, ramos recolhidos */
+.ger-dest-eds{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:thin}
+.ger-dest-eds[hidden]{display:none}
+.ger-dest-ed{all:unset;box-sizing:border-box;cursor:pointer;flex:0 0 auto;display:flex;flex-direction:column;gap:1px;max-width:240px;
+  padding:5px 11px;border:1px solid var(--borda);border-radius:10px;background:var(--panel)}
+.ger-dest-ed:hover,.ger-dest-ed:focus-visible{border-color:var(--acao)}
+.ger-dest-ed.sel{border-color:var(--acao);background:rgba(99,102,241,.16);box-shadow:inset 0 0 0 1px var(--acao)}
+.ger-dest-ed-nome{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ger-dest-ed-sub{font-size:11.5px;color:var(--sutil);font-weight:600}
+.ger-dest-ed-prox .ger-dest-ed-sub{color:var(--verde)}
+.ger-dest-ed-passou{opacity:.6}
+.ger-dest-ed-sem .ger-dest-ed-nome,.ger-dest-ed-todos .ger-dest-ed-nome{font-weight:600}
+.ger-dest-raiz{margin-top:12px;color:var(--texto);text-transform:none;letter-spacing:0;font-size:13px}
+.ger-dest-disc{all:unset;box-sizing:border-box;cursor:pointer;position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;
+  padding:7px 8px;margin-top:4px;background:var(--panel);border-bottom:1px solid var(--borda);font-weight:800;font-size:13.5px}
+.ger-dest-disc:hover,.ger-dest-disc:focus-visible{color:var(--acao)}
+.ger-dest-disc-seta{width:1em;color:var(--sutil)}
+.ger-dest-disc-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ger-dest-n{font-size:11.5px;font-weight:600;color:var(--sutil);white-space:nowrap}
+.ger-dest-top{display:flex;gap:6px;align-items:stretch;margin-left:14px}
+.ger-dest-top>.ger-dest-item{flex:1;min-width:0;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;min-height:40px}
+.ger-dest-ramos-bt{all:unset;box-sizing:border-box;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;
+  color:var(--sutil);border:1px dashed var(--borda);border-radius:9px;white-space:nowrap}
+.ger-dest-ramos-bt:hover,.ger-dest-ramos-bt:focus-visible{color:var(--texto);border-color:var(--acao)}
+.ger-dest-rodape{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
 .ger-dest-sec{margin:8px 0 2px;font-size:12px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.04em}
 @media (max-width:760px){ dialog.ger-dest-dlg[open]{width:100vw;max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0} }
 #dlgGerCartoes[open] > *{flex:0 0 auto}
@@ -10387,9 +10412,14 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="dlg-x" id="btnGerDestX" data-i18n-title="help_close">✖</button>
   </div>
   <p class="nota" id="gerDestDe"></p>
+  <!-- (19.46.0) os editais, pela prova mais próxima; a lista em disciplina › tópico › ramos; a Bancada no rodapé -->
+  <div id="gerDestEds" class="ger-dest-eds" role="group" data-i18n-title="ger_dest_eds_tip" hidden></div>
   <input type="search" id="gerDestBusca" class="mat-busca" data-i18n-ph="ger_pop_busca_ph" autocomplete="off">
   <div id="gerDestLista" class="ger-dest-lista" role="listbox"></div>
-  <div class="dlg-rodape"><button class="btn btn-cinza" id="btnGerDestFechar" data-i18n="ger_edit_cancelar"></button></div>
+  <div class="dlg-rodape ger-dest-rodape">
+    <button class="btn btn-cinza" id="btnGerDestBancada" data-i18n="ger_dest_bancada" data-i18n-title="ger_dest_bancada_tip" hidden></button>
+    <button class="btn btn-cinza" id="btnGerDestFechar" data-i18n="ger_edit_cancelar"></button>
+  </div>
 </dialog>
 
 <dialog id="dlgGerCartoes" class="ui-modal diag-modal ger-v-pastas">

@@ -1541,7 +1541,7 @@ function gerAcaoApagarAberto() {
 
 /* Mover {ms} para {dest}: mostra o que vai acontecer (quantos vão, quantos o destino já tem) e só
  * move se você confirmar. É o que o botão "Mover para…" e o arrastar-e-soltar chamam. */
-async function gerConfirmarMover(ms, dest, concurso) {
+async function gerConfirmarMover(ms, dest, concurso, aoMover) {
   if (!ms || !ms.length || !dest) return;
   const prev = gerPrevisaoMover(ms, dest);
   if (!prev.validos.length) { gerAviso(t("ger_mover_mesmo"), false); return; }
@@ -1552,6 +1552,8 @@ async function gerConfirmarMover(ms, dest, concurso) {
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_mover", { n: r.movidos, m: r.repetidos, k: r.naoAchou }), true);
+  /* (19.45.0) quem pediu de fora da lista (o player de estudo) segue de onde estava */
+  if (typeof aoMover === "function") { try { aoMover(r); } catch (e) {} }
 }
 
 async function gerAcaoMover() {
@@ -1682,7 +1684,7 @@ function gerSoltarRamo(ev, rm) {
   return gerConfirmarRamo(ms, rm);
 }
 
-async function gerConfirmarRamo(ms, rm) {
+async function gerConfirmarRamo(ms, rm, aoMover) {
   if (!ms || !ms.length) return;
   const geral = rm.ramoId === RAM_GERAL;
   const fora = ms.filter((n) => n.chave !== rm.chave).length;
@@ -1693,6 +1695,7 @@ async function gerConfirmarRamo(ms, rm) {
   gerCalcular(); gerAbrirCaminhoDe(rm.chave); gerPintar(); gerPintarDestinos();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_ramo", { n: r.ligados, m: r.movidos }), true);
+  if (typeof aoMover === "function") { try { aoMover(r); } catch (e) {} }
 }
 
 function gerSoltar(ev, chave, concurso) {
@@ -1841,6 +1844,7 @@ function gerToqueCancelar() {
  * ===================================================================== */
 const GER_CHAVE_DEST_RECENTES = "eac_ger_dest_recentes";
 let gerDestNotas = null;
+let gerDestAoMover = null;   /* (19.45.0) o que fazer depois de mover (o player de estudo continua) */
 function gerDestRecentes() {
   try { const v = JSON.parse(localStorage.getItem(GER_CHAVE_DEST_RECENTES) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
@@ -1849,14 +1853,74 @@ function gerDestLembrar(ch, concurso, ramo) {
   l.unshift({ ch, concurso: concurso || "", ramo: ramo || "" });
   try { localStorage.setItem(GER_CHAVE_DEST_RECENTES, JSON.stringify(l.slice(0, 5))); } catch (e) {}
 }
-function gerDestAbrir(notas) {
+/* =====================================================================
+ * (19.46.0) A JANELA "MOVER PARA…" COM A HIERARQUIA À VISTA
+ *
+ * O relato: "não fica clara a hierarquia entre pastas e tópicos; não dá para reorganizar por edital; deve priorizar
+ * os editais mais próximos". A lista era uma tira só — cada tópico repetindo "Edital › Disciplina" em letra miúda,
+ * os ramos sempre abertos com o mesmo peso dos tópicos, a Bancada no meio e tudo em ordem alfabética. Agora:
+ *  · FICHAS DE EDITAL no topo, pela prova mais próxima ("prova em 32 dias"); sem data depois; prova passada por
+ *    último, esmaecida. Vem marcado o edital do cartão (ou o da prova mais próxima); "todos" mostra cada edital
+ *    com o seu cabeçalho;
+ *  · a DISCIPLINA é um cabeçalho que abre e fecha, preso no topo enquanto a lista rola (a do cartão já vem aberta);
+ *    o TÓPICO é a linha que se escolhe; os RAMOS ficam recolhidos num "▸ 4 ramos" (abertos só no tópico do cartão);
+ *  · "Últimos destinos" em cima; a busca filtra tópico, disciplina e ramo e abre o que achou;
+ *  · a Bancada saiu da lista: é um botão no rodapé;
+ *  · setas ↑↓ andam pelas opções; Enter escolhe.
+ * ===================================================================== */
+let gerDestEd = "";              /* a ficha marcada: id do edital, "*" (todos) */
+let gerDestAbertas = new Set();  /* disciplinas abertas (id do nó) */
+let gerDestRamosAb = new Set();  /* tópicos com os ramos à mostra (raiz|chave) */
+let gerDestModelo = null;        /* as raízes (editais e "sem edital"), lidas uma vez por abertura */
+
+function gerDestRaizes() {
+  let roots = [];
+  try { roots = gerModeloEditais(gerNotas, gerPastasVazias(gerNotas)).roots; } catch (e) { roots = []; }
+  const eds = roots.filter((r) => r.tipo === "edital");
+  eds.forEach((r) => { if (!r.sit) r.sit = { grupo: "sem_data", dias: null }; });
+  eds.sort((a, b) => { const ka = gerChaveProva(a.sit), kb = gerChaveProva(b.sit); return (ka[0] - kb[0]) || (ka[1] - kb[1]) || ((a.cad || 0) - (b.cad || 0)); });
+  return eds.concat(roots.filter((r) => r.tipo === "sem"));
+}
+
+/* "prova em 32 dias" · "prova hoje" · "prova há 10 dias" · "sem data" · "" (sem edital) */
+function gerDestProvaTxt(r) {
+  if (r.tipo !== "edital") return "";
+  const sit = r.sit || {};
+  if (sit.dias === 0) return t("ger_dest_prova_hoje");
+  if (sit.dias !== null && sit.dias !== undefined) return t("ger_dest_prova_em", { n: sit.dias });
+  if (sit.grupo === "encerrado") return t("ger_dest_prova_foi", { n: sit.desde || 0 });
+  return t("ger_dest_prova_sem");
+}
+
+function gerDestAbrir(notas, opc) {
   const ms = (notas || []).filter(Boolean);
   if (!ms.length || !$("dlgGerDestino")) return false;
   gerDestNotas = ms;
+  gerDestAoMover = (opc && opc.aoMover) || null;
   $("gerDestTit").textContent = ms.length === 1 ? t("ger_dest_tit_1") : t("ger_dest_tit", { n: ms.length });
   const de = [...new Set(ms.map((n) => n.chave))];
   $("gerDestDe").textContent = t("ger_dest_de", { d: de.length === 1 ? gerNomeDestino(de[0]) : t("ger_dest_varias", { n: de.length }) });
   $("gerDestBusca").value = "";
+  gerDestModelo = gerDestRaizes();
+  /* o ponto de partida: o edital do cartão (o de prova mais próxima, se ele está em vários) e a disciplina dele aberta */
+  const aqui = new Set(de);
+  /* o tópico pode estar em dois editais (o mesmo "Receita Pública"): vale o edital gravado no tópico, se houver */
+  const concDe = cqNormal(((matResumos[de[0]] || {}).concurso) || "");
+  const temCh = (r) => r.tipo === "edital" && de.some((ch) => r.chaves && r.chaves.has(ch));
+  const mesmoNome = (r) => { const x = cqNormal(r.concurso || ""); return !!concDe && !!x && (x === concDe || x.indexOf(concDe) === 0 || concDe.indexOf(x) === 0); };
+  const dono = gerDestModelo.find((r) => temCh(r) && mesmoNome(r)) || gerDestModelo.find(temCh);
+  const primeiro = gerDestModelo.find((r) => r.tipo === "edital");
+  gerDestEd = dono ? dono.id : primeiro ? primeiro.id : "*";
+  gerDestAbertas = new Set();
+  gerDestRamosAb = new Set();
+  gerDestModelo.forEach((r) => (r.filhos || []).forEach((d) => (d.filhos || []).forEach((tp) => {
+    if (aqui.has(tp.chave)) { gerDestAbertas.add(d.id); gerDestRamosAb.add(r.id + "|" + tp.chave); }
+  })));
+  /* nada aberto (cartão da Bancada): abre a 1ª disciplina do edital marcado */
+  if (!gerDestAbertas.size) {
+    const r0 = gerDestModelo.find((r) => r.id === gerDestEd) || gerDestModelo[0];
+    if (r0 && r0.filhos && r0.filhos[0]) gerDestAbertas.add(r0.filhos[0].id);
+  }
   gerDestPintar();
   abrirModal("dlgGerDestino");
   try { $("gerDestBusca").focus(); } catch (e) {}
@@ -1880,49 +1944,170 @@ function gerDestinosComRamos() {
   });
   return out;
 }
+
+/* as fichas dos editais (só quando há mais de uma raiz para escolher) */
+function gerDestPintarFichas() {
+  const cx = $("gerDestEds");
+  if (!cx) return;
+  cx.innerHTML = "";
+  const rs = gerDestModelo || [];
+  cx.hidden = rs.length < 2;
+  if (cx.hidden) return;
+  const ficha = (id, nome, sub, cls) => {
+    const b = gerEl("button", "ger-dest-ed" + (cls ? " " + cls : "") + (gerDestEd === id ? " sel" : ""));
+    b.type = "button";
+    b.setAttribute("aria-pressed", gerDestEd === id ? "true" : "false");
+    b.append(gerEl("span", "ger-dest-ed-nome", nome));
+    if (sub) b.append(gerEl("span", "ger-dest-ed-sub", sub));
+    b.onclick = () => { gerDestEd = id; gerDestPintar(); };
+    cx.append(b);
+  };
+  rs.forEach((r) => ficha(r.id, r.nome, gerDestProvaTxt(r),
+    r.tipo !== "edital" ? "ger-dest-ed-sem" : r.sit && r.sit.grupo === "encerrado" ? "ger-dest-ed-passou" : r.sit && r.sit.dias !== null && r.sit.dias !== undefined ? "ger-dest-ed-prox" : ""));
+  ficha("*", t("ger_dest_todos"), "", "ger-dest-ed-todos");
+}
+
 function gerDestPintar() {
   const cx = $("gerDestLista");
   if (!cx) return [];
+  if (!gerDestModelo) gerDestModelo = gerDestRaizes();
+  gerDestPintarFichas();
   cx.innerHTML = "";
   const q = cqNormal($("gerDestBusca").value || "");
-  const todos = gerDestinosComRamos();
   const aqui = new Set((gerDestNotas || []).map((n) => n.chave));
-  const todosAqui = (d) => aqui.size === 1 && aqui.has(d.ch);
-  const item = (d, i, pre) => {
-    const partes = String(d.nome).split(" › ");
-    const aquiMesmo = !d.ramo && todosAqui(d);
+  const todosAqui = (ch) => aqui.size === 1 && aqui.has(ch);
+  const saida = [];
+  let nItem = 0;
+  const item = (d, pre, comCaminho) => {
+    const aquiMesmo = !d.ramo && todosAqui(d.ch);
     const b = gerEl("button", "ger-dest-item" + (d.ramo ? " ger-dest-ramo" : "") + (aquiMesmo ? " ger-dest-aqui" : ""));
     b.type = "button";
-    b.id = pre + i;
-    if (partes.length > 1 && !d.ramo) b.append(gerEl("span", "ger-dest-cam", partes.slice(0, -1).join(" › ")));
-    b.append(gerEl("span", "ger-dest-nome", partes[partes.length - 1] + (aquiMesmo ? " — " + t("ger_dest_aqui") : "")));
+    b.id = pre === "gerDestRec_" ? pre + d.i : pre + (nItem++);
+    if (comCaminho && d.cam) b.append(gerEl("span", "ger-dest-cam", d.cam));
+    const nome = gerEl("span", "ger-dest-nome", (d.ramo ? "↳ " + d.ramo.nome : d.nome) + (aquiMesmo ? " — " + t("ger_dest_aqui") : ""));
+    b.append(nome);
+    if (d.total !== undefined && !d.ramo) b.append(gerEl("span", "ger-dest-n", t(d.total === 1 ? "ger_dest_n_1" : "ger_dest_n", { n: d.total })));
     if (d.ramo) b.title = t("ger_dest_ramo_tip", { r: d.ramo.nome });
     b.disabled = aquiMesmo;
     b.onclick = () => (d.ramo ? gerDestEscolherRamo(d.ramo) : gerDestEscolher(d.ch, d.concurso));
+    saida.push(d);
     return b;
   };
-  const filtrados = todos.filter((d) => !q || cqNormal(d.nome).indexOf(q) >= 0);
+  const conc = (r) => (r.tipo === "edital" ? r.concurso : undefined);
+
+  /* 1. os últimos destinos (sem busca) */
   if (!q) {
-    const rec = gerDestRecentes().map((r) => todos.find((d) => d.ch === r.ch && (d.concurso || "") === (r.concurso || "") && ((d.ramo && d.ramo.ramoId) || "") === (r.ramo || ""))
-      || (r.ramo ? null : todos.find((d) => d.ch === r.ch && !d.ramo))).filter(Boolean);
+    const rec = [];
+    gerDestRecentes().forEach((x, i) => {
+      for (const r of gerDestModelo) {
+        if (r.tipo === "edital" && (x.concurso || "") !== (r.concurso || "")) continue;
+        for (const dsc of r.filhos || []) {
+          const tp = (dsc.filhos || []).find((y) => y.chave === x.ch);
+          if (!tp) continue;
+          const rm = x.ramo ? (tp.ramos || []).find((z) => z.ramoId === x.ramo) : null;
+          if (x.ramo && !rm) continue;
+          rec.push({ i: rec.length, ch: tp.chave, concurso: conc(r), nome: tp.topico, ramo: rm, total: tp.total, cam: [r.tipo === "edital" ? r.nome : "", dsc.nome].concat(rm ? [tp.topico] : []).filter(Boolean).join(" › ") });
+          return;
+        }
+      }
+    });
     if (rec.length) {
       cx.append(gerEl("p", "ger-dest-sec", t("ger_dest_recentes")));
-      rec.forEach((d, i) => cx.append(item(d, i, "gerDestRec_")));
-      cx.append(gerEl("p", "ger-dest-sec", t("ger_dest_todas")));
+      rec.slice(0, 3).forEach((d) => cx.append(item(d, "gerDestRec_", true)));
     }
   }
-  if (!filtrados.length) cx.append(gerEl("p", "nota", t("ger_pop_vazio")));
-  filtrados.slice(0, 200).forEach((d, i) => cx.append(item(d, i, "gerDestItem_")));
-  if (filtrados.length > 200) cx.append(gerEl("p", "nota", t("ger_pop_mais", { n: filtrados.length - 200 })));
-  return filtrados;
+
+  /* 2. as raízes no escopo da ficha: disciplina (cabeçalho que abre e fecha) › tópico › ramos */
+  const rs = (gerDestModelo || []).filter((r) => gerDestEd === "*" || r.id === gerDestEd || (gerDestModelo.length < 2));
+  const casa = (x) => !q || cqNormal(x).indexOf(q) >= 0;
+  let algum = false;
+  rs.forEach((r) => {
+    const blocos = [];
+    (r.filhos || []).forEach((dsc) => {
+      const discCasa = q && casa(dsc.nome);
+      const tops = (dsc.filhos || []).map((tp) => {
+        const ramos = (tp.ramos || []).filter((rm) => rm.ramoId !== RAM_GERAL);
+        const rCasa = q ? ramos.filter((rm) => casa(rm.nome)) : [];
+        const ok = !q || discCasa || casa(tp.topico) || rCasa.length;
+        return ok ? { tp, ramos, rCasa } : null;
+      }).filter(Boolean);
+      if (tops.length) blocos.push({ dsc, tops });
+    });
+    if (!blocos.length) return;
+    algum = true;
+    if (gerDestEd === "*" && rs.length > 1) {
+      const h = gerEl("p", "ger-dest-sec ger-dest-raiz", r.nome);
+      const pv = gerDestProvaTxt(r);
+      if (pv) h.append(gerEl("span", "ger-dest-ed-sub", " · " + pv));
+      cx.append(h);
+    }
+    blocos.forEach(({ dsc, tops }) => {
+      const aberta = !!q || gerDestAbertas.has(dsc.id);
+      const cab = gerEl("button", "ger-dest-disc" + (aberta ? " aberta" : ""));
+      cab.type = "button";
+      cab.setAttribute("aria-expanded", aberta ? "true" : "false");
+      cab.append(gerEl("span", "ger-dest-disc-seta", aberta ? "▾" : "▸"), gerEl("span", "ger-dest-disc-nome", dsc.nome),
+        gerEl("span", "ger-dest-n", t(tops.length === 1 ? "ger_dest_ntop_1" : "ger_dest_ntop", { n: tops.length })));
+      cab.onclick = () => { if (gerDestAbertas.has(dsc.id)) gerDestAbertas.delete(dsc.id); else gerDestAbertas.add(dsc.id); gerDestPintar(); };
+      cx.append(cab);
+      if (!aberta) return;
+      tops.forEach(({ tp, ramos, rCasa }) => {
+        const linha = gerEl("div", "ger-dest-top");
+        linha.append(item({ ch: tp.chave, concurso: conc(r), nome: tp.topico, total: tp.total }, "gerDestItem_"));
+        const kR = r.id + "|" + tp.chave;
+        const abertos = ramos.length && (gerDestRamosAb.has(kR) || rCasa.length);
+        if (ramos.length) {
+          const bt = gerEl("button", "ger-dest-ramos-bt", (abertos ? "▾ " : "▸ ") + t(ramos.length === 1 ? "ger_dest_nramos_1" : "ger_dest_nramos", { n: ramos.length }));
+          bt.type = "button";
+          bt.setAttribute("aria-expanded", abertos ? "true" : "false");
+          bt.title = t("ger_dest_ramos_tip", { t: tp.topico });
+          bt.onclick = () => { if (gerDestRamosAb.has(kR)) gerDestRamosAb.delete(kR); else gerDestRamosAb.add(kR); gerDestPintar(); };
+          linha.append(bt);
+        }
+        cx.append(linha);
+        if (abertos) (q && rCasa.length && !casa(tp.topico) ? rCasa : ramos).forEach((rm) => cx.append(item({ ch: tp.chave, concurso: conc(r), nome: rm.nome, ramo: rm }, "gerDestItem_")));
+      });
+    });
+  });
+  if (!algum) cx.append(gerEl("p", "nota", q ? t("ger_pop_vazio") : t("ger_dest_vazio")));
+
+  /* a Bancada, no rodapé (só quando algum cartão ainda não está nela) */
+  const bb = $("btnGerDestBancada");
+  if (bb) {
+    bb.hidden = !(gerDestNotas || []).some((n) => !cqEhBancada(n.chave));
+    bb.onclick = () => gerDestEscolher(CQ_BANCADA);
+  }
+  return saida;
 }
+
+/* ↑↓ andam pelas opções (busca incluída); Enter no campo escolhe a primeira */
+function gerDestTeclas(ev) {
+  const lista = $("gerDestLista");
+  if (!ev || !lista) return false;
+  const bts = Array.from(lista.querySelectorAll("button:not([disabled])") || []);
+  if (!bts.length) return false;
+  const i = bts.indexOf(document.activeElement);
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    const j = ev.key === "ArrowDown" ? (i < 0 ? 0 : Math.min(bts.length - 1, i + 1)) : (i <= 0 ? -1 : i - 1);
+    if (ev.preventDefault) ev.preventDefault();
+    if (j < 0) { try { $("gerDestBusca").focus(); } catch (e) {} } else { try { bts[j].focus(); } catch (e) {} }
+    return true;
+  }
+  if (ev.key === "Enter" && ev.target === $("gerDestBusca")) {
+    const prim = bts.find((b) => /\bger-dest-item\b/.test(b.className));
+    if (prim) { if (ev.preventDefault) ev.preventDefault(); prim.onclick(); return true; }
+  }
+  return false;
+}
+
 function gerDestEscolher(ch, concurso) {
   const ms = gerDestNotas;
   gerDestNotas = null;
   try { if ($("dlgGerDestino").open) $("dlgGerDestino").close(); } catch (e) {}
   if (!ms || !ms.length) return Promise.resolve();
   gerDestLembrar(ch, concurso);
-  return gerConfirmarMover(ms, ch, concurso);
+  const ao = gerDestAoMover; gerDestAoMover = null;
+  return gerConfirmarMover(ms, ch, concurso, ao);
 }
 /* escolheu um RAMO: liga os cartões a ele (os de outro tópico vão para o tópico do ramo) — pergunta antes */
 function gerDestEscolherRamo(rm) {
@@ -1931,7 +2116,8 @@ function gerDestEscolherRamo(rm) {
   try { if ($("dlgGerDestino").open) $("dlgGerDestino").close(); } catch (e) {}
   if (!ms || !ms.length || !rm) return Promise.resolve();
   gerDestLembrar(rm.chave, rm.concurso, rm.ramoId);
-  return gerConfirmarRamo(ms, rm);
+  const ao = gerDestAoMover; gerDestAoMover = null;
+  return gerConfirmarRamo(ms, rm, ao);
 }
 /* o cartão da prévia */
 function gerPrevMover() {
@@ -1952,13 +2138,18 @@ function gerAcaoSalvarEdicao() {
   const idx = gerFoco >= 0 ? gerVis[gerFoco] : undefined;
   if (idx === undefined) return;
   const idsAntes = typeof estcIdsDoCard === "function" ? estcIdsDoCard(gerNotas[idx].card) : [];
-  const r = gerEditar(gerNotas[idx], $("gerEditor").value);
+  const notaEd = gerNotas[idx];
+  const r = gerEditar(notaEd, $("gerEditor").value);
   if (!r.ok) { uiAlert(t(r.motivo === "sem_cartao" ? "ger_edit_sem_cartao" : "ger_edit_nao_achou")); return; }
+  let cardNovo = null;
+  try { cardNovo = parseText(String($("gerEditor").value || ""), []).cards[0] || null; } catch (e) {}
   /* o histórico de estudo acompanha o cartão editado (o guid nasce do texto, e o texto mudou) */
   try { const novo = parseText(String($("gerEditor").value || ""), []).cards[0]; if (novo && idsAntes.length) estcMigrarAgenda(idsAntes, estcIdsDoCard(novo)); } catch (e) {}
   gerCalcular(); gerPintar();
   try { matRender(); } catch (e) {}
   gerAviso(t("ger_feito_editar"), true);
+  /* (19.45.0) a edição veio do player de estudo: ele reabre no mesmo cartão, já com o texto novo */
+  if (typeof estcAposEditar === "function") estcAposEditar(notaEd, cardNovo);
 }
 
 function gerAcaoMelhorar() {
@@ -2526,6 +2717,7 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   }
   if ($("btnGerPrevMover")) $("btnGerPrevMover").onclick = () => gerPrevMover();
   if ($("gerDestBusca")) $("gerDestBusca").oninput = () => gerDestPintar();
+  if ($("dlgGerDestino") && $("dlgGerDestino").addEventListener) $("dlgGerDestino").addEventListener("keydown", (ev) => { try { gerDestTeclas(ev); } catch (e) {} });
   ["btnGerDestFechar", "btnGerDestX"].forEach((id) => { if ($(id)) $(id).onclick = () => { gerDestNotas = null; $("dlgGerDestino").close(); }; });
   /* (v18.68.0) agrupar, ordenar e ocultar vazias moram num painel "⚙ exibir": três linhas a menos acima da árvore */
   if ($("btnGerArvOpc")) $("btnGerArvOpc").onclick = () => {
@@ -2637,7 +2829,10 @@ if (typeof document !== "undefined" && $("btnGerCartoes")) {
   }
   $("btnGerEditar").onclick = () => { gerAcaoEditar(); flashBotao($("btnGerEditar")); };
   $("btnGerEditSalvar").onclick = gerAcaoSalvarEdicao;
-  $("btnGerEditCancelar").onclick = () => { gerEditando = false; gerPintarPrevia(); };
+  $("btnGerEditCancelar").onclick = () => {
+    gerEditando = false; gerPintarPrevia();
+    if (typeof estcAposEditar === "function") estcAposEditar(null, null);
+  };
   $("btnGerMelhorar").onclick = gerAcaoMelhorar;
   $("btnGerDesfazer").onclick = gerAcaoDesfazer;
 }

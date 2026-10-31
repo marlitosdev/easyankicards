@@ -683,6 +683,8 @@ async function ceFecharEVoltar() {
       }
     } catch (e) {}
     try { matReg("cartoes", "melhorar cartões: de volta à Biblioteca", ceOrigem.nome); } catch (e) {}
+    /* (19.45.0) veio do player de estudo: a lista reabre no mesmo cartão */
+    if (v.estudo && typeof estcRetomar === "function") { try { estcRetomar(v.estudo); } catch (e) {} }
   }
   return true;
 }
