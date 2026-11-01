@@ -1865,6 +1865,28 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .hub-ritmo-tx b{font-weight:700}
 .hub-ritmo-bts{display:flex;flex-wrap:wrap;gap:6px}
 .hub-ritmo-imp{margin-top:4px;font-weight:700}
+dialog.hub-ia-dlg[open]{width:min(720px,96vw);max-height:92vh}
+.hub-ia-ler{margin:6px 0}
+.hub-ia-prev{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.hub-ia-op{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;font-weight:700;margin-top:6px}
+.hub-ia-sub{font-weight:400;color:var(--sutil)}
+.hub-ia-lista{margin:2px 0 4px;padding-left:26px}
+.hub-ia-pq-tit{font-weight:700;margin-top:8px}
+.hub-ia-aviso{color:var(--atencao);margin:2px 0}
+.hub-ia-cmp{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;margin:4px 0 6px}
+.hub-ia-cmp-res{font-weight:700;margin-bottom:6px}
+.hub-ia-cmp-grade{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:600px){.hub-ia-cmp-grade{grid-template-columns:1fr}}
+.hub-ia-cmp-col{border-radius:8px;padding:6px 9px;border-left:4px solid var(--borda)}
+.hub-ia-cmp-col ul{margin:3px 0 0;padding-left:18px;font-size:12.5px}
+.hub-ia-cmp-tit{font-weight:800}
+.hub-ia-cmp-entra{border-left-color:var(--ok);background:rgba(34,197,94,.10)}
+.hub-ia-cmp-entra .hub-ia-cmp-tit{color:var(--ok)}
+.hub-ia-cmp-sai{border-left-color:var(--erro);background:rgba(239,68,68,.10)}
+.hub-ia-cmp-sai .hub-ia-cmp-tit{color:var(--erro)}
+.hub-ia-cmp-muda{border-left-color:var(--info);background:rgba(59,130,246,.10);margin-top:8px}
+.hub-ia-cmp-muda .hub-ia-cmp-tit{color:var(--info)}
+.hub-ia-cmp-vazio,.hub-ia-cmp-mais{color:var(--sutil);list-style:none;margin-left:-18px}
 .hub-ritmo-tx ul{margin:2px 0 0;padding-left:20px}
 .hub-meta-inline{align-items:center}
 .hub-meta-val{font-weight:800;min-width:78px;text-align:center}
@@ -10463,6 +10485,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- (v18.70.0) PARA QUAL PASTA? Mover pela prévia (e, no futuro, por outros caminhos): últimos destinos, busca,
      itens grandes para o dedo. Escolher pergunta antes de mover. -->
+<!-- (19.52.0) colar a resposta da IA sobre o ritmo: o app lê, mostra o que muda e aplica o que for marcado -->
+<dialog id="dlgHubIA" class="ui-modal diag-modal hub-ia-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="hub_ia_tit"></h3>
+    <button type="button" class="dlg-x" id="btnHubIaX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="hub_ia_ajuda"></p>
+  <textarea id="hubIaResp" rows="9" style="width:100%;box-sizing:border-box" data-i18n-ph="hub_ia_ph"></textarea>
+  <div class="hub-ia-ler"><button type="button" class="btn-min btn-min-ok" id="btnHubIaLer" data-i18n="hub_ia_ler"></button></div>
+  <div id="hubIaPrev" class="hub-ia-prev"></div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-azul" id="btnHubIaAplicar" data-i18n="hub_ia_aplicar" hidden></button>
+    <button type="button" class="btn btn-cinza" id="btnHubIaFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgGerDestino" class="ui-modal diag-modal ger-dest-dlg">
   <div class="vka-cab">
     <h3 id="gerDestTit"></h3>

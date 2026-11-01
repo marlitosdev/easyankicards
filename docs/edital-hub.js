@@ -227,10 +227,10 @@ function hubPintarAgenda() {
    * do que "cabe até a prova" era otimista e nada dizia isso. Com duas semanas ou mais de registro e o ritmo abaixo de
    * 75% do planejado, a agenda avisa e oferece planejar com o ritmo real (a escolha fica guardada; volta num toque). */
   const ritmo = hubRitmoReal();
-  const usarReal = hubRitmoRealLigado() && ritmo.min > 0;
+  const usarReal = hubRitmoRealLigado() && ritmo.ref > 0;
   /* (19.51.0) a meta escolhida à mão ("outra meta…") vence o ritmo real; os dois saem com "voltar às horas do edital" */
   const meta = hubMetaMin();
-  const minUsado = meta || (usarReal ? ritmo.min : 0);
+  const minUsado = meta || (usarReal ? ritmo.ref : 0);
   hubRitmoCtx = null;
   const equilibrios = [];
   const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
@@ -254,7 +254,9 @@ function hubPintarAgenda() {
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
     if (plano.recente && plano.recente.total >= ED_RECENTE_MIN) equilibrios.push({ nome: e.nome || cfg.concurso || "", eq: plano.equilibrio || [] });
-    if (!minUsado && ritmo.semanas >= 2 && ritmo.min > 0 && (cfg.horas || 10) * 60 * 0.75 > ritmo.min && !hubRitmoRecusado(ritmo.min)) hubRitmoAvisar = { real: ritmo.min, plano: (cfg.horas || 10) * 60 };
+    /* (19.52.0) o aviso usa o ritmo de REFERÊNCIA: com tendência clara (subindo ou caindo), o das 2 últimas semanas — a média
+     * de 4 escondia que 0h35 → 2h15 → 11h35 → 16h11 já é outro ritmo */
+    if (!minUsado && ritmo.semanas >= 2 && ritmo.ref > 0 && (cfg.horas || 10) * 60 * 0.75 > ritmo.ref && !hubRitmoRecusado(ritmo.ref)) hubRitmoAvisar = { real: ritmo.ref, plano: (cfg.horas || 10) * 60 };
     const sem = semanaAtual(plano) || [];
     const u = edUrgencia(s);
     sem.forEach((i) => {
@@ -570,6 +572,16 @@ function hubModoControles(modosVistos, sugerido, dias) {
   sel.title = t("hub_modo_tip_" + (sel.value === "auto" ? (sugerido || "equilibrado") : sel.value));
   sel.onchange = () => { hubModoDefinir("", sel.value); hubPintarAgenda(); };
   cx.append(rot, sel);
+  /* (19.52.0) a IA ao alcance mesmo sem aviso de ritmo: pedir a opinião e colar a resposta */
+  const bIa = document.createElement("button");
+  bIa.type = "button"; bIa.className = "btn-min"; bIa.id = "btnHubModoIA";
+  bIa.textContent = t("hub_ritmo_ia"); bIa.title = t("hub_ritmo_ia_tip");
+  bIa.onclick = () => hubRitmoCopiarIA();
+  const bCol = document.createElement("button");
+  bCol.type = "button"; bCol.className = "btn-min"; bCol.id = "btnHubModoColar";
+  bCol.textContent = t("hub_ia_colar"); bCol.title = t("hub_ia_colar_tip");
+  bCol.onclick = () => hubIaAbrir();
+  cx.append(bIa, bCol);
   const discs = Object.keys(modosVistos || {});
   if (discs.length) {
     const det = document.createElement("details");
@@ -600,22 +612,29 @@ function hubModoControles(modosVistos, sugerido, dias) {
   return cx;
 }
 
+/* (19.52.0) os botões da janela "colar a resposta da IA" */
+if (typeof document !== "undefined" && document.getElementById && document.getElementById("dlgHubIA")) {
+  const lig = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
+  lig("btnHubIaLer", () => hubIaLer());
+  lig("btnHubIaAplicar", () => hubIaAplicar());
+  lig("btnHubIaFechar", () => document.getElementById("dlgHubIA").close());
+  lig("btnHubIaX", () => document.getElementById("dlgHubIA").close());
+}
+
 /* (19.47.0) o ritmo real: média de minutos por semana nas últimas 4 semanas com registro (a mesma conta do painel de ritmo) */
 let hubRitmoAvisar = null;
 const HUB_RITMO_REAL = "eac_ag_ritmo_real";
 function hubRitmoReal() {
-  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
-  const porSemana = {};
-  diario.forEach((x) => {
-    if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
-    const k = edSemanaCalendario(x.d).ini;
-    porSemana[k] = (porSemana[k] || 0) + (Number(x.m) || 0);
-  });
-  const hoje = typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10);
-  const atual = edSemanaCalendario(hoje).ini;
-  /* a semana em curso fica de fora: pela metade, ela puxaria a média para baixo */
-  const ks = Object.keys(porSemana).filter((k) => k < atual && porSemana[k] > 0).sort().slice(-4);
-  return { min: ks.length ? Math.round(ks.reduce((a, k) => a + porSemana[k], 0) / ks.length) : 0, semanas: ks.length };
+  /* (19.52.0) além da média das 4 últimas semanas fechadas: a das 2 últimas, a tendência e o ritmo de REFERÊNCIA (o das
+   * 2 últimas quando a tendência é clara — subir de 2h15 para 16h11 não é "7h39 por semana") */
+  const ws = hubRitmoSemanas(8).filter((x) => x.min > 0).slice(-4);
+  const media = (xs) => (xs.length ? Math.round(xs.reduce((a, x) => a + x.min, 0) / xs.length) : 0);
+  const min = media(ws);
+  const ult2 = ws.length >= 2 ? media(ws.slice(-2)) : 0;
+  const ant2 = ws.length >= 3 ? media(ws.slice(0, -2)) : 0;
+  let tendencia = "estavel";
+  if (ult2 && ant2) tendencia = ult2 > ant2 * 1.2 ? "subindo" : ult2 < ant2 * 0.8 ? "caindo" : "estavel";
+  return { min, semanas: ws.length, ult2, tendencia, ref: tendencia !== "estavel" && ult2 ? ult2 : min, lista: ws };
 }
 function hubRitmoRealLigado() { try { return localStorage.getItem(HUB_RITMO_REAL) === "1"; } catch (e) { return false; } }
 function hubRitmoRealDefinir(sim) {
@@ -698,7 +717,10 @@ function hubRitmoCaixa(ritmo, minUsado, meta) {
     const forte = document.createElement("b");
     forte.textContent = t(igual ? "hub_ritmo_tit_ok" : "hub_ritmo_tit2");
     const med = document.createElement("div");
-    med.textContent = t("hub_ritmo_linha", { n: hubRitmoReal().semanas, r: horasTexto(real), p: horasTexto(plano) });
+    const rr = hubRitmoReal();
+    med.textContent = rr.tendencia !== "estavel" && rr.ult2
+      ? t("hub_ritmo_linha_tend", { n: rr.semanas, m: horasTexto(rr.min), u: horasTexto(rr.ult2), tend: t("hub_tend_" + rr.tendencia), p: horasTexto(plano) })
+      : t("hub_ritmo_linha", { n: rr.semanas, r: horasTexto(real), p: horasTexto(plano) });
     tx.append(forte, med);
     if (cr && cp) {
       const prova = hubRitmoCtx && hubRitmoCtx.s && hubRitmoCtx.s.prova ? hubRitmoCtx.s.prova.split("-").reverse().slice(0, 2).join("/") : "";
@@ -728,6 +750,7 @@ function hubRitmoCaixa(ritmo, minUsado, meta) {
     bts.append(bt("btnHubRitmoMeta", t("hub_ritmo_outra"), t("hub_ritmo_outra_tip"), () => hubRitmoMetaInline(av, Math.round((real + plano) / 2 / 30) * 30)));
   }
   bts.append(bt("btnHubRitmoIA", t("hub_ritmo_ia"), t("hub_ritmo_ia_tip"), () => hubRitmoCopiarIA()));
+  bts.append(bt("btnHubRitmoColar", t("hub_ia_colar"), t("hub_ia_colar_tip"), () => hubIaAbrir()));
   av.append(tx, bts);
   return av;
 }
@@ -763,7 +786,7 @@ function hubRitmoMetaInline(av, inicial) {
 function hubRitmoDecisaoTexto() {
   const meta = hubMetaMin();
   if (meta) return t("hub_dec_meta", { h: horasTexto(meta) });
-  if (hubRitmoRealLigado()) return t("hub_dec_real", { h: horasTexto(hubRitmoReal().min) });
+  if (hubRitmoRealLigado()) return t("hub_dec_real", { h: horasTexto(hubRitmoReal().ref) });
   try {
     const v = JSON.parse(localStorage.getItem(HUB_RITMO_RECUSA) || "null");
     if (v && v.ate && hubHoje() < v.ate) return t("hub_dec_mantido", { r: horasTexto(Number(v.real) || 0), d: v.ate.split("-").reverse().join("/") });
@@ -783,7 +806,10 @@ async function hubRitmoOutraMeta() {
   hubPintarAgenda();
   return true;
 }
-/* o pedido à IA: o contexto inteiro e a pergunta fechada, num texto para colar */
+/* o pedido à IA: o contexto inteiro e a pergunta fechada, num texto para colar.
+ * (19.52.0) Depois da revisão crítica do pedido: o ritmo com as datas de cada semana, as duas médias e a tendência; o que
+ * os "14 dias" e o "caber" querem dizer; o que cada modo faz, inclusive com disciplina zerada; as notas mínimas (ou que
+ * o app não as tem); o conhecimento de fora do app; e um formato que o app consegue LER de volta ("colar a resposta"). */
 function hubRitmoPromptIA(ctx) {
   const c = ctx || hubRitmoCtx;
   if (!c) return "";
@@ -791,50 +817,70 @@ function hubRitmoPromptIA(ctx) {
   const ritmo = hubRitmoReal();
   const plano = c.plano;
   const planoMin = (c.cfg.horas || 10) * 60;
+  const dm = (iso) => iso.split("-").reverse().slice(0, 2).join("/");
+  const fimSem = (iso) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + 6); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   L.push(t("hub_ia_cab"));
   L.push("");
   L.push("== " + t("hub_ia_contexto") + " ==");
-  L.push(t("hub_ia_concurso", { c: c.e.nome || c.cfg.concurso || "?", p: c.s.prova || "?", d: c.s.dias == null ? "?" : c.s.dias }));
-  L.push(t("hub_ia_horas", { p: horasTexto(planoMin), r: horasTexto(ritmo.min), n: ritmo.semanas }));
-  const sem = hubRitmoSemanas(6);
-  if (sem.length) L.push(t("hub_ia_semanas") + " " + sem.map((x) => x.ini.split("-").reverse().slice(0, 2).join("/") + ": " + horasTexto(x.min)).join(" · "));
-  const modos = plano.modos || {};
-  L.push(t("hub_ia_modo", { m: plano.modoSugerido || "?" }));
+  L.push(t("hub_ia_concurso2", { c: c.e.nome || c.cfg.concurso || "?", p: c.s.prova ? c.s.prova.split("-").reverse().join("/") : "?", d: c.s.dias == null ? "?" : c.s.dias, w: c.s.dias == null ? "?" : Math.floor(c.s.dias / 7) }));
+  L.push(t("hub_ia_horas_plano", { p: horasTexto(planoMin) }));
+  L.push(t("hub_ia_semanas2"));
+  hubRitmoSemanas(6).forEach((x) => L.push("  - " + dm(x.ini) + "–" + dm(fimSem(x.ini)) + ": " + horasTexto(x.min)));
+  L.push("  " + t("hub_ia_medias", { m: horasTexto(ritmo.min), u: ritmo.ult2 ? horasTexto(ritmo.ult2) : "-", tend: t("hub_tend_" + ritmo.tendencia) }));
+  L.push(t("hub_ia_bagagem"));
+  /* as notas mínimas: as que o edital tem no app, com a cobertura de hoje — ou o aviso de que não estão cadastradas */
+  const blocos = (plano.blocos || []).filter((b) => b.minPct !== null && b.minPct !== undefined);
+  if (blocos.length) {
+    L.push(t("hub_ia_corte_tem"));
+    blocos.forEach((b) => L.push("  - " + t("hub_ia_corte_bloco", { n: b.nome || "?", d: (b.disciplinas || []).join(", "), m: b.minPct, c: b.pct, a: b.acerto == null ? "-" : b.acerto + "%" })));
+  } else L.push(t("hub_ia_corte_sem"));
   L.push("");
-  L.push("== " + t("hub_ia_disc") + " ==");
-  L.push(t("hub_ia_disc_cab"));
+  L.push("== " + t("hub_ia_disc2") + " ==");
+  L.push(t("hub_ia_disc_cab2"));
   const diario = (typeof edDiario !== "undefined" && edDiario) || [];
   const banco = (typeof qsBanco !== "undefined" && qsBanco) || [];
   let sinais = [];
   try { sinais = typeof plSinais === "function" ? plSinais(plano, diario, banco) : []; } catch (e) { sinais = []; }
   const eq = {};
   (plano.equilibrio || []).forEach((x) => { eq[x.disciplina] = x; });
+  const modos = plano.modos || {};
   const discs = Object.keys(plano.fatia || {}).sort((a, b) => (plano.fatia[b] || 0) - (plano.fatia[a] || 0));
   discs.forEach((d) => {
     const its = plano.itens.filter((i) => i.disciplina === d);
+    const feitos = its.filter((i) => i.feito).length;
+    const comecados = its.filter((i) => !i.feito && i.ramos && i.ramos.length && (i.ramosFeitos || 0) > 0).length;
     const sg = sinais.find((x) => x.disciplina === d) || {};
     const q = eq[d] || {};
-    L.push([d, (plano.fatia[d] || 0) + "%", (q.tempo || 0) + "% (" + horasTexto(q.min || 0) + ")",
-      sg.pct == null ? "-" : sg.pct + "% (" + sg.qFeitas + " q)",
-      its.filter((i) => i.feito).length + "/" + its.length,
-      its.filter((i) => !i.feito && i.ramos && i.ramos.length && (i.ramosFeitos || 0) > 0).length,
-      (modos[d] && modos[d].modo) || "-"].join(" | "));
+    L.push([d, (plano.fatia[d] || 0) + "%", horasTexto(q.min || 0) + " (" + (q.tempo || 0) + "%)",
+      sg.pct == null ? t("hub_ia_sem_dado") : sg.pct + "% (" + sg.qFeitas + " q)",
+      feitos + "/" + its.length, comecados,
+      (modos[d] && modos[d].modo) || "-",
+      !feitos && !comecados ? t("hub_ia_zerada") : "-"].join(" | "));
   });
   L.push("");
+  L.push("== " + t("hub_ia_modos_tit") + " ==");
+  L.push(t("hub_ia_modos"));
+  L.push("");
   L.push("== " + t("hub_ia_cenarios") + " ==");
-  const mid = Math.round((ritmo.min + planoMin) / 2 / 30) * 30;
-  [[t("hub_ia_cen_real"), ritmo.min], [t("hub_ia_cen_meio"), mid], [t("hub_ia_cen_plano"), planoMin]].forEach(([n, m]) => {
-    const cc = m ? hubCenario(m, c) : null;
-    if (cc) L.push(t("hub_ia_cen_linha", { n, h: horasTexto(m), c: cc.cabem, t: cc.pend, p: cc.pesoPct }));
+  L.push(t("hub_ia_caber"));
+  const mid = Math.round((ritmo.ref + planoMin) / 2 / 30) * 30;
+  const cen = [[t("hub_ia_cen_ult2"), ritmo.ult2], [t("hub_ia_cen_real"), ritmo.min], [t("hub_ia_cen_meio"), mid], [t("hub_ia_cen_plano"), planoMin]];
+  const vistos = new Set();
+  cen.forEach(([n, m]) => {
+    if (!m || vistos.has(m)) return;
+    vistos.add(m);
+    const cc = hubCenario(m, c);
+    if (cc) L.push("  - " + t("hub_ia_cen_linha", { n, h: horasTexto(m), c: cc.cabem, t: cc.pend, p: cc.pesoPct }));
   });
   L.push("");
   L.push("== " + t("hub_ia_pergunta_tit") + " ==");
-  L.push(t("hub_ia_pergunta"));
+  L.push(t("hub_ia_pergunta2"));
   L.push("");
   L.push("== " + t("hub_ia_diretrizes_tit") + " ==");
-  L.push(t("hub_ia_diretrizes"));
+  L.push(t("hub_ia_diretrizes2"));
   L.push("");
-  L.push(t("hub_ia_formato"));
+  L.push("== " + t("hub_ia_formato_tit") + " ==");
+  L.push(t("hub_ia_formato2"));
   return L.join("\n");
 }
 /* as últimas `n` semanas fechadas com o total de minutos (para a IA ver a tendência, não só a média) */
@@ -869,6 +915,225 @@ function hubSelosDe(li, alvo) {
   else (alvo || li).append(f);
   return f;
 }
+/* =====================================================================
+ * (19.52.0) COLAR A RESPOSTA DA IA: o app lê o formato fixo do pedido, mostra o que vai mudar e aplica o que a pessoa
+ * marcar — a meta de horas, o modo de cada disciplina (pelo foco: "questões"/"revisão" → Consolidar, "estudo novo" →
+ * Avançar, "misto" → Equilibrado) e o "deixar de fora" (os tópicos ainda por estudar saem da agenda como "não vou
+ * estudar", e voltam pela gaveta de tirados). A divisão de horas por disciplina fica como referência: a agenda ordena
+ * pelo modo e pelo equilíbrio, não por cota de horas. Nada é aplicado sem "aplicar".
+ * ===================================================================== */
+let hubIaLido = null;
+function hubIaNorm(x) { return cqNormalSeguro(String(x || "").replace(/[*_`]/g, "")); }
+/* o nome escrito pela IA → a disciplina do plano ("Dir. Administrativo", "Noções de Direito Administrativo", "Administrativo") */
+function hubIaAcharDisc(nome, discs) {
+  const n = hubIaNorm(nome).replace(/\bdir\.?\s/g, "direito ").replace(/\bcontab\.?\s/g, "contabilidade ").trim();
+  if (!n) return "";
+  const cand = discs.map((d) => ({ d, k: hubIaNorm(d), c: hubIaNorm(hubDiscCurta(d)) }));
+  const ex = cand.find((x) => x.k === n || x.c === n);
+  if (ex) return ex.d;
+  const parcial = cand.filter((x) => x.k.indexOf(n) >= 0 || n.indexOf(x.c) >= 0 || x.c.indexOf(n) >= 0);
+  return parcial.length === 1 ? parcial[0].d : "";
+}
+function hubIaModoDoFoco(foco) {
+  const f = hubIaNorm(foco);
+  if (/misto|equilib|altern/.test(f)) return "equilibrado";
+  if (/quest|revis|consolid|fixa|manut|exerc/.test(f)) return "consolidar";
+  if (/novo|teoria|leitura|base|inicia|aprend|resum/.test(f)) return "avancar";
+  return "equilibrado";
+}
+/* lê a resposta: {min, divisao:[{disc, min, foco, modo, texto}], fora:[{disc, topico, itens}], porque:[], avisos:[]} */
+function hubIaLerResposta(txt, plano) {
+  const res = { min: 0, divisao: [], fora: [], porque: [], avisos: [] };
+  const discs = Object.keys((plano && plano.fatia) || {});
+  let sec = "";
+  String(txt || "").split(/\r?\n/).forEach((linha0) => {
+    const linha = linha0.replace(/\*\*/g, "").trim();
+    if (!linha) return;
+    const h = hubIaNorm(linha);
+    let m;
+    if ((m = linha.match(/horas\s+recomendadas\s*:?\s*(.+)$/i))) {
+      res.min = hubLerHoras(String(m[1]).replace(/\s*(?:por|\/)\s*semana.*$/i, "").replace(/h\s*\/\s*sem.*$/i, "h").trim());
+      sec = ""; return;
+    }
+    if (/^divis[aã]o/.test(h)) { sec = "div"; return; }
+    if (/^deixar de fora|^o que cortar|^podar/.test(h)) { sec = "fora"; return; }
+    if (/^por qu[eê]|^justificativa/.test(h)) { sec = "pq"; return; }
+    const item = linha.replace(/^[-•*·]\s*|^\d+[.)]\s*/, "");
+    if (sec === "div") {
+      m = item.match(/^(.+?)\s*:\s*(\d+(?:[.,]\d+)?\s*h(?:\s*\d{1,2})?|\d+\s*min)\s*(?:\/\s*sem(?:ana)?|por semana)?\s*(?:[—–-]+\s*(?:foco\s*:\s*)?(.*))?$/i);
+      if (!m) return;
+      const d = hubIaAcharDisc(m[1], discs);
+      const mins = /min/i.test(m[2]) ? Number(m[2].replace(/\D/g, "")) : hubLerHoras(m[2].replace(/\s+/g, ""));
+      const foco = (m[3] || "").trim();
+      if (!d) { res.avisos.push(t("hub_ia_av_disc", { d: m[1].trim() })); return; }
+      res.divisao.push({ disc: d, min: mins, foco, modo: hubIaModoDoFoco(foco), texto: item });
+    } else if (sec === "fora") {
+      if (/^nada|^nenhum/.test(hubIaNorm(item))) return;
+      const partes = item.split(/\s*[›>]\s*/);
+      const d = hubIaAcharDisc(partes[0].replace(/\(.*\)\s*$/, ""), discs);
+      if (!d) { res.avisos.push(t("hub_ia_av_disc", { d: partes[0].trim() })); return; }
+      const pend = (plano.itens || []).filter((i) => i.disciplina === d && !i.feito);
+      let itens = pend;
+      let topico = "";
+      if (partes[1]) {
+        const k = hubIaNorm(partes[1]);
+        /* o nome exato primeiro: "Tópico 13" não pode levar junto o "Tópico 1" (um contém o outro) */
+        const exatos = pend.filter((i) => hubIaNorm(i.nome) === k);
+        const parciais = pend.filter((i) => hubIaNorm(i.nome).indexOf(k) >= 0 || k.indexOf(hubIaNorm(i.nome)) >= 0);
+        itens = exatos.length ? exatos : (parciais.length === 1 ? parciais : []);
+        topico = partes[1].trim();
+        if (!itens.length) { res.avisos.push(t("hub_ia_av_topico", { t: topico, d })); return; }
+      }
+      res.fora.push({ disc: d, topico, itens });
+    } else if (sec === "pq") res.porque.push(item);
+  });
+  if (!res.min) res.avisos.push(t("hub_ia_av_sem_horas"));
+  const soma = res.divisao.reduce((a, x) => a + (x.min || 0), 0);
+  if (res.min && res.divisao.length && Math.abs(soma - res.min) > 30) res.avisos.push(t("hub_ia_av_soma", { s: horasTexto(soma), h: horasTexto(res.min) }));
+  /* cortar uma disciplina que está num bloco com nota mínima: o app avisa (a IA pode não saber) */
+  (plano.blocos || []).filter((b) => b.minPct !== null && b.minPct !== undefined).forEach((b) => {
+    res.fora.filter((f) => !f.topico && (b.disciplinas || []).indexOf(f.disc) >= 0)
+      .forEach((f) => res.avisos.push(t("hub_ia_av_corte", { d: f.disc, b: b.nome || "?", m: b.minPct })));
+  });
+  return res;
+}
+function hubIaAbrir() {
+  if (!$("dlgHubIA")) return false;
+  hubIaLido = null;
+  if ($("hubIaResp")) $("hubIaResp").value = "";
+  if ($("hubIaPrev")) $("hubIaPrev").innerHTML = "";
+  if ($("btnHubIaAplicar")) $("btnHubIaAplicar").hidden = true;
+  abrirModal("dlgHubIA");
+  return true;
+}
+/* lê o que foi colado e mostra o que vai mudar, com uma caixa de marcar para cada parte */
+function hubIaLer() {
+  const c = hubRitmoCtx;
+  const cx = $("hubIaPrev");
+  if (!cx) return null;
+  cx.innerHTML = "";
+  if (!c) { cx.textContent = t("hub_ia_sem_edital"); return null; }
+  const res = hubIaLerResposta($("hubIaResp").value, c.plano);
+  hubIaLido = res;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const marca = (id, rot, sub) => {
+    const l = el("label", "hub-ia-op");
+    const ck = document.createElement("input"); ck.type = "checkbox"; ck.id = id; ck.checked = true;
+    const tx = el("span", "", rot);
+    l.append(ck, tx);
+    if (sub) l.append(el("span", "hub-ia-sub", sub));
+    cx.append(l);
+  };
+  /* o painel verde/vermelho: a agenda até a prova hoje × como ficaria aceitando tudo */
+  if (res.min || res.divisao.length || res.fora.length) cx.append(hubIaComparar(res, c));
+  if (res.min) {
+    const cc = hubCenario(res.min);
+    marca("hubIaOpMeta", t("hub_ia_op_meta", { h: horasTexto(res.min) }), cc ? t("hub_meta_res", { c: cc.cabem, n: cc.pend, p: cc.pesoPct }) : "");
+  }
+  if (res.divisao.length) {
+    marca("hubIaOpModos", t("hub_ia_op_modos"), "");
+    const ul = el("ul", "hub-ia-lista");
+    res.divisao.forEach((x) => ul.append(el("li", "", t("hub_ia_op_modo_item", { d: x.disc, m: t("hub_modo_" + x.modo), h: horasTexto(x.min || 0), f: x.foco || "-" }))));
+    cx.append(ul);
+  }
+  if (res.fora.length) {
+    const n = res.fora.reduce((a, f) => a + f.itens.length, 0);
+    marca("hubIaOpFora", t("hub_ia_op_fora", { n }), t("hub_ia_op_fora_sub"));
+    const ul = el("ul", "hub-ia-lista");
+    res.fora.forEach((f) => ul.append(el("li", "", f.topico ? f.disc + " › " + f.topico + " (" + f.itens.length + ")" : t("hub_ia_op_fora_disc", { d: f.disc, n: f.itens.length }))));
+    cx.append(ul);
+  }
+  if (res.divisao.length) cx.append(el("p", "nota", t("hub_ia_nota_divisao")));
+  if (res.porque.length) {
+    cx.append(el("div", "hub-ia-pq-tit", t("hub_ia_pq_tit")));
+    const ol = el("ol", "hub-ia-lista");
+    res.porque.slice(0, 6).forEach((x) => ol.append(el("li", "", x)));
+    cx.append(ol);
+  }
+  res.avisos.forEach((a) => cx.append(el("p", "hub-ia-aviso", "⚠ " + a)));
+  const algo = !!(res.min || res.divisao.length || res.fora.length);
+  if (!algo) cx.append(el("p", "hub-ia-aviso", t("hub_ia_nada")));
+  if ($("btnHubIaAplicar")) $("btnHubIaAplicar").hidden = !algo;
+  return res;
+}
+/* (19.52.0) O QUE ENTRA E O QUE SAI. Pedido: "um painel com indicações claras, em verde e vermelho, do que entra e sai,
+ * para ajudar a decidir". Compara a lista do que cabe até a prova HOJE (o plano da agenda) com a lista se a resposta for
+ * aceita inteira (nova meta, novos modos e os tópicos deixados de fora). Verde: passa a caber. Vermelho: sai — deixado
+ * de fora, ou não cabe mais. Azul: o que muda de regra (horas e modos). */
+function hubIaSimular(res, c) {
+  const antes = new Set(c.plano.fila.filter((i) => !i.ehRevisao && !i.feito).map((i) => i.chave));
+  const modos = hubModosLer();
+  const novos = { geral: modos.geral, disc: Object.assign({}, modos.disc) };
+  res.divisao.forEach((x) => { novos.disc[x.disc] = x.modo; });
+  const minAtual = hubMetaMin() || (hubRitmoRealLigado() ? hubRitmoReal().ref : 0) || (c.cfg.horas || 10) * 60;
+  let dep;
+  try { dep = montarPlano(c.r, { horas: (res.min || minAtual) / 60, prova: c.s.prova, feitos: c.e.progresso || {}, modos: novos }); } catch (e) { return null; }
+  const fora = new Set();
+  res.fora.forEach((f) => f.itens.forEach((i) => fora.add(i.chave)));
+  const depois = new Set(dep.fila.filter((i) => !i.ehRevisao && !i.feito && !fora.has(i.chave)).map((i) => i.chave));
+  const nome = {};
+  c.plano.itens.concat(dep.itens).forEach((i) => { nome[i.chave] = { disc: i.disciplina, nome: i.nome, bruto: i.bruto || 0 }; });
+  const entram = [...depois].filter((k) => !antes.has(k)).map((k) => nome[k]);
+  const saem = [...antes].filter((k) => !depois.has(k)).map((k) => Object.assign({ fora: fora.has(k) }, nome[k]));
+  const peso = (set) => [...set].reduce((a, k) => a + ((nome[k] && nome[k].bruto) || 0), 0);
+  const pend = c.plano.itens.filter((i) => !i.feito).reduce((a, i) => a + (i.bruto || 0), 0) || 1;
+  return { entram, saem, minAtual, antesN: antes.size, depoisN: depois.size,
+    antesPct: Math.round(peso(antes) / pend * 100), depoisPct: Math.round(peso(depois) / pend * 100), novosModos: novos };
+}
+function hubIaComparar(res, c) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("div", "hub-ia-cmp");
+  box.id = "hubIaCmp";
+  const sim = hubIaSimular(res, c);
+  if (!sim) return box;
+  box.append(el("div", "hub-ia-cmp-res", t("hub_ia_cmp_resumo", { a: sim.antesN, ap: sim.antesPct, d: sim.depoisN, dp: sim.depoisPct })));
+  const col = (cls, tit, itens, fmt) => {
+    const d = el("div", "hub-ia-cmp-col " + cls);
+    d.append(el("div", "hub-ia-cmp-tit", tit));
+    const ul = el("ul");
+    itens.slice(0, 12).forEach((x) => ul.append(el("li", "", fmt(x))));
+    if (itens.length > 12) ul.append(el("li", "hub-ia-cmp-mais", t("hub_ia_cmp_mais", { n: itens.length - 12 })));
+    if (!itens.length) ul.append(el("li", "hub-ia-cmp-vazio", t("hub_ia_cmp_nenhum")));
+    d.append(ul);
+    return d;
+  };
+  const grade = el("div", "hub-ia-cmp-grade");
+  grade.append(
+    col("hub-ia-cmp-entra", "✓ " + t("hub_ia_cmp_entra", { n: sim.entram.length }), sim.entram, (x) => hubDiscCurta(x.disc) + " › " + x.nome),
+    col("hub-ia-cmp-sai", "✕ " + t("hub_ia_cmp_sai", { n: sim.saem.length }), sim.saem, (x) => hubDiscCurta(x.disc) + " › " + x.nome + " — " + t(x.fora ? "hub_ia_cmp_fora" : "hub_ia_cmp_naocabe")));
+  box.append(grade);
+  /* o que muda de regra */
+  const muda = [];
+  if (res.min && res.min !== sim.minAtual) muda.push(t("hub_ia_cmp_meta", { a: horasTexto(sim.minAtual), d: horasTexto(res.min) }));
+  const atuais = (c.plano.modos || {});
+  res.divisao.forEach((x) => {
+    const antes = atuais[x.disc] ? atuais[x.disc].modo : "";
+    if (antes !== x.modo) muda.push(t("hub_ia_cmp_modo", { d: hubDiscCurta(x.disc), a: antes ? t("hub_modo_" + antes) : "-", n: t("hub_modo_" + x.modo) }));
+  });
+  if (muda.length) box.append(col("hub-ia-cmp-muda", "↻ " + t("hub_ia_cmp_muda"), muda, (x) => x));
+  return box;
+}
+
+/* aplica o que estiver marcado; devolve o que fez */
+function hubIaAplicar() {
+  const res = hubIaLido, c = hubRitmoCtx;
+  if (!res || !c) return null;
+  const ligado = (id) => !$(id) || $(id).checked !== false;
+  const feito = { meta: 0, modos: 0, fora: 0 };
+  if (res.min && ligado("hubIaOpMeta")) { hubMetaDefinir(res.min); feito.meta = res.min; }
+  if (res.divisao.length && ligado("hubIaOpModos")) res.divisao.forEach((x) => { hubModoDefinir(x.disc, x.modo); feito.modos++; });
+  if (res.fora.length && ligado("hubIaOpFora") && typeof faTirar === "function") {
+    res.fora.forEach((f) => f.itens.forEach((i) => {
+      if (faTirar(Object.assign({}, i, { edital: c.e.id }), "nao_vou")) feito.fora++;
+    }));
+  }
+  try { reg("EDITAL", "resposta da IA aplicada", JSON.stringify(feito)); } catch (e) {}
+  try { if ($("dlgHubIA").open) $("dlgHubIA").close(); } catch (e) {}
+  try { toastMsg(t("hub_ia_aplicado", { h: feito.meta ? horasTexto(feito.meta) : "-", m: feito.modos, f: feito.fora }), 6000); } catch (e) {}
+  hubPintarAgenda();
+  return feito;
+}
+
 /* "Noções de Direito Administrativo" → "Direito Administrativo" (o nome inteiro fica na dica) */
 function hubDiscCurta(d) { return String(d || "").replace(/^no[çc][õo]es\s+(?:b[áa]sicas\s+)?de\s+/i, "").replace(/^no[çc][õo]es\s+/i, ""); }
 

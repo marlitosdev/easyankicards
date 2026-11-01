@@ -127,7 +127,7 @@ async function testes() {
     api.hubMetaDefinir(0);
     ok(api.hubMetaMin() === 0, "R4b e sai com 'voltar as horas do edital'");
     const pr = api.hubRitmoPromptIA(ctx);
-    ok(/Horas recomendadas: X h\/semana/.test(pr) && /Português/.test(pr) && /Tributário/.test(pr) && /cabem \d+ de \d+ tópicos/.test(pr) && /faltam 30 dias/.test(pr) && /Justifique/.test(pr),
+    ok(/Horas recomendadas: X h\/semana/.test(pr) && /Português/.test(pr) && /Tributário/.test(pr) && /cabem \d+ de \d+ tópicos/.test(pr) && /faltam 30 dias/.test(pr) && /deixar de fora/.test(pr) && /"Caber" = a primeira sessão/.test(pr) && /nada estudado ainda/.test(pr) && /SOMAR exatamente/.test(pr) && /não cadastradas no app/.test(pr),
       "R5 o pedido a IA traz contexto, disciplinas, cenarios, a pergunta e o formato da resposta");
     ok(api.hubDiscCurta("Noções de Direito Administrativo") === "Direito Administrativo" && api.hubDiscCurta("Português") === "Português", "R6 nomes curtos na faixa do equilibrio");
     ok(/DIRETRIZES/.test(pr) && /custo × benefício/.test(pr) && /não invente/.test(pr), "R7 o pedido a IA traz as diretrizes (realista, custo x beneficio, sem inventar)");
@@ -136,6 +136,41 @@ async function testes() {
     api.hubMetaDefinir(0);
     api.hubRitmoRecusar(460);
     ok(/horas do edital mantidas por você até/.test(api.hubRitmoDecisaoTexto()), "R9 e o 'manter': " + api.hubRitmoDecisaoTexto());
+    /* ---- IA: ler a resposta colada (19.52.0) ---- */
+    const RESP = [
+      "**Horas recomendadas: 12 h/semana**",
+      "",
+      "Divisão semanal:",
+      "- Tributário: 5 h/semana — foco: questões",
+      "- Português: 4h/semana — foco: estudo novo",
+      "- Dir. Administrativo: 3 h/semana — foco: misto",
+      "- Química: 1 h/semana — foco: revisão",
+      "",
+      "Deixar de fora:",
+      "- Administrativo › Licitações",
+      "",
+      "Por quê:",
+      "1. Tributário vale 42%.",
+      "2. Português está zerado.",
+    ].join("\n");
+    const lido = api.hubIaLerResposta(RESP, ctx.plano);
+    ok(lido.min === 720, "IA1 le as horas recomendadas (com negrito): " + lido.min);
+    const dv = (d) => lido.divisao.find((x) => x.disc === d);
+    ok(dv("Tributário") && dv("Tributário").modo === "consolidar" && dv("Português").modo === "avancar" && dv("Administrativo").modo === "equilibrado" && dv("Português").min === 240,
+      "IA2 a divisao vira modo por disciplina pelo foco (questoes -> consolidar, estudo novo -> avancar, misto -> equilibrado): " + JSON.stringify(lido.divisao.map((x) => [x.disc, x.modo, x.min])));
+    ok(lido.avisos.some((a) => /Química/.test(a)), "IA3 disciplina desconhecida vira aviso, nao invencao");
+    ok(lido.fora.length === 1 && lido.fora[0].disc === "Administrativo" && lido.fora[0].itens.length === 1 && lido.fora[0].itens[0].nome === "Licitações", "IA4 'deixar de fora' por topico acha o topico certo");
+    ok(lido.porque.length === 2, "IA5 o 'por que' vem como lista");
+    const ctx2 = { e, r: api.lerEdital(["# T | prova: 2026-11-29 | horas: 13", "@ A :: 5", "+ Tópico 1 :: 5", "+ Tópico 13 :: 4"].join("\n")), s: { prova: "2026-11-29", dias: 30 }, cfg: {} };
+    ctx2.plano = api.montarPlano(ctx2.r, Object.assign({}, base, { tempoRecente: null }));
+    const l2 = api.hubIaLerResposta(["Horas recomendadas: 5 h/semana", "Deixar de fora:", "- A › Tópico 13"].join("\n"), ctx2.plano);
+    ok(l2.fora.length === 1 && l2.fora[0].itens.length === 1 && l2.fora[0].itens[0].nome === "Tópico 13", "IA4b 'Tópico 13' nao leva junto o 'Tópico 1'");
+    ok(lido.avisos.some((a) => /soma 12h/.test(a)) === false && api.hubIaLerResposta(RESP.replace("12 h/semana", "20 h/semana"), ctx.plano).avisos.some((a) => /A divisão soma/.test(a)), "IA6 avisa quando a divisao nao soma as horas recomendadas");
+    const sim = api.hubIaSimular(lido, ctx);
+    ok(sim && sim.saem.some((x) => x.nome === "Licitações" && x.fora), "IA7 o painel mostra em vermelho o topico deixado de fora: " + JSON.stringify(sim && sim.saem.map((x) => x.nome)));
+    const pouco = api.hubIaSimular(api.hubIaLerResposta("Horas recomendadas: 1 h/semana", ctx.plano), ctx);
+    const muito = api.hubIaSimular(api.hubIaLerResposta("Horas recomendadas: 40 h/semana", ctx.plano), ctx);
+    ok(pouco && muito && pouco.depoisN <= muito.depoisN, "IA8 menos horas: cabem menos (o painel compara antes e depois)");
     const rel2 = api.plRelatorio(p1, r, [], [], { concurso: "Teste" });
     ok(/ritmo: horas do edital mantidas/.test(rel2), "R10 o raio-X traz a decisao de ritmo");
   }
