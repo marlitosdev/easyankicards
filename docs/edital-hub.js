@@ -228,6 +228,10 @@ function hubPintarAgenda() {
    * 75% do planejado, a agenda avisa e oferece planejar com o ritmo real (a escolha fica guardada; volta num toque). */
   const ritmo = hubRitmoReal();
   const usarReal = hubRitmoRealLigado() && ritmo.min > 0;
+  /* (19.51.0) a meta escolhida à mão ("outra meta…") vence o ritmo real; os dois saem com "voltar às horas do edital" */
+  const meta = hubMetaMin();
+  const minUsado = meta || (usarReal ? ritmo.min : 0);
+  hubRitmoCtx = null;
   const equilibrios = [];
   const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
   let modoSugerido = "";
@@ -239,16 +243,18 @@ function hubPintarAgenda() {
     const r = lerEdital(e.texto || "");
     const cfg = r.cfg || {};
     const plano = montarPlano(r, {
-      horas: usarReal ? ritmo.min / 60 : (cfg.horas || 10), prova: s.prova, feitos: e.progresso || {},
+      horas: minUsado ? minUsado / 60 : (cfg.horas || 10), prova: s.prova, feitos: e.progresso || {},
       modos: hubModosLer(),
     });
+    /* o edital de prova mais próxima é o dos cenários do aviso e do pedido à IA */
+    if (s.dias !== null && s.dias !== undefined && (!hubRitmoCtx || s.dias < hubRitmoCtx.s.dias)) hubRitmoCtx = { e, r, s, cfg, plano };
     Object.keys(plano.modos || {}).forEach((d) => { if (!modosVistos[d]) modosVistos[d] = plano.modos[d]; });
     /* com dois editais, o rótulo do automático fala do de prova mais próxima (o modo mais "fechado") */
     if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
     if (plano.recente && plano.recente.total >= ED_RECENTE_MIN) equilibrios.push({ nome: e.nome || cfg.concurso || "", eq: plano.equilibrio || [] });
-    if (!usarReal && ritmo.semanas >= 2 && ritmo.min > 0 && (cfg.horas || 10) * 60 * 0.75 > ritmo.min) hubRitmoAvisar = { real: ritmo.min, plano: (cfg.horas || 10) * 60 };
+    if (!minUsado && ritmo.semanas >= 2 && ritmo.min > 0 && (cfg.horas || 10) * 60 * 0.75 > ritmo.min && !hubRitmoRecusado(ritmo.min)) hubRitmoAvisar = { real: ritmo.min, plano: (cfg.horas || 10) * 60 };
     const sem = semanaAtual(plano) || [];
     const u = edUrgencia(s);
     sem.forEach((i) => {
@@ -336,42 +342,40 @@ function hubPintarAgenda() {
     cx.append(av);
   }
 
-  /* o ritmo: aviso (planejado acima do real) ou lembrete (planejando com o real) */
-  if (hubRitmoAvisar || usarReal) {
-    const av = document.createElement("div");
-    av.className = "ed-caixa-sub hub-ritmo" + (usarReal ? " hub-ritmo-on" : "");
-    av.id = "hubRitmo";
-    const tx = document.createElement("span");
-    tx.textContent = usarReal ? t("hub_ritmo_usando", { r: horasTexto(ritmo.min) })
-      : t("hub_ritmo_aviso", { r: horasTexto(hubRitmoAvisar.real), p: horasTexto(hubRitmoAvisar.plano) });
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "btn-min" + (usarReal ? "" : " btn-min-ok");
-    b.id = "btnHubRitmo";
-    b.textContent = t(usarReal ? "hub_ritmo_voltar" : "hub_ritmo_usar", { r: horasTexto(ritmo.min) });
-    b.title = t("hub_ritmo_tip");
-    b.onclick = () => { hubRitmoRealDefinir(!usarReal); hubPintarAgenda(); };
-    av.append(tx, b);
-    cx.append(av);
-  }
+  /* (19.51.0) O AVISO DE RITMO DIZ O QUE MUDA, e oferece quatro saídas: planejar com o ritmo real, manter as horas do
+   * edital (o aviso some por 14 dias, ou até o ritmo cair mais), outra meta (com a conta antes de aplicar) e pedir
+   * a opinião de uma IA, com o contexto todo. O que se decide fica no registro. */
+  if (hubRitmoAvisar || minUsado) cx.append(hubRitmoCaixa(ritmo, minUsado, meta));
   cx.append(hubModoControles(modosVistos, modoSugerido, diasProx));
-  /* (19.47.0) A FAIXA DO EQUILÍBRIO: fatia da prova × fatia do seu tempo (14 dias), as disciplinas mais desviadas */
+  /* (19.47.0) A FAIXA DO EQUILÍBRIO — (19.51.0) com o que ela quer dizer, e mais enxuta: as 3 mais atrasadas e a mais
+   * adiantada, nomes sem "Noções de", "vale X% · teve Y%", e o porquê num "?" que abre */
   equilibrios.forEach((q) => {
     const fora = q.eq.filter((x) => Math.abs(x.desvio) >= 5);
     if (!fora.length) return;
     const fx = document.createElement("div");
     fx.className = "hub-equil";
-    fx.title = t("hub_equil_tip");
     const rot = document.createElement("span");
     rot.className = "hub-equil-rot";
-    rot.textContent = t("hub_equil_rot") + (equilibrios.length > 1 ? " · " + q.nome : "");
+    rot.textContent = t("hub_equil_rot2") + (equilibrios.length > 1 ? " · " + q.nome : "");
     fx.append(rot);
-    fora.slice(0, 4).concat(fora.length > 4 ? [fora[fora.length - 1]] : []).forEach((x) => {
+    const atras = fora.filter((x) => x.desvio < 0).slice(0, 3);
+    const sobra = fora.filter((x) => x.desvio > 0).slice(-1);
+    atras.concat(sobra).forEach((x) => {
       const c = document.createElement("span");
       c.className = "hub-equil-c " + (x.desvio < 0 ? "hub-equil-atras" : "hub-equil-sobra");
-      c.textContent = t("hub_equil_item", { d: x.disciplina, p: x.prova, t: x.tempo });
+      c.textContent = t("hub_equil_item2", { d: hubDiscCurta(x.disciplina), p: x.prova, t: x.tempo });
+      c.title = t("hub_equil_item_tip", { d: x.disciplina, p: x.prova, t: x.tempo, m: horasTexto(x.min || 0) });
       fx.append(c);
     });
+    const det = document.createElement("details");
+    det.className = "hub-equil-aj";
+    const sm = document.createElement("summary");
+    sm.textContent = "?";
+    sm.title = t("hub_equil_tip");
+    const tx = document.createElement("p");
+    tx.textContent = t("hub_equil_explica");
+    det.append(sm, tx);
+    fx.append(det);
     cx.append(fx);
   });
 
@@ -496,7 +500,7 @@ function hubPintarAgenda() {
       mq.className = "ed-selo-modo";
       mq.textContent = t(i.ehRevisao ? "hub_modo_selo_rev" : "hub_modo_selo_curta", { m: t("hub_modo_" + i.modoRitmo) });
       mq.title = t("hub_modo_tip_" + i.modoRitmo);
-      (li.querySelector(".ed-item-porque") || alvo).append(mq);
+      hubSelosDe(li, alvo).append(mq);
     }
     /* (19.47.0) POR QUE AGORA: a disciplina está atrás do que vale na prova */
     if (i.equilibrio && i.equilibrio.desvio <= -10) {
@@ -505,7 +509,7 @@ function hubPintarAgenda() {
       q.textContent = t("hub_atraso_sinal", { p: i.equilibrio.prova, t: i.equilibrio.tempo });
       q.title = t("hub_atraso_tip", { d: i.disciplina, p: i.equilibrio.prova, t: i.equilibrio.tempo });
       /* na linha do motivo ("Português · peso 5 · …"): é a resposta a "por que este agora" */
-      (li.querySelector(".ed-item-porque") || alvo).append(q);
+      hubSelosDe(li, alvo).append(q);
     }
     li.append();
     cx.append(li);
@@ -618,6 +622,255 @@ function hubRitmoRealDefinir(sim) {
   try { localStorage.setItem(HUB_RITMO_REAL, sim ? "1" : "0"); } catch (e) {}
   try { reg("EDITAL", sim ? "agenda planejada com o ritmo real" : "agenda de volta às horas do edital", ""); } catch (e) {}
 }
+
+/* =====================================================================
+ * (19.51.0) O RITMO: CENÁRIOS, DECISÃO E O PEDIDO À IA
+ * ===================================================================== */
+let hubRitmoCtx = null;        /* {e, r, s, cfg, plano} do edital de prova mais próxima, da última pintura */
+const HUB_META = "eac_ag_meta_min";
+const HUB_RITMO_RECUSA = "eac_ag_ritmo_recusa";
+const HUB_RECUSA_DIAS = 14;
+function hubHoje() { return typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10); }
+function hubMetaMin() { try { const v = Number(localStorage.getItem(HUB_META)); return v > 0 ? Math.round(v) : 0; } catch (e) { return 0; } }
+function hubMetaDefinir(min) {
+  try { if (min > 0) localStorage.setItem(HUB_META, String(Math.round(min))); else localStorage.removeItem(HUB_META); } catch (e) {}
+  try { reg("EDITAL", min > 0 ? "agenda planejada com meta própria" : "meta própria desfeita", min > 0 ? horasTexto(min) + "/semana" : ""); } catch (e) {}
+}
+/* "manter as horas do edital": o aviso some por 14 dias — ou volta antes, se o ritmo cair mais de 10% */
+function hubRitmoRecusar(real) {
+  const d = new Date(hubHoje() + "T00:00:00"); d.setDate(d.getDate() + HUB_RECUSA_DIAS);
+  const ate = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  try { localStorage.setItem(HUB_RITMO_RECUSA, JSON.stringify({ ate, real })); } catch (e) {}
+  try { reg("EDITAL", "aviso de ritmo: manter as horas do edital", "ritmo " + horasTexto(real) + " · aviso volta em " + ate); } catch (e) {}
+}
+function hubRitmoRecusado(real) {
+  try {
+    const v = JSON.parse(localStorage.getItem(HUB_RITMO_RECUSA) || "null");
+    return !!(v && v.ate && hubHoje() < v.ate && real >= (Number(v.real) || 0) * 0.9);
+  } catch (e) { return false; }
+}
+/* "15 h", "10h30", "10,5", "7:30" → minutos (0 = não entendi) */
+function hubLerHoras(txt) {
+  const s0 = String(txt || "").trim().toLowerCase().replace(",", ".");
+  let m = s0.match(/^(\d{1,2})\s*(?:h|:)\s*(\d{1,2})?\s*(?:min)?$/);
+  if (m) return Number(m[1]) * 60 + (Number(m[2]) || 0);
+  m = s0.match(/^(\d{1,2}(?:\.\d+)?)\s*(?:h|horas?)?$/);
+  if (m) return Math.round(Number(m[1]) * 60);
+  return 0;
+}
+/* o que cabe até a prova com `min` minutos por semana: {pend, cabem, pesoPct} — tópicos ainda por estudar */
+function hubCenario(min, ctx) {
+  const c = ctx || hubRitmoCtx;
+  if (!c || !min) return null;
+  let p;
+  try { p = montarPlano(c.r, { horas: min / 60, prova: c.s.prova, feitos: c.e.progresso || {}, modos: hubModosLer() }); } catch (e) { return null; }
+  const pend = p.itens.filter((i) => !i.feito);
+  const dentro = new Set(p.fila.filter((i) => !i.ehRevisao).map((i) => i.chave));
+  const cabem = pend.filter((i) => dentro.has(i.chave));
+  const pesoT = pend.reduce((a, i) => a + (i.bruto || 0), 0) || 1;
+  return { min, pend: pend.length, cabem: cabem.length, pesoPct: Math.round(cabem.reduce((a, i) => a + (i.bruto || 0), 0) / pesoT * 100) };
+}
+function hubRitmoCaixa(ritmo, minUsado, meta) {
+  const av = document.createElement("div");
+  av.className = "hub-ritmo" + (minUsado ? " hub-ritmo-on" : "");
+  av.id = "hubRitmo";
+  const bt = (id, txt, tip, fn, cls) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = id; b.className = "btn-min" + (cls ? " " + cls : "");
+    b.textContent = txt; if (tip) b.title = tip; b.onclick = fn;
+    return b;
+  };
+  const tx = document.createElement("div");
+  tx.className = "hub-ritmo-tx";
+  const bts = document.createElement("div");
+  bts.className = "hub-ritmo-bts";
+  if (minUsado) {
+    const c = hubCenario(minUsado);
+    tx.textContent = t(meta ? "hub_meta_usando" : "hub_ritmo_usando", { r: horasTexto(minUsado) })
+      + (c ? " " + t("hub_ritmo_cabem", { c: c.cabem, n: c.pend, p: c.pesoPct }) : "");
+    bts.append(bt("btnHubRitmo", t("hub_ritmo_voltar"), t("hub_ritmo_tip"), () => { hubMetaDefinir(0); hubRitmoRealDefinir(false); hubPintarAgenda(); }));
+    bts.append(bt("btnHubRitmoMeta", t("hub_ritmo_outra"), t("hub_ritmo_outra_tip"), () => hubRitmoMetaInline(av, minUsado)));
+  } else {
+    const real = hubRitmoAvisar.real, plano = hubRitmoAvisar.plano;
+    const cr = hubCenario(real), cp = hubCenario(plano);
+    const igual = cr && cp && cr.cabem >= cp.cabem;
+    /* título, a medida e o impacto em duas linhas — o que cada escolha custa, antes de escolher */
+    const forte = document.createElement("b");
+    forte.textContent = t(igual ? "hub_ritmo_tit_ok" : "hub_ritmo_tit2");
+    const med = document.createElement("div");
+    med.textContent = t("hub_ritmo_linha", { n: hubRitmoReal().semanas, r: horasTexto(real), p: horasTexto(plano) });
+    tx.append(forte, med);
+    if (cr && cp) {
+      const prova = hubRitmoCtx && hubRitmoCtx.s && hubRitmoCtx.s.prova ? hubRitmoCtx.s.prova.split("-").reverse().slice(0, 2).join("/") : "";
+      if (igual) {
+        /* o ritmo real já comporta o mesmo que o plano: o aviso diz isso, em vez de soar como problema */
+        const d = document.createElement("div");
+        d.textContent = t("hub_ritmo_cabe_igual", { r: horasTexto(real), c: cr.cabem, n: cr.pend });
+        tx.append(d);
+      } else {
+        const im = document.createElement("div");
+        im.className = "hub-ritmo-imp";
+        im.textContent = t("hub_ritmo_impacto", { d: prova });
+        const ul = document.createElement("ul");
+        [[t("hub_ritmo_li_real", { r: horasTexto(real), c: cr.cabem, n: cr.pend, p: cr.pesoPct })],
+          [t("hub_ritmo_li_plano", { h: horasTexto(plano), c: cp.cabem, n: cp.pend, p: cp.pesoPct })]].forEach(([x]) => {
+          const li = document.createElement("li"); li.textContent = x; ul.append(li);
+        });
+        tx.append(im, ul);
+      }
+    }
+    bts.append(bt("btnHubRitmo", t("hub_ritmo_usar", { r: horasTexto(real) }), t("hub_ritmo_tip"), () => { hubRitmoRealDefinir(true); hubPintarAgenda(); }, "btn-min-ok"));
+    bts.append(bt("btnHubRitmoManter", t("hub_ritmo_manter", { p: horasTexto(plano) }), t("hub_ritmo_manter_tip", { d: HUB_RECUSA_DIAS }), () => {
+      hubRitmoRecusar(real);
+      try { toastMsg(t("hub_ritmo_manter_feito", { d: HUB_RECUSA_DIAS, l: horasTexto(Math.round(real * 0.9)) }), 6000); } catch (e) {}
+      hubPintarAgenda();
+    }));
+    bts.append(bt("btnHubRitmoMeta", t("hub_ritmo_outra"), t("hub_ritmo_outra_tip"), () => hubRitmoMetaInline(av, Math.round((real + plano) / 2 / 30) * 30)));
+  }
+  bts.append(bt("btnHubRitmoIA", t("hub_ritmo_ia"), t("hub_ritmo_ia_tip"), () => hubRitmoCopiarIA()));
+  av.append(tx, bts);
+  return av;
+}
+/* (19.51.0) "outra meta…" NA PRÓPRIA CAIXA: os botões viram  [−] 10h [+] /semana → cabem 11 de 14 (83%) [aplicar] [cancelar].
+ * Cada toque muda 30 min e a conta do que cabe refaz na hora; nada é aplicado sem "aplicar". */
+const HUB_META_PASSO = 30;
+function hubRitmoMetaInline(av, inicial) {
+  const bts = av && av.querySelector ? av.querySelector(".hub-ritmo-bts") : null;
+  if (!bts) return hubRitmoOutraMeta();
+  let min = Math.max(60, Math.min(100 * 60, Math.round((inicial || 600) / HUB_META_PASSO) * HUB_META_PASSO));
+  bts.innerHTML = "";
+  bts.className = "hub-ritmo-bts hub-meta-inline";
+  const b = (id, txt, fn, cls) => { const x = document.createElement("button"); x.type = "button"; x.id = id; x.className = "btn-min" + (cls ? " " + cls : ""); x.textContent = txt; x.onclick = fn; return x; };
+  const val = document.createElement("span");
+  val.className = "hub-meta-val";
+  val.id = "hubMetaVal";
+  const res = document.createElement("span");
+  res.className = "hub-meta-res";
+  res.id = "hubMetaRes";
+  const pintar = () => {
+    val.textContent = t("hub_meta_valor", { h: horasTexto(min) });
+    const c = hubCenario(min);
+    res.textContent = c ? t("hub_meta_res", { c: c.cabem, n: c.pend, p: c.pesoPct }) : "";
+  };
+  const mudar = (d) => { min = Math.max(60, Math.min(100 * 60, min + d)); pintar(); };
+  bts.append(b("btnHubMetaMenos", "−", () => mudar(-HUB_META_PASSO)), val, b("btnHubMetaMais", "+", () => mudar(HUB_META_PASSO)), res,
+    b("btnHubMetaAplicar", t("hub_meta_aplicar"), () => { hubMetaDefinir(min); hubPintarAgenda(); }, "btn-min-ok"),
+    b("btnHubMetaCancelar", t("cancel_btn"), () => hubPintarAgenda()));
+  pintar();
+  return true;
+}
+/* o que está decidido sobre o ritmo, numa frase — para o raio-X explicar as horas do plano */
+function hubRitmoDecisaoTexto() {
+  const meta = hubMetaMin();
+  if (meta) return t("hub_dec_meta", { h: horasTexto(meta) });
+  if (hubRitmoRealLigado()) return t("hub_dec_real", { h: horasTexto(hubRitmoReal().min) });
+  try {
+    const v = JSON.parse(localStorage.getItem(HUB_RITMO_RECUSA) || "null");
+    if (v && v.ate && hubHoje() < v.ate) return t("hub_dec_mantido", { r: horasTexto(Number(v.real) || 0), d: v.ate.split("-").reverse().join("/") });
+  } catch (e) {}
+  return "";
+}
+/* "outra meta…" pela janela de texto (a caixa sem a fileira de botões, ou quem chamar direto) */
+async function hubRitmoOutraMeta() {
+  const v = await uiTexto(t("hub_meta_pergunta"), "");
+  if (v === null || v === undefined) return false;
+  const min = hubLerHoras(v);
+  if (!min || min < 60 || min > 100 * 60) { try { uiAlert(t("hub_meta_invalida")); } catch (e) {} return false; }
+  const c = hubCenario(min);
+  const ok = await uiConfirm(c ? t("hub_meta_conf", { h: horasTexto(min), c: c.cabem, n: c.pend, p: c.pesoPct }) : t("hub_meta_conf_sem", { h: horasTexto(min) }));
+  if (!ok) return false;
+  hubMetaDefinir(min);
+  hubPintarAgenda();
+  return true;
+}
+/* o pedido à IA: o contexto inteiro e a pergunta fechada, num texto para colar */
+function hubRitmoPromptIA(ctx) {
+  const c = ctx || hubRitmoCtx;
+  if (!c) return "";
+  const L = [];
+  const ritmo = hubRitmoReal();
+  const plano = c.plano;
+  const planoMin = (c.cfg.horas || 10) * 60;
+  L.push(t("hub_ia_cab"));
+  L.push("");
+  L.push("== " + t("hub_ia_contexto") + " ==");
+  L.push(t("hub_ia_concurso", { c: c.e.nome || c.cfg.concurso || "?", p: c.s.prova || "?", d: c.s.dias == null ? "?" : c.s.dias }));
+  L.push(t("hub_ia_horas", { p: horasTexto(planoMin), r: horasTexto(ritmo.min), n: ritmo.semanas }));
+  const sem = hubRitmoSemanas(6);
+  if (sem.length) L.push(t("hub_ia_semanas") + " " + sem.map((x) => x.ini.split("-").reverse().slice(0, 2).join("/") + ": " + horasTexto(x.min)).join(" · "));
+  const modos = plano.modos || {};
+  L.push(t("hub_ia_modo", { m: plano.modoSugerido || "?" }));
+  L.push("");
+  L.push("== " + t("hub_ia_disc") + " ==");
+  L.push(t("hub_ia_disc_cab"));
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  const banco = (typeof qsBanco !== "undefined" && qsBanco) || [];
+  let sinais = [];
+  try { sinais = typeof plSinais === "function" ? plSinais(plano, diario, banco) : []; } catch (e) { sinais = []; }
+  const eq = {};
+  (plano.equilibrio || []).forEach((x) => { eq[x.disciplina] = x; });
+  const discs = Object.keys(plano.fatia || {}).sort((a, b) => (plano.fatia[b] || 0) - (plano.fatia[a] || 0));
+  discs.forEach((d) => {
+    const its = plano.itens.filter((i) => i.disciplina === d);
+    const sg = sinais.find((x) => x.disciplina === d) || {};
+    const q = eq[d] || {};
+    L.push([d, (plano.fatia[d] || 0) + "%", (q.tempo || 0) + "% (" + horasTexto(q.min || 0) + ")",
+      sg.pct == null ? "-" : sg.pct + "% (" + sg.qFeitas + " q)",
+      its.filter((i) => i.feito).length + "/" + its.length,
+      its.filter((i) => !i.feito && i.ramos && i.ramos.length && (i.ramosFeitos || 0) > 0).length,
+      (modos[d] && modos[d].modo) || "-"].join(" | "));
+  });
+  L.push("");
+  L.push("== " + t("hub_ia_cenarios") + " ==");
+  const mid = Math.round((ritmo.min + planoMin) / 2 / 30) * 30;
+  [[t("hub_ia_cen_real"), ritmo.min], [t("hub_ia_cen_meio"), mid], [t("hub_ia_cen_plano"), planoMin]].forEach(([n, m]) => {
+    const cc = m ? hubCenario(m, c) : null;
+    if (cc) L.push(t("hub_ia_cen_linha", { n, h: horasTexto(m), c: cc.cabem, t: cc.pend, p: cc.pesoPct }));
+  });
+  L.push("");
+  L.push("== " + t("hub_ia_pergunta_tit") + " ==");
+  L.push(t("hub_ia_pergunta"));
+  L.push("");
+  L.push("== " + t("hub_ia_diretrizes_tit") + " ==");
+  L.push(t("hub_ia_diretrizes"));
+  L.push("");
+  L.push(t("hub_ia_formato"));
+  return L.join("\n");
+}
+/* as últimas `n` semanas fechadas com o total de minutos (para a IA ver a tendência, não só a média) */
+function hubRitmoSemanas(n) {
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  const porSemana = {};
+  diario.forEach((x) => {
+    if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
+    const k = edSemanaCalendario(x.d).ini;
+    porSemana[k] = (porSemana[k] || 0) + (Number(x.m) || 0);
+  });
+  const atual = edSemanaCalendario(hubHoje()).ini;
+  return Object.keys(porSemana).filter((k) => k < atual).sort().slice(-(n || 6)).map((k) => ({ ini: k, min: porSemana[k] }));
+}
+function hubRitmoCopiarIA() {
+  const txt = hubRitmoPromptIA();
+  if (!txt) return "";
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(() => {}); } catch (e) {}
+  try { toastMsg(t("hub_ia_copiado"), 6000); } catch (e) {}
+  try { reg("EDITAL", "pedido de opinião sobre o ritmo copiado para a IA", txt.length + " caracteres"); } catch (e) {}
+  return txt;
+}
+/* (19.51.0) os selos do modo e do atraso numa fileira PRÓPRIA, embaixo do motivo: na linha do motivo eles empurravam
+ * o texto para baixo dos botões e repetiam o "vale X% da prova" que o motivo já diz */
+function hubSelosDe(li, alvo) {
+  let f = li.querySelector(".ed-item-selos");
+  if (f) return f;
+  f = document.createElement("div");
+  f.className = "ed-item-selos";
+  const pq = li.querySelector(".ed-item-porque");
+  if (pq && pq.parentNode) pq.parentNode.insertBefore(f, pq.nextSibling);
+  else (alvo || li).append(f);
+  return f;
+}
+/* "Noções de Direito Administrativo" → "Direito Administrativo" (o nome inteiro fica na dica) */
+function hubDiscCurta(d) { return String(d || "").replace(/^no[çc][õo]es\s+(?:b[áa]sicas\s+)?de\s+/i, "").replace(/^no[çc][õo]es\s+/i, ""); }
 
 /* a ordem das linhas da agenda: em andamento → posição no rodízio (dividida pela urgência) → peso. (19.47.0) A revisão
  * já vem na frente DENTRO da disciplina dela (montarPlano); passá-la à frente de tudo aqui desfazia o rodízio. */

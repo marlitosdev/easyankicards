@@ -302,6 +302,8 @@ function plRelatorio(plano, r, diario, banco, cfg) {
   L.push("topicos: " + plano.total + " | estudados: " + plano.feitos
     + (parciais ? " | com ramos comecados: " + parciais : "")
     + " | nao cabem: " + (plano.fora || []).length);
+  /* (19.51.0) a decisão sobre o ritmo (meta própria, ritmo real, ou "manter" o edital) explica as horas acima */
+  try { const dr = typeof hubRitmoDecisaoTexto === "function" ? hubRitmoDecisaoTexto() : ""; if (dr) L.push("ritmo: " + dr); } catch (e) {}
   L.push("fatia da prova: " + (plano.fatiaExata
     ? "EXATA (numeros do edital)" : "ESTIMADA (peso 1-5)"));
   L.push("");

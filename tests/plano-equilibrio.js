@@ -112,8 +112,36 @@ async function testes() {
     ok(!api.hubModosLer().disc["Português"], "M11 'como o geral' tira o modo proprio da disciplina");
   }
 
+  /* ---- R (19.51.0): o aviso de ritmo — cenários, manter, outra meta e o pedido à IA ---- */
+  {
+    ok(api.hubLerHoras("10") === 600 && api.hubLerHoras("10h30") === 630 && api.hubLerHoras("7,5") === 450 && api.hubLerHoras("7:30") === 450 && api.hubLerHoras("abc") === 0,
+      "R1 as horas digitadas sao lidas em varios formatos");
+    const e = { id: "e1", nome: "Teste", progresso: {} };
+    const ctx = { e, r, s: { prova: "2026-11-29", dias: 30 }, cfg: r.cfg || {}, plano: api.montarPlano(r, Object.assign({}, base, { tempoRecente: so, modos: { geral: "auto", disc: {} } })) };
+    const c1 = api.hubCenario(60, ctx), c25 = api.hubCenario(25 * 60, ctx);
+    ok(c1 && c25 && c1.pend === c25.pend && c1.cabem < c25.cabem && c25.pesoPct >= c1.pesoPct, "R2 com menos horas cabem menos topicos: " + JSON.stringify([c1, c25]));
+    api.hubRitmoRecusar(460);
+    ok(api.hubRitmoRecusado(460) === true && api.hubRitmoRecusado(300) === false, "R3 'manter' cala o aviso, mas ele volta se o ritmo cair mais de 10%");
+    api.hubMetaDefinir(600);
+    ok(api.hubMetaMin() === 600, "R4 a meta propria fica guardada");
+    api.hubMetaDefinir(0);
+    ok(api.hubMetaMin() === 0, "R4b e sai com 'voltar as horas do edital'");
+    const pr = api.hubRitmoPromptIA(ctx);
+    ok(/Horas recomendadas: X h\/semana/.test(pr) && /Português/.test(pr) && /Tributário/.test(pr) && /cabem \d+ de \d+ tópicos/.test(pr) && /faltam 30 dias/.test(pr) && /Justifique/.test(pr),
+      "R5 o pedido a IA traz contexto, disciplinas, cenarios, a pergunta e o formato da resposta");
+    ok(api.hubDiscCurta("Noções de Direito Administrativo") === "Direito Administrativo" && api.hubDiscCurta("Português") === "Português", "R6 nomes curtos na faixa do equilibrio");
+    ok(/DIRETRIZES/.test(pr) && /custo × benefício/.test(pr) && /não invente/.test(pr), "R7 o pedido a IA traz as diretrizes (realista, custo x beneficio, sem inventar)");
+    api.hubMetaDefinir(600);
+    ok(/meta escolhida por você: 10h/.test(api.hubRitmoDecisaoTexto()), "R8 o raio-X sabe explicar a meta propria: " + api.hubRitmoDecisaoTexto());
+    api.hubMetaDefinir(0);
+    api.hubRitmoRecusar(460);
+    ok(/horas do edital mantidas por você até/.test(api.hubRitmoDecisaoTexto()), "R9 e o 'manter': " + api.hubRitmoDecisaoTexto());
+    const rel2 = api.plRelatorio(p1, r, [], [], { concurso: "Teste" });
+    ok(/ritmo: horas do edital mantidas/.test(rel2), "R10 o raio-X traz a decisao de ritmo");
+  }
+
   /* textos */
-  ["hub_modo_rot", "hub_modo_auto", "hub_modo_avancar", "hub_modo_equilibrado", "hub_modo_consolidar", "hub_modo_tip_avancar", "hub_modo_tip_equilibrado", "hub_modo_tip_consolidar", "hub_modo_por_disc", "hub_modo_como_geral", "hub_modo_auto_d", "hub_modo_faixa_avancar", "hub_modo_faixa_equilibrado", "hub_modo_faixa_consolidar", "hub_modo_selo_rev", "hub_modo_selo_curta", "hub_ritmo_aviso", "hub_ritmo_usar", "hub_ritmo_usando", "hub_ritmo_voltar", "hub_ritmo_tip", "hub_equil_rot", "hub_equil_item", "hub_equil_tip", "hub_atraso_sinal", "hub_atraso_tip"].forEach((k) => {
+  ["hub_ritmo_tit", "hub_ritmo_cenarios", "hub_ritmo_manter", "hub_ritmo_outra", "hub_ritmo_ia", "hub_meta_pergunta", "hub_meta_conf", "hub_equil_rot2", "hub_equil_item2", "hub_equil_explica", "hub_ia_cab", "hub_ia_pergunta", "hub_ia_formato", "hub_ia_copiado", "hub_modo_rot", "hub_modo_auto", "hub_modo_avancar", "hub_modo_equilibrado", "hub_modo_consolidar", "hub_modo_tip_avancar", "hub_modo_tip_equilibrado", "hub_modo_tip_consolidar", "hub_modo_por_disc", "hub_modo_como_geral", "hub_modo_auto_d", "hub_modo_faixa_avancar", "hub_modo_faixa_equilibrado", "hub_modo_faixa_consolidar", "hub_modo_selo_rev", "hub_modo_selo_curta", "hub_ritmo_aviso", "hub_ritmo_usar", "hub_ritmo_usando", "hub_ritmo_voltar", "hub_ritmo_tip", "hub_equil_rot", "hub_equil_item", "hub_equil_tip", "hub_atraso_sinal", "hub_atraso_tip"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");
