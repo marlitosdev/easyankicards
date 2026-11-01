@@ -194,8 +194,64 @@ async function testes() {
     ok(api.edConfPendencias(api.lerEdital(A), null, "mx").indexOf("discursiva") < 0, "M10 'não tem discursiva' tira o item");
   }
 
+  /* ---- (19.58.0) X: o texto colado da TELA do chat e o mínimo na linha "@" são consertados ---- */
+  {
+    const tela = [
+      "ISS X Auditor | prova: 2030-11-29 | horas: 27",
+      "discursiva | pontos: 40 | objetiva: 90 | disciplinas: Tributário",
+      "& Conhecimentos Específicos | minimo: 30 @ Tributário :: 8q", "",
+      "* Princípios :: 5 :: tema basilar !d ++ Legalidade :: 5 :: exceções !d ++ Anterioridade :: 5 :: regras !d", "",
+      "* Lançamento :: 5 :: núcleo !d @ Administrativo :: 4q", "",
+      "* Atos :: 5 :: central !d & Conhecimentos Básicos @ Português :: 10q | minimo: 10", "",
+      "* Crase :: 5 :: clássico @ Lógica :: 5q | minimo: 2", "",
+      "* Tautologias :: 2 :: P & Q e contingências @ Redação :: 3q", "",
+      "* Coesão :: 3 :: P&D na prática",
+    ].join("\n");
+    ok(api.lerEdital(tela).disciplinas.length === 0, "X0 como veio da tela, o leitor não acha nada (o motivo do conserto)");
+    const c = api.edConsertarColagem(tela);
+    const r = api.lerEdital(c.texto);
+    const D = (n) => r.disciplinas.find((d) => d.nome === n);
+    const B = (n) => (r.blocos || []).find((b) => b.nome === n);
+    ok(c.mudou && r.cfg.prova === "2030-11-29" && r.cfg.horas === 27 && r.cfg.discursiva && r.cfg.discursiva.pontos === 40, "X1 o cabeçalho e a discursiva voltam com o '#'");
+    ok(r.disciplinas.length === 5 && D("Tributário").topicos.length === 2 && D("Tributário").topicos[0].ramos.length === 2, "X2 disciplinas, tópicos e ramos separados: " + c.texto);
+    ok(D("Português").abs === 10 && B("Português") && B("Português").minimo.valor === 10 && B("Lógica").minimo.valor === 2, "X3 o mínimo na linha '@' vira bloco próprio e o 10q não se perde");
+    ok(B("Conhecimentos Específicos").minimo.valor === 30 && B("Conhecimentos Específicos").disciplinas.join() === "Tributário,Administrativo", "X4 o bloco das específicas fica com as dele");
+    ok(B("Conhecimentos Básicos") && B("Conhecimentos Básicos").disciplinas.join() === "Redação", "X5 a disciplina sem mínimo continua no bloco de antes (os de mínimo próprio vão para o fim)");
+    ok(/P & Q e contingências/.test(c.texto) && /P&D na prática/.test(c.texto), "X6 '&' dentro de um motivo não vira bloco");
+    ok(!api.edConsertarColagem(c.texto).mudou, "X7 consertar de novo não muda nada");
+    const certo = ["# A | prova: 2030-01-01 | horas: 5", "& B | minimo: 50%", "@ A :: 3", "+ t :: 3 :: x * y", "++ r :: 2"].join("\n");
+    ok(!api.edConsertarColagem(certo).mudou, "X8 um plano já certo volta igual");
+    ok(/Português, Lógica/.test(api.edConsertoTexto(c)) && api.edConsertoTexto({ mudou: false }) === "", "X9 o aviso diz o que foi feito");
+    /* na caixa: colar conserta e avisa */
+    api.$("edColarTexto").value = tela;
+    api.edConferirColagem();
+    ok(/^# ISS X/.test(api.$("edColarTexto").value), "X10 a caixa da revisão é consertada ao colar");
+  }
+
+  /* ---- (19.58.0) W: o mínimo na linha "@" já gravado no edital — o aviso de "pesos estimados" não pode ficar preso ---- */
+  {
+    const T = ["# W | prova: 2030-11-29 | horas: 20", "& Específicos | minimo: 30", "@ Tributário :: 8q", "+ a :: 5",
+      "& Básicos", "@ Português :: 10q | minimo: 10", "+ b :: 5", "@ Lógica :: 5q | minimo: 2", "+ c :: 5", "@ Redação :: 3q", "+ d :: 3"].join("\n");
+    const r = api.lerEdital(T);
+    const D = (n) => r.disciplinas.find((d) => d.nome === n);
+    const B = (n) => (r.blocos || []).find((b) => b.nome === n);
+    ok(D("Português").abs === 10 && D("Lógica").abs === 5, "W1 o 10q não se perde com '| minimo' na mesma linha");
+    ok(B("Português") && B("Português").minimo.valor === 10 && B("Lógica").minimo.valor === 2, "W2 o mínimo da linha é o mínimo dela");
+    ok(B("Básicos").disciplinas.join() === "Redação" && D("Redação").bloco === "Básicos", "W3 a seguinte sem mínimo continua no bloco de antes");
+    const pl = api.montarPlano(r, { hoje: "2030-01-01" });
+    ok(pl.fatiaExata && api.edConfPendencias(r, pl, "w1").indexOf("pesos") < 0, "W4 com todos os números, o aviso de pesos sai");
+    const e = api.epEstado(T);
+    ok(e.ds.find((d) => d.nome === "Português").min.valor === 10 && e.ds.find((d) => d.nome === "Português").abs === 10, "W5 a janela de pontuação lê o mínimo e o número");
+    const nv = api.epNovoTexto(T, e);
+    ok(!/\| *minimo/i.test(nv.split("\n").filter((l) => /^@/.test(l)).join("\n")) && /& Português \| minimo: 10/.test(nv), "W6 gravar pela janela tira o '| minimo' da linha '@' e escreve o bloco: " + nv);
+    const r2 = api.lerEdital(T.replace("@ Redação :: 3q", "@ Redação :: 3"));
+    const cx = api.edConferenciaEdital(r2, api.montarPlano(r2, { hoje: "2030-01-01" }), "w2");
+    const txt = cx ? cx.textContent : "";
+    ok(/Ainda sem o número do edital \(1\): Redação/.test(txt), "W7 o aviso diz qual disciplina falta: " + txt.slice(0, 200));
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

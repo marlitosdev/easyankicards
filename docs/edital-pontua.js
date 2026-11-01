@@ -312,6 +312,8 @@ function epNovoTexto(texto, c) {
     if (atual) atual.linhas.push(ln); else pre.push(ln);
   });
   const nomeDe = (ln) => { const m = ln.match(/^\s*@\s*(.+?)\s*(?:::|$)/); return m ? m[1].trim() : ""; };
+  /* (19.58.0) "| minimo:" na linha "@" sai: o mínimo é escrito abaixo, num bloco "&" só dela */
+  blocos.forEach((b) => { b.linhas[0] = b.linhas[0].replace(/\s*\|\s*m[íi]nimo\s*:\s*[^|]*/i, ""); });
   blocos.forEach((b) => { b.nome = nomeDe(b.linhas[0]); b.d = c.ds.find((d) => d.nome === b.nome) || null; });
   /* o peso: "10q"/"20p" quando o edital diz; senão, o que já estava */
   blocos.forEach((b) => {

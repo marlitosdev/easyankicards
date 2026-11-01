@@ -627,8 +627,14 @@ function lerEdital(raw) {
       /* "@ Língua Estrangeira Espanhol :: 2 | escolha: Língua Estrangeira" — a MESMA chave em duas ou mais disciplinas é um
        * grupo de escolha ("escolha 1 de N"). Só se separa o sufixo quando é de fato "escolha:": qualquer outra barra vertical
        * continua sendo lida como sempre foi. */
-      const mesc = md[1].match(/\s*\|\s*escolha\s*:\s*([^|]*)$/i);
-      const corpoD = mesc ? md[1].slice(0, mesc.index) : md[1];
+      /* (19.58.0) "@ Português :: 10q | minimo: 10" — o mínimo na linha da disciplina. Antes, o "| minimo" grudava no peso e
+       * o 10q se perdia (e com ele a fatia exata: o aviso de "pesos estimados" não saía nunca). Agora é o mínimo DELA, igual
+       * a um bloco só dela, sem tirar as disciplinas seguintes do bloco em que estão. */
+      let corpoLinha = md[1], minDaLinha = null;
+      const mmin = corpoLinha.match(/\s*\|\s*m[íi]nimo\s*:\s*([^|]*)/i);
+      if (mmin) { minDaLinha = edMinimo(mmin[1].trim()); corpoLinha = corpoLinha.slice(0, mmin.index) + corpoLinha.slice(mmin.index + mmin[0].length); }
+      const mesc = corpoLinha.match(/\s*\|\s*escolha\s*:\s*([^|]*)$/i);
+      const corpoD = mesc ? corpoLinha.slice(0, mesc.index) : corpoLinha;
       const p = edPartes(corpoD);
       const { peso, abs, unidade } = edPeso(p[1], achados, n);
       /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
@@ -639,7 +645,10 @@ function lerEdital(raw) {
                 /* o número real do edital, quando ele foi escrito */
                 abs: abs || null, unidade: unidade || "",
                 bloco: blocoAtual ? blocoAtual.nome : "" };
-      if (blocoAtual) blocoAtual.disciplinas.push(p[0]);
+      if (minDaLinha && p[0]) {
+        atual.bloco = p[0];
+        blocos.push({ nome: p[0], minimo: minDaLinha, linha: n, disciplinas: [p[0]], daLinha: true });
+      } else if (blocoAtual) blocoAtual.disciplinas.push(p[0]);
       if (!p[0]) achados.push({ linha: n, tipo: "disciplina_sem_nome", txt: s });
       if (edNomeDeModelo(p[0])) achados.push({ linha: n, tipo: "nome_de_modelo", txt: p[0] });
       if (disciplinas.some((d) => d.nome.toLowerCase() === p[0].toLowerCase()))
@@ -3361,6 +3370,114 @@ function edHerdeirosDe(nomeAntigo, candidatos) {
    * pista, e a tela diz "provavelmente". */
   const melhor = achados.length ? achados[0].forca : 0;
   return achados.filter((x) => x.forca >= melhor - 0.4).slice(0, 3);
+}
+
+/* =====================================================================
+ * (19.58.0) CONSERTAR O TEXTO COLADO
+ *
+ * Dois jeitos de a resposta da IA chegar quebrada, os dois vistos no uso real:
+ *  1. COPIADA DA TELA, não do texto: o chat desenha "#" como título (o sinal some), "+" como marcador ("* "), e as
+ *     linhas "++", "@" e "&" grudam no fim da anterior. Lido assim, vira zero disciplinas.
+ *  2. O MÍNIMO NA LINHA DA DISCIPLINA ("@ Português :: 10q | minimo: 10"): o app não lê — e perde até o "10q". O jeito
+ *     certo é um bloco só dela ("& Português | minimo: 10"), que vai para o fim (senão as disciplinas seguintes cairiam
+ *     dentro dele).
+ * Só mexe no que reconhece; um texto já certo volta igual (a função é idempotente).
+ * ===================================================================== */
+function edConsertarColagem(txt) {
+  const orig = String(txt || "");
+  const out = { texto: orig, mudou: false, linhas: 0, cabecalho: 0, topicos: 0, minimos: [] };
+  if (!orig.trim()) return out;
+  let L = orig.replace(/\r\n?/g, "\n").split("\n");
+  const temMais = L.some((l) => /^\s*\+/.test(l));
+  const renderizado = !temMais && L.some((l) => /^\s*[*•\-]\s+\S[^\n]*::/.test(l) || /\s(?:@|\+\+)\s+[^:\n]+::/.test(l));
+  if (renderizado) {
+    const N = [];
+    /* separa "x @ Disc :: 4q" e "x ++ Ramo :: 5" e "x & Bloco | minimo: 30" — só quando o pedaço tem a cara da linha */
+    const separar = (linha, re, cara) => {
+      const pcs = linha.split(re), r = [];
+      pcs.forEach((pc, i) => { if (i > 0 && cara(pc, r[r.length - 1])) r.push(pc); else if (r.length) r[r.length - 1] += " " + pc; else r.push(pc); });
+      return r;
+    };
+    /* "& Conhecimentos Básicos" é bloco; "P & Q", "P & D" dentro de um motivo não (letra solta de um lado ou do outro) */
+    const ehBloco = (pc, antes) => /^&\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ]{2,}/.test(pc) && !/(?:^|\s)[A-Za-z]$/.test(antes || "")
+      && !/::/.test(pc.replace(/\s@\s[\s\S]*$/, ""));
+    L.forEach((l0) => {
+      let l = l0.replace(/\*\*/g, "");
+      let pcs = separar(l, /\s+(?=@\s)/, (pc) => /^@\s+[^:]+::/.test(pc));
+      pcs = [].concat(...pcs.map((x) => separar(x, /\s+(?=&\s)/, ehBloco)));
+      pcs = [].concat(...pcs.map((x) => separar(x, /\s+(?=\+\+\s)/, (pc) => /^\+\+\s+[^:]+::/.test(pc))));
+      out.linhas += pcs.length - 1;
+      pcs.forEach((pc) => {
+        if (/^\s*[*•\-]\s+\S/.test(pc)) { out.topicos++; pc = pc.replace(/^\s*[*•\-]\s+/, "+ "); }
+        N.push(pc.replace(/\s+$/, ""));
+      });
+    });
+    /* as linhas em branco entre tópicos eram só o espaçamento da tela */
+    L = N.filter((l, i) => l.trim() || (N[i + 1] !== undefined && /^\s*[#@&]/.test(N[i + 1])));
+  }
+  /* o cabeçalho sem "#": a primeira linha com "| prova:"/"| horas:", a "discursiva |" e a "fase 2:" */
+  if (!L.some((l) => /^\s*#/.test(l))) {
+    let cab = false;
+    L = L.map((l) => {
+      if (!cab && /^[^@&+\s][^\n]*\|\s*(?:prova|previsto|horas)\s*:/i.test(l)) { cab = true; out.cabecalho++; return "# " + l.trim(); }
+      if (/^\s*(?:discursiva\s*\||fase\s*2\s*:)/i.test(l)) { out.cabecalho++; return "# " + l.trim(); }
+      return l;
+    });
+  }
+  /* o mínimo na linha "@": vira um bloco só da disciplina, no fim */
+  const pre = [], itens = [];
+  let atual = null;
+  L.forEach((l) => {
+    if (/^\s*&/.test(l)) { atual = null; itens.push({ amp: true, linhas: [l] }); return; }
+    if (/^\s*@/.test(l)) { atual = { linhas: [l] }; itens.push(atual); return; }
+    if (atual) atual.linhas.push(l);
+    else if (itens.length) itens[itens.length - 1].linhas.push(l);
+    else pre.push(l);
+  });
+  const movidos = [];
+  itens.forEach((it) => {
+    if (it.amp) return;
+    const m = it.linhas[0].match(/^(\s*@[^|]*?)\s*\|\s*m[ií]nimo\s*:\s*([^|]+?)\s*(\|.*)?$/i);
+    if (!m) return;
+    it.linhas[0] = m[1] + (m[3] ? " " + m[3].trim() : "");
+    it.movido = true;
+    const nome = (m[1].match(/^\s*@\s*(.+?)\s*(?:::|$)/) || [])[1] || "";
+    movidos.push({ it, nome, min: m[2].trim() });
+    out.minimos.push(nome);
+  });
+  if (movidos.length) {
+    const fica = itens.filter((it) => !it.movido);
+    /* um "&" que perdeu todas as disciplinas sai junto */
+    const res = [];
+    fica.forEach((it, i) => {
+      if (it.amp) {
+        let k = i + 1, tem = false;
+        while (k < fica.length && !fica[k].amp) { tem = true; k++; }
+        if (!tem) return;
+      }
+      res.push(...it.linhas);
+    });
+    movidos.forEach((x) => {
+      while (res.length && !res[res.length - 1].trim()) res.pop();
+      res.push("& " + x.nome + " | minimo: " + x.min, ...x.it.linhas);
+    });
+    L = pre.concat(res);
+  }
+  const texto = L.join("\n").replace(/\n{3,}/g, "\n\n");
+  out.mudou = texto !== orig.replace(/\r\n?/g, "\n");
+  out.texto = out.mudou ? texto : orig;
+  return out;
+}
+
+/* a frase do que foi consertado (para o aviso); "" quando nada mudou */
+function edConsertoTexto(c) {
+  if (!c || !c.mudou) return "";
+  const p = [];
+  if (c.linhas) p.push(t("ed_conserto_linhas", { n: c.linhas }));
+  if (c.topicos) p.push(t("ed_conserto_topicos", { n: c.topicos }));
+  if (c.cabecalho) p.push(t("ed_conserto_cab"));
+  if (c.minimos.length) p.push(t("ed_conserto_min", { d: c.minimos.join(", ") }));
+  return t("ed_conserto_feito", { l: p.join("; ") });
 }
 
 function edCompararColagem(txtAntes, txtDepois, progresso) {

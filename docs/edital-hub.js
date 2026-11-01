@@ -2417,6 +2417,8 @@ function hubIniciar() {
   const pl = document.getElementById("edNovoPlano");
   if (pl) {
     pl.oninput = () => {
+      /* (19.58.0) o texto copiado da tela do chat (e o mínimo na linha "@") é consertado aqui mesmo, com aviso */
+      if (typeof edConsertarCaixa === "function") edConsertarCaixa(pl);
       const c = document.getElementById("edNovoConf");
       if (!c) return;
       const est = hubNovoPintar();

@@ -1159,7 +1159,7 @@ function rodar(opc) {
     matSelGuardadaTeste: () => matSelGuardada,
     matTextoAtual: () => $("matTexto").value,
     uiModalResponder: (v) => { if (_uiResolve) { const r = _uiResolve; _uiResolve = null; r(v); } else if (typeof edMudResolver !== "undefined" && edMudResolver) edMudancasFechar(v); },
-    edMudancasRevisao, edMudancasFechar,
+    edMudancasRevisao, edMudancasFechar, edConsertarColagem, edConsertoTexto, edConsertarCaixa,
     /* "esta perguntando alguma coisa agora?" — sem isto nao da para
      * exigir que uma acao NAO pergunte, so que ela pergunte. */
     uiPerguntando: () => !!_uiResolve,

@@ -1445,7 +1445,8 @@ async function edColarNoEditor(ev) {
   if (!txt || !ed.value.trim()) return false;
   const linhas = txt.split(/\r?\n/).filter((l) => l.trim()).length;
   if (linhas < 6) return false;
-  const lido = lerEdital(txt);
+  /* (19.58.0) copiado da tela do chat também é a resposta da IA */
+  const lido = lerEdital(typeof edConsertarColagem === "function" ? edConsertarColagem(txt).texto : txt);
   if (!lido.disciplinas.length) return false;
   ev.preventDefault();
   if (await uiConfirm(t("ed_colar_desvio", { d: lido.disciplinas.length, l: linhas }))) {
@@ -4000,6 +4001,11 @@ function edConferenciaEdital(r, plano, id) {
     it.id = "edConf_" + item;
     it.append(el("div", "ed-conf-nome", "☐ " + t("ed_conf_" + item + "_tit")));
     it.append(el("p", "ed-conf-pq", t("ed_conf_" + item + "_pq")));
+    /* (19.58.0) "pesos estimados" diz QUAIS disciplinas ainda estão sem o número do edital: basta uma para o aviso ficar */
+    if (item === "pesos") {
+      const falta = ((r && r.disciplinas) || []).filter((d) => !d.inativa && !(d.abs > 0)).map((d) => d.nome);
+      if (falta.length) { const pf = el("p", "ed-conf-falta", t("ed_conf_pesos_faltam", { n: falta.length, l: falta.join(", ") })); pf.id = "edConfPesosFaltam"; it.append(pf); }
+    }
     const det = el("details", "ed-conf-como");
     det.append(el("summary", "", t("ed_conf_como")));
     det.append(el("p", "nota", t("ed_conf_" + item + "_como")));
@@ -4594,7 +4600,20 @@ async function edLoteAplicar(marcar) {
  * tópicos antes e depois é comparado, porque a IA resumir um edital de 231
  * linhas é exatamente o que ela faz quando o pedido é longo.
  * ------------------------------------------------------------------ */
+/* (19.58.0) conserta a caixa ANTES de conferir: texto copiado da tela do chat e mínimo na linha "@". Avisa o que fez. */
+function edConsertarCaixa(ta) {
+  if (!ta || typeof edConsertarColagem !== "function") return null;
+  const c = edConsertarColagem(ta.value);
+  if (!c.mudou) return null;
+  ta.value = c.texto;
+  const msg = edConsertoTexto(c);
+  try { toastMsg(msg, 7000); } catch (e) {}
+  try { reg("EDITAL-COLAR", "texto colado consertado", msg); } catch (e) {}
+  return c;
+}
+
 function edConferirColagem() {
+  edConsertarCaixa($("edColarTexto"));
   edColarSemaforo();
   const novoTxt = $("edColarTexto").value;
   const av = $("edColarAviso");
