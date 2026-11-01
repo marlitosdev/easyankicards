@@ -2681,7 +2681,8 @@ function citConfirmarNaTela(trecho, msgOk) {
     const naTela = ["matLeitura", "leiLeitura", "qsSessCorpo", "estCartao", "gerPrevia"].some((id) => $(id) && norm($(id).textContent).indexOf(alvo) >= 0);
     const partido = /\n/.test(String(trecho || "").trim());
     if (naTela || partido) {
-      try { toastMsg(t("cit_vinc_invisivel", { tr: qsVincCurto(trecho) }), 9000); } catch (e) {}
+      /* (19.50.0) só culpa os parágrafos quando o trecho de fato atravessa um; senão, diz onde procurar */
+      try { toastMsg(t(partido ? "cit_vinc_invisivel" : "cit_vinc_invisivel_outro", { tr: qsVincCurto(trecho) }), 9000); } catch (e) {}
       try { reg("QUESTOES", "vínculo guardado mas o link não apareceu na tela", trecho); } catch (e) {}
     }
   }, 250);
@@ -2715,6 +2716,14 @@ function qsVincSalvar() {
     if (!r) { try { uiAlert(t("qs_vinc_erro_gravar")); } catch (e) {} return false; }
     /* o vínculo velho do MESMO trecho, no outro alcance, sairia vencido em silêncio */
     if (c.esc.cit && c.esc.cit.vinculoK && c.esc.cit.vinculoK !== r.k) citVinculoRemover(c.esc.cit.vinculoK);
+    /* (19.50.0) LIGAR DE NOVO VENCE O "DESLIGADO". Desligar um link guarda um vínculo "nenhum" só NESTE tópico; ligar o
+     * mesmo trecho depois "em todo o app" gravava o novo, mas o desligado do tópico continuava por cima — o trecho
+     * seguia como texto, e o aviso culpava os parágrafos. Ligar é a decisão mais nova: sai o que, neste tópico, diria
+     * outra coisa sobre o mesmo trecho. */
+    const chTop = q && q.disciplina && q.topico && typeof matChave === "function" ? matChave(q.disciplina, q.topico) : "";
+    const kt = citChave(trecho);
+    citVinculosLer().filter((v) => v.k !== r.k && v.tipo !== "jur" && citChave(v.trecho) === kt && (!v.chave || v.chave === chTop) && (v.nenhum || v.chave))
+      .forEach((v) => { citVinculoRemover(v.k); try { reg("QUESTOES", v.nenhum ? "vínculo desligado substituído ao ligar de novo" : "vínculo do tópico substituído", v.trecho); } catch (e) {} });
     qsVincPintar();
     qsUiVoltaDe(q)();
     /* (v18.49.0) A CONFIRMAÇÃO: o relato foi "visualmente não tenho garantia de que o vínculo foi efetivado". Um aviso

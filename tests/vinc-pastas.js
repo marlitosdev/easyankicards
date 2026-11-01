@@ -67,6 +67,21 @@ async function testes() {
   ok(api.$("dlgQsVincEsc").open && nova && api.$("qsVincLei").value === nova.id && /9\.784\/1999/.test(api.$("qsVincEscTrecho").textContent),
     "V9 criada a lei, a janela de vinculo volta com o mesmo trecho e a lei nova escolhida: " + api.$("qsVincLei").value);
 
+  /* ---- 5 (19.50.0): ligar de novo um trecho DESLIGADO neste tópico, valendo em todo o app ---- */
+  {
+    const T = "Lei nº 9.784/1999 desligada";
+    api.citVinculoSalvar({ trecho: T, nenhum: true, chave: ch });
+    api.qsVincEscolherPara({ disciplina: DISC, topico: TOP, comentario: "x" }, { trecho: T, cit: null });
+    api.$("qsVincLei").value = "lei_ctn"; api.$("qsVincLei").onchange();
+    api.$("qsVincAlcTudo").checked = true; api.$("qsVincAlcTopico").checked = false;
+    api.qsVincSalvar();
+    const vs = api.citVinculosLer().filter((v) => v.trecho === T);
+    ok(vs.length === 1 && !vs[0].nenhum && !vs[0].chave && vs[0].leiId === "lei_ctn", "D1 ligar de novo (em todo o app) tira o 'desligado' do topico: " + JSON.stringify(vs));
+    const cs = api.citVinculosAplicar("Ver a " + T + " hoje.", [], ch);
+    ok(cs.length === 1 && cs[0].permanente && cs[0].leiId === "lei_ctn", "D2 no topico, o trecho agora vira link");
+    ok(api.t("cit_vinc_invisivel_outro") !== "cit_vinc_invisivel_outro", "D3 o aviso sem 'parágrafos' existe");
+  }
+
   ["qs_vinc_escolha_n", "qs_vinc_lei_busca_ph", "qs_vinc_nova_lei", "qs_vinc_nova_lei_tip", "lei_nova_pnome", "lei_nova_snome_aj", "lei_nova_nome_rot", "lei_nova_nome_sug", "lei_nova_apelido_rot", "lei_nova_apelido_ph", "lei_nova_falta_nome"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
