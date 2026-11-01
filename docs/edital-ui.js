@@ -3943,6 +3943,75 @@ function abrirDisciplina(nome) {
  * A ordem é a do risco, não a do edital: o bloco em que você pode ser
  * eliminado vem primeiro, mesmo sendo o menor da prova.
  * ================================================================== */
+/* =====================================================================
+ * (19.54.0) A CONFERÊNCIA DO EDITAL: O QUE AINDA FALTA CADASTRAR
+ *
+ * O caso real: o ISS Caruaru elimina quem fizer menos de 2 de 5 em Raciocínio Lógico ou Informática, mas o edital no
+ * app não tinha nota mínima nenhuma — e a IA, sem saber, sugeriu zerar as duas. E os pesos eram estimativas de 1 a 5:
+ * Português valia 22% da prova (20 de 90 pontos) e o app contava 17%. Nenhuma tela dizia que faltava algo.
+ * Agora, enquanto faltar, o edital mostra uma lista de conferência com dois itens:
+ *   · PONTOS DE CORTE — nenhum bloco com "| minimo: …";
+ *   · PESOS DO EDITAL — a fatia da prova é estimada (alguma disciplina sem "10q"/"20p").
+ * Cada item diz o que se perde sem ele, traz o exemplo com as SUAS disciplinas (para copiar) e um "o edital não tem
+ * isso" que o tira da lista, guardado por edital. A agenda mostra uma linha por edital pendente, com "conferir".
+ * ===================================================================== */
+const ED_CONF_CHAVE = "eac_ed_conferencia";
+function edConfLer() { try { const v = JSON.parse(localStorage.getItem(ED_CONF_CHAVE) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
+function edConfDispensar(id, item) {
+  const v = edConfLer();
+  v[id] = Object.assign({}, v[id] || {}, { [item]: new Date().toISOString().slice(0, 10) });
+  try { localStorage.setItem(ED_CONF_CHAVE, JSON.stringify(v)); } catch (e) {}
+  try { reg("EDITAL", "conferência do edital: " + item + " dispensado", id); } catch (e) {}
+}
+/* o que falta neste edital: ["corte", "pesos"] (sem os que a pessoa disse que o edital não tem) */
+function edConfPendencias(r, plano, id) {
+  const disp = (edConfLer()[id]) || {};
+  const out = [];
+  const temCorte = ((r && r.blocos) || []).some((b) => b.minimo);
+  if (!temCorte && !disp.corte) out.push("corte");
+  if (plano && !plano.fatiaExata && !disp.pesos) out.push("pesos");
+  return out;
+}
+function edConfExemplo(item, r) {
+  const ds = ((r && r.disciplinas) || []).filter((d) => !d.inativa).map((d) => d.nome);
+  const d1 = ds[0] || "Disciplina 1", d2 = ds[1] || "Disciplina 2";
+  if (item === "corte") return ["& " + t("ed_conf_ex_bloco1") + " | minimo: 50%", "@ " + d1 + " :: …", "   (+ os tópicos, como estão)", "& " + d2 + " | minimo: 40%", "@ " + d2 + " :: …"].join("\n");
+  return ["@ " + d1 + " :: 10q", "@ " + d2 + " :: 20p"].join("\n");
+}
+function edConferenciaEdital(r, plano, id) {
+  const pend = edConfPendencias(r, plano, id);
+  if (!pend.length) return null;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const cx = el("div", "ed-caixa ed-conf");
+  cx.id = "edConferencia";
+  cx.append(el("div", "ed-caixa-tit ed-conf-tit", t("ed_conf_tit", { n: pend.length })));
+  cx.append(el("p", "nota", t("ed_conf_sub")));
+  pend.forEach((item) => {
+    const it = el("div", "ed-conf-item");
+    it.id = "edConf_" + item;
+    it.append(el("div", "ed-conf-nome", "☐ " + t("ed_conf_" + item + "_tit")));
+    it.append(el("p", "ed-conf-pq", t("ed_conf_" + item + "_pq")));
+    const det = el("details", "ed-conf-como");
+    det.append(el("summary", "", t("ed_conf_como")));
+    det.append(el("p", "nota", t("ed_conf_" + item + "_como")));
+    const ex = edConfExemplo(item, r);
+    det.append(el("pre", "ed-conf-ex", ex));
+    const bc = el("button", "btn-min", t("ed_conf_copiar"));
+    bc.type = "button";
+    bc.onclick = () => { try { if (navigator.clipboard) navigator.clipboard.writeText(ex).catch(() => {}); toastMsg(t("ed_conf_copiado"), 3000); } catch (e) {} };
+    det.append(bc);
+    it.append(det);
+    const bd = el("button", "btn-min ed-conf-nao", t("ed_conf_" + item + "_nao"));
+    bd.type = "button";
+    bd.id = "btnEdConfNao_" + item;
+    bd.title = t("ed_conf_nao_tip");
+    bd.onclick = () => { edConfDispensar(id, item); try { if (typeof edRender === "function") edRender(); } catch (e) {} try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (e) {} cx.remove && cx.remove(); };
+    it.append(bd);
+    cx.append(it);
+  });
+  return cx;
+}
+
 function edPintarBlocos(plano) {
   const blocos = (plano && plano.blocos) || [];
   const comMin = blocos.filter((b) => b.minPct !== null);
@@ -4213,6 +4282,9 @@ function edPintarPainel(r, plano) {
    * eliminação primeiro. */
   const pBloc = edPintarBlocos(plano);
   if (pBloc) box.append(pBloc);
+  /* (19.54.0) a conferência do edital: pontos de corte e pesos que ainda faltam cadastrar */
+  const pConf = edConferenciaEdital(r, plano, typeof editalAtual !== "undefined" ? editalAtual : "");
+  if (pConf) box.append(pConf);
 
   /* -------- esta semana MORA NO TOPO --------
    * Até a v8.69 existiam DUAS "Agenda da semana": esta, do edital aberto, e

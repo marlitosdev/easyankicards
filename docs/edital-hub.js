@@ -233,6 +233,7 @@ function hubPintarAgenda() {
   const minUsado = meta || (usarReal ? ritmo.ref : 0);
   hubRitmoCtx = null;
   const equilibrios = [];
+  const confs = [];             /* (19.54.0) os editais com conferência pendente (corte, pesos) */
   const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
   let modoSugerido = "";
   let diasProx = null;          /* dias até a prova mais próxima: o que o automático usa */
@@ -253,6 +254,10 @@ function hubPintarAgenda() {
     if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
+    try {
+      const pend = typeof edConfPendencias === "function" ? edConfPendencias(r, plano, e.id) : [];
+      if (pend.length) confs.push({ id: e.id, nome: e.nome || cfg.concurso || "", pend });
+    } catch (err) {}
     if (plano.recente && plano.recente.total >= ED_RECENTE_MIN) equilibrios.push({ nome: e.nome || cfg.concurso || "", eq: plano.equilibrio || [] });
     /* (19.52.0) o aviso usa o ritmo de REFERÊNCIA: com tendência clara (subindo ou caindo), o das 2 últimas semanas — a média
      * de 4 escondia que 0h35 → 2h15 → 11h35 → 16h11 já é outro ritmo */
@@ -344,6 +349,18 @@ function hubPintarAgenda() {
     cx.append(av);
   }
 
+  /* (19.54.0) a conferência do edital, em uma linha por edital que ainda tem pendência (o detalhe fica no edital) */
+  confs.forEach((q) => {
+    const ln = document.createElement("div");
+    ln.className = "hub-conf";
+    const tx = document.createElement("span");
+    tx.textContent = t("hub_conf_linha", { e: q.nome, p: q.pend.map((x) => t("ed_conf_" + x + "_curto")).join(" · ") });
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min"; b.textContent = t("hub_conf_ir");
+    b.onclick = () => { try { hubAbrirEdital(q.id); } catch (e) {} };
+    ln.append(tx, b);
+    cx.append(ln);
+  });
   /* (19.51.0) O AVISO DE RITMO DIZ O QUE MUDA, e oferece quatro saídas: planejar com o ritmo real, manter as horas do
    * edital (o aviso some por 14 dias, ou até o ritmo cair mais), outra meta (com a conta antes de aplicar) e pedir
    * a opinião de uma IA, com o contexto todo. O que se decide fica no registro. */
@@ -828,6 +845,8 @@ function hubRitmoPromptIA(ctx) {
   hubRitmoSemanas(6).forEach((x) => L.push("  - " + dm(x.ini) + "–" + dm(fimSem(x.ini)) + ": " + horasTexto(x.min)));
   L.push("  " + t("hub_ia_medias", { m: horasTexto(ritmo.min), u: ritmo.ult2 ? horasTexto(ritmo.ult2) : "-", tend: t("hub_tend_" + ritmo.tendencia) }));
   L.push(t("hub_ia_bagagem"));
+  /* (19.54.0) os pesos são do edital ou estimados? A IA precisa saber o quanto confiar no "vale na prova" */
+  L.push(t(plano.fatiaExata ? "hub_ia_fatia_exata" : "hub_ia_fatia_est"));
   /* as notas mínimas: as que o edital tem no app, com a cobertura de hoje — ou o aviso de que não estão cadastradas */
   const blocos = (plano.blocos || []).filter((b) => b.minPct !== null && b.minPct !== undefined);
   if (blocos.length) {
@@ -966,7 +985,8 @@ function hubIaLerResposta(txt, plano) {
       const mins = /min/i.test(m[2]) ? Number(m[2].replace(/\D/g, "")) : hubLerHoras(m[2].replace(/\s+/g, ""));
       const foco = (m[3] || "").trim();
       if (!d) { res.avisos.push(t("hub_ia_av_disc", { d: m[1].trim() })); return; }
-      res.divisao.push({ disc: d, min: mins, foco, modo: hubIaModoDoFoco(foco), texto: item });
+      /* (19.53.0) 0h é PAUSA, não modo: "Raciocínio Lógico: 0 h — foco: questões" não vira "Consolidar" */
+      res.divisao.push({ disc: d, min: mins, foco, modo: mins > 0 ? hubIaModoDoFoco(foco) : "", pausa: !(mins > 0), texto: item });
     } else if (sec === "fora") {
       if (/^nada|^nenhum/.test(hubIaNorm(item))) return;
       const partes = item.split(/\s*[›>]\s*/);
@@ -988,6 +1008,9 @@ function hubIaLerResposta(txt, plano) {
     } else if (sec === "pq") res.porque.push(item);
   });
   if (!res.min) res.avisos.push(t("hub_ia_av_sem_horas"));
+  /* 0h na divisão sem estar em "deixar de fora": a resposta se contradiz — o app diz, e não decide sozinho */
+  res.divisao.filter((x) => x.pausa && !res.fora.some((f) => f.disc === x.disc && !f.topico))
+    .forEach((x) => res.avisos.push(t("hub_ia_av_zero", { d: x.disc })));
   const soma = res.divisao.reduce((a, x) => a + (x.min || 0), 0);
   if (res.min && res.divisao.length && Math.abs(soma - res.min) > 30) res.avisos.push(t("hub_ia_av_soma", { s: horasTexto(soma), h: horasTexto(res.min) }));
   /* cortar uma disciplina que está num bloco com nota mínima: o app avisa (a IA pode não saber) */
@@ -1006,7 +1029,10 @@ function hubIaAbrir() {
   abrirModal("dlgHubIA");
   return true;
 }
-/* lê o que foi colado e mostra o que vai mudar, com uma caixa de marcar para cada parte */
+/* lê o que foi colado e mostra o que vai mudar.
+ * (19.53.0) CADA PARTE TEM A SUA CAIXA: a meta; o modo de cada disciplina; cada disciplina do "deixar de fora" — e,
+ * dentro dela, cada tópico (para aceitar "cortar Informática, menos LGPD"). O painel verde/vermelho refaz a conta a
+ * cada caixa marcada ou desmarcada: mostra o que acontece com a escolha de agora, não com a resposta inteira. */
 function hubIaLer() {
   const c = hubRitmoCtx;
   const cx = $("hubIaPrev");
@@ -1016,32 +1042,42 @@ function hubIaLer() {
   const res = hubIaLerResposta($("hubIaResp").value, c.plano);
   hubIaLido = res;
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
-  const marca = (id, rot, sub) => {
-    const l = el("label", "hub-ia-op");
+  const caixa = (id, rot, sub, cls) => {
+    const l = el("label", "hub-ia-op" + (cls ? " " + cls : ""));
     const ck = document.createElement("input"); ck.type = "checkbox"; ck.id = id; ck.checked = true;
-    const tx = el("span", "", rot);
-    l.append(ck, tx);
+    ck.onchange = () => hubIaRepintarComparacao();
+    l.append(ck, el("span", "", rot));
     if (sub) l.append(el("span", "hub-ia-sub", sub));
-    cx.append(l);
+    return l;
   };
-  /* o painel verde/vermelho: a agenda até a prova hoje × como ficaria aceitando tudo */
-  if (res.min || res.divisao.length || res.fora.length) cx.append(hubIaComparar(res, c));
+  const algo = !!(res.min || res.divisao.length || res.fora.length);
+  const cmp = el("div", "");
+  cmp.id = "hubIaCmpLugar";
+  cx.append(cmp);
   if (res.min) {
     const cc = hubCenario(res.min);
-    marca("hubIaOpMeta", t("hub_ia_op_meta", { h: horasTexto(res.min) }), cc ? t("hub_meta_res", { c: cc.cabem, n: cc.pend, p: cc.pesoPct }) : "");
+    cx.append(caixa("hubIaOpMeta", t("hub_ia_op_meta", { h: horasTexto(res.min) }), cc ? t("hub_meta_res", { c: cc.cabem, n: cc.pend, p: cc.pesoPct }) : ""));
   }
   if (res.divisao.length) {
-    marca("hubIaOpModos", t("hub_ia_op_modos"), "");
-    const ul = el("ul", "hub-ia-lista");
-    res.divisao.forEach((x) => ul.append(el("li", "", t("hub_ia_op_modo_item", { d: x.disc, m: t("hub_modo_" + x.modo), h: horasTexto(x.min || 0), f: x.foco || "-" }))));
-    cx.append(ul);
+    cx.append(el("div", "hub-ia-grupo", t("hub_ia_op_modos")));
+    res.divisao.forEach((x, k) => {
+      if (x.pausa) cx.append(el("div", "hub-ia-op hub-ia-pausa", t("hub_ia_op_pausa", { d: x.disc })));
+      else cx.append(caixa("hubIaModo_" + k, t("hub_ia_op_modo_item", { d: x.disc, m: t("hub_modo_" + x.modo), h: horasTexto(x.min || 0), f: x.foco || "-" }), "", "hub-ia-sub-op"));
+    });
   }
   if (res.fora.length) {
-    const n = res.fora.reduce((a, f) => a + f.itens.length, 0);
-    marca("hubIaOpFora", t("hub_ia_op_fora", { n }), t("hub_ia_op_fora_sub"));
-    const ul = el("ul", "hub-ia-lista");
-    res.fora.forEach((f) => ul.append(el("li", "", f.topico ? f.disc + " › " + f.topico + " (" + f.itens.length + ")" : t("hub_ia_op_fora_disc", { d: f.disc, n: f.itens.length }))));
-    cx.append(ul);
+    cx.append(el("div", "hub-ia-grupo", t("hub_ia_op_fora_tit")));
+    cx.append(el("div", "hub-ia-sub", t("hub_ia_op_fora_sub")));
+    res.fora.forEach((f, k) => {
+      const rot = f.topico ? f.disc + " › " + f.topico : t("hub_ia_op_fora_disc", { d: f.disc, n: f.itens.length });
+      cx.append(caixa("hubIaFora_" + k, rot, "", "hub-ia-sub-op"));
+      if (f.itens.length > 1) {
+        const det = el("details", "hub-ia-fora-det");
+        det.append(el("summary", "", t("hub_ia_op_fora_escolher", { n: f.itens.length })));
+        f.itens.forEach((i, j) => det.append(caixa("hubIaForaT_" + k + "_" + j, i.nome, "", "hub-ia-topico")));
+        cx.append(det);
+      }
+    });
   }
   if (res.divisao.length) cx.append(el("p", "nota", t("hub_ia_nota_divisao")));
   if (res.porque.length) {
@@ -1051,11 +1087,34 @@ function hubIaLer() {
     cx.append(ol);
   }
   res.avisos.forEach((a) => cx.append(el("p", "hub-ia-aviso", "⚠ " + a)));
-  const algo = !!(res.min || res.divisao.length || res.fora.length);
   if (!algo) cx.append(el("p", "hub-ia-aviso", t("hub_ia_nada")));
   if ($("btnHubIaAplicar")) $("btnHubIaAplicar").hidden = !algo;
+  hubIaRepintarComparacao();
   return res;
 }
+/* o que está marcado agora: {min, divisao (sem as pausadas), fora (com os tópicos marcados)} */
+function hubIaSelecao() {
+  const res = hubIaLido;
+  if (!res) return null;
+  const marcado = (id) => !$(id) || $(id).checked !== false;
+  const sel = { min: res.min && marcado("hubIaOpMeta") ? res.min : 0, divisao: [], fora: [] };
+  res.divisao.forEach((x, k) => { if (!x.pausa && marcado("hubIaModo_" + k)) sel.divisao.push(x); });
+  res.fora.forEach((f, k) => {
+    if (!marcado("hubIaFora_" + k)) return;
+    const itens = f.itens.length > 1 ? f.itens.filter((i, j) => marcado("hubIaForaT_" + k + "_" + j)) : f.itens;
+    if (itens.length) sel.fora.push(Object.assign({}, f, { itens }));
+  });
+  return sel;
+}
+function hubIaRepintarComparacao() {
+  const lugar = $("hubIaCmpLugar");
+  const c = hubRitmoCtx, sel = hubIaSelecao();
+  if (!lugar || !c || !sel) return;
+  lugar.innerHTML = "";
+  if (sel.min || sel.divisao.length || sel.fora.length) lugar.append(hubIaComparar(sel, c));
+  else { const p = document.createElement("p"); p.className = "nota"; p.textContent = t("hub_ia_nada_marcado"); lugar.append(p); }
+}
+
 /* (19.52.0) O QUE ENTRA E O QUE SAI. Pedido: "um painel com indicações claras, em verde e vermelho, do que entra e sai,
  * para ajudar a decidir". Compara a lista do que cabe até a prova HOJE (o plano da agenda) com a lista se a resposta for
  * aceita inteira (nova meta, novos modos e os tópicos deixados de fora). Verde: passa a caber. Vermelho: sai — deixado
@@ -1077,7 +1136,15 @@ function hubIaSimular(res, c) {
   const saem = [...antes].filter((k) => !depois.has(k)).map((k) => Object.assign({ fora: fora.has(k) }, nome[k]));
   const peso = (set) => [...set].reduce((a, k) => a + ((nome[k] && nome[k].bruto) || 0), 0);
   const pend = c.plano.itens.filter((i) => !i.feito).reduce((a, i) => a + (i.bruto || 0), 0) || 1;
-  return { entram, saem, minAtual, antesN: antes.size, depoisN: depois.size,
+  /* (19.53.0) quanto da PROVA cada tópico vale (o peso dele sobre o edital inteiro), e a soma do que entra e do que sai */
+  const totalEdital = c.plano.itens.reduce((a, i) => a + (i.bruto || 0), 0) || 1;
+  const pctProva = (x) => Math.round(((x && x.bruto) || 0) / totalEdital * 1000) / 10;
+  entram.forEach((x) => { x.pctProva = pctProva(x); });
+  saem.forEach((x) => { x.pctProva = pctProva(x); });
+  saem.sort((a, b) => b.pctProva - a.pctProva);
+  entram.sort((a, b) => b.pctProva - a.pctProva);
+  const soma = (xs) => Math.round(xs.reduce((a, x) => a + x.pctProva, 0) * 10) / 10;
+  return { entram, saem, minAtual, entraPct: soma(entram), saiPct: soma(saem), saiForaPct: soma(saem.filter((x) => x.fora)), antesN: antes.size, depoisN: depois.size,
     antesPct: Math.round(peso(antes) / pend * 100), depoisPct: Math.round(peso(depois) / pend * 100), novosModos: novos };
 }
 function hubIaComparar(res, c) {
@@ -1099,8 +1166,12 @@ function hubIaComparar(res, c) {
   };
   const grade = el("div", "hub-ia-cmp-grade");
   grade.append(
-    col("hub-ia-cmp-entra", "✓ " + t("hub_ia_cmp_entra", { n: sim.entram.length }), sim.entram, (x) => hubDiscCurta(x.disc) + " › " + x.nome),
-    col("hub-ia-cmp-sai", "✕ " + t("hub_ia_cmp_sai", { n: sim.saem.length }), sim.saem, (x) => hubDiscCurta(x.disc) + " › " + x.nome + " — " + t(x.fora ? "hub_ia_cmp_fora" : "hub_ia_cmp_naocabe")));
+    col("hub-ia-cmp-entra", "✓ " + t("hub_ia_cmp_entra2", { n: sim.entram.length, p: hubPct(sim.entraPct) }), sim.entram,
+      (x) => hubDiscCurta(x.disc) + " › " + x.nome + " — " + t("hub_ia_cmp_vale", { p: hubPct(x.pctProva) })),
+    col("hub-ia-cmp-sai", "✕ " + t("hub_ia_cmp_sai2", { n: sim.saem.length, p: hubPct(sim.saiPct) }), sim.saem,
+      (x) => hubDiscCurta(x.disc) + " › " + x.nome + " — " + t("hub_ia_cmp_vale", { p: hubPct(x.pctProva) }) + " · " + t(x.fora ? "hub_ia_cmp_fora" : "hub_ia_cmp_naocabe")));
+  /* o que sai, dito em pontos da prova: quanto por escolha (deixado de fora) e quanto por falta de tempo */
+  if (sim.saem.length) box.append(el("div", "hub-ia-cmp-perda", t("hub_ia_cmp_perda", { p: hubPct(sim.saiPct), f: hubPct(sim.saiForaPct), n: hubPct(Math.round((sim.saiPct - sim.saiForaPct) * 10) / 10) })));
   box.append(grade);
   /* o que muda de regra */
   const muda = [];
@@ -1114,16 +1185,18 @@ function hubIaComparar(res, c) {
   return box;
 }
 
+/* "1,5%" — uma casa decimal, com a vírgula do português */
+function hubPct(x) { const v = Math.round((Number(x) || 0) * 10) / 10; return (typeof LANG !== "undefined" && LANG === "en" ? String(v) : String(v).replace(".", ",")) + "%"; }
+
 /* aplica o que estiver marcado; devolve o que fez */
 function hubIaAplicar() {
-  const res = hubIaLido, c = hubRitmoCtx;
-  if (!res || !c) return null;
-  const ligado = (id) => !$(id) || $(id).checked !== false;
+  const c = hubRitmoCtx, sel = hubIaSelecao();
+  if (!sel || !c) return null;
   const feito = { meta: 0, modos: 0, fora: 0 };
-  if (res.min && ligado("hubIaOpMeta")) { hubMetaDefinir(res.min); feito.meta = res.min; }
-  if (res.divisao.length && ligado("hubIaOpModos")) res.divisao.forEach((x) => { hubModoDefinir(x.disc, x.modo); feito.modos++; });
-  if (res.fora.length && ligado("hubIaOpFora") && typeof faTirar === "function") {
-    res.fora.forEach((f) => f.itens.forEach((i) => {
+  if (sel.min) { hubMetaDefinir(sel.min); feito.meta = sel.min; }
+  sel.divisao.forEach((x) => { hubModoDefinir(x.disc, x.modo); feito.modos++; });
+  if (typeof faTirar === "function") {
+    sel.fora.forEach((f) => f.itens.forEach((i) => {
       if (faTirar(Object.assign({}, i, { edital: c.e.id }), "nao_vou")) feito.fora++;
     }));
   }

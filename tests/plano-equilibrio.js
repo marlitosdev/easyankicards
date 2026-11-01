@@ -161,6 +161,10 @@ async function testes() {
     ok(lido.avisos.some((a) => /Química/.test(a)), "IA3 disciplina desconhecida vira aviso, nao invencao");
     ok(lido.fora.length === 1 && lido.fora[0].disc === "Administrativo" && lido.fora[0].itens.length === 1 && lido.fora[0].itens[0].nome === "Licitações", "IA4 'deixar de fora' por topico acha o topico certo");
     ok(lido.porque.length === 2, "IA5 o 'por que' vem como lista");
+    const lz = api.hubIaLerResposta(["Horas recomendadas: 5 h/semana", "Divisão semanal:", "- Tributário: 5 h/semana — foco: questões", "- Português: 0 h/semana — foco: questões", "- Administrativo: 0 h/semana — foco: questões", "Deixar de fora:", "- Administrativo"].join("\n"), ctx.plano);
+    const zp = lz.divisao.find((x) => x.disc === "Português"), za = lz.divisao.find((x) => x.disc === "Administrativo");
+    ok(zp && zp.pausa && !zp.modo && za && za.pausa, "IA5b (19.53.0) 0h e pausa, nao modo: " + JSON.stringify(lz.divisao.map((x) => [x.disc, x.modo, x.pausa])));
+    ok(lz.avisos.some((a) => /0h para Português/.test(a)) && !lz.avisos.some((a) => /0h para Noções|0h para Administrativo/.test(a)), "IA5c avisa so a disciplina com 0h que NAO esta em 'deixar de fora': " + lz.avisos.join(" | "));
     const ctx2 = { e, r: api.lerEdital(["# T | prova: 2026-11-29 | horas: 13", "@ A :: 5", "+ Tópico 1 :: 5", "+ Tópico 13 :: 4"].join("\n")), s: { prova: "2026-11-29", dias: 30 }, cfg: {} };
     ctx2.plano = api.montarPlano(ctx2.r, Object.assign({}, base, { tempoRecente: null }));
     const l2 = api.hubIaLerResposta(["Horas recomendadas: 5 h/semana", "Deixar de fora:", "- A › Tópico 13"].join("\n"), ctx2.plano);
@@ -168,9 +172,22 @@ async function testes() {
     ok(lido.avisos.some((a) => /soma 12h/.test(a)) === false && api.hubIaLerResposta(RESP.replace("12 h/semana", "20 h/semana"), ctx.plano).avisos.some((a) => /A divisão soma/.test(a)), "IA6 avisa quando a divisao nao soma as horas recomendadas");
     const sim = api.hubIaSimular(lido, ctx);
     ok(sim && sim.saem.some((x) => x.nome === "Licitações" && x.fora), "IA7 o painel mostra em vermelho o topico deixado de fora: " + JSON.stringify(sim && sim.saem.map((x) => x.nome)));
+    const lic = sim.saem.find((x) => x.nome === "Licitações");
+    ok(lic && lic.pctProva > 0 && sim.saiPct >= lic.pctProva && sim.saiForaPct === lic.pctProva, "IA7b cada topico que sai diz quanto vale da prova, e a soma do que fica de lado: " + JSON.stringify([lic && lic.pctProva, sim.saiPct, sim.saiForaPct]));
+    ok(api.hubPct(12.34) === "12,3%", "IA7c percentual com virgula: " + api.hubPct(12.34));
     const pouco = api.hubIaSimular(api.hubIaLerResposta("Horas recomendadas: 1 h/semana", ctx.plano), ctx);
     const muito = api.hubIaSimular(api.hubIaLerResposta("Horas recomendadas: 40 h/semana", ctx.plano), ctx);
     ok(pouco && muito && pouco.depoisN <= muito.depoisN, "IA8 menos horas: cabem menos (o painel compara antes e depois)");
+    /* ---- conferência do edital (19.54.0) ---- */
+    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte,pesos", "C1 sem blocos com minimo e com pesos 1-5: faltam corte e pesos");
+    const rOk = api.lerEdital(["# T | prova: 2026-11-29 | horas: 10", "& Especificos | minimo: 50%", "@ A :: 10q", "+ x :: 5", "& Lógico | minimo: 40%", "@ B :: 5q", "+ y :: 5"].join("\n"));
+    const pOk = api.montarPlano(rOk, Object.assign({}, base, { tempoRecente: null }));
+    ok(pOk.fatiaExata && api.edConfPendencias(rOk, pOk, "e2").length === 0, "C2 com blocos com minimo e pesos do edital: nada pendente");
+    api.edConfDispensar("e1", "pesos");
+    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte", "C3 'o edital nao informa' tira so aquele item, so naquele edital");
+    const cx = api.edConferenciaEdital(r, ctx.plano, "e1");
+    ok(cx && /Pontos de corte/.test(cx.textContent) && /& Conhecimentos Específicos | minimo: 50%/.test(cx.textContent) && /Tributário/.test(cx.textContent), "C4 a lista explica e traz o exemplo com as disciplinas do edital");
+    ok(/ESTIMADOS/.test(api.hubRitmoPromptIA(ctx)), "C5 o pedido a IA diz que os pesos sao estimados");
     const rel2 = api.plRelatorio(p1, r, [], [], { concurso: "Teste" });
     ok(/ritmo: horas do edital mantidas/.test(rel2), "R10 o raio-X traz a decisao de ritmo");
   }
