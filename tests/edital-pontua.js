@@ -102,8 +102,100 @@ async function testes() {
   ok(c3.peso === "nao" && lido.avisos.some((a) => /Só 3 de 5/.test(a)), "P5d so algumas com numero: os pesos ficam estimados, com aviso");
   ok(api.$("dlgEdPontua").open, "P5e preencher nao grava nem fecha");
 
+  /* ---- blocos à vista (19.56.0) ---- */
+  {
+    api.epAbrir();
+    const cb = api.epCtxAtual();
+    cb.minimo = "sim";
+    await api.epCriarBloco("Bloco Teste");
+    ok(cb.grupos.some((g) => g.nome === "Bloco Teste") && !api.$("epGrupos").hidden && /Blocos de disciplinas/.test(api.$("epGrupos").textContent), "B1 criar bloco abre a secao dos blocos com o bloco novo");
+    cb.ds[0].grupo = "Bloco Teste";
+    ok(api.epGravar() === false && /sem o mínimo/.test(api.$("epMsg").textContent), "B2 bloco sem minimo nao grava");
+    api.$("dlgEdPontua").close();
+  }
+
+  /* ---- discursiva (19.56.0) ---- */
+  {
+    api.epAbrir();
+    const cd = api.epCtxAtual();
+    ok(cd.discursiva === "nao", "D0 sem a linha da discursiva, a pergunta 3 comeca em 'nao'");
+    cd.discursiva = "sim";
+    ok(api.epGravar() === false && /Discursiva: falta/.test(api.$("epMsg").textContent), "D1 discursiva sem valor nem disciplinas nao grava");
+    cd.disc.pontos = 40; cd.disc.objetiva = 90; cd.disc.minimo = { tipo: "pct", valor: 50 }; cd.disc.linhas = { min: 25, max: 30 }; cd.disc.corrigida = 50;
+    cd.disc.disciplinas = ["Sistema Tributário Brasileiro"];
+    const frases = api.epResumoAtual();
+    ok(frases.some((f) => /31% da nota final/.test(f)) && frases.some((f) => /25 a 30 linhas/.test(f)) && frases.some((f) => /50 primeiros/.test(f)), "D2 'como fica' explica o peso, as linhas e a classificacao: " + frases.join(" | "));
+    const tx = api.epNovoTexto(api.$("editalTexto").value, cd);
+    const rd = api.lerEdital(tx);
+    ok(rd.cfg.discursiva && rd.cfg.discursiva.pontos === 40 && rd.cfg.discursiva.disciplinas[0] === "Sistema Tributário Brasileiro" && rd.cfg.prova === "2026-11-29",
+      "D3 a linha '# discursiva' vai para o cabecalho, sem estragar o resto: " + tx.split("\n").slice(0, 3).join(" / "));
+    const p0 = api.montarPlano(api.lerEdital(api.$("editalTexto").value), { horas: 20, prova: "2026-11-29", hoje: "2026-11-01", feitos: {}, tempoRecente: null });
+    const p1 = api.montarPlano(rd, { horas: 20, prova: "2026-11-29", hoje: "2026-11-01", feitos: {}, tempoRecente: null });
+    ok(p1.discursiva && p1.discursiva.s === 31 && p1.fatia["Sistema Tributário Brasileiro"] > p0.fatia["Sistema Tributário Brasileiro"] && p1.fatia["Português"] < p0.fatia["Português"],
+      "D4 a discursiva sobe a fatia de onde ela cai e encolhe as outras: " + JSON.stringify([p0.fatia, p1.fatia]));
+    ok(api.epGravar() === true && api.lerEdital(api.$("editalTexto").value).cfg.discursiva.pontos === 40, "D5 gravar leva a discursiva para o edital");
+    const comD = api.$("editalTexto").value;
+    const semD = comD.split("\n").filter((l) => !/^\s*#\s*discursiva/i.test(l)).join("\n");
+    const mD = api.edManterPontuacao(comD, semD);
+    ok(mD.discursiva && api.lerEdital(mD.txt).cfg.discursiva && api.lerEdital(mD.txt).cfg.discursiva.pontos === 40, "D5b a revisao com IA que devolve o plano sem a discursiva nao a apaga");
+    api.epAbrir();
+    const ce = api.epCtxAtual();
+    ok(ce.discursiva === "sim" && ce.disc.corrigida === 50, "D6 reabrir le a discursiva de volta");
+    ce.discursiva = "nao"; ce.disc = { pontos: 0, objetiva: 0, minimo: null, linhas: null, corrigida: 0, disciplinas: [] };
+    api.epLerIA("Discursiva | 40 | 90 | 50% | 25-30 | 50 | Sistema Tributário Brasileiro; Noções de Direito Administrativo");
+    ok(ce.discursiva === "sim" && ce.disc.pontos === 40 && ce.disc.disciplinas.length === 2 && ce.disc.linhas.max === 30, "D7 a IA preenche a discursiva");
+    api.$("dlgEdPontua").close();
+    api.hubDiscTreinoMarcar(ed.id || ed, true);
+    ok(api.hubDiscTreinoFeito(ed.id || ed) === true, "D8 o treino de escrita da semana fica marcado");
+  }
+
+  /* ---- compatibilidade com a revisão e a criação com IA (19.56.0) ---- */
+  {
+    const comCortes = api.$("editalTexto").value;
+    const semCortes = comCortes.split("\n").filter((l) => !/^\s*&/.test(l)).join("\n");
+    const m = api.edManterPontuacao(comCortes, semCortes);
+    const rm = api.lerEdital(m.txt);
+    ok(m.cortes && rm.blocos.length >= 3 && rm.blocos.some((b) => b.nome === "Conhecimentos Específicos"), "K1 plano novo sem cortes: os cortes do atual sao mantidos");
+    const outro = comCortes.replace("& Português | minimo: 50%", "& Português | minimo: 60%");
+    const m2 = api.edManterPontuacao(comCortes, outro);
+    ok(!m2.cortes && m2.txt === outro, "K2 plano novo que ja traz cortes manda");
+    const base = api.t("ed_prompt");
+    ok(/Se o mínimo for de CADA disciplina/.test(base) && /Se o mínimo for de CADA disciplina/.test(api.edPromptRevisao(["# x", "@ A :: 3", "+ t :: 3"].join("\n"), [])), "K3 criar e revisar levam a mesma regra dos cortes");
+    ok(/RAMIFICAÇÕES/.test(api.edPromptEdital(true)) && !/RAMIFICAÇÕES/.test(api.edPromptEdital(false)), "K4 o pedido de montar leva a regra dos ramos quando pedida");
+    ok(api.t("ed_conf_ramos") !== "ed_conf_ramos", "K5 o aviso de ramos que somem existe");
+    ok(api.hubConferir(ed.id || ed) === true, "K6 conferir no edital responde (abre, rola ate a conferencia ou abre a janela)");
+  }
+
+  /* ---- (19.57.0) M: o painel das mudanças da revisão e a discursiva no pedido ---- */
+  {
+    const A = ["# R | prova: 2030-01-01 | horas: 10", "& Básicos | minimo: 40%", "@ Português :: 3", "+ Crase :: 3", "+ Vírgula :: 2",
+      "@ Direito :: 4", "+ Atos :: 4", "++ Vinculados :: 3", "++ Discricionários :: 3", "+ Licitação :: 3", "@ Geografia :: 2", "+ Mapas :: 2"].join("\n");
+    const D = ["# R | prova: 2030-01-01 | horas: 10", "# discursiva | pontos: 30 | objetiva: 100 | disciplinas: Direito",
+      "& Básicos | minimo: 50%", "@ Português :: 3", "+ Crase :: 4", "+ Vírgula :: 2",
+      "@ Direito :: 5", "+ Atos :: 4", "++ Vinculados :: 3", "+ Licitação :: 3", "+ Contratos :: 3", "@ Contabilidade :: 3", "+ Balanço :: 3"].join("\n");
+    const c = api.edCompararColagem(A, D, {});
+    const m = api.edMudancasRevisao(A, D, c, { cortes: false, pesos: true, discursiva: false });
+    const tem = (l, re) => l.some((x) => re.test(x));
+    ok(tem(m.sai, /Geografia/) && tem(m.sai, /Mapas/) && tem(m.sai, /Discricion/), "M1 vermelho: disciplina, tópico e ramo que saem: " + JSON.stringify(m.sai));
+    ok(tem(m.entra, /Contabilidade/) && tem(m.entra, /Contratos/) && tem(m.entra, /discursiva/i), "M2 verde: disciplina, tópico e discursiva que entram: " + JSON.stringify(m.entra));
+    ok(tem(m.muda, /Direito: 4 → 5/) && tem(m.muda, /Crase: peso 3 → 4/) && tem(m.muda, /Básicos: 40% → 50%/), "M3 âmbar: pesos e corte que mudam: " + JSON.stringify(m.muda));
+    ok(m.mantem.length === 1 && !tem(m.entra, /^Português/), "M4 azul só com o que o app manteve; o que não mudou não aparece");
+    const m0 = api.edMudancasRevisao(A, A, api.edCompararColagem(A, A, {}), null);
+    ok(!m0.sai.length && !m0.entra.length && !m0.muda.length, "M5 sem mudança, painel vazio");
+    /* a regra da discursiva no pedido: só quando o plano ainda não tem a linha */
+    ok(/PROVA DISCURSIVA/.test(api.edPromptEdital(false, undefined, { tem: false })) && !/PROVA DISCURSIVA/.test(api.edPromptEdital(false)) && !/PROVA DISCURSIVA/.test(api.edPromptEdital(false, undefined, { tem: true })), "M6 montar: a regra da discursiva só sem a linha");
+    ok(!/\+\+/.test(api.t("ed_prompt_disc")), "M6b a regra nova não fala de ++");
+    ok(/PROVA DISCURSIVA/.test(api.edPromptRevisao(A, [])) && /Mantenha a linha "# discursiva"/.test(api.edPromptRevisao(D, [])), "M7 revisar: pede a discursiva sem a linha; mantém com ela");
+    const nv = api.hubNovoTexto({ nome: "N", prova: "2030-01-01", horas: 5, plano: "# Outro | horas: 99\n# discursiva | pontos: 20 | objetiva: 80 | disciplinas: A\n@ A :: 3\n+ t :: 3" });
+    const rn = api.lerEdital(nv);
+    ok(rn.cfg.discursiva && rn.cfg.discursiva.pontos === 20 && rn.cfg.horas === 5, "M8 criar guarda a linha da discursiva e descarta o outro cabeçalho: " + nv);
+    ok(api.edConfPendencias(api.lerEdital(A), null, "mx").indexOf("discursiva") >= 0 && api.edConfPendencias(api.lerEdital(D), null, "mx").indexOf("discursiva") < 0, "M9 conferência: discursiva pendente só sem a linha");
+    api.edConfDispensar("mx", "discursiva");
+    ok(api.edConfPendencias(api.lerEdital(A), null, "mx").indexOf("discursiva") < 0, "M10 'não tem discursiva' tira o item");
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

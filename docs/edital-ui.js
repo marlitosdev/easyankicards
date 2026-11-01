@@ -1363,7 +1363,13 @@ function edColarModoDefinir(modo) {
 }
 /* o texto que o botão do passo 1 copia, conforme o modo */
 function edColarPedidoTexto() {
-  return edColarModo === "corrigir" ? edPromptRevisao($("editalTexto").value, edAchadosAtuais()) : t("ed_prompt");
+  if (edColarModo === "corrigir") return edPromptRevisao($("editalTexto").value, edAchadosAtuais());
+  /* (19.56.0) montar de novo a partir do edital: o MESMO pedido da criação — com a regra dos ramos quando o plano atual
+   * já os tem (sem ela, a IA devolvia os tópicos sem as ramificações, que sumiriam) */
+  let temRamos = false;
+  try { temRamos = lerEdital($("editalTexto").value).disciplinas.some((d) => d.topicos.some((tp) => (tp.ramos || []).length)); } catch (e) {}
+  const temDisc = /^\s*#\s*discursiva\b/im.test($("editalTexto").value || "");
+  return typeof edPromptEdital === "function" ? edPromptEdital(temRamos, undefined, { tem: temDisc }) : t("ed_prompt");
 }
 const ED_COLAR_BLOQUEIA = { vazio: 1, prompt: 1, igual: 1, cru: 1 };
 
@@ -3970,12 +3976,15 @@ function edConfPendencias(r, plano, id) {
   const temCorte = ((r && r.blocos) || []).some((b) => b.minimo);
   if (!temCorte && !disp.corte) out.push("corte");
   if (plano && !plano.fatiaExata && !disp.pesos) out.push("pesos");
+  /* (19.57.0) a discursiva: ninguém respondeu ainda se o concurso tem (a pergunta 3 de "⚖ Pontuação e cortes") */
+  if (!(r && r.cfg && r.cfg.discursiva) && !disp.discursiva) out.push("discursiva");
   return out;
 }
 function edConfExemplo(item, r) {
   const ds = ((r && r.disciplinas) || []).filter((d) => !d.inativa).map((d) => d.nome);
   const d1 = ds[0] || "Disciplina 1", d2 = ds[1] || "Disciplina 2";
   if (item === "corte") return ["& " + t("ed_conf_ex_bloco1") + " | minimo: 50%", "@ " + d1 + " :: …", "   (+ os tópicos, como estão)", "& " + d2 + " | minimo: 40%", "@ " + d2 + " :: …"].join("\n");
+  if (item === "discursiva") return "# discursiva | pontos: 40 | objetiva: 90 | minimo: 50% | linhas: 25-30 | disciplinas: " + d1;
   return ["@ " + d1 + " :: 10q", "@ " + d2 + " :: 20p"].join("\n");
 }
 function edConferenciaEdital(r, plano, id) {
@@ -4889,26 +4898,24 @@ async function edAplicarColagem() {
     await uiAlert(t("ed_colar_vazio_erro"));
     return;
   }
-  if (c.discSomem.length || c.pesosMudam.length) {
-    const partes = [];
-    if (c.discSomem.length)
-      partes.push(t("ed_conf_disc", { n: c.discSomem.length, l: c.discSomem.slice(0, 5).join(", ") }));
-    if (c.pesosMudam.length)
-      partes.push(t("ed_conf_pesos", { n: c.pesosMudam.length,
-        l: c.pesosMudam.slice(0, 5).map((p) => p.nome + ": " + p.de + " → " + p.para).join("\n· ") }));
-    if (!(await uiConfirm(partes.join("\n\n") + "\n\n" + t("ed_conf_seguir")))) {
-      reg("EDITAL-COLAR", "colagem cancelada na conferência de estrutura");
-      return;
-    }
+  /* (19.57.0) O PAINEL DAS MUDANÇAS substitui as perguntas em sequência: antes de aplicar, uma tela só com o que SAI
+   * (vermelho), o que ENTRA (verde), o que MUDA (âmbar) e o que o app MANTÉM sozinho (azul) — e o progresso que ficaria
+   * sem dono em destaque. Aplicar ou voltar; nada muda antes. */
+  let previa = c.novoTxt, manteveP = null;
+  try { if (typeof edManterPontuacao === "function") { manteveP = edManterPontuacao($("editalTexto").value, c.novoTxt); previa = manteveP.txt; } } catch (e) { previa = c.novoTxt; }
+  const mud = edMudancasRevisao($("editalTexto").value, previa, c, manteveP);
+  if (!(await edMudancasAbrir(mud))) {
+    reg("EDITAL-COLAR", "colagem cancelada no painel das mudanças", mud.resumo);
+    return;
   }
-  if (c.somem.length && !c.orfaos.length) {
-    if (!(await uiConfirm(t("ed_conf_somem", { n: c.somem.length,
-        l: c.somem.slice(0, 5).map((x) => x.t).join("\n· ") })))) {
-      reg("EDITAL-COLAR", "colagem cancelada na conferência de tópicos");
-      return;
-    }
+  /* (19.57.0) depois do painel ficam só as perguntas do que NÃO se desfaz colando de volta: ramos que somem e progresso
+   * sem dono. As outras (disciplinas que saem, pesos, tópicos, "aplicar?") já estão no painel, em cor. */
+  const nRamos = (txt) => lerEdital(txt || "").disciplinas.reduce((s, d) => s + d.topicos.reduce((x, tp) => x + (tp.ramos || []).length, 0), 0);
+  const rA = nRamos($("editalTexto").value), rD = nRamos(previa);
+  if (rD < rA && !(await uiConfirm(t("ed_conf_ramos", { a: rA, d: rD })))) {
+    reg("EDITAL-COLAR", "colagem cancelada: ramos perdidos", rA + " → " + rD);
+    return;
   }
-  /* a última e a mais séria: progresso que fica sem dono */
   if (c.orfaos.length) {
     if (!(await uiConfirm(t("ed_conf_orfaos", { n: c.orfaos.length,
         l: c.orfaos.slice(0, 5).map((o) => o.d + " › " + o.t).join("\n· ") })))) {
@@ -4917,21 +4924,122 @@ async function edAplicarColagem() {
     }
   }
 
-  /* A ÚLTIMA PERGUNTA VEM SEMPRE, com os números dentro.
-   * As confirmações acima só aparecem quando há risco; sem elas, um
-   * plano de 533 tópicos podia substituir outro num clique só, e a
-   * única ação irreversível da caixa era a mais fácil de disparar. */
-  if (!(await uiConfirm(t("ed_colar_conf_aplicar", {
-      a: c.topicosAntes, d: c.topicosDepois, dd: c.discDepois })))) return;
-
   guardarVersao("antes de colar o plano corrigido", $("editalTexto").value);
-  $("editalTexto").value = c.novoTxt;
+  /* (19.56.0) os cortes, os números e a discursiva de "⚖ Pontuação e cortes" vão junto, se o plano novo não os trouxe */
+  const novoTxt = previa, manteve = manteveP;
+  $("editalTexto").value = novoTxt;
+  if (manteve && (manteve.cortes || manteve.pesos || manteve.discursiva)) {
+    try { reg("EDITAL-COLAR", "pontuação e cortes mantidos do plano anterior", (manteve.cortes ? "cortes " : "") + (manteve.pesos ? "pesos" : "")); } catch (e) {}
+  }
   reg("EDITAL-COLAR", "plano corrigido colado",
       c.topicosAntes + " → " + c.topicosDepois + " tópicos, "
       + c.orfaos.length + " marcações órfãs");
   $("dlgEdColar").close();
   edRender();
-  toast("ed_colado");
+  if (manteve && (manteve.cortes || manteve.pesos || manteve.discursiva)) { try { toastMsg(t("ed_colado_manteve"), 6000); } catch (e) { toast("ed_colado"); } }
+  else toast("ed_colado");
+}
+
+/* =====================================================================
+ * (19.57.0) O PAINEL DAS MUDANÇAS DA REVISÃO
+ *
+ * O pedido: "antes de efetivar as mudanças da revisão, mostrar um painel com o que saiu e o que entrou, com cores
+ * distintas". As cores têm UM significado cada, sempre com o símbolo junto (para quem não distingue cores):
+ *   ✕ VERMELHO — sai (disciplina, tópico sem herdeiro, ramo, corte, discursiva);
+ *   ＋ VERDE    — entra (disciplina, tópico, ramo, corte, discursiva);
+ *   ↻ ÂMBAR    — muda (tópico renomeado, peso de disciplina ou tópico, mínimo, valor da discursiva);
+ *   ✓ AZUL     — o app mantém sozinho (cortes, números e discursiva que o plano novo não trouxe);
+ *   ⚠ VERMELHO FORTE, no topo — o que você já estudou e ficaria sem dono.
+ * ===================================================================== */
+function edMudancasRevisao(antesTxt, depoisTxt, c, manteve) {
+  const A = lerEdital(antesTxt || ""), D = lerEdital(depoisTxt || "");
+  const sai = [], entra = [], muda = [], mantem = [], alerta = [];
+  const k = (x) => String(x || "").toLowerCase().trim();
+  (c.discSomem || []).forEach((d) => sai.push(t("ed_mud_disc", { d })));
+  (c.discSurgem || []).forEach((d) => entra.push(t("ed_mud_disc", { d })));
+  (c.semHerdeiro || []).forEach((x) => sai.push(x.d + " › " + x.t));
+  (c.herdados || []).forEach((x) => muda.push(t("ed_mud_renomeado", { d: x.d, a: x.t, b: (x.herdeiros || [])[0] || "?" })));
+  const herdeirosUsados = new Set();
+  (c.herdados || []).forEach((x) => (x.herdeiros || []).forEach((h) => herdeirosUsados.add(k(x.d + "›" + h))));
+  (c.surgem || []).forEach((x) => { if (!herdeirosUsados.has(k(x.d + "›" + x.t))) entra.push(x.d + " › " + x.t); });
+  (c.pesosMudam || []).forEach((p) => muda.push(t("ed_mud_peso_disc", { d: p.nome, a: p.de, b: p.para })));
+  /* tópicos e ramos que existem nos dois */
+  const topA = {}, topD = {};
+  A.disciplinas.forEach((d) => d.topicos.forEach((tp) => { topA[k(d.nome + "›" + tp.nome)] = { d: d.nome, tp }; }));
+  D.disciplinas.forEach((d) => d.topicos.forEach((tp) => { topD[k(d.nome + "›" + tp.nome)] = { d: d.nome, tp }; }));
+  Object.keys(topA).forEach((kk) => {
+    const a = topA[kk], b = topD[kk];
+    if (!b) return;
+    if (a.tp.peso !== b.tp.peso) muda.push(t("ed_mud_peso_top", { d: a.d, t: a.tp.nome, a: a.tp.peso, b: b.tp.peso }));
+    const ra = (a.tp.ramos || []).map((r) => r.nome), rb = (b.tp.ramos || []).map((r) => r.nome);
+    ra.filter((r) => !rb.some((x) => k(x) === k(r))).forEach((r) => sai.push(t("ed_mud_ramo", { d: a.d, t: a.tp.nome, r })));
+    rb.filter((r) => !ra.some((x) => k(x) === k(r))).forEach((r) => entra.push(t("ed_mud_ramo", { d: a.d, t: a.tp.nome, r })));
+  });
+  /* cortes (blocos com mínimo) */
+  const blA = {}, blD = {};
+  const minTx = (m) => (!m ? "-" : m.tipo === "pct" ? m.valor + "%" : m.valor + " " + t("ep_acertos"));
+  (A.blocos || []).forEach((b) => { blA[k(b.nome)] = b; });
+  (D.blocos || []).forEach((b) => { blD[k(b.nome)] = b; });
+  Object.keys(blA).forEach((kk) => {
+    if (!blD[kk]) sai.push(t("ed_mud_corte", { b: blA[kk].nome, m: minTx(blA[kk].minimo) }));
+    else if (minTx(blA[kk].minimo) !== minTx(blD[kk].minimo)) muda.push(t("ed_mud_corte_muda", { b: blA[kk].nome, a: minTx(blA[kk].minimo), c: minTx(blD[kk].minimo) }));
+  });
+  Object.keys(blD).forEach((kk) => { if (!blA[kk]) entra.push(t("ed_mud_corte", { b: blD[kk].nome, m: minTx(blD[kk].minimo) })); });
+  /* discursiva */
+  const dA = A.cfg && A.cfg.discursiva, dD = D.cfg && D.cfg.discursiva;
+  const dTx = (d) => t("ed_mud_disc_tx", { p: d.pontos || "?", d: (d.disciplinas || []).join(", ") || "?" });
+  if (dA && !dD) sai.push(t("ed_mud_discursiva", { x: dTx(dA) }));
+  else if (!dA && dD) entra.push(t("ed_mud_discursiva", { x: dTx(dD) }));
+  else if (dA && dD && edLinhaDiscursiva(dA) !== edLinhaDiscursiva(dD)) muda.push(t("ed_mud_discursiva_muda", { a: dTx(dA), b: dTx(dD) }));
+  /* o que o app manteve sozinho */
+  if (manteve) {
+    if (manteve.cortes) mantem.push(t("ed_mud_mantem_cortes"));
+    if (manteve.pesos) mantem.push(t("ed_mud_mantem_pesos"));
+    if (manteve.discursiva) mantem.push(t("ed_mud_mantem_discursiva"));
+  }
+  /* o dano que não se desfaz colando de novo */
+  (c.orfaos || []).forEach((o) => alerta.push(o.d + " › " + o.t));
+  const resumo = t("ed_mud_resumo", { s: sai.length, e: entra.length, m: muda.length, a: c.topicosAntes, d: c.topicosDepois });
+  return { sai, entra, muda, mantem, alerta, resumo, topicosAntes: c.topicosAntes, topicosDepois: c.topicosDepois };
+}
+
+let edMudResolver = null;
+function edMudancasAbrir(mud) {
+  const dlg = $("dlgEdMudancas");
+  if (!dlg) return Promise.resolve(true);
+  const cx = $("edMudCorpo");
+  cx.innerHTML = "";
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  cx.append(el("p", "ed-mud-resumo", mud.resumo));
+  const leg = el("div", "ed-mud-legenda");
+  [["sai", "✕", t("ed_mud_leg_sai")], ["entra", "＋", t("ed_mud_leg_entra")], ["muda", "↻", t("ed_mud_leg_muda")], ["mantem", "✓", t("ed_mud_leg_mantem")]]
+    .forEach(([cls, ic, tx]) => leg.append(el("span", "ed-mud-chip ed-mud-" + cls, ic + " " + tx)));
+  cx.append(leg);
+  const sec = (cls, ic, tit, itens, aberto) => {
+    if (!itens.length) return;
+    const d = el("details", "ed-mud-sec ed-mud-" + cls);
+    d.open = aberto !== false;
+    d.append(el("summary", "", ic + " " + tit + " (" + itens.length + ")"));
+    const ul = el("ul");
+    itens.slice(0, 60).forEach((x) => ul.append(el("li", "", x)));
+    if (itens.length > 60) ul.append(el("li", "ed-mud-mais", t("hub_ia_cmp_mais", { n: itens.length - 60 })));
+    d.append(ul);
+    cx.append(d);
+  };
+  sec("alerta", "⚠", t("ed_mud_tit_alerta"), mud.alerta);
+  sec("sai", "✕", t("ed_mud_tit_sai"), mud.sai);
+  sec("entra", "＋", t("ed_mud_tit_entra"), mud.entra);
+  sec("muda", "↻", t("ed_mud_tit_muda"), mud.muda, mud.muda.length <= 15);
+  sec("mantem", "✓", t("ed_mud_tit_mantem"), mud.mantem);
+  if (!mud.sai.length && !mud.entra.length && !mud.muda.length && !mud.alerta.length) cx.append(el("p", "nota", t("ed_mud_nada")));
+  abrirModal("dlgEdMudancas");
+  return new Promise((res) => { edMudResolver = res; });
+}
+function edMudancasFechar(sim) {
+  const r = edMudResolver;
+  edMudResolver = null;
+  try { if ($("dlgEdMudancas").open) $("dlgEdMudancas").close(); } catch (e) {}
+  if (r) r(!!sim);
 }
 
 /* Simulador de horas: a decisão é uma troca, e troca se decide vendo os dois
@@ -5165,6 +5273,11 @@ function edIniciar() {
   if ($("btnEdAchAbrir")) $("btnEdAchAbrir").onclick = () => edAchadosAbrir($("edAchLista").hidden);
   $("edColarTexto").addEventListener("input", edConferirColagem);
   $("btnEdColarAplicar").onclick = edAplicarColagem;
+  /* (19.57.0) o painel das mudanças: aplicar ou voltar (fechar pelo X ou Esc também é voltar) */
+  if ($("btnEdMudAplicar")) $("btnEdMudAplicar").onclick = () => edMudancasFechar(true);
+  if ($("btnEdMudVoltar")) $("btnEdMudVoltar").onclick = () => edMudancasFechar(false);
+  if ($("btnEdMudX")) $("btnEdMudX").onclick = () => edMudancasFechar(false);
+  if ($("dlgEdMudancas") && $("dlgEdMudancas").addEventListener) $("dlgEdMudancas").addEventListener("close", () => { if (edMudResolver) edMudancasFechar(false); });
   $("btnEdColarFechar").onclick = () => $("dlgEdColar").close();
   if ($("btnEdColarRecolocar")) $("btnEdColarRecolocar").onclick = edColarRecolocar;
   if ($("btnEdColarPrompt")) $("btnEdColarPrompt").onclick = edColarPrompt;

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.55.0";
+const VERSAO = "19.57.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -381,6 +381,8 @@ function _uiFechar(valor) {
   if (m.open) m.close();
   const r = _uiResolve; _uiResolve = null;
   if (r) r(valor);
+  /* (19.57.0) o painel das mudanças da revisão é uma confirmação também: quem responde as outras responde ele */
+  else if (typeof edMudancasFechar === "function" && typeof edMudResolver !== "undefined" && edMudResolver) edMudancasFechar(valor);
 }
 
 function uiDialog(texto, comCancelar, opc) {

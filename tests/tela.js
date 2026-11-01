@@ -646,12 +646,9 @@ async function testes() {
        "Q4 acusou perda de tópico ou de progresso numa colagem íntegra");
     ok(conf2.pesosMudam.length === 1,
        "Q4b a mudança de peso não foi detectada na conferência");
+    /* (19.57.0) a troca de peso e a confirmação final viraram UM painel das mudanças (âmbar: peso de B 3 → 4) */
     const aplicando = api.edAplicarColagem();
-    api.uiModalResponder(true);          /* usuário confirma a troca de peso */
-    /* e a confirmação FINAL, que passou a vir sempre: sem ela, um plano
-     * inteiro era substituído num clique só quando não havia perda */
-    await Promise.resolve();
-    api.uiModalResponder(true);
+    for (let i = 0; i < 6; i++) { await Promise.resolve(); api.uiModalResponder(true); }
     await aplicando;
     ok(api.lerEdital(api.$("editalTexto").value).disciplinas[1].peso === 4,
        "Q5 a colagem confirmada não foi aplicada");

@@ -179,12 +179,12 @@ async function testes() {
     const muito = api.hubIaSimular(api.hubIaLerResposta("Horas recomendadas: 40 h/semana", ctx.plano), ctx);
     ok(pouco && muito && pouco.depoisN <= muito.depoisN, "IA8 menos horas: cabem menos (o painel compara antes e depois)");
     /* ---- conferência do edital (19.54.0) ---- */
-    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte,pesos", "C1 sem blocos com minimo e com pesos 1-5: faltam corte e pesos");
+    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte,pesos,discursiva", "C1 sem blocos com minimo e com pesos 1-5: faltam corte e pesos");
     const rOk = api.lerEdital(["# T | prova: 2026-11-29 | horas: 10", "& Especificos | minimo: 50%", "@ A :: 10q", "+ x :: 5", "& Lógico | minimo: 40%", "@ B :: 5q", "+ y :: 5"].join("\n"));
     const pOk = api.montarPlano(rOk, Object.assign({}, base, { tempoRecente: null }));
-    ok(pOk.fatiaExata && api.edConfPendencias(rOk, pOk, "e2").length === 0, "C2 com blocos com minimo e pesos do edital: nada pendente");
+    ok(pOk.fatiaExata && api.edConfPendencias(rOk, pOk, "e2").join() === "discursiva", "C2 com blocos com minimo e pesos do edital: nada pendente");
     api.edConfDispensar("e1", "pesos");
-    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte", "C3 'o edital nao informa' tira so aquele item, so naquele edital");
+    ok(api.edConfPendencias(r, ctx.plano, "e1").join() === "corte,discursiva", "C3 'o edital nao informa' tira so aquele item, so naquele edital");
     const cx = api.edConferenciaEdital(r, ctx.plano, "e1");
     ok(cx && /Pontos de corte/.test(cx.textContent) && /& Conhecimentos Específicos | minimo: 50%/.test(cx.textContent) && /Tributário/.test(cx.textContent), "C4 a lista explica e traz o exemplo com as disciplinas do edital");
     ok(/ESTIMADOS/.test(api.hubRitmoPromptIA(ctx)), "C5 o pedido a IA diz que os pesos sao estimados");

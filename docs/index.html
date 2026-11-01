@@ -1873,6 +1873,25 @@ dialog.hub-ia-dlg[open]{width:min(720px,96vw);max-height:92vh}
 .hub-ia-lista{margin:2px 0 4px;padding-left:26px}
 .hub-ia-pq-tit{font-weight:700;margin-top:8px}
 .hub-ia-grupo{font-weight:700;margin-top:10px}
+/* (19.57.0) painel das mudanças da revisão: uma cor por tipo, sempre com o símbolo */
+dialog.ed-mud-dlg[open]{width:min(760px,96vw);max-height:92vh}
+.ed-mud-resumo{font-weight:700;margin:2px 0 8px}
+.ed-mud-legenda{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.ed-mud-chip{font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid}
+.ed-mud-sec{border-radius:9px;padding:6px 10px;margin:6px 0;border-left:5px solid}
+.ed-mud-sec summary{cursor:pointer;font-weight:800}
+.ed-mud-sec ul{margin:4px 0 2px;padding-left:20px;font-size:13px;line-height:1.5}
+.ed-mud-mais{list-style:none;margin-left:-20px;color:var(--sutil)}
+.ed-mud-sai{border-color:var(--erro);background:rgba(239,68,68,.09)}
+.ed-mud-sai summary,.ed-mud-chip.ed-mud-sai{color:var(--erro)}
+.ed-mud-entra{border-color:var(--ok);background:rgba(34,197,94,.09)}
+.ed-mud-entra summary,.ed-mud-chip.ed-mud-entra{color:var(--ok)}
+.ed-mud-muda{border-color:var(--atencao);background:rgba(245,158,11,.09)}
+.ed-mud-muda summary,.ed-mud-chip.ed-mud-muda{color:var(--atencao)}
+.ed-mud-mantem{border-color:var(--info);background:rgba(59,130,246,.09)}
+.ed-mud-mantem summary,.ed-mud-chip.ed-mud-mantem{color:var(--info)}
+.ed-mud-alerta{border-color:var(--erro);background:rgba(239,68,68,.18)}
+.ed-mud-alerta summary{color:var(--erro)}
 /* (19.55.0) como a prova pontua */
 dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ep-ia{border:1px solid var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0 10px}
@@ -1887,7 +1906,20 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ep-cab{font-size:12px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.03em}
 .ep-c-vale,.ep-c-min,.ep-mincampo{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .ep-num{width:64px}
-.ep-grupos{border:1px dashed var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0}
+.ep-grupos{border:1px solid var(--borda);border-radius:9px;padding:8px 12px;margin:8px 0}
+.ep-bloco{border:1px dashed var(--borda);border-radius:9px;padding:8px 10px;margin:6px 0}
+.ep-bloco-topo{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ep-bloco-topo .ep-gnome{flex:1 1 200px;width:auto}
+.ep-bloco-rot{font-size:12.5px;color:var(--sutil)}
+.ep-bloco-discs{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:13px}
+.ep-bloco-d{display:flex;gap:5px;align-items:center}
+.ep-bloco-d.ep-outro{color:var(--sutil)}
+.ep-no-bloco{font-size:12.5px;color:var(--info);font-weight:700}
+.ep-disc-lin{display:flex;flex-wrap:wrap;gap:8px 16px;margin:4px 0}
+.ep-disc-campo{display:flex;gap:6px;align-items:center;font-size:13px}
+.hub-disc-treino{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:6px 10px;margin:4px 0;border-radius:9px;
+  border:1px solid var(--info);background:rgba(59,130,246,.08);font-size:12.5px}
+.hub-disc-treino.feito{opacity:.7;border-style:dashed}
 .ep-grupo{grid-template-columns:minmax(150px,1.2fr) minmax(140px,1fr) minmax(160px,1.6fr)}
 .ep-gnome{width:100%;box-sizing:border-box}
 .ep-membros{color:var(--sutil);font-size:12.5px}
@@ -1899,6 +1931,8 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ed-acao-mini{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 /* (19.54.0) conferência do edital */
 .ed-conf{border-color:var(--atencao)}
+.ed-conf.ed-conf-flash{animation:edConfFlash 2s ease-out}
+@keyframes edConfFlash{0%,40%{box-shadow:0 0 0 3px var(--atencao)}100%{box-shadow:0 0 0 0 transparent}}
 .ed-conf-tit{color:var(--atencao)}
 .ed-conf-item{border-top:1px solid var(--borda);padding:8px 0}
 .ed-conf-nome{font-weight:700}
@@ -10528,6 +10562,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- (v18.70.0) PARA QUAL PASTA? Mover pela prévia (e, no futuro, por outros caminhos): últimos destinos, busca,
      itens grandes para o dedo. Escolher pergunta antes de mover. -->
+<!-- (19.57.0) as mudanças da revisão, antes de aplicar: o que sai, entra, muda e o que o app mantém -->
+<dialog id="dlgEdMudancas" class="ui-modal diag-modal ed-mud-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="ed_mud_tit"></h3>
+    <button type="button" class="dlg-x" id="btnEdMudX" data-i18n-title="help_close">✖</button>
+  </div>
+  <div id="edMudCorpo"></div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-azul" id="btnEdMudAplicar" data-i18n="ed_mud_aplicar"></button>
+    <button type="button" class="btn btn-cinza" id="btnEdMudVoltar" data-i18n="ed_mud_voltar"></button>
+  </div>
+</dialog>
+
 <!-- (19.55.0) COMO A PROVA PONTUA: perguntas e uma tabela no lugar de "&" e "10q" no texto do edital -->
 <dialog id="dlgEdPontua" class="ui-modal diag-modal ep-dlg">
   <div class="vka-cab">
@@ -10555,6 +10602,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label><input type="radio" name="epMin" id="epMin_nao"> <span data-i18n="ep_q2_nao"></span></label>
     <label><input type="radio" name="epMin" id="epMin_sim"> <span data-i18n="ep_q2_sim"></span></label>
   </fieldset>
+  <fieldset class="ep-perg">
+    <legend data-i18n="ep_q3"></legend>
+    <label><input type="radio" name="epDisc" id="epDisc_nao"> <span data-i18n="ep_q3_nao"></span></label>
+    <label><input type="radio" name="epDisc" id="epDisc_sim"> <span data-i18n="ep_q3_sim"></span></label>
+  </fieldset>
+  <div id="epDiscCx" class="ep-grupos ep-disc" hidden></div>
   <div id="epTabela" class="ep-tabela"></div>
   <div id="epGrupos" class="ep-grupos" hidden></div>
   <div class="ep-resumo-cx">

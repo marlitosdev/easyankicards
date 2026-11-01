@@ -358,7 +358,7 @@ async function testes() {
     ok(pr("btnEdColarModoCor") === "true" && pr("btnEdColarModoOrg") === "false" && api.$("btnEdColarModoCor").disabled === false && /plano atual e os pontos/.test(api.$("edColarModoExp").textContent), "Y3d com plano lido, o padrão é 'Corrigir o plano que já tenho' (e a explicação diz o que a IA recebe)");
     ok(/vão no pedido à IA/.test(api.$("edAchLista").textContent), "Y3e o passo 0 diz que os pontos 'precisa da IA' vão no pedido");
     api.$("btnEdColarModoOrg").onclick();
-    ok(pr("btnEdColarModoOrg") === "true" && pr("btnEdColarModoCor") === "false" && api.edColarPedidoTexto() === api.t("ed_prompt") && /instruções de como organizar/.test(api.$("edColarModoExp").textContent), "Y3f trocar para 'Montar a partir do edital oficial': o pedido é o ed_prompt de sempre");
+    ok(pr("btnEdColarModoOrg") === "true" && pr("btnEdColarModoCor") === "false" && api.edColarPedidoTexto().replace(/\n\d+\. PROVA DISCURSIVA[\s\S]*?não escreva a linha\./, "") === api.t("ed_prompt") && /instruções de como organizar/.test(api.$("edColarModoExp").textContent), "Y3f trocar para 'Montar a partir do edital oficial': o pedido é o ed_prompt de sempre");
     api.$("btnEdColarModoCor").onclick();
     janela.__area = "";
     await conduzir(api.$("btnEdColarPedido").onclick());

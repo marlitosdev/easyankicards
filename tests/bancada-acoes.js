@@ -110,7 +110,8 @@ async function testes() {
     ok(String(janela.__area || "").length > 200,
        "B3 o pedido nao foi para a area de transferencia: "
        + String(janela.__area).slice(0, 60));
-    ok(janela.__area === api.t("ed_prompt"),
+    /* (19.57.0) fora a regra da discursiva (o plano ainda não tem a linha), é o pedido de sempre */
+    ok(String(janela.__area).replace(/\n\d+\. PROVA DISCURSIVA[\s\S]*?não escreva a linha\./, "") === api.t("ed_prompt") && /PROVA DISCURSIVA/.test(janela.__area),
        "B3b o que foi copiado nao e o pedido de organizacao do edital");
 
     /* E A PESSOA FICA SABENDO. O aviso diz o tamanho — que é como se

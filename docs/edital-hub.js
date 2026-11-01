@@ -234,6 +234,7 @@ function hubPintarAgenda() {
   hubRitmoCtx = null;
   const equilibrios = [];
   const confs = [];             /* (19.54.0) os editais com conferência pendente (corte, pesos) */
+  const discs = [];             /* (19.56.0) os editais com discursiva cadastrada (o treino de escrita da semana) */
   const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
   let modoSugerido = "";
   let diasProx = null;          /* dias até a prova mais próxima: o que o automático usa */
@@ -254,6 +255,7 @@ function hubPintarAgenda() {
     if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
+    if (cfg.discursiva && cfg.discursiva.pontos > 0 && s.dias !== null && s.dias !== undefined && s.dias >= 0) discs.push({ id: e.id, nome: e.nome || cfg.concurso || "", d: cfg.discursiva });
     try {
       const pend = typeof edConfPendencias === "function" ? edConfPendencias(r, plano, e.id) : [];
       if (pend.length) confs.push({ id: e.id, nome: e.nome || cfg.concurso || "", pend });
@@ -349,6 +351,24 @@ function hubPintarAgenda() {
     cx.append(av);
   }
 
+  /* (19.56.0) O TREINO DA DISCURSIVA. Discursiva se treina escrevendo, não só estudando o conteúdo: com a discursiva
+   * cadastrada, a semana pede uma dissertação no formato do edital. "feito esta semana" é guardado por semana. */
+  discs.forEach((q) => {
+    const ln = document.createElement("div");
+    const feito = hubDiscTreinoFeito(q.id);
+    ln.className = "hub-disc-treino" + (feito ? " feito" : "");
+    ln.id = "hubDiscTreino_" + q.id;
+    const tx = document.createElement("span");
+    const dd = q.d;
+    tx.textContent = t(feito ? "hub_disc_treino_ok" : "hub_disc_treino", { e: q.nome, d: (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-",
+      l: dd.linhas && dd.linhas.min ? dd.linhas.min + "–" + dd.linhas.max : "?" });
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min" + (feito ? "" : " btn-min-ok");
+    b.textContent = t(feito ? "hub_disc_treino_desfazer" : "hub_disc_treino_feito");
+    b.onclick = () => { hubDiscTreinoMarcar(q.id, !feito); hubPintarAgenda(); };
+    ln.append(tx, b);
+    cx.append(ln);
+  });
   /* (19.54.0) a conferência do edital, em uma linha por edital que ainda tem pendência (o detalhe fica no edital) */
   confs.forEach((q) => {
     const ln = document.createElement("div");
@@ -357,7 +377,8 @@ function hubPintarAgenda() {
     tx.textContent = t("hub_conf_linha", { e: q.nome, p: q.pend.map((x) => t("ed_conf_" + x + "_curto")).join(" · ") });
     const b = document.createElement("button");
     b.type = "button"; b.className = "btn-min"; b.textContent = t("hub_conf_ir");
-    b.onclick = () => { try { hubAbrirEdital(q.id); } catch (e) {} };
+    b.id = "btnHubConf_" + q.id;
+    b.onclick = () => hubConferir(q.id);
     ln.append(tx, b);
     cx.append(ln);
   });
@@ -638,6 +659,21 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
   lig("btnHubIaX", () => document.getElementById("dlgHubIA").close());
 }
 
+/* (19.56.0) o treino da discursiva desta semana: {edital: {semana (segunda ISO): true}} */
+const HUB_DISC_TREINO = "eac_disc_treino";
+function hubDiscTreinoFeito(id) {
+  try { const v = JSON.parse(localStorage.getItem(HUB_DISC_TREINO) || "{}"); return !!(v[id] && v[id][edSemanaCalendario(hubHoje()).ini]); } catch (e) { return false; }
+}
+function hubDiscTreinoMarcar(id, sim) {
+  let v = {};
+  try { v = JSON.parse(localStorage.getItem(HUB_DISC_TREINO) || "{}") || {}; } catch (e) { v = {}; }
+  const sem = edSemanaCalendario(hubHoje()).ini;
+  v[id] = Object.assign({}, v[id] || {});
+  if (sim) v[id][sem] = true; else delete v[id][sem];
+  try { localStorage.setItem(HUB_DISC_TREINO, JSON.stringify(v)); } catch (e) {}
+  try { reg("EDITAL", sim ? "treino da discursiva feito" : "treino da discursiva desmarcado", id + " · " + sem); } catch (e) {}
+}
+
 /* (19.47.0) o ritmo real: média de minutos por semana nas últimas 4 semanas com registro (a mesma conta do painel de ritmo) */
 let hubRitmoAvisar = null;
 const HUB_RITMO_REAL = "eac_ag_ritmo_real";
@@ -845,6 +881,12 @@ function hubRitmoPromptIA(ctx) {
   hubRitmoSemanas(6).forEach((x) => L.push("  - " + dm(x.ini) + "–" + dm(fimSem(x.ini)) + ": " + horasTexto(x.min)));
   L.push("  " + t("hub_ia_medias", { m: horasTexto(ritmo.min), u: ritmo.ult2 ? horasTexto(ritmo.ult2) : "-", tend: t("hub_tend_" + ritmo.tendencia) }));
   L.push(t("hub_ia_bagagem"));
+  /* (19.56.0) a discursiva: quanto vale da nota final, onde cai e o que elimina */
+  if (plano.discursivaCfg) {
+    const dd = plano.discursivaCfg;
+    L.push(t("hub_ia_discursiva", { p: dd.pontos || "?", s: plano.discursiva ? plano.discursiva.s : "?", d: (dd.disciplinas || []).join(", ") || "?",
+      m: dd.minimo ? (dd.minimo.tipo === "pct" ? dd.minimo.valor + "%" : dd.minimo.valor) : "-", l: dd.linhas ? dd.linhas.min + "–" + dd.linhas.max : "-", c: dd.corrigida || "-" }));
+  } else L.push(t("hub_ia_discursiva_sem"));
   /* (19.54.0) os pesos são do edital ou estimados? A IA precisa saber o quanto confiar no "vale na prova" */
   L.push(t(plano.fatiaExata ? "hub_ia_fatia_exata" : "hub_ia_fatia_est"));
   /* as notas mínimas: as que o edital tem no app, com a cobertura de hoje — ou o aviso de que não estão cadastradas */
@@ -1740,6 +1782,27 @@ function hubAbrirEdital(id) {
   if (typeof edRender === "function") edRender();
 }
 
+/* (19.56.0) "conferir no edital" LEVA ATÉ A CONFERÊNCIA. Antes só abria o edital — e, com ele já aberto, nada parecia
+ * acontecer: a caixa ficava mais abaixo, fora da tela. Agora abre (se preciso), rola até a caixa e a destaca; sem a
+ * caixa à vista, abre direto a janela "Como a prova pontua". */
+function hubConferir(id) {
+  try { const a0 = edAberto(); if (!a0 || a0.id !== id) hubAbrirEdital(id); } catch (e) {}
+  const ir = () => {
+    const cx = document.getElementById("edConferencia");
+    if (cx && !cx.hidden) {
+      try { cx.scrollIntoView({ block: "center" }); } catch (e) { try { cx.scrollIntoView(); } catch (e2) {} }
+      if (cx.classList) { cx.classList.remove("ed-conf-flash"); void cx.offsetWidth; cx.classList.add("ed-conf-flash"); setTimeout(() => { try { cx.classList.remove("ed-conf-flash"); } catch (e) {} }, 2200); }
+      return true;
+    }
+    if (typeof epAbrir === "function") return epAbrir();
+    return false;
+  };
+  try { reg("EDITAL", "conferir no edital (pela agenda)", String(id)); } catch (e) {}
+  /* depois de o edital terminar de desenhar (abrir repinta a tela e devolveria a rolagem ao topo) */
+  if (typeof setTimeout === "function") { setTimeout(ir, 60); return true; }
+  return ir();
+}
+
 function hubVoltar() {
   hubGravarAberto();
   edAbrir(null);
@@ -1827,13 +1890,20 @@ function hubNovo() {
 /* O prompt do edital para a IA. Com `comRamos`, ganha o bloco de regras de ramificação ("++ Ramo :: peso :: nota"),
  * numerado a seguir à última regra e colocado ANTES do exemplo/do edital — sem a caixa, é o ed_prompt de sempre. O ponto de
  * inserção é o primeiro "\n\nEXEMPLO DE SAÍDA:" / "\n\nSYLLABUS:" / "\n\nEDITAL:", que existem nos dois idiomas. */
-function edPromptEdital(comRamos, textoDoEdital) {
+function edPromptEdital(comRamos, textoDoEdital, opcDisc) {
   let out = t("ed_prompt");
   const corte = out.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
   if (comRamos && corte >= 0) {
     let n = 0;
     out.slice(0, corte).replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
     out = out.slice(0, corte) + "\n" + t("ed_prompt_ramos", { n: n + 1 }) + out.slice(corte);
+  }
+  /* (19.57.0) a regra da discursiva, depois da última — só quando o plano ainda não tem a linha "# discursiva" */
+  if (corte >= 0 && opcDisc && !opcDisc.tem) {
+    const c2 = out.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+    let n2 = 0;
+    out.slice(0, c2).replace(/(?:^|\n)(\d+)\./g, (m, d) => { n2 = Math.max(n2, Number(d)); return m; });
+    out = out.slice(0, c2) + "\n" + t("ed_prompt_disc", { n: n2 + 1 }) + out.slice(c2);
   }
   /* com o texto do edital na mão, ele já vai DENTRO do prompt, no lugar do "[cole aqui o edital]" */
   if (textoDoEdital) out = out.replace(/\[cole aqui o edital\]|\[paste the syllabus here\]/, () => textoDoEdital);
@@ -1853,7 +1923,9 @@ function edPromptRevisao(textoPlano, achados) {
   const itens = edAchadosParaIA(achados).map((a, k) => (k + 1) + ". " + (a.grave ? "[GRAVE] " : "") + (a.msg || t(a.chave, a.params || {})));
   const L = [t("ed_prompt_rev_cab"), ""];
   if (itens.length) L.push(t("ed_prompt_rev_achados"), itens.join("\n"), "");
-  L.push(miolo, t("ed_prompt_rev_regra", { n: n + 1 }), "", t("ed_prompt_rev_plano"), String(textoPlano || ""), "", t("ed_prompt_onde"));
+  /* (19.57.0) a discursiva: com a linha no plano, mantê-la; sem ela, só incluir se o texto colado trouxer a discursiva */
+  const temDisc = /^\s*#\s*discursiva\b/im.test(String(textoPlano || ""));
+  L.push(miolo, t("ed_prompt_rev_regra", { n: n + 1 }), t(temDisc ? "ed_prompt_rev_disc_manter" : "ed_prompt_rev_disc", { n: n + 2 }), "", t("ed_prompt_rev_plano"), String(textoPlano || ""), "", t("ed_prompt_onde"));
   return L.join("\n");
 }
 
@@ -2185,7 +2257,10 @@ function hubNovoTexto(d) {
     /* O CABEÇALHO É NOSSO, o resto é da pessoa. Se ela colar a resposta
      * inteira da IA — que já vem com "#" —, aquela linha viraria uma
      * segunda configuração competindo com a daqui. */
-    const corpo = plano.split(/\r?\n/)
+    /* (19.57.0) a linha "# discursiva" da IA FICA: ela não compete com o cabeçalho daqui (é outro dado) */
+    const linhasP = plano.split(/\r?\n/);
+    linhasP.filter((l) => /^\s*#\s*discursiva\b/i.test(l)).slice(0, 1).forEach((l) => L.push(l.trim()));
+    const corpo = linhasP
       .filter((l) => !/^\s*#/.test(l))
       .join("\n").trim();
     if (corpo) { L.push(""); L.push(corpo); }

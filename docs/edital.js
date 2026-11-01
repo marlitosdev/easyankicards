@@ -111,6 +111,36 @@ function edMinimo(txt) {
 }
 
 const ED_FASE2_RE = /^fase\s*2\b\s*:?\s*(.*)$/i;
+
+/* (19.56.0) a linha da discursiva, lida e escrita num lugar só */
+function edLerDiscursiva(partes) {
+  const d = { pontos: 0, objetiva: 0, minimo: null, linhas: null, corrigida: 0, disciplinas: [] };
+  (partes || []).forEach((p) => {
+    const i = p.indexOf(":");
+    const k = (i < 0 ? p : p.slice(0, i)).trim();
+    const v = (i < 0 ? "" : p.slice(i + 1)).trim();
+    if (!v) return;
+    const num = (x) => Number(String(x).replace(",", ".").replace(/[^\d.]/g, "")) || 0;
+    if (/^pontos?/i.test(k)) d.pontos = num(v);
+    else if (/^objetiva/i.test(k)) d.objetiva = num(v);
+    else if (/^m[íi]nimo|^min|^corte/i.test(k)) d.minimo = edMinimo(v);
+    else if (/^linhas?/i.test(k)) { const m = v.match(/(\d+)\s*(?:a|-|–|até)\s*(\d+)/i); if (m) d.linhas = { min: Number(m[1]), max: Number(m[2]) }; }
+    else if (/^corrigida|^classific/i.test(k)) d.corrigida = num(v);
+    else if (/^disciplinas?/i.test(k)) d.disciplinas = v.split(";").map((x) => x.trim()).filter(Boolean);
+  });
+  return d;
+}
+function edLinhaDiscursiva(d) {
+  if (!d) return "";
+  const p = ["discursiva"];
+  if (d.pontos) p.push("pontos: " + d.pontos);
+  if (d.objetiva) p.push("objetiva: " + d.objetiva);
+  if (d.minimo && d.minimo.valor != null) p.push("minimo: " + (d.minimo.tipo === "pct" ? d.minimo.valor + "%" : d.minimo.valor));
+  if (d.linhas && d.linhas.min && d.linhas.max) p.push("linhas: " + d.linhas.min + "-" + d.linhas.max);
+  if (d.corrigida) p.push("corrigida: " + d.corrigida);
+  if ((d.disciplinas || []).length) p.push("disciplinas: " + d.disciplinas.join("; "));
+  return "# " + p.join(" | ");
+}
 /* "!d" ou "!d4"; sempre no fim do campo, para não competir com o texto
  * do motivo — que é prosa livre e não pode ganhar sintaxe. */
 const ED_MARCA_F2_RE = /\s*!d([1-5])?\s*$/i;
@@ -533,6 +563,13 @@ function lerEdital(raw) {
        * segunda sobrescrevendo a primeira em silêncio. Agora, quando ela
        * começa com "fase 2", vira o outro prazo em vez de apagar o
        * primeiro. */
+      /* (19.56.0) "# discursiva | pontos: 40 | objetiva: 90 | minimo: 50% | linhas: 25-30 | corrigida: 50 | disciplinas: A; B"
+       * — a prova discursiva DO MESMO concurso: quanto vale, o corte, o formato e em quais disciplinas pode cair. Entra
+       * no peso das disciplinas (montarPlano) e nas regras que a tela mostra. Não é a "fase 2" (outra data). */
+      if (/^discursiva$/i.test(String(partes[0] || "").trim())) {
+        cfg.discursiva = edLerDiscursiva(partes.slice(1));
+        return;
+      }
       const f2 = String(partes[0] || "").trim().match(ED_FASE2_RE);
       if (f2) {
         cfg.fase2 = cfg.fase2 || { nome: "", prova: "", horas: 0 };
@@ -1322,6 +1359,41 @@ function montarPlano(r, opcoes) {
     });
     todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
   }
+  /* (19.56.0) A DISCURSIVA ENTRA NO PESO. Ela vale uma parte da nota final (40 de 130 pontos no ISS Caruaru = 31%) e cai
+   * em algumas disciplinas. A fatia de cada disciplina passa a ser a da NOTA FINAL: a objetiva encolhe na proporção
+   * (1 − s) e a parte da discursiva vai para as disciplinas em que ela cai, na proporção do peso delas. Cada item da
+   * disciplina tem o bruto multiplicado pela mesma razão — a ordem DENTRO da disciplina não muda; entre disciplinas, sim.
+   * Só na primeira fase (na segunda, o plano já é o da discursiva). */
+  const disc = cfg.discursiva;
+  let discInfo = null;
+  if (!fase.so2 && disc && disc.pontos > 0 && (disc.disciplinas || []).length) {
+    const porD = {};
+    const ativas = (r.disciplinas || []).filter((d) => !d.inativa);
+    const exataD = ativas.length && ativas.every((d) => d.abs > 0);
+    if (exataD) ativas.forEach((d) => { porD[d.nome] = d.abs; });
+    else todos.forEach((i) => { porD[i.disciplina] = (porD[i.disciplina] || 0) + i.bruto; });
+    const tot = Object.keys(porD).reduce((a2, k) => a2 + porD[k], 0) || 1;
+    const nomeDe = {};
+    Object.keys(porD).forEach((k) => { nomeDe[k.toLowerCase()] = k; });
+    const escolhidas = disc.disciplinas.map((n) => nomeDe[String(n).toLowerCase()]).filter(Boolean);
+    const objPts = disc.objetiva || (exataD && ativas.every((d) => d.unidade === "p") ? tot : 0);
+    if (escolhidas.length && objPts > 0) {
+      const sD = disc.pontos / (objPts + disc.pontos);
+      const fC = escolhidas.reduce((a2, k) => a2 + porD[k] / tot, 0) || 1;
+      const mult = {}, antes = {}, depois = {};
+      Object.keys(porD).forEach((k) => {
+        const f = porD[k] / tot;
+        const f2 = f * (1 - sD) + (escolhidas.indexOf(k) >= 0 ? sD * f / fC : 0);
+        mult[k] = f ? f2 / f : 1;
+        antes[k] = Math.round(f * 100); depois[k] = Math.round(f2 * 100);
+      });
+      todos.forEach((i) => { const m = mult[i.disciplina] || 1; i.bruto *= m; i.brutoOrdem *= m; });
+      const maxB = todos.reduce((m2, i) => Math.max(m2, i.brutoOrdem), 0) || 1;
+      todos.forEach((i) => { i.prioridade = Math.round((i.brutoOrdem / maxB) * 100); });
+      todos.sort((a2, b2) => b2.brutoOrdem - a2.brutoOrdem || a2.linha - b2.linha);
+      discInfo = { s: Math.round(sD * 100), pontos: disc.pontos, objetiva: objPts, disciplinas: escolhidas, antes, depois, mult };
+    }
+  }
   /* PASSADA 1: identidade e ESTADO de cada item (o dos ramos sai dos ramos). */
   todos.forEach((i) => {
     i.topicoChave = (i.disciplina + "›" + i.nome).toLowerCase();
@@ -1386,6 +1458,8 @@ function montarPlano(r, opcoes) {
     comAbs.forEach((d) => {
       fatia[d.nome] = Math.round((d.abs / somaAbs) * 100);
     });
+    /* com a discursiva, a fatia é a da nota final (a conta foi feita acima) */
+    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; });
   } else {
     const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
     todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
@@ -1613,6 +1687,8 @@ function montarPlano(r, opcoes) {
     blocos,
     /* (19.47.0) fatia da prova × fatia do seu tempo nos últimos 14 dias, por disciplina (a mais atrasada primeiro) */
     equilibrio, recente,
+    /* (19.56.0) a discursiva no peso: {s (% da nota final), pontos, objetiva, disciplinas, antes, depois} */
+    discursiva: discInfo, discursivaCfg: cfg.discursiva || null,
     /* (19.48.0) o modo de estudo de cada disciplina ({modo, auto, sugerido}) e o que a data sugere */
     modos: modoDe ? [...porDisc.keys()].reduce((acc, d) => { acc[d] = modoDe(d); return acc; }, {}) : null,
     modoSugerido: edModoAuto(s ? s.dias : null),
@@ -3016,6 +3092,8 @@ function edParaTexto(r) {
     if (c.fase2.horas) c2.push("horas: " + c.fase2.horas);
     L.push("# " + c2.join(" | "));
   }
+  /* (19.56.0) a discursiva volta para o texto junto com o cabeçalho, como a fase 2 */
+  if (c.discursiva) L.push(edLinhaDiscursiva(c.discursiva));
   if (cab.length) L.push("");
 
   /* OS BLOCOS COM MÍNIMO TAMBÉM TÊM DE VOLTAR.
