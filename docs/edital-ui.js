@@ -4001,6 +4001,12 @@ function edConferenciaEdital(r, plano, id) {
     bc.onclick = () => { try { if (navigator.clipboard) navigator.clipboard.writeText(ex).catch(() => {}); toastMsg(t("ed_conf_copiado"), 3000); } catch (e) {} };
     det.append(bc);
     it.append(det);
+    /* (19.55.0) o caminho simples primeiro: a janela de perguntas, sem mexer no texto */
+    const bf = el("button", "btn-min btn-min-ok", t("ed_conf_resolver"));
+    bf.type = "button";
+    bf.id = "btnEdConfResolver_" + item;
+    bf.onclick = () => { if (typeof epAbrir === "function") epAbrir(); };
+    it.insertBefore(bf, det);
     const bd = el("button", "btn-min ed-conf-nao", t("ed_conf_" + item + "_nao"));
     bd.type = "button";
     bd.id = "btnEdConfNao_" + item;
@@ -4027,6 +4033,13 @@ function edPintarBlocos(plano) {
     ? t("ed_min_tit_risco", { n: emRisco })
     : t("ed_min_tit_ok", { n: comMin.length });
   cx.append(tit);
+
+  /* (19.55.0) mudar os cortes sem tocar no texto */
+  const be = document.createElement("button");
+  be.type = "button"; be.className = "btn-min ed-min-editar"; be.id = "btnEdMinEditar";
+  be.textContent = t("ep_editar_cortes");
+  be.onclick = () => { if (typeof epAbrir === "function") epAbrir(); };
+  cx.append(be);
 
   const sub = document.createElement("p");
   sub.className = "nota";

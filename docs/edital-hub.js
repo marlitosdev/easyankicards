@@ -2359,7 +2359,14 @@ function hubIniciar() {
   }
   const rc = document.getElementById("btnEdBancRecolher");
   if (rc) rc.onclick = bancAlternar;
-  try { bancRecolhida = localStorage.getItem("eac_banc_recolhida") === "1"; } catch (e) {}
+  /* (19.55.0) COM O EDITAL JÁ CRIADO, O TEXTO COLADO FICA RECOLHIDO POR PADRÃO: o que se usa dali em diante são os
+   * botões do resumo (pontuação e cortes, revisar com a IA, incluir disciplina). Quem expandiu de propósito continua
+   * vendo — a escolha da pessoa vale mais que o padrão. */
+  try {
+    const v = localStorage.getItem("eac_banc_recolhida");
+    const temDisc = (() => { const ta0 = document.getElementById("editalTexto"); const a0 = edAberto(); return lerEdital((ta0 && ta0.value) || (a0 && a0.texto) || "").disciplinas.length > 0; })();
+    bancRecolhida = v === "1" || (v === null && temDisc);
+  } catch (e) {}
   bancAplicar();
 
   /* os campos da bancada nascem com a rotina salva — antes eles voltavam
@@ -2410,7 +2417,18 @@ function bancAplicar() {
     const b = document.createElement("b");
     b.textContent = t("ed_banc_resumo", { d: r.disciplinas.length, t: tops });
     resumo.append(b);
+    /* (19.55.0) o que se faz com o edital depois de criado, sem abrir o texto */
+    const acoes = document.createElement("div");
+    acoes.className = "ed-acao-mini";
+    const bt2 = (id, txt, tip, fn, cls) => { const x = document.createElement("button"); x.type = "button"; x.id = id; x.className = "btn-min" + (cls ? " " + cls : ""); x.textContent = txt; x.title = tip; x.onclick = fn; return x; };
+    acoes.append(
+      bt2("btnBancPontua", t("ep_btn"), t("ep_btn_tip"), () => { if (typeof epAbrir === "function") epAbrir(); }, "btn-min-ok"),
+      bt2("btnBancRevisar", t("ed_rev_btn"), t("ed_rev_exp"), () => { const x = document.getElementById("btnEditalColar"); if (x) x.click(); }),
+      bt2("btnBancTexto", t("ed_banc_texto"), t("ed_banc_texto_tip"), () => bancAlternar()));
+    resumo.append(acoes);
   }
+  /* copiar tudo e limpar são gestos do texto cru: só com o texto à vista */
+  ["btnEditalCopiar", "btnEditalLimpar"].forEach((id) => { const x = document.getElementById(id); if (x) x.hidden = bancRecolhida; });
   try { localStorage.setItem("eac_banc_recolhida", bancRecolhida ? "1" : "0"); } catch (e) {}
 }
 

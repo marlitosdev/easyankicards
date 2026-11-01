@@ -1873,6 +1873,30 @@ dialog.hub-ia-dlg[open]{width:min(720px,96vw);max-height:92vh}
 .hub-ia-lista{margin:2px 0 4px;padding-left:26px}
 .hub-ia-pq-tit{font-weight:700;margin-top:8px}
 .hub-ia-grupo{font-weight:700;margin-top:10px}
+/* (19.55.0) como a prova pontua */
+dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
+.ep-ia{border:1px solid var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0 10px}
+.ep-ia summary{cursor:pointer;font-weight:700}
+.ep-ia-passos{margin:6px 0 2px;padding-left:20px;font-size:13px;line-height:1.5}
+.ep-ia-passos li{margin-bottom:6px}
+.ep-perg{border:0;padding:0;margin:0 0 10px}
+.ep-perg legend{font-weight:700;margin-bottom:4px}
+.ep-perg label{display:flex;gap:6px;align-items:flex-start;font-size:13.5px;margin:2px 0}
+.ep-tabela{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+.ep-lin{display:grid;grid-template-columns:minmax(150px,1.6fr) minmax(130px,1fr) minmax(200px,1.4fr);gap:8px;align-items:center;font-size:13.5px;padding:4px 0;border-bottom:1px solid var(--borda)}
+.ep-cab{font-size:12px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.03em}
+.ep-c-vale,.ep-c-min,.ep-mincampo{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.ep-num{width:64px}
+.ep-grupos{border:1px dashed var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0}
+.ep-grupo{grid-template-columns:minmax(150px,1.2fr) minmax(140px,1fr) minmax(160px,1.6fr)}
+.ep-gnome{width:100%;box-sizing:border-box}
+.ep-membros{color:var(--sutil);font-size:12.5px}
+.ep-sub-tit{font-weight:800;margin:6px 0 4px}
+.ep-resumo-cx{background:var(--campo);border-radius:9px;padding:6px 12px;margin-top:8px}
+.ep-resumo{margin:0;padding-left:18px;font-size:13.5px;line-height:1.5}
+.ep-msg{color:var(--atencao)}
+@media (max-width:640px){.ep-lin,.ep-grupo{grid-template-columns:1fr}.ep-cab{display:none}}
+.ed-acao-mini{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 /* (19.54.0) conferência do edital */
 .ed-conf{border-color:var(--atencao)}
 .ed-conf-tit{color:var(--atencao)}
@@ -10504,6 +10528,46 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- (v18.70.0) PARA QUAL PASTA? Mover pela prévia (e, no futuro, por outros caminhos): últimos destinos, busca,
      itens grandes para o dedo. Escolher pergunta antes de mover. -->
+<!-- (19.55.0) COMO A PROVA PONTUA: perguntas e uma tabela no lugar de "&" e "10q" no texto do edital -->
+<dialog id="dlgEdPontua" class="ui-modal diag-modal ep-dlg">
+  <div class="vka-cab">
+    <h3 data-i18n="ep_tit"></h3>
+    <button type="button" class="dlg-x" id="btnEpX" data-i18n-title="help_close">✖</button>
+  </div>
+  <p class="nota" data-i18n="ep_sub"></p>
+  <details class="ep-ia" id="epIaBox">
+    <summary data-i18n="ep_ia_tit"></summary>
+    <ol class="ep-ia-passos">
+      <li><span data-i18n="ep_ia_p1"></span> <button type="button" class="btn-min" id="btnEpIaCopiar" data-i18n="ep_ia_copiar"></button></li>
+      <li data-i18n="ep_ia_p2"></li>
+      <li><span data-i18n="ep_ia_p3"></span>
+        <textarea id="epIaResp" rows="5" style="width:100%;box-sizing:border-box" data-i18n-ph="ep_ia_ph"></textarea>
+        <button type="button" class="btn-min btn-min-ok" id="btnEpIaLer" data-i18n="ep_ia_ler"></button></li>
+    </ol>
+  </details>
+  <fieldset class="ep-perg">
+    <legend data-i18n="ep_q1"></legend>
+    <label><input type="radio" name="epPeso" id="epPeso_sim"> <span data-i18n="ep_q1_sim"></span></label>
+    <label><input type="radio" name="epPeso" id="epPeso_nao"> <span data-i18n="ep_q1_nao"></span></label>
+  </fieldset>
+  <fieldset class="ep-perg">
+    <legend data-i18n="ep_q2"></legend>
+    <label><input type="radio" name="epMin" id="epMin_nao"> <span data-i18n="ep_q2_nao"></span></label>
+    <label><input type="radio" name="epMin" id="epMin_sim"> <span data-i18n="ep_q2_sim"></span></label>
+  </fieldset>
+  <div id="epTabela" class="ep-tabela"></div>
+  <div id="epGrupos" class="ep-grupos" hidden></div>
+  <div class="ep-resumo-cx">
+    <div class="ep-sub-tit" data-i18n="ep_resumo_tit"></div>
+    <ul id="epResumo" class="ep-resumo"></ul>
+  </div>
+  <p class="nota ep-msg" id="epMsg" role="status"></p>
+  <div class="dlg-rodape">
+    <button type="button" class="btn btn-azul" id="btnEpGravar" data-i18n="ep_gravar"></button>
+    <button type="button" class="btn btn-cinza" id="btnEpCancelar" data-i18n="cancel_btn"></button>
+  </div>
+</dialog>
+
 <!-- (19.52.0) colar a resposta da IA sobre o ritmo: o app lê, mostra o que muda e aplica o que for marcado -->
 <dialog id="dlgHubIA" class="ui-modal diag-modal hub-ia-dlg">
   <div class="vka-cab">
@@ -11516,6 +11580,7 @@ window.__sqlPromise = initSqlJs({
 <script src="fora-da-agenda.js"></script>
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
+<script src="edital-pontua.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
