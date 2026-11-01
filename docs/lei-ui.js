@@ -4802,8 +4802,10 @@ function leiGravar(opc) {
      * cabeçalho quando ele veio junto */
     const ident = leiIdentificar(txt);
     const ente = leiEnteDoTexto(txt);
-    const nome = ident ? ident.nome
-      : (leiAtual.disciplina + " — " + leiAtual.topico);
+    /* (19.49.0) o nome escolhido no assistente (passo 2) vence o do cabeçalho */
+    const escolhido = typeof leiNovaNomeEscolhido === "function" ? leiNovaNomeEscolhido() : null;
+    const nome = (escolhido && escolhido.nome) || (ident ? ident.nome
+      : (leiAtual.disciplina + " — " + leiAtual.topico));
     /* A LEI JÁ EXISTE NA BIBLIOTECA? Sem esta pergunta, colar a mesma lei num
      * segundo tópico caía no mesmo registro e SUBSTITUÍA o texto e a lista de
      * tópicos do primeiro. A pessoa escolhe: usar a que existe, usar e
@@ -4835,7 +4837,8 @@ function leiGravar(opc) {
       Object.keys(alteracoes).length ? { alteracoes } : {},
       (opc && opc.repetidosOk && opc.repetidosOk.length) ? { repetidosOk: opc.repetidosOk } : {},
       (opc && opc.anexos && opc.anexos.length) ? { anexos: opc.anexos } : {},
-      ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {}));
+      ident ? { especie: ident.especie, numero: ident.numero, ano: ident.ano } : {},
+      escolhido && escolhido.apelido ? { apelido: escolhido.apelido } : {}));
     if (!l) return;
     leiIdAtual = l.id;
   } else {
@@ -9862,8 +9865,14 @@ function leiIniciar() {
   liga("btnQsVincEscCancelar", "cancelar escolha de lei", () => $("dlgQsVincEsc").close());
   liga("btnQsVincEscOk", "gravar vínculo de lei", () => qsVincSalvar());
   /* a janela de vincular repinta a prévia a cada mudança de lei, destino ou "guardar" */
-  if ($("qsVincLei")) $("qsVincLei").onchange = () => { try { qsVincPintarEsc(); } catch (e) {} };
+  if ($("qsVincLei")) $("qsVincLei").onchange = () => { try { if (qsVincCtx) qsVincCtx.leiManual = $("qsVincLei").value; qsVincPintarEsc(); } catch (e) {} };
   if ($("qsVincArts")) $("qsVincArts").oninput = () => { try { qsVincPintarEsc(); } catch (e) {} };
+  /* (19.49.0) a busca de lei filtra o select e repinta a prévia (a escolha pode ter mudado: uma lei só no filtro) */
+  /* (19.49.0) a lei ainda não está na biblioteca: incluir por aqui e voltar ao vínculo com ela escolhida */
+  if ($("btnQsVincNovaLei")) $("btnQsVincNovaLei").onclick = () => { try { qsVincNovaLei(); } catch (e) {} };
+  if ($("qsVincLeiBusca")) $("qsVincLeiBusca").oninput = () => {
+    try { qsVincLeiBusca = $("qsVincLeiBusca").value || ""; qsVincPintarLeis(); qsVincPintarEsc(); } catch (e) {}
+  };
   if ($("qsVincPerm")) $("qsVincPerm").onchange = () => { try { qsVincPintarEsc(); } catch (e) {} };
   liga("btnLeiRelDup", "relatório: artigos repetidos", () => leiRelatorioCopiar("artigos repetidos"));
   liga("btnLeiRelMapa", "relatório: mapa e conferência", () => leiRelatorioCopiar("mapa e conferência"));

@@ -15,11 +15,20 @@
  * Nada é gravado antes das confirmações de sempre. O editor completo continua a um link.
  * ===================================================================== */
 let leiNovaCtx = null;
+/* (19.49.0) QUATRO PASSOS: 1. a lei · 2. COMO CHAMÁ-LA (nome e apelido) · 3. as que alteram · 4. conferir e criar.
+ * O nome era o que o cabeçalho trazia ("LEI COMPLEMENTAR Nº 15, DE 30 DE DEZEMBRO DE 2009") ou, sem cabeçalho,
+ * "disciplina — tópico"; agora a pessoa decide, com o reconhecido já preenchido. O apelido ("CTM Caruaru", "CTN") é
+ * o que se digita nas citações e aparece nas fichas. */
+const LEI_NOVA_SECOES = { 1: "leiNovaS1", 2: "leiNovaSNome", 3: "leiNovaS2", 4: "leiNovaS3" };
+const LEI_NOVA_ROTULOS = { 1: "leiNovaP1", 2: "leiNovaPNome", 3: "leiNovaP2", 4: "leiNovaP3" };
 
-function leiNovaAbrir() {
+/* opc.volta(id): quem pediu a lei nova (a janela de vínculo) volta quando ela fica pronta, com o id dela */
+function leiNovaAbrir(opc) {
   if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
   leiNovaIniciarTela();   /* idempotente: os botões ficam ligados mesmo se a partida não ligou */
-  leiNovaCtx = { passo: 1, texto: "", origem: "", tipo: "", riscados: 0, alts: [], faixa: null };
+  leiNovaCtx = { passo: 1, texto: "", origem: "", tipo: "", riscados: 0, alts: [], faixa: null,
+    nome: "", apelido: "", nomeTocado: false, volta: (opc && typeof opc.volta === "function") ? opc.volta : null };
+  ["leiNovaNome", "leiNovaApelido"].forEach((id) => { if ($(id)) $(id).value = ""; });
   ["leiNovaTexto", "leiNovaAltTexto"].forEach((id) => { if ($(id)) $(id).value = ""; });
   if ($("leiNovaColarCx")) $("leiNovaColarCx").hidden = true;
   if ($("leiNovaAltColarCx")) $("leiNovaAltColarCx").hidden = true;
@@ -36,6 +45,8 @@ function leiNovaDefinirPrincipal(texto, origem, tipo, riscados) {
   const tx = String(texto || "").trim();
   if (!c || !tx) return false;
   c.texto = tx; c.origem = String(origem || ""); c.tipo = tipo || "colado"; c.riscados = riscados || 0;
+  /* lei trocada: o nome sugerido acompanha (o que a pessoa já digitou fica) */
+  if (!c.nomeTocado) c.nome = "";
   try { leiReg("lei", "incluir lei: lei principal " + (c.origem ? "lida de " + c.origem : "colada"),
     tx.length + " caracteres · " + leiArtigos(tx).length + " artigos"); } catch (e) {}
   leiNovaPintar();
@@ -89,7 +100,13 @@ function leiNovaIr(passo) {
   const c = leiNovaCtx;
   if (!c) return false;
   if (passo > 1 && !c.texto) { $("leiNovaMsg").textContent = t("lei_nova_falta_principal"); return false; }
-  c.passo = Math.max(1, Math.min(3, passo));
+  /* o nome reconhecido entra preenchido; sem nome não se segue (é como a lei vai aparecer em todo o app) */
+  if (!c.nomeTocado && !c.nome) c.nome = leiNovaAnalise(c.texto).nome || "";
+  if (passo > 2) {
+    leiNovaLerNome();
+    if (!c.nome.trim()) { c.passo = 2; leiNovaPintar(); $("leiNovaMsg").textContent = t("lei_nova_falta_nome"); return false; }
+  }
+  c.passo = Math.max(1, Math.min(4, passo));
   $("leiNovaMsg").textContent = "";
   leiNovaPintar();
   return true;
@@ -100,7 +117,8 @@ function leiNovaComecar() {
   const c = leiNovaCtx;
   if (!c || !c.texto) return false;
   const an = leiNovaAnalise(c.texto);
-  c.faixa = { nome: an.nome || t("lei_nova_sem_nome"), etapa: "limpeza", alts: c.alts.map((x) => ({ id: x.id, nome: x.nome })) };
+  leiNovaLerNome();
+  c.faixa = { nome: c.nome || an.nome || t("lei_nova_sem_nome"), etapa: "limpeza", alts: c.alts.map((x) => ({ id: x.id, nome: x.nome })) };
   $("dlgLeiNova").close();
   leiBibNovaEditor();
   leiAltFilaNovaDefinir(c.alts);
@@ -134,9 +152,40 @@ function leiNovaFim(motivo) {
   const f = leiNovaCtx && leiNovaCtx.faixa;
   if (!f) return false;
   try { leiReg("lei", "incluir lei: concluído", f.nome + " · " + (motivo || "")); } catch (e) {}
+  const volta = leiNovaCtx.volta;
   leiNovaCtx = null;
   leiNovaFaixaPintar();
+  /* (19.49.0) a lei nasceu: quem a pediu (a janela de vínculo) continua, já com ela */
+  if (volta && typeof leiIdAtual !== "undefined" && leiIdAtual) { try { volta(leiIdAtual); } catch (e) {} }
   return true;
+}
+
+/* (19.49.0) o nome e o apelido escolhidos no passo 2 — lidos por leiGravar ao criar a lei */
+function leiNovaLerNome() {
+  const c = leiNovaCtx;
+  if (!c) return;
+  if ($("leiNovaNome") && $("leiNovaNome").value !== undefined && c.passo === 2) c.nome = String($("leiNovaNome").value || "").replace(/\s+/g, " ").trim();
+  if ($("leiNovaApelido") && c.passo === 2) c.apelido = String($("leiNovaApelido").value || "").replace(/\s+/g, " ").trim();
+}
+function leiNovaNomeEscolhido() {
+  const c = leiNovaCtx;
+  return c && c.faixa && c.nome ? { nome: c.nome, apelido: c.apelido || "" } : null;
+}
+/* os nomes sugeridos: o que o cabeçalho diz e a forma curta ("LC 15/2009") */
+function leiNovaSugestoes(texto) {
+  const out = [];
+  let ident = null;
+  try { ident = typeof leiIdentificar === "function" ? leiIdentificar(texto) : null; } catch (e) { ident = null; }
+  const an = leiNovaAnalise(texto);
+  if (an.nome) out.push(an.nome);
+  if (ident && ident.numero) {
+    const esp = String(ident.especie || "Lei");
+    const sig = /complementar/i.test(esp) ? "LC" : /decreto-lei/i.test(esp) ? "Decreto-Lei" : /decreto/i.test(esp) ? "Decreto"
+      : /emenda/i.test(esp) ? "EC" : /medida/i.test(esp) ? "MP" : "Lei";
+    const curta = sig + " " + ident.numero + (ident.ano ? "/" + ident.ano : "");
+    if (out.indexOf(curta) < 0) out.push(curta);
+  }
+  return out.slice(0, 3);
 }
 function leiNovaFaixaTexto() {
   const f = leiNovaCtx && leiNovaCtx.faixa;
@@ -177,12 +226,35 @@ function leiNovaFaixaPintar() {
 function leiNovaPintar() {
   const c = leiNovaCtx;
   if (!c || !$("dlgLeiNova")) return;
-  [1, 2, 3].forEach((p) => {
-    const li = $("leiNovaP" + p);
+  [1, 2, 3, 4].forEach((p) => {
+    const li = $(LEI_NOVA_ROTULOS[p]);
     if (li) li.className = "lei-nova-passo" + (p === c.passo ? " atual" : p < c.passo ? " feito" : "");
-    const s = $("leiNovaS" + p);
+    const s = $(LEI_NOVA_SECOES[p]);
     if (s) s.hidden = p !== c.passo;
   });
+  /* passo 2: o nome */
+  if ($("leiNovaNome")) {
+    if (c.passo === 2) {
+      if ($("leiNovaNome").value !== c.nome) $("leiNovaNome").value = c.nome || "";
+      if ($("leiNovaApelido").value !== c.apelido) $("leiNovaApelido").value = c.apelido || "";
+    }
+    const sg = $("leiNovaNomeSug");
+    if (sg) {
+      sg.innerHTML = "";
+      const sugs = c.texto ? leiNovaSugestoes(c.texto) : [];
+      sg.hidden = !sugs.length;
+      if (sugs.length) { const r = document.createElement("span"); r.className = "nota"; r.textContent = t("lei_nova_nome_sug"); sg.append(r); }
+      sugs.forEach((x, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn-min" + (x === c.nome ? " mat-ligado" : "");
+        b.id = "btnLeiNovaSug_" + i;
+        b.textContent = x;
+        b.onclick = () => { c.nome = x; c.nomeTocado = true; $("leiNovaNome").value = x; leiNovaPintar(); };
+        sg.append(b);
+      });
+    }
+  }
   /* passo 1 */
   const card = $("leiNovaPrinc");
   card.hidden = !c.texto;
@@ -231,11 +303,11 @@ function leiNovaPintar() {
   /* passo 3 */
   const res = $("leiNovaResumo");
   res.innerHTML = "";
-  if (c.passo === 3 && c.texto) {
+  if (c.passo === 4 && c.texto) {
     const an = leiNovaAnalise(c.texto);
     const p1 = document.createElement("div");
     p1.className = "lei-nova-card-tit";
-    p1.textContent = t("lei_nova_vou_criar", { n: an.nome || t("lei_nova_sem_nome"), a: an.artigos });
+    p1.textContent = t("lei_nova_vou_criar", { n: (c.nome || an.nome || t("lei_nova_sem_nome")) + (c.apelido ? " (" + c.apelido + ")" : ""), a: an.artigos });
     res.append(p1);
     const p2 = document.createElement("div");
     p2.className = "nota";
@@ -249,10 +321,10 @@ function leiNovaPintar() {
   }
   /* rodapé */
   $("btnLeiNovaVoltar").hidden = c.passo === 1;
-  $("btnLeiNovaAvancar").hidden = c.passo === 3;
+  $("btnLeiNovaAvancar").hidden = c.passo === 4;
   $("btnLeiNovaAvancar").disabled = c.passo === 1 && !c.texto;
-  $("btnLeiNovaAvancar").textContent = t(c.passo === 2 && !c.alts.length ? "lei_nova_pular" : "lei_nova_avancar");
-  $("btnLeiNovaCriar").hidden = c.passo !== 3;
+  $("btnLeiNovaAvancar").textContent = t(c.passo === 3 && !c.alts.length ? "lei_nova_pular" : "lei_nova_avancar");
+  $("btnLeiNovaCriar").hidden = c.passo !== 4;
 }
 
 function leiNovaIniciarTela() {
@@ -267,6 +339,11 @@ function leiNovaIniciarTela() {
   lig("btnLeiNovaVoltar", () => leiNovaIr((leiNovaCtx ? leiNovaCtx.passo : 1) - 1));
   lig("btnLeiNovaAvancar", () => leiNovaIr((leiNovaCtx ? leiNovaCtx.passo : 1) + 1));
   lig("btnLeiNovaCriar", () => leiNovaComecar());
+  /* o nome digitado conta como escolhido (o sugerido deixa de ser trocado por baixo) */
+  ["leiNovaNome", "leiNovaApelido"].forEach((id) => {
+    const el = $(id);
+    if (el && !el._leiNova) { el._leiNova = true; el.oninput = () => { if (leiNovaCtx) { leiNovaCtx.nomeTocado = true; leiNovaLerNome(); } }; }
+  });
   lig("btnLeiNovaEditor", () => { $("dlgLeiNova").close(); leiNovaCtx = null; leiBibNovaEditor(); });
   const liga = (id, fn) => {
     const inp = $(id);

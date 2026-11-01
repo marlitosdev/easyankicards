@@ -5,7 +5,9 @@
  *  1. "＋ Nova lei" abre o assistente no passo 1; sem a lei principal não se avança;
  *  2. a lei principal (arquivo ou colar) mostra o que foi reconhecido — e avisa se parece uma lei que ALTERA;
  *  3. as leis que alteram entram em ordem de data, saem com ✕, e "Pular" quando não há;
- *  4. o passo 3 resume, e "Criar e conferir" usa o motor de sempre: a lei nasce sem tópico e a fila começa;
+ *  3b. (19.49.0) o passo 2 pergunta como chamar a lei — vem com o nome reconhecido; o escolhido (e o apelido) é o
+ *      que a lei recebe ao nascer; sem nome não se segue;
+ *  4. o passo 4 resume, e "Criar e conferir" usa o motor de sempre: a lei nasce sem tópico e a fila começa;
  *  5. cada tela de conferência mostra a faixa "etapa X de N", com ✓ ▶ ○, e ela some ao terminar ou parar.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
@@ -49,7 +51,15 @@ async function testes() {
       "N2a o que foi reconhecido aparece (nome e artigos): " + card);
     ok(api.$("btnLeiNovaAvancar").disabled === false, "N2b com a principal, Avançar liga");
     api.$("btnLeiNovaAvancar").onclick();
-    ok(!api.$("leiNovaS2").hidden && api.$("leiNovaS1").hidden && /feito/.test(api.$("leiNovaP1").className), "N3 passo 2");
+    ok(!api.$("leiNovaSNome").hidden && api.$("leiNovaS1").hidden && /015/.test(api.$("leiNovaNome").value) && /atual/.test(api.$("leiNovaPNome").className),
+      "N3n (19.49.0) o passo 2 pergunta o nome, ja com o reconhecido: " + api.$("leiNovaNome").value);
+    ok(api.$("btnLeiNovaSug_0") && /015/.test(api.$("btnLeiNovaSug_0").textContent), "N3o o nome reconhecido vem como sugestao: " + (api.$("btnLeiNovaSug_0") && api.$("btnLeiNovaSug_0").textContent));
+    api.$("leiNovaNome").value = ""; api.$("leiNovaNome").oninput();
+    ok(api.leiNovaIr(3) === false && /nome/.test(api.$("leiNovaMsg").textContent), "N3p sem nome nao se segue");
+    api.$("leiNovaNome").value = "Código Tributário de Caruaru"; api.$("leiNovaNome").oninput();
+    api.$("leiNovaApelido").value = "CTM Caruaru"; api.$("leiNovaApelido").oninput();
+    api.$("btnLeiNovaAvancar").onclick();
+    ok(!api.$("leiNovaS2").hidden && api.$("leiNovaSNome").hidden && /feito/.test(api.$("leiNovaPNome").className), "N3 passo 3 (as que alteram)");
     ok(/Pular/.test(api.$("btnLeiNovaAvancar").textContent) && !api.$("leiNovaAltsVazio").hidden, "N3a sem alteradoras, o botão diz 'Pular — não há'");
     /* duas alteradoras, fora de ordem; e uma terceira tirada com ✕ */
     [alt("112", "09 DE JUNHO DE 2023", "2023"), alt("95", "28 DE SETEMBRO DE 2022", "2022"), alt("145", "23 DE DEZEMBRO DE 2024", "2024")].forEach((tx) => {
@@ -63,12 +73,13 @@ async function testes() {
     ok(itens().length === 2 && !itens().some((x) => /145/.test(x)) && /Avançar/.test(api.$("btnLeiNovaAvancar").textContent), "N3c ✕ tira da lista");
     api.$("btnLeiNovaAvancar").onclick();
     const res = api.$("leiNovaResumo").textContent;
-    ok(!api.$("leiNovaS3").hidden && /Vou criar/.test(res) && /015/.test(res) && /95/.test(res) && /112/.test(res) && api.$("btnLeiNovaCriar").hidden === false,
-      "N4 o passo 3 resume o que vai acontecer: " + res);
+    ok(!api.$("leiNovaS3").hidden && /Vou criar/.test(res) && /Código Tributário de Caruaru \(CTM Caruaru\)/.test(res) && /95/.test(res) && /112/.test(res) && api.$("btnLeiNovaCriar").hidden === false,
+      "N4 o passo 4 resume o que vai acontecer, com o nome escolhido: " + res);
     api.$("btnLeiNovaCriar").onclick();
     for (let i = 0; i < 4; i++) await tique();
     const lei = api.leisLista().find((l) => /Município/.test(l.texto || ""));
     ok(lei && Array.isArray(lei.topicos) && lei.topicos.length === 0, "N4a a lei nasce na biblioteca, sem tópico");
+    ok(lei && lei.nome === "Código Tributário de Caruaru" && lei.apelido === "CTM Caruaru", "N4n a lei nasce com o nome e o apelido escolhidos: " + (lei && lei.nome + " / " + lei.apelido));
     ok(api.$("dlgLeiAtualizar").open && /Altera a Lei Complementar nº 015/.test(api.$("leiUpdTexto").value) && /95/.test(api.$("leiUpdTexto").value),
       "N4b a fila começa pela mais antiga (LC 95)");
     const fx = faixa(api, "leiNovaFaixaUpd");
@@ -85,7 +96,7 @@ async function testes() {
     const api = montar();
     api.leiNovaAbrir();
     api.leiNovaDefinirPrincipal(PRINC + "\nArt. 3º O sujeito ativo da obrigação é o Município.", "", "colado", 0);
-    api.leiNovaIr(3);
+    api.leiNovaIr(4);
     api.$("btnLeiNovaCriar").onclick();
     for (let i = 0; i < 3; i++) await tique();
     ok(api.$("dlgLeiDup").open && /etapa 2 de 3: Artigos repetidos/.test(faixa(api, "leiNovaFaixaDup")) && /✓ Limpeza do texto/.test(faixa(api, "leiNovaFaixaDup")),
@@ -102,7 +113,7 @@ async function testes() {
     const api = montar();
     api.leiNovaAbrir();
     api.leiNovaDefinirPrincipal(PRINC + "\nArt . 4º Quarta regra sobre os tributos.", "", "colado", 0);
-    api.leiNovaIr(3);
+    api.leiNovaIr(4);
     api.$("btnLeiNovaCriar").onclick();
     for (let i = 0; i < 3; i++) await tique();
     ok(api.$("dlgLeiPre").open && /etapa 1 de 3: Limpeza do texto/.test(faixa(api, "leiNovaFaixaPre")) && /○ Criar a lei/.test(faixa(api, "leiNovaFaixaPre")),
@@ -114,7 +125,7 @@ async function testes() {
     const api = montar();
     api.leiNovaAbrir();
     api.leiNovaDefinirPrincipal(PRINC + "\nArt. 3º O sujeito ativo da obrigação é o Município.", "", "colado", 0);
-    api.leiNovaIr(3);
+    api.leiNovaIr(4);
     api.$("btnLeiNovaCriar").onclick();
     for (let i = 0; i < 3; i++) await tique();
     ok(/etapa 2 de 3/.test(faixa(api, "leiNovaFaixaDup")), "N5g (antes) nos repetidos");

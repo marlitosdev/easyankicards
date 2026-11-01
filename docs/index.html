@@ -1699,6 +1699,10 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .pas-fileira:empty{display:none}
 .pas-chip.pas-edital{border-style:dashed}
 .pas-chip.pas-nova{color:var(--acao,#2563eb)}
+.qs-vinc-nova{margin:2px 0 6px}
+.lei-nova-sug{margin:6px 0 10px}
+.qs-vinc-pastas{margin:4px 0}
+.qs-vinc-lei-busca{width:100%;box-sizing:border-box;margin:2px 0 4px}
 .pas-lista{display:flex;flex-direction:column;gap:4px;margin:8px 0}
 .pas-li{display:flex;align-items:center;gap:6px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
@@ -9046,7 +9050,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <!-- 1. a lei: as do tópico em fichas; o select tem todas -->
   <label class="qs-vinc-rot" for="qsVincLei"><b>1.</b> <span data-i18n="qs_vinc_lei_rot"></span></label>
   <div id="qsVincLeisTopico" class="qs-vinc-fichas" hidden></div>
+  <!-- (19.49.0) achar a lei: as pastas da Biblioteca de leis e uma busca; os dois só filtram o select -->
+  <div id="qsVincPastas" class="pas-fileira qs-vinc-pastas" role="group" hidden></div>
+  <input type="search" id="qsVincLeiBusca" class="mat-busca qs-vinc-lei-busca" autocomplete="off" data-i18n-ph="qs_vinc_lei_busca_ph">
   <select id="qsVincLei" style="width:100%"></select>
+  <p class="nota qs-vinc-nova"><button type="button" class="btn-link" id="btnQsVincNovaLei" data-i18n="qs_vinc_nova_lei" data-i18n-title="qs_vinc_nova_lei_tip"></button></p>
   <!-- 2. o destino: número ("113, § 1º") ou palavra (lista os artigos que a contêm) -->
   <label class="qs-vinc-rot" for="qsVincArts"><b>2.</b> <span data-i18n="qs_vinc_arts_rot"></span></label>
   <input type="text" id="qsVincArts" style="width:100%;box-sizing:border-box" data-i18n-ph="qs_vinc_arts_ph" placeholder="113, § 1º">
@@ -9869,6 +9877,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <ol class="lei-nova-passos">
     <li id="leiNovaP1" data-i18n="lei_nova_p1"></li>
+    <li id="leiNovaPNome" data-i18n="lei_nova_pnome"></li>
     <li id="leiNovaP2" data-i18n="lei_nova_p2"></li>
     <li id="leiNovaP3" data-i18n="lei_nova_p3"></li>
   </ol>
@@ -9885,6 +9894,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <div class="lei-nova-card" id="leiNovaPrinc" hidden></div>
     <p class="nota"><button type="button" class="btn-link" id="btnLeiNovaEditor" data-i18n="lei_nova_editor"></button></p>
+  </section>
+  <!-- (19.49.0) passo 2: como a lei vai se chamar no app -->
+  <section id="leiNovaSNome" hidden>
+    <p class="nota" data-i18n="lei_nova_snome_aj"></p>
+    <label class="qs-vinc-rot" for="leiNovaNome" data-i18n="lei_nova_nome_rot"></label>
+    <input type="text" id="leiNovaNome" maxlength="160" style="width:100%;box-sizing:border-box" autocomplete="off">
+    <div id="leiNovaNomeSug" class="qs-vinc-fichas lei-nova-sug" hidden></div>
+    <label class="qs-vinc-rot" for="leiNovaApelido" data-i18n="lei_nova_apelido_rot"></label>
+    <input type="text" id="leiNovaApelido" maxlength="40" style="width:100%;box-sizing:border-box" autocomplete="off" data-i18n-ph="lei_nova_apelido_ph">
   </section>
   <section id="leiNovaS2" hidden>
     <p class="nota" data-i18n="lei_nova_s2_aj"></p>

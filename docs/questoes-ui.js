@@ -2369,19 +2369,12 @@ function qsVincEscolher(alvo) {
   $("qsVincEscTitulo").textContent = t(alvo.cit ? "qs_vinc_esc_errado" : "qs_vinc_esc_novo");
   $("qsVincEscTrecho").textContent = "“" + alvo.trecho + "”";
   const s = $("qsVincLei");
-  s.innerHTML = "";
-  const vazio = document.createElement("option");
-  vazio.value = "";
-  vazio.textContent = t("qs_vinc_escolha");
-  s.append(vazio);
   /* as leis do tópico primeiro: é onde está a resposta mais provável */
-  const ordem = doTopico.concat(lista.filter((l) => !doTopico.some((d) => d.id === l.id)));
-  ordem.forEach((l) => {
-    const o = document.createElement("option");
-    o.value = l.id;
-    o.textContent = l.nome + (doTopico.some((d) => d.id === l.id) ? " ★" : "");
-    s.append(o);
-  });
+  c.ordemLeis = doTopico.concat(lista.filter((l) => !doTopico.some((d) => d.id === l.id)));
+  c.doTopicoIds = new Set(doTopico.map((d) => d.id));
+  qsVincPasta = ""; qsVincLeiBusca = ""; c.leiManual = "";
+  if ($("qsVincLeiBusca")) $("qsVincLeiBusca").value = "";
+  qsVincPintarLeis("");
   /* a lei que o app achou é justamente a que a pessoa disse estar errada: não
    * vem marcada. Trecho novo que já nomeia a lei ("do CTN") vem com ela; sem
    * nome e uma lei só no tópico, essa é a sugestão. Corrigir um vínculo que a
@@ -2397,6 +2390,7 @@ function qsVincEscolher(alvo) {
     } catch (e) {}
     if (!sug && doTopico.length === 1) sug = doTopico[0].id;
   }
+  qsVincPintarLeis(sug);
   s.value = sug;
   let ds = [];
   try {
@@ -2417,6 +2411,85 @@ function qsVincEscolher(alvo) {
   $("qsVincEscAviso").textContent = "";
   qsVincPintarEsc();
   abrirModal("dlgQsVincEsc");
+}
+
+/* =====================================================================
+ * (19.49.0) ACHAR A LEI QUANDO JÁ SÃO MUITAS: AS PASTAS E UMA BUSCA
+ *
+ * O pedido: "no menu de vinculação de leis, filtro para as leis de determinada pasta — com muitas leis salvas fica
+ * difícil achar". O select listava todas, em ordem alfabética depois das do tópico. Agora, acima dele, a MESMA
+ * fileira de pastas da Biblioteca de leis (📋 as de edital, 📁 as livres, com quantas leis cada uma tem) e um campo
+ * que procura por nome, apelido, número e ano. Os dois só ESCONDEM opções: a ordem continua (as do tópico, ★,
+ * primeiro), e a lei já escolhida nunca some do select — mudar o filtro não desfaz a escolha.
+ * ===================================================================== */
+let qsVincPasta = "";      /* "" = todas; "ed:<concurso>" = a do edital; senão, a pasta livre */
+let qsVincLeiBusca = "";
+
+function qsVincPintarLeis(manter) {
+  const c = qsVincCtx;
+  const s = $("qsVincLei");
+  if (!c || !s) return 0;
+  const atual = manter !== undefined ? manter : String(s.value || "");
+  const ordem = c.ordemLeis || [];
+  const idx = typeof pasIndice === "function" ? pasIndice() : null;
+  const item = (l) => ({ t: "lei", id: l.id, topicos: l.topicos || [] });
+  /* a fileira de pastas (só quando há alguma pasta com lei, ou alguma livre) */
+  const fx = $("qsVincPastas");
+  if (fx && typeof pasFileira === "function") {
+    if (qsVincPasta && typeof pasTodas === "function" && !pasTodas(idx).some((p) => p.id === qsVincPasta)) qsVincPasta = "";
+    const n = pasFileira({ cx: fx, idx, itens: ordem.map(item), sel: qsVincPasta,
+      escolher: (id) => { qsVincPasta = id; qsVincPintarLeis(); qsVincPintarEsc(); } });
+    fx.hidden = !n;
+  }
+  const q = typeof leiTxtChave === "function" ? leiTxtChave(qsVincLeiBusca) : String(qsVincLeiBusca || "").toLowerCase();
+  const passa = (l) => {
+    if (qsVincPasta && typeof pasContem === "function" && !pasContem(qsVincPasta, item(l), idx)) return false;
+    if (!q) return true;
+    const pal = [l.nome, l.apelido, l.numero, typeof leiNumeroNorm === "function" ? leiNumeroNorm(l.numero) : "", l.ano, l.especie, l.ente].join(" ");
+    return (typeof leiTxtChave === "function" ? leiTxtChave(pal) : pal.toLowerCase()).indexOf(q) >= 0;
+  };
+  s.innerHTML = "";
+  const vazio = document.createElement("option");
+  vazio.value = "";
+  /* a que a PESSOA escolheu não some com o filtro; a sugerida pelo app (a do tópico) sim — buscar outra é trocar */
+  const fica = atual && c.leiManual === atual ? atual : "";
+  const visiveis = ordem.filter((l) => passa(l) || l.id === fica);
+  const filtrando = !!(qsVincPasta || q);
+  vazio.textContent = filtrando ? t("qs_vinc_escolha_n", { n: visiveis.filter(passa).length, t: ordem.length }) : t("qs_vinc_escolha");
+  s.append(vazio);
+  visiveis.forEach((l) => {
+    const o = document.createElement("option");
+    o.value = l.id;
+    o.textContent = l.nome + (c.doTopicoIds && c.doTopicoIds.has(l.id) ? " ★" : "");
+    s.append(o);
+  });
+  s.value = atual && (!filtrando || fica === atual || passa(ordem.find((l) => l.id === atual) || {})) && visiveis.some((l) => l.id === atual) ? atual : "";
+  /* uma lei só no filtro: já vem escolhida (é o que a pessoa procurava) */
+  const sobram = visiveis.filter(passa);
+  if (filtrando && !s.value && sobram.length === 1) s.value = sobram[0].id;
+  return sobram.length;
+}
+
+/* (19.49.0) "a lei não está na lista": o assistente de nova lei abre; criada a lei, esta janela volta com o mesmo
+ * trecho e a lei nova escolhida (e o que fora digitado no destino) */
+function qsVincNovaLei() {
+  const c = qsVincCtx;
+  if (!c || !c.esc || typeof leiNovaAbrir !== "function") return false;
+  const alvo = c.esc;
+  const arts = String(($("qsVincArts") && $("qsVincArts").value) || "");
+  try { $("dlgQsVincEsc").close(); } catch (e) {}
+  try { reg("QUESTOES", "vínculo: incluir lei nova pela janela", alvo.trecho); } catch (e) {}
+  return leiNovaAbrir({ volta: (id) => {
+    qsVincCtx = c;
+    qsVincEscolher(alvo);
+    if (id && leiDe(id)) {
+      qsVincCtx.leiManual = id;
+      qsVincPintarLeis(id);
+      $("qsVincLei").value = id;
+      if (arts && $("qsVincArts")) $("qsVincArts").value = arts;
+      qsVincPintarEsc();
+    }
+  } });
 }
 
 /* repinta tudo o que depende da lei e do destino: fichas, achados, partes e prévia */
@@ -2444,7 +2517,7 @@ function qsVincPintarEsc() {
       b.className = "btn-min qs-vinc-ficha" + (l.id === leiId ? " sel" : "");
       b.textContent = l.nome;
       b.setAttribute("aria-pressed", l.id === leiId ? "true" : "false");
-      b.onclick = () => { $("qsVincLei").value = l.id; c.cacheArts = null; qsVincPintarEsc(); };
+      b.onclick = () => { $("qsVincLei").value = l.id; c.leiManual = l.id; c.cacheArts = null; qsVincPintarEsc(); };
       fx.append(b);
     });
   }

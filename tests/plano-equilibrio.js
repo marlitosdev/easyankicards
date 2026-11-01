@@ -113,7 +113,7 @@ async function testes() {
   }
 
   /* textos */
-  ["hub_modo_rot", "hub_modo_auto", "hub_modo_avancar", "hub_modo_equilibrado", "hub_modo_consolidar", "hub_modo_tip_avancar", "hub_modo_tip_equilibrado", "hub_modo_tip_consolidar", "hub_modo_por_disc", "hub_modo_como_geral", "hub_modo_selo_rev", "hub_modo_selo_curta", "hub_ritmo_aviso", "hub_ritmo_usar", "hub_ritmo_usando", "hub_ritmo_voltar", "hub_ritmo_tip", "hub_equil_rot", "hub_equil_item", "hub_equil_tip", "hub_atraso_sinal", "hub_atraso_tip"].forEach((k) => {
+  ["hub_modo_rot", "hub_modo_auto", "hub_modo_avancar", "hub_modo_equilibrado", "hub_modo_consolidar", "hub_modo_tip_avancar", "hub_modo_tip_equilibrado", "hub_modo_tip_consolidar", "hub_modo_por_disc", "hub_modo_como_geral", "hub_modo_auto_d", "hub_modo_faixa_avancar", "hub_modo_faixa_equilibrado", "hub_modo_faixa_consolidar", "hub_modo_selo_rev", "hub_modo_selo_curta", "hub_ritmo_aviso", "hub_ritmo_usar", "hub_ritmo_usando", "hub_ritmo_voltar", "hub_ritmo_tip", "hub_equil_rot", "hub_equil_item", "hub_equil_tip", "hub_atraso_sinal", "hub_atraso_tip"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

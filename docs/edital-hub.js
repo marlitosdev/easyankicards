@@ -231,6 +231,7 @@ function hubPintarAgenda() {
   const equilibrios = [];
   const modosVistos = {};       /* disciplina → {modo, auto, sugerido}, do primeiro edital em que aparece */
   let modoSugerido = "";
+  let diasProx = null;          /* dias até a prova mais próxima: o que o automático usa */
   /* pega a fila da semana de cada edital ativo e junta */
   const linhas = [];
   ativos.forEach((e) => {
@@ -243,6 +244,7 @@ function hubPintarAgenda() {
     });
     Object.keys(plano.modos || {}).forEach((d) => { if (!modosVistos[d]) modosVistos[d] = plano.modos[d]; });
     /* com dois editais, o rótulo do automático fala do de prova mais próxima (o modo mais "fechado") */
+    if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
     if (plano.recente && plano.recente.total >= ED_RECENTE_MIN) equilibrios.push({ nome: e.nome || cfg.concurso || "", eq: plano.equilibrio || [] });
@@ -352,7 +354,7 @@ function hubPintarAgenda() {
     av.append(tx, b);
     cx.append(av);
   }
-  cx.append(hubModoControles(modosVistos, modoSugerido));
+  cx.append(hubModoControles(modosVistos, modoSugerido, diasProx));
   /* (19.47.0) A FAIXA DO EQUILÍBRIO: fatia da prova × fatia do seu tempo (14 dias), as disciplinas mais desviadas */
   equilibrios.forEach((q) => {
     const fora = q.eq.filter((x) => Math.abs(x.desvio) >= 5);
@@ -542,7 +544,9 @@ function hubModoDefinir(disc, modo) {
   return v;
 }
 /* a linha "Modo de estudo": o geral (com o que a data sugere) e, recolhido, o de cada disciplina */
-function hubModoControles(modosVistos, sugerido) {
+/* (19.49.0) cada modo diz o PRAZO em que o automático o escolhe; o automático diz quantos dias faltam */
+function hubModoRotulo(m) { return t("hub_modo_" + m) + " · " + t("hub_modo_faixa_" + m); }
+function hubModoControles(modosVistos, sugerido, dias) {
   const v = hubModosLer();
   const cx = document.createElement("div");
   cx.className = "hub-modo";
@@ -555,8 +559,9 @@ function hubModoControles(modosVistos, sugerido) {
   const sel = document.createElement("select");
   sel.id = "hubModoGeral";
   const opt = (s0, val, txt) => { const o = document.createElement("option"); o.value = val; o.textContent = txt; s0.append(o); };
-  opt(sel, "auto", t("hub_modo_auto", { m: t("hub_modo_" + (sugerido || "equilibrado")) }));
-  ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(sel, m, t("hub_modo_" + m)));
+  opt(sel, "auto", dias !== null && dias !== undefined ? t("hub_modo_auto_d", { m: t("hub_modo_" + (sugerido || "equilibrado")), d: dias })
+    : t("hub_modo_auto", { m: t("hub_modo_" + (sugerido || "equilibrado")) }));
+  ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(sel, m, hubModoRotulo(m)));
   sel.value = v.geral || "auto";
   sel.title = t("hub_modo_tip_" + (sel.value === "auto" ? (sugerido || "equilibrado") : sel.value));
   sel.onchange = () => { hubModoDefinir("", sel.value); hubPintarAgenda(); };
@@ -580,7 +585,7 @@ function hubModoControles(modosVistos, sugerido) {
       const s2 = document.createElement("select");
       s2.id = "hubModoDisc_" + k;
       opt(s2, "geral", t("hub_modo_como_geral"));
-      ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(s2, m, t("hub_modo_" + m)));
+      ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(s2, m, hubModoRotulo(m)));
       s2.value = v.disc[d] || "geral";
       s2.onchange = () => { hubModoDefinir(d, s2.value); hubPintarAgenda(); };
       lin.append(nm, s2);
