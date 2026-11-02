@@ -25,7 +25,7 @@ let epCtx = null;
 /* o estado da janela a partir do texto do edital */
 function epEstado(texto) {
   const r = lerEdital(texto || "");
-  const ds = (r.disciplinas || []).map((d) => ({ nome: d.nome, peso: d.peso, abs: d.abs || 0, unidade: d.unidade || "q", grupo: "", min: null }));
+  const ds = (r.disciplinas || []).map((d) => ({ nome: d.nome, peso: d.peso, peso0: d.peso, abs: d.abs || 0, unidade: d.unidade || "q", grupo: "", min: null }));
   const grupos = [];
   (r.blocos || []).forEach((b) => {
     const membros = (b.disciplinas || []).filter((n) => ds.some((d) => d.nome === n));
@@ -54,6 +54,9 @@ function epAbrir() {
   if (!dlg || !$("editalTexto")) return false;
   epCtx = epEstado($("editalTexto").value);
   if (!epCtx.ds.length) { try { uiAlert(t("ep_sem_disc")); } catch (e) {} return false; }
+  /* (19.59.0) a foto do que está gravado: é o "antes" da confirmação e do "cadastrado agora" */
+  epCtx.orig = epFoto(epCtx);
+  epPintarAtual();
   if ($("epIaResp")) $("epIaResp").value = "";
   if ($("epIaBox")) $("epIaBox").open = false;
   if ($("epMsg")) $("epMsg").textContent = "";
@@ -84,6 +87,8 @@ function epPintar() {
   const cab = el("div", "ep-lin ep-cab");
   cab.append(el("span", "ep-c-nome", t("ep_col_disc")));
   if (c.peso === "sim") cab.append(el("span", "ep-c-vale", t("ep_col_vale")));
+  else cab.append(el("span", "ep-c-vale", t("ep_col_peso15")));
+  cab.append(el("span", "ep-c-fatia", t("ep_col_fatia")));
   if (c.minimo === "sim") cab.append(el("span", "ep-c-min", t("ep_col_min")));
   tb.append(cab);
   c.ds.forEach((d, k) => {
@@ -102,7 +107,22 @@ function epPintar() {
       u.onchange = () => { d.unidade = u.value; c.ds.forEach((x) => { x.unidade = u.value; }); epPintar(); };
       v.append(n, u);
       lin.append(v);
+    } else {
+      /* (19.59.0) sem os números do edital, o peso de 1 a 5 da disciplina pode ser mudado aqui */
+      const v = el("span", "ep-c-vale");
+      const sel = document.createElement("select");
+      sel.id = "epPeso15_" + k; sel.className = "ep-peso15";
+      sel.setAttribute("aria-label", t("ep_col_peso15") + " · " + d.nome);
+      [1, 2, 3, 4, 5].forEach((x) => { const o = document.createElement("option"); o.value = String(x); o.textContent = x + " · " + t("ep_peso15_" + x); sel.append(o); });
+      sel.value = String(Math.min(5, Math.max(1, Math.round(d.peso || 3))));
+      sel.onchange = () => { d.peso = Number(sel.value); epResumo(); };
+      v.append(sel);
+      if (d.peso !== d.peso0) v.append(el("span", "ep-mudou", t("ep_era", { v: d.peso0 })));
+      lin.append(v);
     }
+    const fz = el("span", "ep-c-fatia");
+    fz.id = "epFatia_" + k;
+    lin.append(fz);
     if (c.minimo === "sim") {
       /* (19.56.0) disciplina num bloco mostra o bloco (o mínimo é do bloco); fora de bloco, o mínimo próprio */
       const m = el("span", "ep-c-min");
@@ -238,7 +258,142 @@ function epResumo() {
   }
   cx.innerHTML = "";
   frases.forEach((f) => { const p = document.createElement("li"); p.textContent = f; cx.append(p); });
+  epPintarFatias();
   return frases;
+}
+
+/* =====================================================================
+ * (19.59.0) CONSULTAR, MUDAR COM CONFIRMAÇÃO E AS REGRAS
+ * O pedido: "consultar os pesos já cadastrados e poder alterar — com confirmação adicional e alerta prévio explicando o
+ * que acontece em cada botão — e as regras dos pesos". Três peças:
+ *  · "Cadastrado agora": a foto do que está gravado (peso, quanto vale, mínimo, discursiva), sempre visível no topo;
+ *  · na tabela, o peso de 1 a 5 vira uma lista quando o edital não traz números, e a coluna "vale" mostra a fatia ao vivo;
+ *  · "Gravar" mostra ANTES o que muda (de → para) e o que cada botão faz; sair com mudanças também pergunta.
+ * ===================================================================== */
+function epFoto(c) {
+  return JSON.parse(JSON.stringify({ ds: c.ds, grupos: c.grupos, peso: c.peso, minimo: c.minimo, disc: c.disc, discursiva: c.discursiva }));
+}
+
+/* a fatia de cada disciplina como o app a calcula (montarPlano), para um texto */
+function epFatiasDe(texto) {
+  try {
+    const r = lerEdital(texto || "");
+    const pl = montarPlano(r, { hoje: typeof hojeISO === "function" ? hojeISO() : undefined });
+    return { fatia: pl.fatia || {}, exata: !!pl.fatiaExata };
+  } catch (e) { return { fatia: {}, exata: false }; }
+}
+
+/* o texto que seria gravado agora (sem gravar) */
+function epTextoPrevia() {
+  const c = epCtx;
+  if (!c || !$("editalTexto")) return "";
+  try { return epNovoTexto($("editalTexto").value, c); } catch (e) { return $("editalTexto").value; }
+}
+
+function epPintarFatias() {
+  const c = epCtx;
+  if (!c) return;
+  const f = epFatiasDe(epTextoPrevia());
+  c.ds.forEach((d, k) => {
+    const x = $("epFatia_" + k);
+    if (!x) return;
+    const v = f.fatia[d.nome];
+    x.textContent = v == null ? "—" : (f.exata ? "" : "≈") + v + "%";
+    x.title = t(f.exata ? "ep_fatia_exata" : "ep_fatia_estimada");
+  });
+}
+
+/* o peso de uma disciplina, em palavras: "10 questões" · "peso 4 (1 a 5)" */
+function epPesoTexto(d, peso) {
+  if (peso === "sim" && d.abs > 0) return t(d.unidade === "p" ? "ep_vale_pontos" : "ep_vale_questoes", { n: d.abs });
+  return t("ep_peso15_tx", { n: d.peso });
+}
+function epMinDe(d, foto) {
+  if (foto.minimo !== "sim") return t("ep_atual_sem_min");
+  if (d.grupo) { const g = foto.grupos.find((x) => x.nome === d.grupo); return t("ep_atual_bloco", { g: d.grupo, m: g && g.min ? epMinTexto(g.min) : "—" }); }
+  return d.min ? epMinTexto(d.min) : t("ep_atual_sem_min");
+}
+function epDiscTexto(foto) {
+  if (foto.discursiva !== "sim" || !foto.disc || !(foto.disc.pontos > 0)) return t("ep_atual_disc_nao");
+  const dd = foto.disc;
+  return t("ep_atual_disc", { p: dd.pontos, o: dd.objetiva || "?", d: (dd.disciplinas || []).map(hubDiscCurtaSeg).join(", ") || "—" })
+    + (dd.minimo ? " · " + t("ep_atual_disc_min", { m: epMinTexto(dd.minimo) }) : "");
+}
+
+/* "Cadastrado agora": o que está gravado no edital, antes de mexer em qualquer coisa */
+function epPintarAtual() {
+  const c = epCtx, cx = $("epAtual");
+  if (!c || !cx || !c.orig) return;
+  const o = c.orig;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  cx.innerHTML = "";
+  const f = epFatiasDe($("editalTexto").value);
+  cx.append(el("summary", "", t("ep_atual_tit")));
+  cx.append(el("p", "nota", t(f.exata ? "ep_atual_sub_exata" : "ep_atual_sub_estimada")));
+  const tb = el("div", "ep-atual-tab");
+  const cab = el("div", "ep-atual-lin ep-cab");
+  [t("ep_col_disc"), t("ep_atual_col_peso"), t("ep_col_fatia"), t("ep_col_min")].forEach((x) => cab.append(el("span", "", x)));
+  tb.append(cab);
+  o.ds.forEach((d) => {
+    const ln = el("div", "ep-atual-lin");
+    const v = f.fatia[d.nome];
+    ln.append(el("span", "ep-c-nome", d.nome), el("span", "", epPesoTexto(d, o.peso)),
+      el("span", "", v == null ? "—" : (f.exata ? "" : "≈") + v + "%"), el("span", "", epMinDe(d, o)));
+    tb.append(ln);
+  });
+  cx.append(tb);
+  cx.append(el("p", "ep-atual-disc", t("ep_atual_disc_rot") + " " + epDiscTexto(o)));
+  cx.open = true;
+}
+
+/* o que muda entre o gravado e o que está na janela: [{tipo: "peso"|"min"|"bloco"|"disc", txt}] */
+function epMudancas(c) {
+  const o = c && c.orig;
+  if (!o) return [];
+  const out = [];
+  c.ds.forEach((d) => {
+    const a = o.ds.find((x) => x.nome === d.nome);
+    if (!a) return;
+    const pa = epPesoTexto(a, o.peso), pb = epPesoTexto(d, c.peso);
+    if (pa !== pb) out.push({ tipo: "peso", txt: t("ep_mud_linha", { d: d.nome, a: pa, b: pb }) });
+    const ma = epMinDe(a, o), mb = epMinDe(d, c);
+    if (ma !== mb) out.push({ tipo: "min", txt: t("ep_mud_min", { d: d.nome, a: ma, b: mb }) });
+  });
+  const da = epDiscTexto(o), db = epDiscTexto(c);
+  if (da !== db) out.push({ tipo: "disc", txt: t("ep_mud_disc", { a: da, b: db }) });
+  return out;
+}
+
+/* Gravar COM confirmação: o que muda (de → para), as fatias antes e depois, e o que cada botão faz */
+async function epGravarConfirmando() {
+  const c = epCtx;
+  if (!c) return false;
+  const mud = epMudancas(c);
+  if (!mud.length && c.peso === c.orig.peso && c.minimo === c.orig.minimo && c.discursiva === c.orig.discursiva) {
+    await uiAlert(t("ep_nada_mudou"));
+    return false;
+  }
+  const fa = epFatiasDe($("editalTexto").value), fb = epFatiasDe(epTextoPrevia());
+  const fat = c.ds.filter((d) => fa.fatia[d.nome] !== fb.fatia[d.nome])
+    .map((d) => hubDiscCurtaSeg(d.nome) + " " + (fa.fatia[d.nome] == null ? "—" : fa.fatia[d.nome] + "%") + " → " + (fb.fatia[d.nome] == null ? "—" : fb.fatia[d.nome] + "%"));
+  const txt = t("ep_conf_tit") + "\n\n" + (mud.length ? mud.map((x) => "· " + x.txt).join("\n") : t("ep_conf_so_respostas"))
+    + (fat.length ? "\n\n" + t("ep_conf_fatias") + "\n· " + fat.join("\n· ") : "")
+    + "\n\n" + t("ep_conf_botoes");
+  if (!(await uiConfirm(txt, { ok: t("ep_conf_ok") }))) {
+    try { reg("EDITAL", "como a prova pontua: gravação desistida na confirmação", mud.length + " mudança(s)"); } catch (e) {}
+    return false;
+  }
+  return epGravar();
+}
+
+/* fechar a janela: com mudanças não gravadas, pergunta antes (e diz o que cada botão faz) */
+async function epFechar() {
+  const c = epCtx, dlg = $("dlgEdPontua");
+  const mud = c ? epMudancas(c) : [];
+  const respostas = c && c.orig && (c.peso !== c.orig.peso || c.minimo !== c.orig.minimo || c.discursiva !== c.orig.discursiva);
+  if ((mud.length || respostas) && !(await uiConfirm(t("ep_sair_conf", { n: mud.length || 1 }), { ok: t("ep_sair_ok"), perigo: true }))) return false;
+  try { if (dlg && dlg.open) dlg.close(); } catch (e) {}
+  return true;
 }
 
 /* ---------------- a discursiva (pergunta 3) ---------------- */
@@ -322,6 +477,8 @@ function epNovoTexto(texto, c) {
     let novo = null;
     if (c.peso === "sim" && b.d.abs > 0) novo = String(b.d.abs) + (b.d.unidade === "p" ? "p" : "q");
     else if (c.peso === "nao" && /^\s*\d+(?:[.,]\d+)?\s*[qp]\s*$/i.test(m ? m[2] : "")) novo = String(b.d.peso || 3);
+    /* (19.59.0) o peso de 1 a 5 mudado na janela */
+    else if (c.peso === "nao" && b.d.peso0 !== undefined && b.d.peso !== b.d.peso0) novo = String(b.d.peso);
     if (m && novo !== null) b.linhas[0] = m[1] + novo + (m[3] || "");
     else if (!m && novo !== null) b.linhas[0] = b.linhas[0].replace(/\s*$/, "") + " :: " + novo;
   });
@@ -371,6 +528,8 @@ function epGravar() {
   /* a garantia: os tópicos e os ramos são os mesmos, só a ordem das disciplinas pode mudar */
   const conta = (tx) => { const r = lerEdital(tx); return r.disciplinas.length + "|" + r.disciplinas.reduce((a, d) => a + d.topicos.length + d.topicos.reduce((b, tp) => b + ((tp.ramos || []).length), 0), 0); };
   if (conta(novo) !== conta(antes)) { if (msg) msg.textContent = t("ep_erro_conta"); try { reg("EDITAL", "como a prova pontua: gravação recusada (tópicos não batem)", ""); } catch (e) {} return false; }
+  /* (19.59.0) uma versão anterior no histórico, como na revisão com IA */
+  try { if (typeof guardarVersao === "function") guardarVersao("antes de ⚖ Pontuação e cortes", antes); } catch (e) {}
   $("editalTexto").value = novo;
   try { edSalvar(); } catch (e) {}
   /* "não tem" também é resposta: tira o item da conferência */
@@ -493,9 +652,12 @@ function epLerIA(txt) {
 
 if (typeof document !== "undefined" && document.getElementById && document.getElementById("dlgEdPontua")) {
   const lig = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
-  lig("btnEpGravar", () => epGravar());
-  lig("btnEpCancelar", () => document.getElementById("dlgEdPontua").close());
-  lig("btnEpX", () => document.getElementById("dlgEdPontua").close());
+  /* (19.59.0) gravar pergunta antes, mostrando o que muda; sair com mudanças também pergunta (inclusive pelo Esc) */
+  lig("btnEpGravar", () => epGravarConfirmando());
+  lig("btnEpCancelar", () => epFechar());
+  lig("btnEpX", () => epFechar());
+  const dlgP = document.getElementById("dlgEdPontua");
+  if (dlgP.addEventListener) dlgP.addEventListener("cancel", (ev) => { ev.preventDefault(); epFechar(); });
   lig("btnEpIaCopiar", () => epCopiarIA());
   lig("btnEpIaLer", () => epLerIA(document.getElementById("epIaResp").value));
   ["sim", "nao"].forEach((v) => {

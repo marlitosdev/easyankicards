@@ -1893,6 +1893,19 @@ dialog.ed-mud-dlg[open]{width:min(760px,96vw);max-height:92vh}
 .ed-mud-mantem summary,.ed-mud-chip.ed-mud-mantem{color:var(--info)}
 .ed-mud-alerta{border-color:var(--erro);background:rgba(239,68,68,.18)}
 .ed-mud-alerta summary{color:var(--erro)}
+/* (19.59.0) como a prova pontua: o cadastrado agora, as regras, o peso 1-5 e a fatia ao vivo */
+.ep-atual,.ep-regras{border:1px solid var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0}
+.ep-atual>summary,.ep-regras>summary{cursor:pointer;font-weight:800}
+.ep-atual-tab{display:grid;gap:2px;margin:4px 0;font-size:13px}
+.ep-atual-lin{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) 60px minmax(0,1.4fr);gap:8px;align-items:center}
+.ep-atual-lin.ep-cab{font-weight:700;color:var(--sutil)}
+.ep-atual-disc{font-size:13px;margin:4px 0 2px}
+.ep-regras-lista{margin:4px 0;padding-left:20px;font-size:13px;line-height:1.5}
+.ep-c-fatia{min-width:52px;text-align:right;font-variant-numeric:tabular-nums;color:var(--sutil)}
+.ep-peso15{max-width:160px}
+.ep-mudou{font-size:12px;font-weight:700;color:var(--atencao);margin-left:6px}
+.ep-botoes-aj{font-size:12px}
+@media (max-width:560px){.ep-atual-lin{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 /* (19.55.0) como a prova pontua */
 dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ep-ia{border:1px solid var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0 10px}
@@ -10583,6 +10596,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="dlg-x" id="btnEpX" data-i18n-title="help_close">✖</button>
   </div>
   <p class="nota" data-i18n="ep_sub"></p>
+  <!-- (19.59.0) o que está gravado agora, e as regras dos pesos -->
+  <details class="ep-atual" id="epAtual" open></details>
+  <details class="ep-regras" id="epRegras">
+    <summary data-i18n="ep_regras_tit"></summary>
+    <ol class="ep-regras-lista">
+      <li data-i18n="ep_regra_1"></li>
+      <li data-i18n="ep_regra_2"></li>
+      <li data-i18n="ep_regra_3"></li>
+      <li data-i18n="ep_regra_4"></li>
+      <li data-i18n="ep_regra_5"></li>
+      <li data-i18n="ep_regra_6"></li>
+      <li data-i18n="ep_regra_7"></li>
+    </ol>
+  </details>
   <details class="ep-ia" id="epIaBox">
     <summary data-i18n="ep_ia_tit"></summary>
     <ol class="ep-ia-passos">
@@ -10616,9 +10643,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <ul id="epResumo" class="ep-resumo"></ul>
   </div>
   <p class="nota ep-msg" id="epMsg" role="status"></p>
+  <p class="nota ep-botoes-aj" data-i18n="ep_botoes_aj"></p>
   <div class="dlg-rodape">
-    <button type="button" class="btn btn-azul" id="btnEpGravar" data-i18n="ep_gravar"></button>
-    <button type="button" class="btn btn-cinza" id="btnEpCancelar" data-i18n="cancel_btn"></button>
+    <button type="button" class="btn btn-azul" id="btnEpGravar" data-i18n="ep_gravar" data-i18n-title="ep_gravar_tip"></button>
+    <button type="button" class="btn btn-cinza" id="btnEpCancelar" data-i18n="cancel_btn" data-i18n-title="ep_cancelar_tip"></button>
   </div>
 </dialog>
 

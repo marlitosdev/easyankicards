@@ -250,8 +250,50 @@ async function testes() {
     ok(/Ainda sem o número do edital \(1\): Redação/.test(txt), "W7 o aviso diz qual disciplina falta: " + txt.slice(0, 200));
   }
 
+  /* ---- (19.59.0) C: consultar o cadastrado, mudar o peso 1-5, confirmar antes de gravar, sair perguntando, regras ---- */
+  {
+    const T = ["# C | prova: 2030-11-29 | horas: 10", "@ Alfa :: 5", "+ a :: 5", "+ b :: 3", "@ Beta :: 2", "+ c :: 5"].join("\n");
+    api.$("editalTexto").value = T;
+    ok(api.epAbrir() === true, "C1 a janela abre");
+    const at = api.$("epAtual").textContent;
+    ok(/Cadastrado agora/.test(at) && /Alfa/.test(at) && /peso 5 \(1 a 5\)/.test(at) && /≈80%/.test(at) && /não cadastrada/.test(at), "C2 'cadastrado agora' mostra peso, quanto vale e a discursiva: " + at.slice(0, 300));
+    ok(api.$("epRegras") && (require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").match(/data-i18n="ep_regra_[1-7]"/g) || []).length === 7, "C3 as regras dos pesos estão na janela");
+    const sel = api.$("epPeso15_1");
+    ok(sel && sel.value === "2", "C4 sem números, o peso 1-5 aparece para mudar");
+    sel.value = "4"; sel.onchange();
+    const mud = api.epMudancas(api.epCtxAtual());
+    ok(mud.length === 1 && /Beta: peso 2 \(1 a 5\) → peso 4 \(1 a 5\)/.test(mud[0].txt), "C5 a mudança é listada de → para: " + JSON.stringify(mud));
+    ok(/≈/.test(api.$("epFatia_1").textContent), "C6 a coluna 'vale' mostra a fatia ao vivo: " + api.$("epFatia_1").textContent);
+    /* gravar: a confirmação vem antes; "Cancelar" não grava */
+    let pr = api.epGravarConfirmando();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); api.uiModalResponder(false); }
+    ok((await pr) === false && api.$("editalTexto").value === T && api.$("dlgEdPontua").open, "C7 cancelar na confirmação não grava e a janela continua");
+    pr = api.epGravarConfirmando();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); api.uiModalResponder(true); }
+    ok((await pr) === true && /@ Beta :: 4/.test(api.$("editalTexto").value) && /@ Alfa :: 5/.test(api.$("editalTexto").value), "C8 confirmando, grava só o peso mudado: " + api.$("editalTexto").value);
+    /* sem mudança: avisa e não grava */
+    api.epAbrir();
+    pr = api.epGravarConfirmando();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); api.uiModalResponder(true); }
+    ok((await pr) === false, "C9 sem mudança não há o que gravar");
+    /* sair com mudança pergunta; "Cancelar" mantém a janela aberta */
+    api.$("epPeso15_0").value = "3"; api.$("epPeso15_0").onchange();
+    pr = api.epFechar();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); api.uiModalResponder(false); }
+    ok((await pr) === false && api.$("dlgEdPontua").open, "C10 sair com mudança pergunta; cancelar continua na janela");
+    pr = api.epFechar();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); api.uiModalResponder(true); }
+    ok((await pr) === true && !api.$("dlgEdPontua").open && /@ Alfa :: 5/.test(api.$("editalTexto").value), "C11 'sair sem gravar' fecha e o edital fica como estava");
+    /* com os números do edital, o cadastrado diz "10 questões" e o vale é exato */
+    api.$("editalTexto").value = T.replace("@ Alfa :: 5", "@ Alfa :: 10q").replace("@ Beta :: 2", "@ Beta :: 5q");
+    api.epAbrir();
+    const at2 = api.$("epAtual").textContent;
+    ok(/10 questões/.test(at2) && /67%/.test(at2) && !/≈67%/.test(at2), "C12 com números, 'cadastrado agora' é exato: " + at2.slice(0, 200));
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");
