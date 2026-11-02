@@ -368,6 +368,13 @@ function epMudancas(c) {
 async function epGravarConfirmando() {
   const c = epCtx;
   if (!c) return false;
+  const falha = epValidar(c);
+  if (falha) {
+    if ($("epMsg")) $("epMsg").textContent = falha;
+    try { reg("EDITAL", "como a prova pontua: gravação recusada (antes de confirmar)", falha.replace(/\n/g, " · ")); } catch (e) {}
+    await uiAlert(t("ep_nao_grava", { f: falha }));
+    return false;
+  }
   const mud = epMudancas(c);
   if (!mud.length && c.peso === c.orig.peso && c.minimo === c.orig.minimo && c.discursiva === c.orig.discursiva) {
     await uiAlert(t("ep_nada_mudou"));
@@ -383,7 +390,9 @@ async function epGravarConfirmando() {
     try { reg("EDITAL", "como a prova pontua: gravação desistida na confirmação", mud.length + " mudança(s)"); } catch (e) {}
     return false;
   }
-  return epGravar();
+  const ok = epGravar();
+  if (!ok) await uiAlert(t("ep_nao_grava", { f: ($("epMsg") && $("epMsg").textContent) || t("ep_erro_conta") }));
+  return ok;
 }
 
 /* fechar a janela: com mudanças não gravadas, pergunta antes (e diz o que cada botão faz) */
@@ -514,15 +523,41 @@ function epNovoTexto(texto, c) {
   return saida.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
+/* (19.59.1) O QUE IMPEDE GRAVAR, dito por nome. Antes, a recusa só aparecia no rodapé da janela (fora da vista) e DEPOIS da
+ * confirmação — a pessoa confirmava, nada era gravado e o aviso da agenda continuava, sem explicação. "" = pode gravar. */
+function epValidar(c) {
+  if (!c) return "";
+  /* bloco sem disciplina marcada não vai para o texto */
+  c.grupos = c.grupos.filter((g) => c.ds.some((x) => x.grupo === g.nome));
+  const falhas = [];
+  if (c.peso === "sim") {
+    const sem = c.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome);
+    if (sem.length) falhas.push(t("ep_falta_vale_de", { n: sem.length, d: sem.join(", ") }));
+  }
+  if (c.minimo === "sim") {
+    const semMin = c.grupos.filter((g) => !g.min).map((g) => g.nome);
+    if (semMin.length) falhas.push(t("ep_bloco_sem_min_de", { g: semMin.join(", ") }));
+  }
+  if (c.discursiva === "sim") {
+    const f = [];
+    if (!(c.disc.pontos > 0)) f.push(t("ep_disc_f_pontos"));
+    if (!(epObjetivaPontos() > 0)) f.push(t("ep_disc_f_objetiva"));
+    if (!c.disc.disciplinas.length) f.push(t("ep_disc_f_disc"));
+    if (f.length) falhas.push(t("ep_disc_incompleta_de", { f: f.join(", ") }));
+  }
+  return falhas.join("\n");
+}
+
 function epGravar() {
   const c = epCtx;
   if (!c) return false;
   const msg = $("epMsg");
-  /* bloco sem disciplina marcada não vai para o texto */
-  c.grupos = c.grupos.filter((g) => c.ds.some((x) => x.grupo === g.nome));
-  if (c.minimo === "sim" && c.grupos.some((g) => !g.min)) { if (msg) msg.textContent = t("ep_bloco_sem_min"); return false; }
-  if (c.discursiva === "sim" && (!(c.disc.pontos > 0) || !(epObjetivaPontos() > 0) || !c.disc.disciplinas.length)) { if (msg) msg.textContent = t("ep_disc_incompleta"); return false; }
-  if (c.peso === "sim" && c.ds.some((d) => !(d.abs > 0))) { if (msg) msg.textContent = t("ep_falta_vale"); return false; }
+  const falha = epValidar(c);
+  if (falha) {
+    if (msg) msg.textContent = falha;
+    try { reg("EDITAL", "como a prova pontua: gravação recusada", falha.replace(/\n/g, " · ")); } catch (e) {}
+    return false;
+  }
   const antes = $("editalTexto").value;
   const novo = epNovoTexto(antes, c);
   /* a garantia: os tópicos e os ramos são os mesmos, só a ordem das disciplinas pode mudar */

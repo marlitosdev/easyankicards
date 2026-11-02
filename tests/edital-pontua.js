@@ -53,7 +53,7 @@ async function testes() {
   /* Português sem número: "sim" na pergunta 1 não grava */
   c.peso = "sim";
   c.ds.forEach((d) => { d.abs = /Português/.test(d.nome) ? 0 : 5; d.unidade = "q"; });
-  ok(api.epGravar() === false && /Falta o número/.test(api.$("epMsg").textContent), "P4b 'sim' com uma disciplina sem numero nao grava");
+  ok(api.epGravar() === false && /falta o número de questões ou pontos de 1 disciplina/.test(api.$("epMsg").textContent), "P4b 'sim' com uma disciplina sem numero nao grava");
   c.peso = "nao";
   const novo = api.epNovoTexto(TXT, c);
   const r = api.lerEdital(novo);
@@ -110,7 +110,7 @@ async function testes() {
     await api.epCriarBloco("Bloco Teste");
     ok(cb.grupos.some((g) => g.nome === "Bloco Teste") && !api.$("epGrupos").hidden && /Blocos de disciplinas/.test(api.$("epGrupos").textContent), "B1 criar bloco abre a secao dos blocos com o bloco novo");
     cb.ds[0].grupo = "Bloco Teste";
-    ok(api.epGravar() === false && /sem o mínimo/.test(api.$("epMsg").textContent), "B2 bloco sem minimo nao grava");
+    ok(api.epGravar() === false && /sem a nota mínima/.test(api.$("epMsg").textContent), "B2 bloco sem minimo nao grava");
     api.$("dlgEdPontua").close();
   }
 
@@ -120,7 +120,7 @@ async function testes() {
     const cd = api.epCtxAtual();
     ok(cd.discursiva === "nao", "D0 sem a linha da discursiva, a pergunta 3 comeca em 'nao'");
     cd.discursiva = "sim";
-    ok(api.epGravar() === false && /Discursiva: falta/.test(api.$("epMsg").textContent), "D1 discursiva sem valor nem disciplinas nao grava");
+    ok(api.epGravar() === false && /Pergunta 3 \(discursiva\): falta/.test(api.$("epMsg").textContent), "D1 discursiva sem valor nem disciplinas nao grava");
     cd.disc.pontos = 40; cd.disc.objetiva = 90; cd.disc.minimo = { tipo: "pct", valor: 50 }; cd.disc.linhas = { min: 25, max: 30 }; cd.disc.corrigida = 50;
     cd.disc.disciplinas = ["Sistema Tributário Brasileiro"];
     const frases = api.epResumoAtual();
@@ -289,6 +289,23 @@ async function testes() {
     api.epAbrir();
     const at2 = api.$("epAtual").textContent;
     ok(/10 questões/.test(at2) && /67%/.test(at2) && !/≈67%/.test(at2), "C12 com números, 'cadastrado agora' é exato: " + at2.slice(0, 200));
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
+  /* ---- (19.59.1) V: o que impede gravar é dito ANTES da confirmação, num alerta, com o nome do que falta ---- */
+  {
+    const T = ["# V | prova: 2030-11-29 | horas: 10", "@ Alfa :: 5", "+ a :: 5", "@ Beta :: 2", "+ c :: 5"].join("\n");
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    const c = api.epCtxAtual();
+    c.peso = "sim"; c.ds[0].abs = 10; c.ds[0].unidade = "q";
+    c.discursiva = "sim"; c.disc.pontos = 40;
+    let msg = "";
+    const pr = api.epGravarConfirmando();
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); msg = msg || String(api.$("uiModalMsg").textContent || ""); api.uiModalResponder(true); }
+    ok((await pr) === false && api.$("editalTexto").value === T, "V1 com falta, nada é gravado");
+    ok(/NADA FOI GRAVADO/.test(msg) && /Beta/.test(msg) && /quanto vale a prova objetiva/.test(msg) && /em quais disciplinas/.test(msg), "V2 o alerta diz o que falta, por nome: " + msg);
+    ok(!/ANTES DE GRAVAR/.test(msg), "V3 a confirmação nem aparece quando não dá para gravar");
     try { api.$("dlgEdPontua").close(); } catch (e) {}
   }
 
