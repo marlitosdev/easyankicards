@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.67.0";
+const VERSAO = "19.68.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1360,6 +1360,9 @@ function formatFrente(c) {
 
 /* Corpo do cartão (frente, alternativas, verso, tags, avisos) —
  * usado na lista de pré-visualização E no preview ao vivo do diálogo. */
+/* (19.68.0) as fórmulas em LaTeX das prévias (bancada, biblioteca, elevar, material) desenhadas como no estudo */
+function cartaoDesenharTex(div) { try { if (typeof matTexDesenharEm === "function") matTexDesenharEm(div); } catch (e) {} }
+
 function renderCorpoCartao(div, c) {
   const f = document.createElement("div");
   f.className = "frente"; f.append(formatFrente(c)); div.append(f);
@@ -1388,6 +1391,7 @@ function renderCorpoCartao(div, c) {
   }
   c.issues.forEach((i) => { const e = document.createElement("div"); e.className = "issue"; e.textContent = "(!) " + i; div.append(e); });
   (c.infos || []).forEach((i) => { const e = document.createElement("div"); e.className = "info"; e.textContent = "ℹ " + i; div.append(e); });
+  cartaoDesenharTex(div);
 }
 
 /* ------------------------- pré-visualização ------------------------- */
@@ -1917,7 +1921,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
   const btF = limitarAltura(frente, c.front, p.caixa);
   if (btF) wrap.append(btF);
 
-  if (!mostrarResposta) return;   // verso só quando o usuário pedir
+  if (!mostrarResposta) { cartaoDesenharTex(div); return; }   // verso só quando o usuário pedir
   /* A prévia tem de mostrar a MESMA divisão do arquivo exportado; quando as
    * duas divergem, o usuário só descobre o problema depois de importar. */
   const emBlocos = (el, txt, cor) => {
@@ -2004,6 +2008,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
     const btJ = limitarAltura(just, c.back, p.caixa);
     if (btJ) wrap.append(btJ);
   }
+  cartaoDesenharTex(div);
 }
 
 
