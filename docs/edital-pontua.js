@@ -241,39 +241,90 @@ async function epTrocarGrupo(d, val) {
 }
 
 /* a regra em frases, e quanto cada disciplina vale (do edital ou estimado) */
+/* (19.62.0) AS FRASES DE UM ESTADO, cada uma com uma CHAVE (do que ela fala), para comparar o gravado com o da janela:
+ * "g:Bloco", "d:Disciplina", "min", "peso", "disc:vale", "disc:cai", "disc:min", "disc:linhas", "disc:corrigida".
+ * st = { ds, grupos, minimo, peso, disc, discursiva }; hib = a fatia híbrida desse estado (ou null). */
+function epFrasesDe(st, hib, objetiva) {
+  const F = [];
+  const add = (k, txt) => F.push({ k, txt });
+  if (st.minimo === "sim") {
+    st.grupos.forEach((g) => {
+      const ms = st.ds.filter((d) => d.grupo === g.nome).map((d) => d.nome);
+      if (!ms.length) return;
+      add("g:" + g.nome, g.min ? t("ep_frase_grupo", { g: g.nome, d: ms.map(hubDiscCurtaSeg).join(", "), m: epMinTexto(g.min) }) : t("ep_frase_grupo_sem", { g: g.nome }));
+    });
+    st.ds.filter((d) => !d.grupo).forEach((d) => add("d:" + d.nome, d.min ? t("ep_frase_disc", { d: d.nome, m: epMinTexto(d.min) }) : t("ep_frase_disc_sem", { d: d.nome })));
+  } else add("min", t("ep_frase_sem_min"));
+  if (st.peso === "sim") {
+    const tot = st.ds.reduce((a, d) => a + (d.abs || 0), 0);
+    const falta = st.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome);
+    if (falta.length) add("peso", t("ep_frase_falta_vale", { d: falta.join(", ") }));
+    else add("peso", t("ep_frase_vale", { l: st.ds.map((d) => hubDiscCurtaSeg(d.nome) + " " + Math.round(d.abs / (tot || 1) * 100) + "%").join(" · ") }));
+  } else if (hib) {
+    /* (19.61.0) edital misturado com o total da objetiva: parte exata, parte estimada no que sobra */
+    add("peso", t("ep_frase_hibrida", { e: Object.keys(hib.pts).filter((k) => hib.estimadas.indexOf(k) < 0).map(hubDiscCurtaSeg).join(", "),
+      d: hib.estimadas.map(hubDiscCurtaSeg).join(", "), r: Math.round(hib.resto) }));
+  } else add("peso", t("ep_frase_estimado"));
+  /* a discursiva: quanto vale da nota final, onde cai e o que elimina */
+  if (st.discursiva === "sim" && st.disc) {
+    const dd = st.disc, obj = objetiva;
+    if (dd.pontos > 0 && obj > 0) add("disc:vale", t("ep_frase_disc_vale", { s: Math.round(dd.pontos / (obj + dd.pontos) * 100), p: dd.pontos, t: obj + dd.pontos }));
+    else add("disc:vale", t("ep_frase_disc_falta"));
+    if ((dd.disciplinas || []).length) add("disc:cai", t("ep_frase_disc_cai", { d: dd.disciplinas.map(hubDiscCurtaSeg).join(", ") }));
+    else add("disc:cai", t("ep_frase_disc_sem_disc"));
+    if (dd.minimo) add("disc:min", t("ep_frase_disc_min", { m: epMinTexto(dd.minimo) }));
+    if (dd.linhas && dd.linhas.min && dd.linhas.max) add("disc:linhas", t("ep_frase_disc_linhas", { a: dd.linhas.min, b: dd.linhas.max }));
+    if (dd.corrigida > 0) add("disc:corrigida", t("ep_frase_disc_corrigida", { n: dd.corrigida }));
+  }
+  return F;
+}
+
+/* "Como fica", com o que mudou em relação ao gravado (mesmas cores e símbolos do painel da revisão):
+ *   ＋ verde "novo" · ↻ âmbar "mudou" (com o "antes" riscado) · ✕ vermelho "sai" (riscada, no fim) · sem marca = igual */
 function epResumo() {
   const c = epCtx, cx = $("epResumo");
   if (!c || !cx) return [];
-  const frases = [];
-  if (c.minimo === "sim") {
-    c.grupos.forEach((g) => {
-      const ms = c.ds.filter((d) => d.grupo === g.nome).map((d) => d.nome);
-      if (g.min) frases.push(t("ep_frase_grupo", { g: g.nome, d: ms.map(hubDiscCurtaSeg).join(", "), m: epMinTexto(g.min) }));
-      else frases.push(t("ep_frase_grupo_sem", { g: g.nome }));
-    });
-    c.ds.filter((d) => !d.grupo).forEach((d) => frases.push(d.min ? t("ep_frase_disc", { d: d.nome, m: epMinTexto(d.min) }) : t("ep_frase_disc_sem", { d: d.nome })));
-  } else frases.push(t("ep_frase_sem_min"));
-  if (c.peso === "sim") {
-    const tot = c.ds.reduce((a, d) => a + (d.abs || 0), 0);
-    const falta = c.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome);
-    if (falta.length) frases.push(t("ep_frase_falta_vale", { d: falta.join(", ") }));
-    else frases.push(t("ep_frase_vale", { l: c.ds.map((d) => hubDiscCurtaSeg(d.nome) + " " + Math.round(d.abs / (tot || 1) * 100) + "%").join(" · ") }));
-  } else frases.push(t("ep_frase_estimado"));
-  /* a discursiva: quanto vale da nota final, onde cai e o que elimina */
-  if (c.discursiva === "sim") {
-    const dd = c.disc, obj = epObjetivaPontos();
-    if (dd.pontos > 0 && obj > 0) frases.push(t("ep_frase_disc_vale", { s: Math.round(dd.pontos / (obj + dd.pontos) * 100), p: dd.pontos, t: obj + dd.pontos }));
-    else frases.push(t("ep_frase_disc_falta"));
-    if (dd.disciplinas.length) frases.push(t("ep_frase_disc_cai", { d: dd.disciplinas.map(hubDiscCurtaSeg).join(", ") }));
-    else frases.push(t("ep_frase_disc_sem_disc"));
-    if (dd.minimo) frases.push(t("ep_frase_disc_min", { m: epMinTexto(dd.minimo) }));
-    if (dd.linhas && dd.linhas.min && dd.linhas.max) frases.push(t("ep_frase_disc_linhas", { a: dd.linhas.min, b: dd.linhas.max }));
-    if (dd.corrigida > 0) frases.push(t("ep_frase_disc_corrigida", { n: dd.corrigida }));
+  const agora = epFrasesDe(c, epFatiasDe(epTextoPrevia()).hibrida, epObjetivaPontos());
+  let antes = null;
+  if (c.orig) {
+    const o = c.orig;
+    const objO = o.disc && o.disc.objetiva > 0 ? o.disc.objetiva
+      : (o.peso === "sim" && o.ds.length && o.ds.every((d) => d.abs > 0 && d.unidade === "p") ? o.ds.reduce((a, d) => a + d.abs, 0) : 0);
+    antes = epFrasesDe(o, epFatiasDe($("editalTexto").value).hibrida, objO);
   }
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const marcas = [];
+  agora.forEach((f) => {
+    const a = antes ? antes.find((x) => x.k === f.k) : null;
+    marcas.push(!antes ? { f, tipo: "" } : !a ? { f, tipo: "novo" } : a.txt !== f.txt ? { f, tipo: "mudou", antes: a.txt } : { f, tipo: "" });
+  });
+  const saem = antes ? antes.filter((a) => !agora.some((f) => f.k === a.k)) : [];
+  const n = { novo: marcas.filter((m) => m.tipo === "novo").length, mudou: marcas.filter((m) => m.tipo === "mudou").length, sai: saem.length };
   cx.innerHTML = "";
-  frases.forEach((f) => { const p = document.createElement("li"); p.textContent = f; cx.append(p); });
+  if (n.novo || n.mudou || n.sai) {
+    const leg = el("li", "ep-res-leg");
+    leg.setAttribute("role", "presentation");
+    if (n.novo) leg.append(el("span", "ep-res-chip ep-res-novo", "＋ " + t("ep_res_novos", { n: n.novo })));
+    if (n.mudou) leg.append(el("span", "ep-res-chip ep-res-mudou", "↻ " + t("ep_res_mudou", { n: n.mudou })));
+    if (n.sai) leg.append(el("span", "ep-res-chip ep-res-sai", "✕ " + t("ep_res_sai", { n: n.sai })));
+    cx.append(leg);
+  }
+  const SIMB = { novo: "＋", mudou: "↻", sai: "✕" };
+  const item = (txt, tipo, ant) => {
+    const li = el("li", tipo ? "ep-res-" + tipo : "");
+    if (tipo) {
+      li.append(el("span", "ep-res-simb", SIMB[tipo] + " "));
+      li.setAttribute("aria-label", t("ep_res_aria_" + tipo) + " " + txt);
+    }
+    li.append(el("span", "ep-res-txt", txt));
+    if (ant) li.append(el("span", "ep-res-antes", t("ep_res_antes", { x: ant })));
+    li.dataset.chave = tipo;
+    cx.append(li);
+  };
+  marcas.forEach((m) => item(m.f.txt, m.tipo, m.antes));
+  saem.forEach((a) => item(a.txt, "sai"));
   epPintarFatias();
-  return frases;
+  return agora.map((f) => f.txt);
 }
 
 /* =====================================================================
@@ -293,8 +344,8 @@ function epFatiasDe(texto) {
   try {
     const r = lerEdital(texto || "");
     const pl = montarPlano(r, { hoje: typeof hojeISO === "function" ? hojeISO() : undefined });
-    return { fatia: pl.fatia || {}, exata: !!pl.fatiaExata };
-  } catch (e) { return { fatia: {}, exata: false }; }
+    return { fatia: pl.fatia || {}, exata: !!pl.fatiaExata, hibrida: pl.fatiaHibrida || null };
+  } catch (e) { return { fatia: {}, exata: false, hibrida: null }; }
 }
 
 /* o texto que seria gravado agora (sem gravar) */
@@ -304,6 +355,12 @@ function epTextoPrevia() {
   try { return epNovoTexto($("editalTexto").value, c); } catch (e) { return $("editalTexto").value; }
 }
 
+/* (19.61.0) "≈" só no que é estimado: no edital misturado com o total da objetiva, as numeradas são exatas */
+function epFatiaEstimada(f, nome) {
+  if (f.exata) return false;
+  if (f.hibrida) return f.hibrida.estimadas.indexOf(nome) >= 0;
+  return true;
+}
 function epPintarFatias() {
   const c = epCtx;
   if (!c) return;
@@ -312,8 +369,9 @@ function epPintarFatias() {
     const x = $("epFatia_" + k);
     if (!x) return;
     const v = f.fatia[d.nome];
-    x.textContent = v == null ? "—" : (f.exata ? "" : "≈") + v + "%";
-    x.title = t(f.exata ? "ep_fatia_exata" : "ep_fatia_estimada");
+    const est = epFatiaEstimada(f, d.nome);
+    x.textContent = v == null ? "—" : (est ? "≈" : "") + v + "%";
+    x.title = t(!est ? "ep_fatia_exata" : f.hibrida ? "ep_fatia_hibrida" : "ep_fatia_estimada", f.hibrida ? { r: Math.round(f.hibrida.resto), t: f.hibrida.total } : {});
   });
 }
 
@@ -350,7 +408,9 @@ function epPintarAtual() {
   cx.innerHTML = "";
   const f = epFatiasDe($("editalTexto").value);
   cx.append(el("summary", "", t("ep_atual_tit")));
-  cx.append(el("p", "nota", t(f.exata ? "ep_atual_sub_exata" : "ep_atual_sub_estimada")));
+  cx.append(el("p", "nota", f.hibrida
+    ? t("ep_atual_sub_hibrida", { n: f.hibrida.numeradas, t: f.hibrida.total, r: Math.round(f.hibrida.resto), d: f.hibrida.estimadas.map(hubDiscCurtaSeg).join(", ") })
+    : t(f.exata ? "ep_atual_sub_exata" : "ep_atual_sub_estimada")));
   const tb = el("div", "ep-atual-tab");
   const cab = el("div", "ep-atual-lin ep-cab");
   [t("ep_col_disc"), t("ep_atual_col_peso"), t("ep_col_fatia"), t("ep_col_min")].forEach((x) => cab.append(el("span", "", x)));
@@ -359,7 +419,7 @@ function epPintarAtual() {
     const ln = el("div", "ep-atual-lin");
     const v = f.fatia[d.nome];
     ln.append(el("span", "ep-c-nome", d.nome), el("span", "", epPesoTexto(d, o.peso)),
-      el("span", "", v == null ? "—" : (f.exata ? "" : "≈") + v + "%"), el("span", "", epMinDe(d, o)));
+      el("span", "", v == null ? "—" : (epFatiaEstimada(f, d.nome) ? "≈" : "") + v + "%"), el("span", "", epMinDe(d, o)));
     tb.append(ln);
   });
   cx.append(tb);

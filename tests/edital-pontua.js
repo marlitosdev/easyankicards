@@ -263,7 +263,7 @@ async function testes() {
     ok(api.epAbrir() === true, "C1 a janela abre");
     const at = api.$("epAtual").textContent;
     ok(/Cadastrado agora/.test(at) && /Alfa/.test(at) && /peso 5 \(1 a 5\)/.test(at) && /≈80%/.test(at) && /não cadastrada/.test(at), "C2 'cadastrado agora' mostra peso, quanto vale e a discursiva: " + at.slice(0, 300));
-    ok(api.$("epRegras") && (require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").match(/data-i18n="ep_regra_[1-7]"/g) || []).length === 7, "C3 as regras dos pesos estão na janela");
+    ok(api.$("epRegras") && (require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").match(/data-i18n="ep_regra_[1-8]"/g) || []).length === 8, "C3 as regras dos pesos estão na janela");
     const sel = api.$("epPeso15_1");
     ok(sel && sel.value === "2", "C4 sem números, o peso 1-5 aparece para mudar");
     sel.value = "4"; sel.onchange();
@@ -390,8 +390,64 @@ async function testes() {
     try { api.$("dlgEdPontua").close(); } catch (e) {}
   }
 
+  /* ---- (19.61.0) H: fatia híbrida — numeradas exatas, as outras dividem o que sobra da objetiva ---- */
+  {
+    const base = ["# H | prova: 2030-11-29 | horas: 10", "# discursiva | pontos: 0 | objetiva: 100",
+      "@ Alfa :: 5", "+ a :: 5", "+ b :: 5", "@ Beta :: 5", "+ c :: 5", "+ d :: 5", "@ Port :: 20p", "+ e :: 5", "@ Log :: 20p", "+ f :: 3"];
+    const T = base.join("\n").replace("# discursiva | pontos: 0 | objetiva: 100", "# discursiva | pontos: 10 | objetiva: 100 | disciplinas: Alfa");
+    const pl = api.montarPlano(api.lerEdital(T), { hoje: "2030-01-01" });
+    const h = pl.fatiaHibrida;
+    ok(h && h.total === 100 && h.numeradas === 40 && h.resto === 60 && h.estimadas.join() === "Alfa,Beta", "H1 numeradas em pontos + total da objetiva: híbrida: " + JSON.stringify(h));
+    ok(h.pts.Alfa === 30 && h.pts.Beta === 30 && h.pts.Port === 20, "H2 o resto (60) dividido pela estimativa (iguais aqui): " + JSON.stringify(h.pts));
+    ok(!pl.fatiaExata && pl.fatia.Port < pl.fatia.Alfa, "H3 a fatia mostrada é a dos pontos (com a discursiva): " + JSON.stringify(pl.fatia));
+    /* sem o total da objetiva, ou numeradas em questões: não há híbrida (a de sempre) */
+    const semTotal = ["# H | prova: 2030-11-29 | horas: 10", "@ Alfa :: 5", "+ a :: 5", "@ Port :: 20p", "+ e :: 5"].join("\n");
+    ok(!api.montarPlano(api.lerEdital(semTotal), { hoje: "2030-01-01" }).fatiaHibrida, "H4 sem o total da objetiva, sem híbrida");
+    ok(!api.montarPlano(api.lerEdital(T.replace(/20p/g, "20q")), { hoje: "2030-01-01" }).fatiaHibrida, "H5 numeradas em questões (total em pontos): sem híbrida");
+    ok(!api.montarPlano(api.lerEdital(T.replace("@ Alfa :: 5", "@ Alfa :: 30p").replace("@ Beta :: 5", "@ Beta :: 30p")), { hoje: "2030-01-01" }).fatiaHibrida, "H6 todas numeradas: exata, sem híbrida");
+    /* na janela: "≈" só nas estimadas; o cadastrado explica */
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    const at = api.$("epAtual").textContent;
+    ok(/Exato para as disciplinas com o número do edital \(40 de 100/.test(at) && /≈/.test(at) && /Port20pontos\d+%/.test(at.replace(/\s/g, "")) && /Log20pontos\d+%/.test(at.replace(/\s/g, "")) && !/Port20pontos≈/.test(at.replace(/\s/g, "")), "H7 cadastrado agora diz o que é exato e o que é ≈: " + at.slice(250, 520));
+    const r2 = api.lerEdital(T);
+    const cx = api.edConferenciaEdital(r2, pl, "h1");
+    ok(cx && /divide os 60 que sobram da objetiva \(100\)/.test(cx.textContent), "H8 a conferência explica a divisão");
+    ok(/Exato para Port, Log/.test(String(api.$("epResumo").textContent)), "H9 o 'como fica' diz o que é exato e o que é estimado: " + String(api.$("epResumo").textContent).slice(0, 200));
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
+  /* ---- (19.62.0) F: "Como fica" marca o que mudou em relação ao gravado ---- */
+  {
+    const T = ["# F | prova: 2030-11-29 | horas: 10", "& Específicos | minimo: 50%", "@ Alfa :: 5", "+ a :: 5", "@ Beta :: 4", "+ b :: 4",
+      "& Port | minimo: 50%", "@ Port :: 3", "+ c :: 3"].join("\n");
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    const txt = () => String(api.$("epResumo").textContent || "");
+    ok(!/[＋↻✕]/.test(txt()), "F1 sem mexer, nada marcado: " + txt().slice(0, 120));
+    const c = api.epCtxAtual();
+    c.ds.find((d) => d.nome === "Port").min = { tipo: "pct", valor: 60 };
+    api.epPintarAtualResumo();
+    ok(/↻ 1 mudou/.test(txt()) && /antes: Você é eliminado se fizer menos de 50% em Port/.test(txt()), "F2 mínimo mudado: âmbar com o antes: " + txt().slice(0, 300));
+    c.discursiva = "sim"; c.disc.pontos = 20; c.disc.objetiva = 80; c.disc.disciplinas = ["Alfa"];
+    api.epPintarAtualResumo();
+    ok(/＋ 2 novo/.test(txt()) && /＋ A discursiva vale 20%/.test(txt()), "F3 discursiva cadastrada: verde: " + txt().slice(0, 200));
+    c.ds.forEach((d) => { if (d.grupo === "Específicos") d.grupo = ""; });
+    c.grupos = c.grupos.filter((g) => g.nome !== "Específicos");
+    api.epPintarAtualResumo();
+    ok(/✕ 1 sai/.test(txt()) && /✕ Você é eliminado se fizer menos de 50% em Específicos/.test(txt()), "F4 bloco desfeito: vermelho, riscado: " + txt().slice(0, 400));
+    /* gravar e reabrir: tudo neutro de novo */
+    c.discursiva = "nao";
+    c.ds.forEach((d) => { if (!d.grupo && d.nome !== "Port") d.min = null; });
+    c.minimo = "sim";
+    ok(api.epGravar() === true, "F5 grava");
+    api.epAbrir();
+    ok(!/[＋↻✕]/.test(txt()), "F6 depois de gravar, neutro: " + txt().slice(0, 160));
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos", "ep_regra_8", "ep_atual_sub_hibrida", "ed_conf_pesos_hibrida", "ep_fatia_hibrida", "ep_res_novos", "ep_res_mudou", "ep_res_sai", "ep_res_antes"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

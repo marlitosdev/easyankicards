@@ -1373,6 +1373,42 @@ function montarPlano(r, opcoes) {
    * (1 − s) e a parte da discursiva vai para as disciplinas em que ela cai, na proporção do peso delas. Cada item da
    * disciplina tem o bruto multiplicado pela mesma razão — a ordem DENTRO da disciplina não muda; entre disciplinas, sim.
    * Só na primeira fase (na segunda, o plano já é o da discursiva). */
+  /* (19.61.0) A FATIA HÍBRIDA. Edital que dá o número de ALGUMAS disciplinas em pontos ("Português 20p, Lógica 5p")
+   * e o total da objetiva (90 pontos, na linha da discursiva), mas não divide o resto ("Conhecimentos Específicos": só o
+   * total do grupo). Antes, uma disciplina sem número bastava para tudo virar estimativa — e os números que o edital deu
+   * eram jogados fora. Agora: as numeradas valem o número delas; o que sobra da objetiva (90 − 30 = 60) é dividido entre
+   * as sem número pela mesma estimativa de sempre (peso da disciplina × pesos dos tópicos). Os pontos de cada uma viram o
+   * peso 1-5 do plano na mesma régua (como no edital todo numerado) e a fatia mostrada é a desses pontos. */
+  let hibrida = null;
+  if (!fase.so2) {
+    const ativasH = (r.disciplinas || []).filter((d) => !d.inativa);
+    const comN = ativasH.filter((d) => d.abs > 0), semN = ativasH.filter((d) => !(d.abs > 0));
+    const T = Number((cfg.discursiva && cfg.discursiva.objetiva) || cfg.objetiva || 0);
+    const somaN = comN.reduce((a, d) => a + d.abs, 0);
+    if (comN.length && semN.length && comN.every((d) => d.unidade === "p") && T > somaN) {
+      const resto = T - somaN;
+      const est = {};
+      todos.forEach((i) => { if (semN.some((d) => d.nome === i.disciplina)) est[i.disciplina] = (est[i.disciplina] || 0) + i.bruto; });
+      const somaE = Object.keys(est).reduce((a, k) => a + est[k], 0) || 1;
+      const pts = {};
+      comN.forEach((d) => { pts[d.nome] = d.abs; });
+      semN.forEach((d) => { pts[d.nome] = resto * (est[d.nome] || 0) / somaE; });
+      const maxP = Object.keys(pts).reduce((m, k) => Math.max(m, pts[k]), 0) || 1;
+      const multH = {};
+      ativasH.forEach((d) => {
+        const pH = Math.max(1, Math.min(5, 1 + Math.round(4 * (pts[d.nome] / maxP))));
+        multH[d.nome] = d.peso ? pH / d.peso : 1;
+      });
+      todos.forEach((i) => { const m = multH[i.disciplina] || 1; i.bruto *= m; i.brutoOrdem *= m; });
+      const maxH = todos.reduce((m, i) => Math.max(m, i.brutoOrdem), 0) || 1;
+      todos.forEach((i) => { i.prioridade = Math.round((i.brutoOrdem / maxH) * 100); });
+      todos.sort((a, b) => b.brutoOrdem - a.brutoOrdem || a.linha - b.linha);
+      const ptsR = {};
+      Object.keys(pts).forEach((k) => { ptsR[k] = Math.round(pts[k] * 10) / 10; });
+      hibrida = { total: T, numeradas: somaN, resto, pts: ptsR, estimadas: semN.map((d) => d.nome) };
+    }
+  }
+
   const disc = cfg.discursiva;
   let discInfo = null;
   if (!fase.so2 && disc && disc.pontos > 0 && (disc.disciplinas || []).length) {
@@ -1380,6 +1416,7 @@ function montarPlano(r, opcoes) {
     const ativas = (r.disciplinas || []).filter((d) => !d.inativa);
     const exataD = ativas.length && ativas.every((d) => d.abs > 0);
     if (exataD) ativas.forEach((d) => { porD[d.nome] = d.abs; });
+    else if (hibrida) Object.keys(hibrida.pts).forEach((k) => { porD[k] = hibrida.pts[k]; });
     else todos.forEach((i) => { porD[i.disciplina] = (porD[i.disciplina] || 0) + i.bruto; });
     const tot = Object.keys(porD).reduce((a2, k) => a2 + porD[k], 0) || 1;
     const nomeDe = {};
@@ -1468,6 +1505,10 @@ function montarPlano(r, opcoes) {
       fatia[d.nome] = Math.round((d.abs / somaAbs) * 100);
     });
     /* com a discursiva, a fatia é a da nota final (a conta foi feita acima) */
+    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; });
+  } else if (hibrida) {
+    /* (19.61.0) a fatia dos pontos (os do edital e os estimados no que sobra da objetiva) */
+    Object.keys(hibrida.pts).forEach((k) => { fatia[k] = Math.round((hibrida.pts[k] / hibrida.total) * 100); });
     if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; });
   } else {
     const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
@@ -1703,6 +1744,8 @@ function montarPlano(r, opcoes) {
     modoSugerido: edModoAuto(s ? s.dias : null),
     /* a fatia da prova é EXATA quando o edital trouxe os números */
     fatiaExata: exata,
+    /* (19.61.0) { total, numeradas, resto, pts, estimadas } quando parte vem do edital e parte é estimada no que sobra */
+    fatiaHibrida: hibrida,
     /* qual fase este plano representa, e o que existe do outro lado */
     fase,
     prazo,

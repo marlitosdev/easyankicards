@@ -4015,6 +4015,12 @@ function edConferenciaEdital(r, plano, id) {
     if (item === "pesos") {
       const falta = ((r && r.disciplinas) || []).filter((d) => !d.inativa && !(d.abs > 0)).map((d) => d.nome);
       if (falta.length) { const pf = el("p", "ed-conf-falta", t("ed_conf_pesos_faltam", { n: falta.length, l: falta.join(", ") })); pf.id = "edConfPesosFaltam"; it.append(pf); }
+      /* (19.61.0) com o total da objetiva, o app já divide o que sobra entre elas — dito aqui */
+      if (plano && plano.fatiaHibrida) {
+        const h = plano.fatiaHibrida;
+        const ph = el("p", "nota", t("ed_conf_pesos_hibrida", { t: h.total, n: h.numeradas, r: Math.round(h.resto) }));
+        ph.id = "edConfPesosHibrida"; it.append(ph);
+      }
     }
     const det = el("details", "ed-conf-como");
     det.append(el("summary", "", t("ed_conf_como")));
