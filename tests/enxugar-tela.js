@@ -367,8 +367,9 @@ async function testes() {
      * qual é qual — e era essa confusão ("13% da prova" lido como o peso
      * da disciplina) que a frase longa tentava desfazer com palavras. */
     const rot = ((cabs[0] || {}).children || []).map((c) => c.textContent || "");
-    ok(rot.length === 5,
-       "E7b deviam ser 5 colunas: " + rot.join(" | "));
+    /* (19.69.0) uma tabela só: disciplina · peso · feito · vale · falta · 1º */
+    ok(rot.length === 6,
+       "E7b deviam ser 6 colunas: " + rot.join(" | "));
     ok(rot.some((x) => x === api.t("ed_lac_col_falta")),
        "E7c falta a coluna que explica a ordem da lista: " + rot.join(" | "));
 
@@ -422,21 +423,13 @@ async function testes() {
     api.$("edProva").value = emDias(140);
     api.edRender();
 
-    const cabMapa = acharClasse(api.$("edPainel"), "edm-cab", [])[0];
-    ok(!!cabMapa, "E8 o mapa das disciplinas nao tem cabecalho para abrir");
-    if (cabMapa) cabMapa.onclick();
-
-    const g8 = cssRegra(".edm-cab-cols,.edm-linha");
-    ok(/grid-template-columns/.test(g8),
-       "E8b cabecalho e linha do mapa nao compartilham as colunas: " + g8);
-    const gl8 = cssRegra(".edm-linha");
-    const cols8 = (r) => (r.match(/grid-template-columns:([^;}]+)/) || [])[1];
-    ok(cols8(g8) && cols8(gl8) && cols8(g8).trim() === cols8(gl8).trim(),
-       "E8c as colunas do cabecalho e da linha do mapa divergiram:\n"
-       + cols8(g8) + "\n" + cols8(gl8));
-
+    /* (19.69.0) o mapa e os buracos viraram UMA tabela: uma caixa só, as linhas já à vista (sem abrir nada) */
+    const caixas = acharClasse(api.$("edPainel"), "edm-caixa", []);
+    ok(caixas.length === 1, "E8 deveria haver uma tabela só de disciplinas: " + caixas.length);
+    ok(acharClasse(api.$("edPainel"), "lac-cab", []).length === 1, "E8b um cabeçalho só (antes eram dois)");
     const linhas8 = acharClasse(api.$("edPainel"), "edm-linha", []);
-    ok(linhas8.length === 2, "E8d o mapa nao listou as duas disciplinas: " + linhas8.length);
+    ok(linhas8.length === 2, "E8d a tabela nao listou as duas disciplinas: " + linhas8.length);
+    ok(linhas8.every((l) => String(l.className || "").split(" ").includes("lac-linha")), "E8e cada linha usa a grade compartilhada (.lac-linha)");
   }
 
   return Object.assign(falhas, { quantas: n });

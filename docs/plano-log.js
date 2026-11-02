@@ -287,10 +287,123 @@ function plSnapsDoEdital(editalId) {
  * fórmula. Por isso é texto puro, com os números crus, e não uma tabela
  * desenhada — desenho não sobrevive a copiar e colar.
  * ------------------------------------------------------------------ */
+/* (19.71.0) O RELATÓRIO VIROU UM DIAGNÓSTICO. Além do plano (prova × tempo, semana 1, sinais), ele leva o que o app
+ * aprendeu a medir depois: a pontuação (exata, híbrida ou estimada, com a discursiva), os RISCOS DE CORTE (blocos e
+ * discursiva), os BURACOS, o TEMPO REAL, o que está DEIXADO DE LADO, as revisões vencidas, os materiais e o que falta
+ * cadastrar — e começa com o pedido à IA, para colar e receber um diagnóstico. */
+function plRelatorioDiagnostico(plano, r, editalId) {
+  const L = [];
+  const pct = (x) => (x == null ? "?" : x + "%");
+  const pan = typeof panoramaDisciplinas === "function" ? panoramaDisciplinas(plano) : [];
+
+  L.push("== PONTUACAO ==");
+  const h = plano.fatiaHibrida;
+  L.push("fatia: " + (plano.fatiaExata ? "EXATA (numero do edital em todas)" : h ? "HIBRIDA (" + h.numeradas + " de " + h.total + " pontos do edital; o resto, " + Math.round(h.resto) + " pontos, ESTIMADO entre: " + h.estimadas.join(", ") + ")" : "ESTIMADA (peso 1-5)"));
+  L.push("disciplina | numero do edital | peso 1-5 | vale%");
+  ((r && r.disciplinas) || []).filter((d) => !d.inativa).forEach((d) => {
+    const pd = pan.find((x) => x.nome === d.nome) || {};
+    L.push([d.nome, d.abs > 0 ? d.abs + (d.unidade === "p" ? " pontos" : " questoes") : "-", d.peso, pct(pd.fatia)].join(" | "));
+  });
+  const dc = plano.discursivaCfg;
+  if (dc && dc.pontos > 0) {
+    L.push("discursiva: " + dc.pontos + " pontos" + (dc.objetiva ? " (objetiva " + dc.objetiva + ")" : "")
+      + (plano.discursiva ? " = " + plano.discursiva.s + "% da nota final" : "")
+      + " | cai em: " + (dc.disciplinas || []).join(", ")
+      + (dc.minimo ? " | minimo " + (dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor) : "")
+      + (dc.linhas ? " | linhas " + dc.linhas.min + "-" + dc.linhas.max : "")
+      + (dc.corrigida ? " | corrigida so para os " + dc.corrigida + " primeiros da objetiva" : ""));
+  } else L.push("discursiva: nao cadastrada");
+  L.push("");
+
+  L.push("== RISCOS DE CORTE (eliminacao) ==");
+  const blocos = (plano.blocos || []).filter((b) => b.minPct !== null && b.minPct !== undefined);
+  if (!blocos.length) L.push("nenhum bloco com nota minima cadastrada");
+  blocos.forEach((b) => {
+    L.push("bloco " + b.nome + " | corte " + b.minPct + "% | cobertura " + b.pct + "% (" + b.feitos + "/" + b.topicos + " topicos)"
+      + " | acerto " + (b.acerto == null ? "sem amostra" : b.acerto + "% em " + b.acertoAmostra + "q (meta " + b.metaAcerto + "%)")
+      + " | vale " + b.fatia + "% da prova | " + (b.abaixo ? "ABAIXO DO CORTE" : b.apertado ? "APERTADO" : "ok"));
+    (b.linhas || []).forEach((x) => L.push("   - " + x.nome + ": cobertura " + x.cobertura + "% | acerto " + (x.acerto == null ? "-" : x.acerto + "% (" + x.acertoAmostra + "q)") + (x.acertoAnotado != null ? " | anotado " + x.acertoAnotado + "%" : "")));
+  });
+  let rd = null;
+  try { rd = typeof edRiscoDiscursiva === "function" ? edRiscoDiscursiva(plano, editalId) : null; } catch (e) { rd = null; }
+  if (rd) L.push("discursiva | corte " + (rd.minPct == null ? "-" : rd.minPct + "%") + " | cobertura das disciplinas dela " + rd.cobertura + "%"
+    + " | treino de escrita: " + rd.treinos + " das ultimas 4 semanas" + (rd.corrigida ? " | so os " + rd.corrigida + " primeiros sao corrigidos" : "")
+    + " | " + (rd.abaixo ? "ABAIXO DO CORTE" : rd.apertado ? "APERTADO" : rd.minPct == null ? "sem minimo" : "ok"));
+  L.push("");
+
+  L.push("== BURACOS (o que falta estudar, pelo peso na prova) ==");
+  L.push("disciplina | feito% | vale% | falta% | estudar-primeiro parados | intocados/total");
+  pan.forEach((d) => L.push([d.nome, pct(d.pesoFeito), pct(d.fatia), pct(d.lacuna), d.altaIntocada, d.intocados + "/" + d.total].join(" | ")));
+  L.push("");
+
+  L.push("== TEMPO REAL (registrado no diario) ==");
+  try {
+    const rr = typeof hubRitmoReal === "function" ? hubRitmoReal() : null;
+    if (rr && rr.semanas) {
+      L.push("media das ultimas " + rr.semanas + " semanas com estudo: " + rr.min + " min/semana | ultimas 2: " + rr.ult2 + " | tendencia: " + rr.tendencia
+        + " | planejado: " + plano.porSemana + " min/semana (" + Math.round((rr.ref || rr.min) / (plano.porSemana || 1) * 100) + "% cumprido)");
+      L.push("semanas: " + rr.lista.map((w) => (w.ini || w.semana || "") + "=" + w.min + "min").join(" | "));
+    } else L.push("sem registro suficiente no diario");
+  } catch (e) { L.push("sem registro suficiente no diario"); }
+  L.push("");
+
+  L.push("== DEIXADO DE LADO ==");
+  const semSemana = pan.filter((d) => d.intocados && !d.itens.some((i) => !i.feito && i.semana === 1)).map((d) => d.nome);
+  L.push("disciplinas com topicos pendentes e NADA na agenda desta semana: " + (semSemana.join(", ") || "nenhuma"));
+  const foraPorDisc = {};
+  (plano.fora || []).forEach((i) => { foraPorDisc[i.disciplina] = (foraPorDisc[i.disciplina] || 0) + 1; });
+  L.push("topicos que nao cabem ate a prova: " + ((plano.fora || []).length ? Object.keys(foraPorDisc).map((k) => k + " " + foraPorDisc[k]).join(", ") : "nenhum"));
+  try {
+    const disp = typeof faDispensados === "function" ? faDispensados() : [];
+    const adi = typeof faAdiados === "function" ? faAdiados() : [];
+    const doEdital = (x) => (plano.itens || []).some((i) => (i.topicoChave || i.chave) === x.chave);
+    const ds = disp.filter(doEdital), ad = adi.filter(doEdital);
+    L.push("tirados da agenda por voce: " + ds.length + " dispensado(s), " + ad.length + " adiado(s)"
+      + (ds.length + ad.length ? " — " + ds.concat(ad).slice(0, 12).map((x) => x.chave.replace("›", " > ") + " (" + (x.motivo || x.tipo) + (x.ate ? " ate " + x.ate : "") + ")").join("; ") : ""));
+  } catch (e) {}
+  const pulados = [];
+  (plano.itens || []).forEach((i) => (i.ramos || []).forEach((rm) => { if (rm.pulado) pulados.push(i.disciplina + " > " + i.nome + " > " + rm.nome); }));
+  L.push("ramos pulados: " + (pulados.length ? pulados.length + " — " + pulados.slice(0, 10).join("; ") : "nenhum"));
+  const altos = (plano.itens || []).filter((i) => !i.feito && i.faixa === "alta" && i.semana !== 1);
+  L.push("topicos de prioridade alta intocados e fora desta semana: " + altos.length + (altos.length ? " — " + altos.slice(0, 10).map((i) => i.disciplina + " > " + i.nome).join("; ") : ""));
+  L.push("");
+
+  L.push("== REVISOES ==");
+  const venc = {};
+  (plano.itens || []).forEach((i) => { if (i.feito && i.venceu) venc[i.disciplina] = (venc[i.disciplina] || 0) + 1; });
+  L.push("revisoes vencidas: " + (Object.keys(venc).length ? Object.keys(venc).map((k) => k + " " + venc[k]).join(", ") : "nenhuma"));
+  L.push("");
+
+  L.push("== MATERIAIS POR DISCIPLINA ==");
+  L.push("disciplina | resumo | cartoes | questoes | lei | julgados");
+  pan.forEach((d) => {
+    const ms = d.itens.map((i) => (typeof dscMaterialDoTopico === "function" ? dscMaterialDoTopico(i) : { chave: "", tipos: [] }));
+    const n = (tp) => ms.filter((x) => x.tipos.indexOf(tp) >= 0).length;
+    const cart = ms.reduce((a, x) => a + (typeof matContarCartoes === "function" && x.chave ? matContarCartoes(x.chave) : 0), 0);
+    const qs = ms.reduce((a, x) => a + (typeof qsContarDoTopico === "function" && x.chave ? qsContarDoTopico(x.chave) : 0), 0);
+    L.push([d.nome, n("resumo") + "/" + d.total + " topicos", cart, qs, n("lei"), n("juris")].join(" | "));
+  });
+  L.push("");
+
+  L.push("== O QUE AINDA E ESTIMATIVA (falta cadastrar) ==");
+  try {
+    const pend = typeof edConfPendencias === "function" ? edConfPendencias(r, plano, editalId) : [];
+    const nomes = { corte: "pontos de corte", pesos: "numero de questoes/pontos de cada disciplina", discursiva: "discursiva" };
+    L.push(pend.length ? pend.map((x) => nomes[x] || x).join(", ") : "nada — pontuacao, cortes e discursiva cadastrados");
+  } catch (e) { L.push("?"); }
+  L.push("");
+  return L;
+}
+
 function plRelatorio(plano, r, diario, banco, cfg) {
   if (!plano) return "";
   const L = [];
   const pct = (x) => (x == null ? "?" : x + "%");
+  /* (19.71.0) o pedido à IA no topo: o relatório é para colar numa conversa e receber um diagnóstico */
+  L.push("PEDIDO: Voce e um orientador de estudos para concursos. Com os dados abaixo (gerados pelo meu app de estudos), diagnostique como estou estudando e planejando:");
+  L.push("1) o que estou deixando de lado; 2) os riscos de eliminacao (cortes por bloco e discursiva); 3) se o meu tempo vai para o que mais vale na prova; 4) o que mudar nas proximas 2 semanas, de forma concreta.");
+  L.push("Trate como SUPOSICAO o que estiver marcado como ESTIMADO ou em \"O QUE AINDA E ESTIMATIVA\". Nao invente numeros que nao estao aqui.");
+  L.push("");
   L.push("RAIO-X DA RECOMENDACAO — " + plHojeISO());
   L.push("concurso: " + ((cfg && cfg.concurso) || "?")
     + " | prova: " + (plano.prazo || "?")
@@ -305,8 +418,9 @@ function plRelatorio(plano, r, diario, banco, cfg) {
   /* (19.51.0) a decisão sobre o ritmo (meta própria, ritmo real, ou "manter" o edital) explica as horas acima */
   try { const dr = typeof hubRitmoDecisaoTexto === "function" ? hubRitmoDecisaoTexto() : ""; if (dr) L.push("ritmo: " + dr); } catch (e) {}
   L.push("fatia da prova: " + (plano.fatiaExata
-    ? "EXATA (numeros do edital)" : "ESTIMADA (peso 1-5)"));
+    ? "EXATA (numeros do edital)" : plano.fatiaHibrida ? "HIBRIDA (parte do edital, parte estimada)" : "ESTIMADA (peso 1-5)"));
   L.push("");
+  try { plRelatorioDiagnostico(plano, r, plSnapEdAtual).forEach((x) => L.push(x)); } catch (e) { L.push("(diagnostico indisponivel: " + (e && e.message) + ")"); L.push(""); }
 
   L.push("== POR DISCIPLINA ==");
   L.push("disciplina | prova% | tempo% | desvio | pesoD | topicos | min");

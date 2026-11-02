@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.68.0";
+const VERSAO = "19.71.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -692,6 +692,18 @@ function toastMsg(texto, ms) {
 }
 
 function toast(chave) { toastMsg(t(chave), 1800); }
+/* (19.70.0) aviso com um botão "Desfazer" (some sozinho em ~10 s) */
+function toastDesfazer(texto, fn, ms) {
+  toastMsg(texto, ms || 10000);
+  const el = $("toast");
+  if (!el || !el.append) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "toast-acao";
+  b.textContent = t("desfazer_btn");
+  b.onclick = () => { try { fn(); } catch (e) {} el.classList.remove("on"); try { if (el.hidePopover) el.hidePopover(); } catch (e) {} };
+  el.append(" ", b);
+}
 
 /* ------------- balão de dica universal (hover / toque longo) -------- */
 

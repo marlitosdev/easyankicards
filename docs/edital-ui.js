@@ -3833,6 +3833,17 @@ function dscPintarRamos(plano, nome) {
   return p;
 }
 
+/* (19.70.0) PANORAMA DA DISCIPLINA — a janela ganhou nome, etiquetas, o que pede atenção, o próximo passo, os materiais
+ * (ver e criar o que falta), UMA lista de tópicos com filtros (os ramos recolhidos embaixo) e o menu ⋯ com peso,
+ * pontuação e o "excluir" — que saiu do lado do "Fechar", onde um toque por engano bastava. */
+let dscFiltroTop = "todos";
+function dscMaterialDoTopico(i) {
+  const ch = typeof matChaveViva === "function" ? matChaveViva(i.disciplina, i.nome) : matChave(i.disciplina, i.nome);
+  const rec = (typeof matResumos !== "undefined" && matResumos[ch]) || {};
+  let tipos = [];
+  try { tipos = typeof matTiposDe === "function" ? matTiposDe(Object.assign({}, rec, { chave: ch })) : []; } catch (e) { tipos = []; }
+  return { chave: ch, tipos };
+}
 function edPintarModalDisciplina(nome) {
   const r = lerEdital($("editalTexto").value);
   const plano = montarPlano(r, { horas: Number($("edHoras").value),
@@ -3840,13 +3851,29 @@ function edPintarModalDisciplina(nome) {
   const d = panoramaDisciplinas(plano).find((x) => x.nome === nome);
   if (!d) return null;
   const discRaw = r.disciplinas.find((x) => x.nome === nome);
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
 
   $("dscTitulo").textContent = d.nome;
-  $("dscSub").textContent = t("ed_dsc_sub", { p: d.peso, f: d.fatia, n: d.total });
+  /* ---- etiquetas: peso, % da prova, tópicos, bloco/mínimo, discursiva, nesta semana / fora do prazo ---- */
+  const chips = $("dscSub");
+  chips.innerHTML = "";
+  const chip = (txt, cls, tip) => { const c = el("span", "dsc-chip" + (cls ? " " + cls : ""), txt); if (tip) c.title = tip; chips.append(c); };
+  chip(t("ed_peso_n", { n: d.peso }));
+  chip(t("dsc_chip_vale", { f: d.fatia }));
+  chip(t("dsc_chip_topicos", { n: d.total }));
+  const bloco = (r.blocos || []).find((b) => (b.disciplinas || []).indexOf(nome) >= 0 && b.minimo);
+  if (bloco) chip(bloco.nome === nome ? t("dsc_chip_min", { m: epMinTextoSeg(bloco.minimo) }) : t("dsc_chip_bloco", { b: bloco.nome, m: epMinTextoSeg(bloco.minimo) }));
+  const disc = r.cfg && r.cfg.discursiva;
+  if (disc && (disc.disciplinas || []).some((x) => String(x).toLowerCase() === nome.toLowerCase())) chip(t("dsc_chip_discursiva"));
+  const naSemana = d.itens.filter((i) => !i.feito && i.semana === 1).length;
+  const foraPrazo = ((plano.fora || []).filter((i) => i.disciplina === nome)).length;
+  if (naSemana) chip(t("dsc_chip_semana", { n: naSemana }), "dsc-chip-semana");
+  else if (d.intocados) chip(t("dsc_chip_semana0"), "dsc-chip-fora", t("dsc_chip_semana0_tip"));
+  let riscos = [];
+  try { riscos = (typeof edDiscEmRisco === "function" ? edDiscEmRisco(plano.blocos) : []).filter((x) => x.disciplina === nome); } catch (e) { riscos = []; }
+  if (riscos.length) chip(t("dsc_chip_risco"), "dsc-chip-risco");
 
-  /* peso editável + próximo tópico: moraram no cartão da grade antiga,
-   * que virou esta janela — sem eles aqui, o "mapa das disciplinas"
-   * perderia as duas ações que só existiam ali. */
+  /* ---- o menu ⋯: peso (o select de sempre, em #dscAcoes), pontuação e excluir ---- */
   const acoes = $("dscAcoes");
   if (acoes) {
     acoes.innerHTML = "";
@@ -3859,58 +3886,143 @@ function edPintarModalDisciplina(nome) {
         if (n === discRaw.peso) o.selected = true;
         sel.append(o);
       });
-      sel.onchange = () => { edMudarPeso(discRaw, Number(sel.value));
-        edPintarModalDisciplina(nome); };
+      sel.onchange = () => { edMudarPeso(discRaw, Number(sel.value)); edPintarModalDisciplina(nome); };
       acoes.append(sel);
-    }
-    const proximo = edProximoDa(d.itens);
-    if (proximo) {
-      const pr = document.createElement("button");
-      pr.type = "button";
-      pr.className = "ed-card-prox";
-      pr.textContent = t("ed_card_prox", { n: proximo.nome });
-      pr.title = t("ed_card_prox_ajuda", { n: proximo.nome,
-        p: proximo.disciplinaPeso != null ? proximo.disciplinaPeso * proximo.peso : "?" });
-      pr.onclick = () => { if (typeof matAbrirEditor === "function") matAbrirEditor(proximo, "ler"); };
-      acoes.append(pr);
-    } else {
-      const pr = document.createElement("div");
-      pr.className = "ed-card-prox ed-card-prox-fim";
-      pr.textContent = t("ed_card_prox_fim");
-      acoes.append(pr);
     }
   }
 
+  /* ---- o que pede atenção (só quando há motivo) ---- */
+  const mats = d.itens.map((i) => ({ i, m: dscMaterialDoTopico(i) }));
+  const semNada = mats.filter((x) => !x.m.tipos.length).length;
+  const baixa = d.itens.filter((i) => !i.feito && i.faixa === "baixa").length;
+  const at = $("dscAtencao");
+  at.innerHTML = "";
+  const motivos = [];
+  riscos.forEach((x) => motivos.push(t(x.motivo.indexOf("acerto") >= 0 && x.motivo.indexOf("cobertura") < 0 ? "dsc_at_risco_acerto" : "dsc_at_risco", { b: x.bloco, m: x.minPct, c: x.cobertura })));
+  if (foraPrazo) motivos.push(t("dsc_at_fora", { n: foraPrazo }));
+  if (!naSemana && d.intocados) motivos.push(t("dsc_at_semana0", { n: d.intocados }));
+  if (baixa) motivos.push(t("dsc_at_baixa", { n: baixa }));
+  if (semNada === d.itens.length && d.itens.length) motivos.push(t("dsc_at_sem_material"));
+  at.hidden = !motivos.length;
+  if (motivos.length) {
+    at.append(el("div", "dsc-atencao-tit", t("dsc_at_tit")));
+    const ul = el("ul");
+    motivos.forEach((m) => ul.append(el("li", "", m)));
+    at.append(ul);
+  }
+
+  /* ---- o próximo passo, em destaque ---- */
+  const px = $("dscProximo");
+  px.innerHTML = "";
+  const proximo = edProximoDa(d.itens);
+  if (proximo) {
+    const pr = el("button", "btn btn-azul dsc-proximo-btn ed-card-prox", t("dsc_proximo", { n: proximo.nome }));
+    pr.type = "button";
+    pr.title = t("ed_card_prox_ajuda", { n: proximo.nome, p: proximo.disciplinaPeso != null ? proximo.disciplinaPeso * proximo.peso : "?" });
+    pr.onclick = () => { $("dlgDisciplina").close(); if (typeof matAbrirEditor === "function") matAbrirEditor(proximo, "ler"); };
+    px.append(pr);
+  } else px.append(el("div", "dsc-proximo-fim ed-card-prox ed-card-prox-fim", t("ed_card_prox_fim")));
+
+  /* ---- os números, numa linha ---- */
   const cx = $("dscResumo");
   cx.innerHTML = "";
-  const cartao = (rot, val, cls) => {
-    const b = document.createElement("div");
-    b.className = "dsc-num " + (cls || "");
-    const v = document.createElement("b"); v.textContent = val;
-    const r2 = document.createElement("span"); r2.textContent = rot;
-    b.append(v, r2); return b;
-  };
+  const cartao = (rot, val, cls) => { const b = el("div", "dsc-num " + (cls || "")); b.append(el("b", "", val), el("span", "", rot)); return b; };
   cx.append(
     cartao(t("ed_dsc_estudado"), d.pesoFeito + "%", "n-feito"),
     cartao(t("ed_dsc_revisado"), d.pesoRevisado + "%", "n-rev"),
     cartao(t("ed_dsc_intocado"), d.intocados + "/" + d.total, "n-falta"),
     cartao(t("ed_dsc_alta"), String(d.altaIntocada), d.altaIntocada ? "n-alerta" : ""));
-
-  /* a contagem por faixa (alta/média/baixa) só aparecia no cartão aberto
-   * da grade antiga — continua existindo, só que aqui */
   const pontosCx = $("dscPontos");
   if (pontosCx) { pontosCx.innerHTML = ""; pontosCx.append(edPontos(d.itens)); }
 
-  dscPintarRamos(plano, nome);
+  /* ---- 📚 materiais: o que existe, ver na estante e criar o que falta ---- */
+  dscPintarMateriais(d, mats);
 
+  /* ---- uma lista de tópicos, com filtros ---- */
+  const filtros = $("dscFiltros");
+  filtros.innerHTML = "";
+  const conta = { todos: d.itens.length, estudar: d.itens.filter((i) => !i.feito).length, feitos: d.itens.filter((i) => i.feito).length, semana: d.itens.filter((i) => !i.feito && i.semana === 1).length, semmat: semNada };
+  ["todos", "estudar", "semana", "feitos", "semmat"].forEach((f) => {
+    if (f !== "todos" && !conta[f] && dscFiltroTop !== f) return;
+    const b = el("button", "di-per" + (dscFiltroTop === f ? " ativa" : ""), t("dsc_f_" + f, { n: conta[f] }));
+    b.type = "button";
+    b.onclick = () => { dscFiltroTop = f; edPintarModalDisciplina(nome); };
+    filtros.append(b);
+  });
+  const passa = (i) => dscFiltroTop === "estudar" ? !i.feito : dscFiltroTop === "feitos" ? i.feito
+    : dscFiltroTop === "semana" ? !i.feito && i.semana === 1 : dscFiltroTop === "semmat" ? !dscMaterialDoTopico(i).tipos.length : true;
   const lista = $("dscLista");
   lista.innerHTML = "";
-  /* dentro da disciplina, o intocado de maior peso vem primeiro: é a ordem
-   * em que a pessoa deveria atacar se abrisse a matéria agora */
-  d.itens.slice().sort((a, b) => (a.feito - b.feito) || (b.bruto - a.bruto))
-    .forEach((i) => lista.append(edLinhaTopico(i, true)));
+  /* dentro da disciplina, o intocado de maior peso vem primeiro: é a ordem em que se deveria atacar */
+  const vis = d.itens.filter(passa).sort((a, b) => (a.feito - b.feito) || (b.bruto - a.bruto));
+  vis.forEach((i) => lista.append(edLinhaTopico(i, true)));
+  if (!vis.length) lista.append(el("p", "nota", t("dsc_f_vazio")));
 
+  dscPintarRamos(plano, nome);
+  if ($("dscRamosDet")) $("dscRamosDet").hidden = !!($("dscRamosBloco") && $("dscRamosBloco").hidden);
   return d;
+}
+
+/* o mínimo em texto curto ("40%" / "6 acertos") sem depender da janela de pontuação estar carregada */
+function epMinTextoSeg(m) {
+  if (!m) return "";
+  if (typeof epMinTexto === "function") return epMinTexto(m);
+  return m.tipo === "pct" ? m.valor + "%" : m.valor;
+}
+
+function dscPintarMateriais(d, mats) {
+  const det = $("dscMateriais");
+  if (!det) return;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const aberto = det.open;
+  det.innerHTML = "";
+  const n = (tp) => mats.filter((x) => x.m.tipos.indexOf(tp) >= 0).length;
+  const cartoes = mats.reduce((a, x) => a + (typeof matContarCartoes === "function" ? matContarCartoes(x.m.chave) : 0), 0);
+  const questoes = mats.reduce((a, x) => a + (typeof qsContarDoTopico === "function" ? qsContarDoTopico(x.m.chave) : 0), 0);
+  const sum = el("summary", "", t("dsc_mat_tit"));
+  sum.append(el("span", "dsc-mat-cont", t("dsc_mat_cont", { r: n("resumo"), t: mats.length, c: cartoes, q: questoes, l: n("lei"), j: n("juris") })));
+  det.append(sum);
+  /* ver na estante, já filtrada pela disciplina */
+  const ver = el("button", "btn-min", t("dsc_mat_ver"));
+  ver.type = "button";
+  ver.onclick = () => dscVerMateriais(d.nome);
+  det.append(ver);
+  const tipo = (tp, rot, criar) => {
+    const faltam = mats.filter((x) => x.m.tipos.indexOf(tp) < 0);
+    const lin = el("div", "dsc-mat-lin");
+    lin.append(el("span", "dsc-mat-rot", rot), el("span", "dsc-mat-falta", faltam.length ? t("dsc_mat_faltam", { n: faltam.length, t: mats.length }) : t("dsc_mat_todos")));
+    if (faltam.length) {
+      const tops = el("div", "dsc-mat-tops");
+      faltam.slice(0, 5).forEach((x) => {
+        const tl = el("div", "dsc-mat-top");
+        tl.append(el("span", "", x.i.nome));
+        criar.forEach(([chaveRot, fn]) => {
+          const b = el("button", "btn-min", t(chaveRot));
+          b.type = "button";
+          b.onclick = () => { $("dlgDisciplina").close(); fn(x); };
+          tl.append(b);
+        });
+        tops.append(tl);
+      });
+      if (faltam.length > 5) tops.append(el("span", "dsc-mat-falta", t("dsc_mat_mais", { n: faltam.length - 5 })));
+      lin.append(tops);
+    }
+    det.append(lin);
+  };
+  const abrir = (x) => { if (typeof matAbrirEditor === "function") matAbrirEditor(x.i, "ler"); };
+  const resumoIA = (x) => { if (typeof riaAbrirDoTopico === "function") riaAbrirDoTopico(x.i.disciplina, x.i.nome, x.m.chave); else abrir(x); };
+  tipo("resumo", t("dsc_mat_resumo"), [["dsc_mat_resumo_ia", resumoIA], ["dsc_mat_abrir", abrir]]);
+  tipo("cartoes", t("dsc_mat_cartoes"), [["dsc_mat_abrir", abrir]]);
+  tipo("questoes", t("dsc_mat_questoes"), [["dsc_mat_abrir", abrir]]);
+  det.open = aberto;
+}
+
+/* "ver na estante": o modo Material, com a busca pela disciplina */
+function dscVerMateriais(nome) {
+  try { $("dlgDisciplina").close(); } catch (e) {}
+  if (typeof trocarModo === "function") trocarModo("material");
+  const b = $("matBusca");
+  if (b) { b.value = nome; try { b.dispatchEvent(new Event("input")); } catch (e) {} }
 }
 
 /* Abre a disciplina no painel e leva o olho até ela. Só expandir não basta:
@@ -3931,9 +4043,22 @@ function edAbrirDisciplinaDaLinha(i) {
 }
 
 function abrirDisciplina(nome) {
+  dscFiltroTop = "todos";
   const d = edPintarModalDisciplina(nome);
   if (!d) return;
+  /* (19.70.0) o menu ⋯: abre e fecha; fora dele, fecha */
+  const menu = $("dscMenu"), mb = $("btnDscMenu");
+  const fecharMenu = () => { if (menu) menu.hidden = true; if (mb) mb.setAttribute("aria-expanded", "false"); };
+  fecharMenu();
+  if (mb) mb.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); const abre = menu.hidden; menu.hidden = !abre; mb.setAttribute("aria-expanded", abre ? "true" : "false"); };
+  if ($("dlgDisciplina") && !$("dlgDisciplina").dataset.menuLigado) {
+    $("dlgDisciplina").dataset.menuLigado = "1";
+    $("dlgDisciplina").addEventListener("click", (ev) => { const m = $("dscMenu"); if (m && !m.hidden && !m.contains(ev.target) && ev.target !== $("btnDscMenu")) { m.hidden = true; $("btnDscMenu").setAttribute("aria-expanded", "false"); } });
+  }
+  if ($("btnDscX")) $("btnDscX").onclick = () => $("dlgDisciplina").close();
+  if ($("btnDscPontua")) $("btnDscPontua").onclick = () => { fecharMenu(); $("dlgDisciplina").close(); if (typeof epAbrir === "function") epAbrir(); };
   if ($("btnDscExcluir")) $("btnDscExcluir").onclick = () => {
+    fecharMenu();
     $("dlgDisciplina").close();
     ndExcluir(d.nome);
   };
@@ -4052,17 +4177,27 @@ function edConferenciaEdital(r, plano, id) {
 function edPintarBlocos(plano) {
   const blocos = (plano && plano.blocos) || [];
   const comMin = blocos.filter((b) => b.minPct !== null);
-  if (!comMin.length) return null;
+  /* (19.71.0) a discursiva também tem corte: entra no painel (e sozinha já justifica o painel) */
+  let rd = null;
+  try { rd = typeof edRiscoDiscursiva === "function" ? edRiscoDiscursiva(plano, typeof editalAtual !== "undefined" ? editalAtual : "") : null; } catch (e) { rd = null; }
+  if (rd && rd.minPct === null && !rd.corrigida) rd = null;
+  if (!comMin.length && !rd) return null;
 
   const cx = document.createElement("div");
   cx.className = "ed-caixa ed-min-cx";
 
-  const emRisco = comMin.filter((b) => b.abaixo).length;
+  /* (19.71.0) o NOME do painel é o que ele faz; o estado vem logo abaixo, em destaque */
+  const nome = document.createElement("div");
+  nome.className = "ed-caixa-tit ed-min-nome-painel";
+  nome.textContent = t("ed_min_painel_tit");
+  cx.append(nome);
+  const emRisco = comMin.filter((b) => b.abaixo).length + (rd && rd.abaixo ? 1 : 0);
+  const totalCortes = comMin.length + (rd ? 1 : 0);
   const tit = document.createElement("div");
-  tit.className = "ed-caixa-tit" + (emRisco ? " ed-min-alerta" : "");
+  tit.className = "ed-min-estado-painel" + (emRisco ? " ed-min-alerta" : " ed-min-tudo-ok");
   tit.textContent = emRisco
-    ? t("ed_min_tit_risco", { n: emRisco })
-    : t("ed_min_tit_ok", { n: comMin.length });
+    ? t("ed_min_tit_risco", { n: emRisco, t: totalCortes })
+    : t("ed_min_tit_ok", { n: totalCortes });
   cx.append(tit);
 
   /* (19.55.0) mudar os cortes sem tocar no texto */
@@ -4190,7 +4325,33 @@ function edPintarBlocos(plano) {
 
     cx.append(li);
   });
+  if (rd) cx.append(edPintarRiscoDiscursiva(rd));
   return cx;
+}
+
+/* (19.71.0) a linha da DISCURSIVA no painel de riscos: a mesma barra com a linha do corte (cobertura das disciplinas em
+ * que ela cai × mínimo), o treino de escrita e o "só os N primeiros são corrigidos" */
+function edPintarRiscoDiscursiva(rd) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const li = el("div", "ed-min-disc" + (rd.abaixo ? " ed-min-abaixo" : (rd.apertado ? " ed-min-apertado" : "")));
+  const cab = el("div", "ed-min-cab");
+  cab.append(el("span", "ed-min-nome", t("ed_min_disc_nome")),
+    el("span", "ed-min-estado", rd.minPct === null ? t("ed_min_disc_sem_min") : rd.abaixo ? t("ed_min_abaixo") : rd.apertado ? t("ed_min_apertado") : t("ed_min_ok")));
+  li.append(cab);
+  if (rd.minPct !== null) {
+    const barra = el("div", "ed-min-barra");
+    const fill = el("div", "ed-min-fill"); fill.style.width = Math.min(100, rd.cobertura) + "%";
+    const corte = el("div", "ed-min-corte"); corte.style.left = Math.min(100, rd.minPct) + "%";
+    barra.append(fill, corte);
+    li.append(barra);
+  }
+  li.append(el("div", "ed-min-num", t("ed_min_disc_num", { c: rd.cobertura, m: rd.minPct === null ? "—" : rd.minPct, s: rd.share, d: rd.disciplinas.join(", ") || "—" })));
+  const tr = el("div", "ed-min-acerto" + (rd.semTreino ? " abaixo" : rd.treinos < 2 ? " apertado" : ""));
+  tr.textContent = rd.semTreino ? t("ed_min_disc_sem_treino") : t("ed_min_disc_treino", { n: rd.treinos });
+  li.append(tr);
+  if (rd.linhas && rd.linhas.min) li.append(el("div", "nota", t("ed_min_disc_linhas", { a: rd.linhas.min, b: rd.linhas.max })));
+  if (rd.corrigida) li.append(el("div", "nota ed-min-disc-corr", t("ed_min_disc_corrigida", { n: rd.corrigida })));
+  return li;
 }
 
 /* "O plano tem problemas de leitura — os números abaixo são provisórios": a faixa que vai em cima de tudo o que é CALCULADO
@@ -4341,201 +4502,112 @@ function edPintarPainel(r, plano) {
    * Ficou uma só, no topo, porque a semana é uma só. O que esta tinha de
    * próprio — ver só o edital aberto — virou um filtro lá em cima. */
 
-  /* -------- onde estão os buracos --------
-   * Progresso médio esconde o que decide a prova: 40% do plano feito pode
-   * ser 100% das matérias leves e 0% da que vale 15%. Esta lista ordena
-   * pela FATIA DA PROVA AINDA NÃO ESTUDADA, que é outra coisa. */
+  /* -------- (19.69.0) ONDE ESTÃO OS BURACOS + O MAPA DAS DISCIPLINAS, NUMA TABELA SÓ --------
+   * Eram duas caixas com as MESMAS linhas: "onde estão os buracos" (feito · vale · falta · 1º, só as 6 com lacuna) e,
+   * logo abaixo, o mapa recolhido (peso · feito · vale · 1º, todas, com a ordem trocável). Agora uma tabela com tudo:
+   * o resumo do edital no topo, a ordem (lacuna · fatia · edital) e as colunas peso · feito · vale · falta · 1º. A
+   * falta continua sendo a ordem padrão — é ela que diz onde estão os buracos. Com muitas disciplinas, mostra as 8
+   * primeiras e "ver todas". Os números ganharam coluna própria e largura fixa: "17%58%" grudados não acontece mais. */
   const pan = panoramaDisciplinas(plano);
-  const comLacuna = pan.filter((d) => d.lacuna > 0).slice(0, 6);
-  if (comLacuna.length) {
-    const cx2 = document.createElement("div");
-    cx2.className = "ed-caixa";
+  if (pan.length) {
+    const cxm = document.createElement("div");
+    /* "edm-caixa" continua: é por ela que os testes (e quem mais precisar) acham esta tabela */
+    cxm.className = "ed-caixa edm-caixa lac-caixa";
+    const topo = document.createElement("div");
+    topo.className = "lac-topo";
     const h2 = document.createElement("div");
     h2.className = "ed-caixa-tit";
     h2.textContent = t("ed_lacunas_tit");
+    const resumo = document.createElement("span");
+    resumo.className = "edm-resumo";
+    const totalTopicos = pan.reduce((a, d) => a + d.total, 0);
+    resumo.textContent = t("edm_resumo", { n: pan.length, t: totalTopicos, p: plano.peso.pctFeito });
+    topo.append(h2, resumo);
+    cxm.append(topo);
     const s2 = document.createElement("div");
     s2.className = "ed-caixa-sub";
     s2.textContent = t("ed_lacunas_sub");
-    cx2.append(h2, s2);
+    cxm.append(s2);
 
-    /* COLUNAS ALINHADAS, NÃO UMA FRASE POR LINHA.
-     * Antes cada disciplina carregava a mesma frase inteira — "falta X%
-     * da prova · vale Y% · Z para estudar primeiro" — repetida seis
-     * vezes em vermelho. Ler seis frases para comparar três números é
-     * trabalho que a tela devia fazer: em coluna, a comparação é o
-     * próprio alinhamento, e o olho desce pelo número que interessa.
-     * O cabeçalho existe porque, sem ele, três porcentagens seguidas na
-     * mesma linha não dizem qual é qual — e era justamente essa confusão
-     * ("13% da prova" lido como o peso da disciplina) que a frase longa
-     * tentava desfazer com palavras. */
+    const ordemBar = document.createElement("div");
+    ordemBar.className = "edm-ordem";
+    [["lacuna", "edm_ordem_lacuna"], ["fatia", "edm_ordem_fatia"], ["edital", "edm_ordem_edital"]].forEach(([chave, k]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "di-per" + (edMapaOrdem === chave ? " ativa" : "");
+      b.textContent = t(k);
+      b.onclick = () => { edMapaOrdem = chave; edRender(); };
+      ordemBar.append(b);
+    });
+    cxm.append(ordemBar);
+
+    /* "lacuna" é o padrão de panoramaDisciplinas (edital.js) — pan já vem nessa ordem */
+    let ordenadas = pan;
+    if (edMapaOrdem === "fatia") ordenadas = pan.slice().sort((a, b) => b.fatia - a.fatia);
+    else if (edMapaOrdem === "edital") {
+      const linhaDe = {};
+      r.disciplinas.forEach((d) => { linhaDe[d.nome] = d.linha; });
+      ordenadas = pan.slice().sort((a, b) => (linhaDe[a.nome] || 0) - (linhaDe[b.nome] || 0));
+    }
+
+    /* COLUNAS ALINHADAS, com o cabeçalho na MESMA grade da linha (definidas uma vez só no CSS) */
     const cab = document.createElement("div");
     cab.className = "lac-cab";
-    [["ed_lac_col_disc", ""], ["ed_lac_col_feito", "lac-num"],
-     ["ed_lac_col_vale", "lac-num"], ["ed_lac_col_falta", "lac-num"],
-     ["ed_lac_col_prior", "lac-num"]].forEach(([k, cls]) => {
+    [["ed_lac_col_disc", ""], ["ed_lac_col_peso", "lac-num"], ["ed_lac_col_feito", "lac-num"],
+     ["ed_lac_col_vale", "lac-num"], ["ed_lac_col_falta", "lac-num"], ["ed_lac_col_prior", "lac-num"]].forEach(([k, cls]) => {
       const c = document.createElement("span");
       c.className = "lac-cab-c " + cls;
       c.textContent = t(k);
       c.title = t(k + "_ajuda");
       cab.append(c);
     });
-    cx2.append(cab);
+    cxm.append(cab);
 
-    comLacuna.forEach((d) => {
+    const LIMITE = 8;
+    const visiveis = edMapaAberto || ordenadas.length <= LIMITE ? ordenadas : ordenadas.slice(0, LIMITE);
+    visiveis.forEach((d) => {
       const li = document.createElement("button");
       li.type = "button";
-      li.className = "lac-linha";
+      li.className = "lac-linha edm-linha" + (d.lacuna > 0 ? "" : " lac-completa");
       li.onclick = () => abrirDisciplina(d.nome);
+      li.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
       const nm = document.createElement("span");
-      nm.className = "lac-nome"; nm.textContent = d.nome;
+      nm.className = "lac-nome edm-nome"; nm.textContent = d.nome;
+      const pesoEl = document.createElement("span");
+      pesoEl.className = "lac-num edm-peso";
+      pesoEl.textContent = String(d.peso);
+      pesoEl.title = t("ed_peso_n", { n: d.peso });
+      /* a barra e o número do progresso na MESMA coluna: a barra para a leitura de relance, o número para conferir */
+      const feito = document.createElement("span");
+      feito.className = "lac-num lac-feito edm-feito";
       const ba = document.createElement("div");
       ba.className = "lac-barra";
       const ok = document.createElement("div");
       ok.className = "lac-ok";
       ok.style.width = d.pesoFeito + "%";
       ba.append(ok);
-      /* a barra e o número do progresso ocupam a MESMA coluna: a barra é
-       * a leitura de relance, o número é a conferência */
-      const feito = document.createElement("span");
-      feito.className = "lac-num lac-feito";
-      feito.append(ba);
       const pf = document.createElement("i");
       pf.textContent = Math.round(d.pesoFeito) + "%";
-      feito.append(pf);
-
+      feito.append(ba, pf);
       const vale = document.createElement("span");
-      vale.className = "lac-num";
-      vale.textContent = d.fatia + "%";
-
+      vale.className = "lac-num edm-vale"; vale.textContent = d.fatia + "%";
+      /* FALTA é a coluna que explica a ordem padrão; disciplina sem buraco mostra ✓ */
       const falta = document.createElement("span");
-      /* FALTA é a coluna que explica a ordem da lista. Tirá-la deixaria
-       * uma tabela ordenada por um critério invisível. */
       falta.className = "lac-num lac-falta";
-      falta.textContent = d.lacuna + "%";
-
+      falta.textContent = d.lacuna > 0 ? d.lacuna + "%" : "✓";
       const prior = document.createElement("span");
-      prior.className = "lac-num" + (d.altaIntocada ? " lac-alerta" : "");
+      prior.className = "lac-num edm-prior" + (d.altaIntocada ? " lac-alerta" : "");
       prior.textContent = d.altaIntocada ? String(d.altaIntocada) : "—";
-      prior.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
-
-      li.append(nm, feito, vale, falta, prior);
-      li.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
-      cx2.append(li);
+      li.append(nm, pesoEl, feito, vale, falta, prior);
+      cxm.append(li);
     });
-    box.append(cx2);
-  }
-
-  /* -------- mapa das disciplinas: recolhido, lista densa quando aberto --
-   * Era uma grade de cartões altos, um por disciplina, sempre abertos —
-   * a mesma leitura de "onde estão os buracos" (disciplina · progresso ·
-   * quanto vale), num formato maior, empilhando a tela abaixo dela. O
-   * cartão grande virou a janela do panorama (abrirDisciplina); aqui
-   * sobra o cabeçalho com o resumo, o seletor de ordem e uma linha por
-   * disciplina — a mesma técnica de colunas compartilhadas de
-   * ".lac-cab,.lac-linha" duas caixas acima. */
-  if (pan.length) {
-    const cxm = document.createElement("div");
-    /* "edm-caixa" existe para achar SÓ esta caixa: ".lac-nome" e
-     * ".lac-linha" também vivem em "onde estão os buracos", uma caixa
-     * acima, e sem um contêiner próprio um teste (ou um seletor futuro)
-     * não teria como pedir só as linhas do mapa. */
-    cxm.className = "ed-caixa edm-caixa";
-
-    const cab = document.createElement("button");
-    cab.type = "button";
-    cab.className = "edm-cab";
-    const seta = document.createElement("span");
-    seta.className = "edm-seta" + (edMapaAberto ? " aberto" : "");
-    seta.textContent = "▸";
-    const resumo = document.createElement("span");
-    resumo.className = "edm-resumo";
-    const totalTopicos = pan.reduce((a, d) => a + d.total, 0);
-    resumo.textContent = t("edm_resumo",
-      { n: pan.length, t: totalTopicos, p: plano.peso.pctFeito });
-    cab.title = t(edMapaAberto ? "edm_recolher" : "edm_expandir");
-    cab.append(seta, resumo);
-    cab.onclick = () => { edMapaAberto = !edMapaAberto; edRender(); };
-    cxm.append(cab);
-
-    if (edMapaAberto) {
-      const ordemBar = document.createElement("div");
-      ordemBar.className = "edm-ordem";
-      [["lacuna", "edm_ordem_lacuna"], ["fatia", "edm_ordem_fatia"],
-       ["edital", "edm_ordem_edital"]].forEach(([chave, k]) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "di-per" + (edMapaOrdem === chave ? " ativa" : "");
-        b.textContent = t(k);
-        b.onclick = () => { edMapaOrdem = chave; edRender(); };
-        ordemBar.append(b);
-      });
-      cxm.append(ordemBar);
-
-      /* "lacuna" é o padrão de panoramaDisciplinas (edital.js) — pan já
-       * vem nessa ordem, então não recalcula nada à toa */
-      let ordenadas = pan;
-      if (edMapaOrdem === "fatia") {
-        ordenadas = pan.slice().sort((a, b) => b.fatia - a.fatia);
-      } else if (edMapaOrdem === "edital") {
-        const linhaDe = {};
-        r.disciplinas.forEach((d) => { linhaDe[d.nome] = d.linha; });
-        ordenadas = pan.slice().sort((a, b) =>
-          (linhaDe[a.nome] || 0) - (linhaDe[b.nome] || 0));
-      }
-
-      const cabCols = document.createElement("div");
-      cabCols.className = "edm-cab-cols";
-      [["ed_lac_col_disc", ""], ["", ""], ["ed_lac_col_feito", "lac-num"],
-       ["ed_lac_col_vale", "lac-num"], ["ed_lac_col_prior", "lac-num"]]
-        .forEach(([k, cls]) => {
-          const c = document.createElement("span");
-          c.className = "lac-cab-c " + cls;
-          if (k) { c.textContent = t(k); c.title = t(k + "_ajuda"); }
-          cabCols.append(c);
-        });
-      cxm.append(cabCols);
-
-      ordenadas.forEach((d) => {
-        const li = document.createElement("button");
-        li.type = "button";
-        li.className = "edm-linha";
-        li.onclick = () => abrirDisciplina(d.nome);
-        li.title = t("ed_lac_val_ajuda", { d: d.nome, l: d.lacuna, f: d.fatia });
-
-        /* cada célula carrega, além da classe visual ".lac-*" já usada em
-         * "onde estão os buracos", uma classe ".edm-*" própria — só para
-         * poder ser achada sem ambiguidade: ".lac-nome" sozinha existe
-         * nas DUAS caixas ao mesmo tempo quando o mapa está aberto. */
-        const nm = document.createElement("span");
-        nm.className = "lac-nome edm-nome"; nm.textContent = d.nome;
-
-        const pesoEl = document.createElement("span");
-        pesoEl.className = "edm-peso";
-        pesoEl.textContent = t("ed_peso_n", { n: d.peso });
-
-        const feito = document.createElement("span");
-        feito.className = "lac-num lac-feito edm-feito";
-        const ba = document.createElement("div");
-        ba.className = "lac-barra";
-        const ok = document.createElement("div");
-        ok.className = "lac-ok";
-        ok.style.width = d.pesoFeito + "%";
-        ba.append(ok);
-        feito.append(ba);
-        const pf = document.createElement("i");
-        pf.textContent = Math.round(d.pesoFeito) + "%";
-        feito.append(pf);
-
-        const vale = document.createElement("span");
-        vale.className = "lac-num edm-vale"; vale.textContent = d.fatia + "%";
-
-        const prior = document.createElement("span");
-        prior.className = "lac-num edm-prior" + (d.altaIntocada ? " lac-alerta" : "");
-        prior.textContent = d.altaIntocada ? String(d.altaIntocada) : "—";
-
-        li.append(nm, pesoEl, feito, vale, prior);
-        cxm.append(li);
-      });
+    if (ordenadas.length > LIMITE) {
+      const mais = document.createElement("button");
+      mais.type = "button";
+      mais.className = "edm-cab btn-min";
+      mais.textContent = edMapaAberto ? t("edm_recolher") : t("edm_ver_todas", { n: ordenadas.length });
+      mais.onclick = () => { edMapaAberto = !edMapaAberto; edRender(); };
+      cxm.append(mais);
     }
     box.append(cxm);
   }
@@ -5671,8 +5743,9 @@ async function ndExcluir(nome) {
   const antes = $("editalTexto").value;
   const r = edExcluirDisciplina(antes, nome, edProgresso);
   if (r.erro) { await uiAlert(t("nd_nao_achou", { n: nome })); return; }
+  /* (19.70.0) o botão da confirmação diz o que faz, em vermelho — não um "OK" genérico */
   if (!(await uiConfirm(t("nd_excluir_conf", {
-    n: r.nome, t: r.topicos, m: r.marcados })))) return;
+    n: r.nome, t: r.topicos, m: r.marcados }), { ok: t("nd_excluir_ok"), perigo: true }))) return;
 
   guardarVersao("antes de excluir disciplina", antes);
   $("editalTexto").value = r.texto;
@@ -5685,7 +5758,15 @@ async function ndExcluir(nome) {
       + " marcações guardadas para o caso de voltar");
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
-  toast("nd_excluida");
+  /* (19.70.0) e dá para voltar atrás com um toque: o aviso traz "Desfazer", que devolve o texto de antes */
+  toastDesfazer(t("nd_excluida_desfazer", { n: r.nome }), () => {
+    guardarVersao("antes de desfazer a exclusão de disciplina", $("editalTexto").value);
+    $("editalTexto").value = antes;
+    reg("EDITAL-DISCIPLINA", "exclusão desfeita: " + r.nome, "");
+    edRender();
+    if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+    toast("nd_desfeita");
+  });
 }
 
 /* =====================================================================

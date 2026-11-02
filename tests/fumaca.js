@@ -1170,7 +1170,7 @@ function rodar(opc) {
     edAcertosPorTopico, edCombinarFatores, difMapaDetalhado, ED_AC_TOP, edAcertos,
     REV_PASSOS, edIntervaloRevisao, edRevisaoVenceu, edNRevDaMarca, edMarcaNova, edMarcaDoDiario, edNivelDoFator, regNRevDepois, regTipoPorqueTexto,
     plItemConta, plPorDisciplina, plSinais, plSnapDe, plSnapGravar, plSnapsLer,
-    plSnapsDoEdital, plSnapDiferenca, plRelatorio, plArmazenamento,
+    plSnapsDoEdital, plSnapDiferenca, plRelatorio, plArmazenamento, edRiscoDiscursiva, plRelatorioDiagnostico,
     plPodasDisponiveis, plPodaLogs, plPodaRascunhos, plPodaSnaps, plTamanho,
     plBytes, plAbrir, plPintar, plIniciar, plContexto,
     /* o raio-X em tela cheia: o painel nao cabe numa janela de 500px */

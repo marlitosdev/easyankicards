@@ -2690,6 +2690,40 @@ function edPainelRamos(plano, disciplina, filtro) {
   };
 }
 
+/* (19.71.0) O RISCO DE CORTE DA DISCURSIVA, para o painel de riscos e para o relatório do Raio-X.
+ * Mede o que dá para medir: a COBERTURA das disciplinas em que ela cai (ponderada pela fatia delas), contra o mínimo; o
+ * treino de escrita das últimas 4 semanas; e o "corrigida só para os N primeiros", que transforma a objetiva em disputa
+ * de classificação. null = edital sem discursiva cadastrada. */
+function edRiscoDiscursiva(plano, editalId) {
+  const dc = plano && plano.discursivaCfg;
+  if (!dc || !(dc.pontos > 0)) return null;
+  const nomes = (dc.disciplinas || []).map((x) => String(x).toLowerCase());
+  const pan = panoramaDisciplinas(plano).filter((d) => nomes.indexOf(d.nome.toLowerCase()) >= 0);
+  const pesoT = pan.reduce((a, d) => a + (d.fatia || 0), 0);
+  const cobertura = pan.length ? Math.round(pan.reduce((a, d) => a + d.pesoFeito * (d.fatia || 0), 0) / (pesoT || 1)) : 0;
+  const minPct = dc.minimo ? (dc.minimo.tipo === "pct" ? dc.minimo.valor : null) : null;
+  /* treino de escrita: semanas (segunda-feira ISO) marcadas como feitas, nas 4 últimas */
+  let treinos = 0, semanasSem = null;
+  try {
+    const v = JSON.parse(localStorage.getItem("eac_disc_treino") || "{}") || {};
+    const marc = Object.keys((v[editalId] || {})).filter((k) => v[editalId][k]).sort();
+    if (typeof edSemanaCalendario === "function") {
+      const hoje = new Date();
+      const iniDe = (d) => edSemanaCalendario(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0")).ini;
+      const ult4 = [0, 1, 2, 3].map((k) => { const d = new Date(hoje); d.setDate(d.getDate() - 7 * k); return iniDe(d); });
+      treinos = ult4.filter((k) => marc.indexOf(k) >= 0).length;
+      const ult = marc[marc.length - 1];
+      semanasSem = ult ? ult4.indexOf(ult) : null;
+      if (ult && semanasSem < 0) semanasSem = 4;
+    }
+  } catch (e) {}
+  const abaixo = minPct !== null && cobertura < minPct;
+  const apertado = !abaixo && minPct !== null && cobertura < minPct + 10;
+  const share = plano.discursiva && plano.discursiva.s != null ? plano.discursiva.s : Math.round(dc.pontos / ((dc.objetiva || 0) + dc.pontos) * 100);
+  return { pontos: dc.pontos, objetiva: dc.objetiva || null, share, minPct, minimo: dc.minimo || null, cobertura, disciplinas: pan.map((d) => d.nome),
+    linhas: dc.linhas || null, corrigida: dc.corrigida || 0, treinos, semanasSem, abaixo, apertado, semTreino: treinos === 0 };
+}
+
 function panoramaDisciplinas(plano) {
   const porNome = new Map();
   plano.itens.forEach((i) => {

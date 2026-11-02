@@ -502,11 +502,9 @@ async function testes() {
       });
       anda(el); return r;
     };
-    /* recolhido por padrão: nenhuma linha antes do clique no cabeçalho */
-    ok(!achar(api.$("edPainel"), "edm-linha"),
-       "O0 o mapa das disciplinas não deveria nascer aberto");
-    achar(achar(api.$("edPainel"), "edm-caixa"), "edm-cab").onclick();
+    /* (19.69.0) a tabela única (buracos + mapa) mostra as disciplinas sem precisar abrir nada */
     const mapaO = achar(api.$("edPainel"), "edm-caixa");
+    ok(!!mapaO, "O0 falta a tabela das disciplinas");
     ok(conta(mapaO, "edm-linha") === 2,
        `O1 esperava 2 linhas de disciplina, veio ${conta(mapaO, "edm-linha")}`);
     /* a barra do topo saiu do painel na v8.71 (era o mesmo numero do bloco
@@ -791,10 +789,9 @@ async function testes() {
      * (edital novo, como abrirEditalTeste acabou de fazer), então
      * recolhe antes de perguntar — sem isso T2 provaria a ordem dos
      * testes, não o comportamento do app. */
-    const cabT = acha(api.$("edPainel"), "edm-cab")[0];
-    if (cabT && acha(api.$("edPainel"), "edm-linha").length) cabT.onclick();
-    ok(acha(api.$("edPainel"), "edm-linha").length === 0,
-       "T2 o mapa das disciplinas já estava aberto antes de qualquer clique");
+    /* (19.69.0) a tabela única mostra as disciplinas logo de cara; "ver todas" só existe com mais de 8 */
+    ok(acha(api.$("edPainel"), "edm-linha").length > 0 && acha(api.$("edPainel"), "edm-cab").length === 0,
+       "T2 a tabela das disciplinas devia aparecer aberta, sem botão de 'ver todas' com poucas disciplinas");
     links[0].onclick({ stopPropagation() {} });
     /* abre uma JANELA com o panorama, em vez de rolar a página até o cartão:
      * rolar fazia o usuário perder o lugar onde estava e ainda procurar o
