@@ -84,6 +84,8 @@ function epPintar() {
   epPintarDiscursiva();
   const tb = $("epTabela");
   tb.innerHTML = "";
+  /* (19.63.0) o que vai em cada campo, ANTES da tabela: que número, em que formato e como o app usa */
+  tb.append(el("div", "ep-guia", t(c.peso === "sim" ? "ep_guia_vale" : "ep_guia_peso15")));
   const cab = el("div", "ep-lin ep-cab");
   cab.append(el("span", "ep-c-nome", t("ep_col_disc")));
   if (c.peso === "sim") cab.append(el("span", "ep-c-vale", t("ep_col_vale")));
@@ -92,12 +94,25 @@ function epPintar() {
   if (c.minimo === "sim") cab.append(el("span", "ep-c-min", t("ep_col_min")));
   tb.append(cab);
   c.ds.forEach((d, k) => {
-    const lin = el("div", "ep-lin");
-    lin.append(el("span", "ep-c-nome", d.nome));
+    const lin = el("div", "ep-lin" + (d.novo ? " ep-lin-nova" : ""));
+    const nomeCx = el("span", "ep-c-nome", d.nome);
+    if (d.novo) {
+      /* (19.64.0) disciplina incluída nesta janela: marcada, com o 1º tópico, e dá para tirar antes de gravar */
+      nomeCx.append(el("span", "ep-nova-tag", t("ep_nova_tag")));
+      nomeCx.append(el("span", "ep-atual-sub", t("ep_nova_topico", { t: d.topico })));
+      const tira = el("button", "btn-min ep-nova-tirar", "✕");
+      tira.type = "button"; tira.id = "btnEpTirarNova_" + k;
+      tira.title = t("ep_nova_tirar");
+      tira.onclick = () => { c.ds = c.ds.filter((x) => x !== d); if (c.disc) c.disc.disciplinas = (c.disc.disciplinas || []).filter((n) => n !== d.nome); epPintar(); };
+      nomeCx.append(tira);
+    }
+    lin.append(nomeCx);
     if (c.peso === "sim") {
       const v = el("span", "ep-c-vale");
       const n = document.createElement("input");
       n.type = "number"; n.min = "0"; n.step = "1"; n.id = "epVale_" + k; n.className = "ep-num";
+      n.placeholder = t("ep_vale_ph");
+      n.setAttribute("aria-label", t("ep_vale_aria", { d: d.nome }));
       n.value = d.abs > 0 ? String(d.abs) : "";
       n.oninput = () => { d.abs = Number(n.value) || 0; epResumo(); };
       const u = document.createElement("select");
@@ -112,7 +127,9 @@ function epPintar() {
       const v = el("span", "ep-c-vale");
       if (d.abs > 0 && !epLimpaNumeros(c)) {
         /* (19.60.1) esta já tem o número do edital: ele fica (para tirá-lo, "Sim" e depois "Não") */
-        v.append(el("span", "ep-num-fica", epPesoTexto(d, "sim", false)));
+        const fica = el("span", "ep-num-fica", epPesoTexto(d, "sim", false));
+        fica.id = "epVale_" + k;
+        v.append(fica);
         lin.append(v);
         const fz0 = el("span", "ep-c-fatia"); fz0.id = "epFatia_" + k; lin.append(fz0);
         if (c.minimo === "sim") {
@@ -146,6 +163,12 @@ function epPintar() {
     }
     tb.append(lin);
   });
+  /* (19.64.0) "+ incluir disciplina": a disciplina nova entra com UM tópico (sem tópico ela não ganharia tempo na agenda) */
+  const inc = el("button", "btn-min btn-min-ok", t("ep_nova_btn"));
+  inc.type = "button"; inc.id = "btnEpIncluirDisc";
+  inc.title = t("ep_nova_btn_tip");
+  inc.onclick = () => epIncluirDisciplina();
+  tb.append(inc);
   /* (19.56.0) OS BLOCOS, À VISTA: o mínimo de um conjunto de disciplinas ("Conhecimentos Específicos: 50%") era
    * escondido numa lista dentro de cada linha. Agora é uma seção própria: "+ criar bloco", o nome, o mínimo do bloco
    * e uma caixa por disciplina para marcar quem faz parte. */
@@ -324,7 +347,46 @@ function epResumo() {
   marcas.forEach((m) => item(m.f.txt, m.tipo, m.antes));
   saem.forEach((a) => item(a.txt, "sai"));
   epPintarFatias();
+  epMarcarMudancas();
   return agora.map((f) => f.txt);
+}
+
+/* (19.63.0) CAMPO QUE MUDOU, MARCADO. Depois do "preencher" (ou de digitar), cada campo diferente do que está gravado
+ * ganha a borda âmbar e o "era …" ao lado; voltar ao valor gravado tira a marca. Devolve quantos campos estão marcados. */
+function epMarcarMudancas() {
+  const c = epCtx;
+  if (!c || !c.orig) return 0;
+  const o = c.orig;
+  let n = 0;
+  const marca = (id, mudou, era) => {
+    const x = $(id);
+    if (!x || !x.classList) return;
+    x.classList.toggle("ep-campo-mudou", !!mudou);
+    if (mudou) { n++; x.title = era != null && era !== "" ? t("ep_era", { v: era }) : t("ep_campo_novo"); }
+    else x.title = "";
+  };
+  const minTx = (m) => (m ? epMinTexto(m) : "");
+  c.ds.forEach((d, k) => {
+    const a = o.ds.find((x) => x.nome === d.nome) || {};
+    marca("epVale_" + k, (d.abs || 0) !== (a.abs || 0) || ((d.abs || 0) > 0 && d.unidade !== a.unidade), a.abs > 0 ? epPesoTexto(a, "sim", false) : "");
+    marca("epPeso15_" + k, d.peso !== a.peso, a.peso);
+    marca("epMinD_" + k, minTx(d.min) !== minTx(a.min) && !d.grupo, minTx(a.min));
+  });
+  c.grupos.forEach((g, k) => {
+    const a = o.grupos.find((x) => x.nome === g.nome);
+    marca("epMinG_" + k, !a || minTx(a.min) !== minTx(g.min), a ? minTx(a.min) : "");
+    marca("epGrupoNome_" + k, !a, "");
+  });
+  const dd = c.disc || {}, da = o.disc || {};
+  if (c.discursiva === "sim") {
+    marca("epDiscPontos", (dd.pontos || 0) !== (da.pontos || 0), da.pontos || "");
+    marca("epDiscObj", (dd.objetiva || 0) !== (da.objetiva || 0), da.objetiva || "");
+    marca("epDiscMin", minTx(dd.minimo) !== minTx(da.minimo), minTx(da.minimo));
+    marca("epDiscLinMin", ((dd.linhas || {}).min || 0) !== ((da.linhas || {}).min || 0), (da.linhas || {}).min || "");
+    marca("epDiscLinMax", ((dd.linhas || {}).max || 0) !== ((da.linhas || {}).max || 0), (da.linhas || {}).max || "");
+    marca("epDiscCorr", (dd.corrigida || 0) !== (da.corrigida || 0), da.corrigida || "");
+  }
+  return n;
 }
 
 /* =====================================================================
@@ -411,29 +473,95 @@ function epPintarAtual() {
   cx.append(el("p", "nota", f.hibrida
     ? t("ep_atual_sub_hibrida", { n: f.hibrida.numeradas, t: f.hibrida.total, r: Math.round(f.hibrida.resto), d: f.hibrida.estimadas.map(hubDiscCurtaSeg).join(", ") })
     : t(f.exata ? "ep_atual_sub_exata" : "ep_atual_sub_estimada")));
-  const tb = el("div", "ep-atual-tab");
-  const cab = el("div", "ep-atual-lin ep-cab");
-  [t("ep_col_disc"), t("ep_atual_col_peso"), t("ep_col_fatia"), t("ep_col_min")].forEach((x) => cab.append(el("span", "", x)));
-  tb.append(cab);
+  /* (19.63.0) uma TABELA de verdade: cabeçalho destacado, números alinhados à direita, peso e mínimo em duas linhas
+   * (o valor em destaque, a explicação menor embaixo) — a lista corrida não deixava ver o que é de quem */
+  const tab = el("table", "ep-atual-tabela");
+  const th = el("thead"), trh = el("tr");
+  [["ep_col_disc", ""], ["ep_atual_col_peso", ""], ["ep_col_fatia", "ep-num-col"], ["ep_col_min", ""]].forEach(([k, cls]) => trh.append(el("th", cls, t(k))));
+  th.append(trh); tab.append(th);
+  const tb = el("tbody");
   o.ds.forEach((d) => {
-    const ln = el("div", "ep-atual-lin");
+    const tr = el("tr");
+    tr.append(el("td", "ep-atual-nome", d.nome));
+    const tdP = el("td");
+    if (d.abs > 0) {
+      tdP.append(el("strong", "", epPesoTexto(d, "sim", false)));
+      tdP.append(el("span", "ep-atual-sub", t("ep_atual_do_edital")));
+    } else {
+      tdP.append(el("strong", "", t("ep_atual_peso_n", { n: d.peso })));
+      tdP.append(el("span", "ep-atual-sub", t("ep_atual_escala")));
+    }
+    tr.append(tdP);
     const v = f.fatia[d.nome];
-    ln.append(el("span", "ep-c-nome", d.nome), el("span", "", epPesoTexto(d, o.peso)),
-      el("span", "", v == null ? "—" : (epFatiaEstimada(f, d.nome) ? "≈" : "") + v + "%"), el("span", "", epMinDe(d, o)));
-    tb.append(ln);
+    const tdV = el("td", "ep-num-col", v == null ? "—" : (epFatiaEstimada(f, d.nome) ? "≈" : "") + v + "%");
+    tr.append(tdV);
+    const tdM = el("td");
+    if (o.minimo === "sim" && d.grupo) {
+      const g = o.grupos.find((x) => x.nome === d.grupo);
+      tdM.append(el("strong", "", g && g.min ? epMinTexto(g.min) : "—"));
+      tdM.append(el("span", "ep-atual-sub", t("ep_atual_no_bloco", { g: d.grupo })));
+    } else if (o.minimo === "sim" && d.min) {
+      tdM.append(el("strong", "", epMinTexto(d.min)));
+      tdM.append(el("span", "ep-atual-sub", t("ep_atual_so_dela")));
+    } else tdM.append(el("span", "ep-atual-sub", t("ep_atual_sem_min")));
+    tr.append(tdM);
+    tb.append(tr);
   });
-  cx.append(tb);
-  cx.append(el("p", "ep-atual-disc", t("ep_atual_disc_rot") + " " + epDiscTexto(o)));
+  tab.append(tb);
+  cx.append(tab);
+  if (!f.exata) cx.append(el("p", "ep-atual-leg", t("ep_atual_leg_aprox")));
+  /* a discursiva em pares rótulo → valor */
+  const dl = el("div", "ep-atual-disc");
+  dl.append(el("div", "ep-atual-disc-tit", t("ep_atual_disc_rot")));
+  if (o.discursiva !== "sim" || !o.disc || !(o.disc.pontos > 0)) dl.append(el("span", "ep-atual-sub", t("ep_atual_disc_nao")));
+  else {
+    const dd = o.disc;
+    const par = (k, val) => { const x = el("span", "ep-atual-par"); x.append(el("span", "ep-atual-rot", t(k)), el("strong", "", String(val))); dl.append(x); };
+    par("ep_atual_d_vale", t("ep_vale_pontos", { n: dd.pontos }));
+    if (dd.objetiva) par("ep_atual_d_obj", t("ep_vale_pontos", { n: dd.objetiva }));
+    if (dd.minimo) par("ep_atual_d_min", epMinTexto(dd.minimo));
+    if (dd.linhas && dd.linhas.min) par("ep_atual_d_lin", dd.linhas.min + "–" + dd.linhas.max);
+    if (dd.corrigida) par("ep_atual_d_corr", t("ep_atual_d_corr_v", { n: dd.corrigida }));
+    par("ep_atual_d_cai", (dd.disciplinas || []).map(hubDiscCurtaSeg).join(", ") || "—");
+  }
+  cx.append(dl);
   cx.open = true;
 }
 
 /* o que muda entre o gravado e o que está na janela: [{tipo: "peso"|"min"|"bloco"|"disc", txt}] */
+/* (19.64.0) INCLUIR UMA DISCIPLINA pela janela. Pergunta o nome e o primeiro tópico (sugestão: "Conteúdo geral de X");
+ * a disciplina entra com peso 3 e pode ganhar número, mínimo e bloco ali mesmo. Só vai para o edital ao Gravar — e a trava
+ * de tópicos passa a aceitar exatamente as disciplinas e tópicos incluídos aqui. */
+async function epIncluirDisciplina(nomeDado, topicoDado) {
+  const c = epCtx;
+  if (!c) return false;
+  let nome = nomeDado, topico = topicoDado;
+  if (nome === undefined) {
+    const r = await uiTexto(t("ep_nova_pergunta"), "", { rotulo2: t("ep_nova_pergunta_top"), valor2: "" });
+    if (!r) return false;
+    nome = r.a; topico = r.b;
+  }
+  const limpa = (x) => String(x || "").replace(/[|&@#+]/g, " ").replace(/::/g, " ").replace(/\s+/g, " ").trim();
+  nome = limpa(nome);
+  const k = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const msg = $("epMsg");
+  if (!nome) { if (msg) msg.textContent = t("ep_nova_sem_nome"); return false; }
+  if (c.ds.some((d) => k(d.nome) === k(nome))) { if (msg) msg.textContent = t("ep_nova_existe", { d: nome }); try { await uiAlert(t("ep_nova_existe", { d: nome })); } catch (e) {} return false; }
+  topico = limpa(topico) || t("ep_nova_topico_padrao", { d: nome });
+  c.ds.push({ nome, peso: 3, peso0: 3, abs: 0, unidade: (c.ds.find((d) => d.abs > 0) || {}).unidade || "q", grupo: "", min: null, novo: true, topico });
+  epPintar();
+  if (msg) msg.textContent = t("ep_nova_ok", { d: nome, t: topico });
+  try { reg("EDITAL", "como a prova pontua: disciplina incluída (ainda não gravada)", nome + " · " + topico); } catch (e) {}
+  return true;
+}
+
 function epMudancas(c) {
   const o = c && c.orig;
   if (!o) return [];
   const out = [];
   c.ds.forEach((d) => {
     const a = o.ds.find((x) => x.nome === d.nome);
+    if (!a && d.novo) { out.push({ tipo: "nova", txt: t("ep_mud_nova", { d: d.nome, t: d.topico, p: epPesoTexto(d, c.peso, false) }) }); return; }
     if (!a) return;
     const pa = epPesoTexto(a, o.peso, false), pb = epPesoTexto(d, c.peso, epLimpaNumeros(c));
     if (pa !== pb) out.push({ tipo: "peso", txt: t("ep_mud_linha", { d: d.nome, a: pa, b: pb }) });
@@ -559,6 +687,8 @@ function epNovoTexto(texto, c) {
   const nomeDe = (ln) => { const m = ln.match(/^\s*@\s*(.+?)\s*(?:::|$)/); return m ? m[1].trim() : ""; };
   /* (19.58.0) "| minimo:" na linha "@" sai: o mínimo é escrito abaixo, num bloco "&" só dela */
   blocos.forEach((b) => { b.linhas[0] = b.linhas[0].replace(/\s*\|\s*m[íi]nimo\s*:\s*[^|]*/i, ""); });
+  /* (19.64.0) as disciplinas incluídas na janela: "@ Nome :: 3" e o primeiro tópico, no lugar que os blocos mandarem */
+  c.ds.filter((d) => d.novo).forEach((d) => blocos.push({ linhas: ["@ " + d.nome + " :: " + (d.peso0 || 3), "+ " + d.topico + " :: 3"] }));
   blocos.forEach((b) => { b.nome = nomeDe(b.linhas[0]); b.d = c.ds.find((d) => d.nome === b.nome) || null; });
   /* o peso: "10q"/"20p" quando o edital diz; senão, o que já estava */
   blocos.forEach((b) => {
@@ -644,8 +774,10 @@ function epGravar() {
   const antes = $("editalTexto").value;
   const novo = epNovoTexto(antes, c);
   /* a garantia: os tópicos e os ramos são os mesmos, só a ordem das disciplinas pode mudar */
-  const conta = (tx) => { const r = lerEdital(tx); return r.disciplinas.length + "|" + r.disciplinas.reduce((a, d) => a + d.topicos.length + d.topicos.reduce((b, tp) => b + ((tp.ramos || []).length), 0), 0); };
-  if (conta(novo) !== conta(antes)) { if (msg) msg.textContent = t("ep_erro_conta"); try { reg("EDITAL", "como a prova pontua: gravação recusada (tópicos não batem)", ""); } catch (e) {} return false; }
+  /* (19.64.0) + exatamente as disciplinas incluídas aqui, com um tópico cada */
+  const extra = c.ds.filter((d) => d.novo).length;
+  const conta = (tx, mais) => { const r = lerEdital(tx); return (r.disciplinas.length + (mais || 0)) + "|" + (r.disciplinas.reduce((a, d) => a + d.topicos.length + d.topicos.reduce((b, tp) => b + ((tp.ramos || []).length), 0), 0) + (mais || 0)); };
+  if (conta(novo) !== conta(antes, extra)) { if (msg) msg.textContent = t("ep_erro_conta"); try { reg("EDITAL", "como a prova pontua: gravação recusada (tópicos não batem)", ""); } catch (e) {} return false; }
   /* (19.59.0) uma versão anterior no histórico, como na revisão com IA */
   try { if (typeof guardarVersao === "function") guardarVersao("antes de ⚖ Pontuação e cortes", antes); } catch (e) {}
   $("editalTexto").value = novo;
@@ -777,46 +909,68 @@ function epCopiarIA() {
   return txt;
 }
 /* lê "Disciplina | questões | pontos | mínimo | grupo" e preenche a tabela (para conferir) */
+/* (19.63.0) LER A RESPOSTA DA IA LINHA POR LINHA, dizendo o que cada uma fez — ou por que não deu.
+ * Cada linha vira { n, txt, tipo: "ok"|"aviso"|"erro"|"info", msg }: "Linha 3 · Português: 10 questões e 20 pontos — uso
+ * os pontos" / "“dez” não é um número". O relatório aparece logo abaixo da caixa colada; os campos que mudaram ficam
+ * marcados na tabela. Nada é gravado aqui. */
 function epLerIA(txt) {
   const c = epCtx;
-  if (!c) return { lidas: 0, avisos: [] };
+  if (!c) return { lidas: 0, avisos: [], linhas: [] };
   const nomes = c.ds.map((d) => d.nome);
   const achar = (x) => (typeof hubIaAcharDisc === "function" ? hubIaAcharDisc(x, nomes) : (nomes.find((n) => n.toLowerCase() === String(x).trim().toLowerCase()) || ""));
   const num = (x) => { const m = String(x || "").match(/(\d+(?:[.,]\d+)?)/); return m ? Number(m[1].replace(",", ".")) : 0; };
-  const avisos = [];
+  const vazio = (x) => /^\s*(?:-+|—|–|n\/?a|nd|n\.?\s*d\.?|n[ãa]o\s+(?:informa|diz|h[áa])|sem|nenhum|\?)?\s*$/i.test(String(x == null ? "" : x));
+  const numOk = (x) => vazio(x) || /^\s*\d+(?:[.,]\d+)?\s*(?:quest(?:[õo]es)?|q|pontos?|pts?|p)?\s*$/i.test(String(x));
+  const avisos = [], linhas = [];
   let lidas = 0, comVale = 0, comPontos = 0;
-  const minimos = {};
-  String(txt || "").split(/\r?\n/).forEach((ln0) => {
+  const minimos = {}, vistas = {};
+  const rel = (n, txt0, tipo, msg) => linhas.push({ n, txt: txt0, tipo, msg });
+  String(txt || "").split(/\r?\n/).forEach((ln0, idx) => {
+    const n = idx + 1;
     const ln = ln0.replace(/\*\*/g, "").replace(/^[-•*·]\s*/, "").trim();
-    if (!ln || ln.indexOf("|") < 0) return;
+    if (!ln) return;
+    if (ln.indexOf("|") < 0) { rel(n, ln, "aviso", t("ep_iac_sem_barra")); return; }
     const p = ln.split("|").map((x) => x.trim());
-    if (/^disciplina$/i.test(p[0])) return;
+    if (/^disciplina$/i.test(p[0])) { rel(n, ln, "info", t("ep_iac_cabecalho")); return; }
     /* (19.56.0) "Discursiva | pontos | objetiva | mínimo | linhas | corrigida | disciplinas (;)" */
     if (/^discursiva$/i.test(p[0])) {
-      const dd = c.disc;
-      if (num(p[1]) > 0) dd.pontos = num(p[1]);
-      if (num(p[2]) > 0) dd.objetiva = num(p[2]);
+      const dd = c.disc, prob = [];
+      if (num(p[1]) > 0) dd.pontos = num(p[1]); else prob.push(t("ep_iac_d_pontos"));
+      if (num(p[2]) > 0) dd.objetiva = num(p[2]); else prob.push(t("ep_iac_d_obj"));
       if (num(p[3]) > 0) dd.minimo = { tipo: "pct", valor: num(p[3]) };
       const ml = String(p[4] || "").match(/(\d+)\D+(\d+)/);
       if (ml) dd.linhas = { min: Number(ml[1]), max: Number(ml[2]) };
       if (num(p[5]) > 0) dd.corrigida = num(p[5]);
-      const ds2 = String(p[6] || "").split(/[;,]/).map((x) => achar(x.trim())).filter(Boolean);
-      if (ds2.length) dd.disciplinas = ds2;
+      const brutos = String(p[6] || "").split(/[;,]/).map((x) => x.trim()).filter(Boolean);
+      const ds2 = brutos.map(achar).filter(Boolean);
+      const naoAchou = brutos.filter((x) => !achar(x));
+      if (ds2.length) dd.disciplinas = ds2; else prob.push(t("ep_iac_d_disc"));
+      if (naoAchou.length) prob.push(t("ep_iac_d_naoachou", { l: naoAchou.join(", ") }));
       if (dd.pontos > 0) c.discursiva = "sim";
+      rel(n, ln, prob.length ? "aviso" : "ok", t("ep_iac_d_ok", { p: dd.pontos || "?", o: dd.objetiva || "?" }) + (prob.length ? " " + t("ep_iac_falta", { l: prob.join("; ") }) : ""));
       lidas++;
       return;
     }
     const d0 = achar(p[0]);
-    if (!d0) { avisos.push(t("ep_ia_av_disc", { d: p[0] })); return; }
+    if (!d0) { avisos.push(t("ep_ia_av_disc", { d: p[0] })); rel(n, ln, "erro", t("ep_iac_disc_nao", { d: p[0], l: nomes.map(hubDiscCurtaSeg).join(", ") })); return; }
     const d = c.ds.find((x) => x.nome === d0);
+    const prob = [];
+    if (p.length < 5) prob.push(t("ep_iac_colunas", { n: p.length }));
+    if (!numOk(p[1])) prob.push(t("ep_iac_num", { x: p[1], c: t("ep_iac_c_q") }));
+    if (!numOk(p[2])) prob.push(t("ep_iac_num", { x: p[2], c: t("ep_iac_c_p") }));
+    if (vistas[d0]) prob.push(t("ep_iac_repetida"));
+    vistas[d0] = true;
     const q = num(p[1]), pt = num(p[2]);
-    if (pt > 0) { d.abs = pt; d.unidade = "p"; comPontos++; comVale++; }
-    else if (q > 0) { d.abs = q; d.unidade = "q"; comVale++; }
+    let oQue;
+    if (pt > 0) { d.abs = pt; d.unidade = "p"; comPontos++; comVale++; oQue = q > 0 ? t("ep_iac_qp", { q, p: pt }) : t("ep_iac_p", { p: pt }); }
+    else if (q > 0) { d.abs = q; d.unidade = "q"; comVale++; oQue = t("ep_iac_q", { q }); }
+    else oQue = t("ep_iac_sem_num");
     const mtx = (p[3] || "").trim();
     let min = null;
     if (/%/.test(mtx) && num(mtx) > 0) min = { tipo: "pct", valor: num(mtx) };
     else if (num(mtx) > 0 && /acert|quest/i.test(mtx)) min = { tipo: "abs", valor: num(mtx) };
     else if (num(mtx) > 0) min = { tipo: "pct", valor: num(mtx) };
+    else if (!vazio(mtx)) prob.push(t("ep_iac_min", { x: mtx }));
     let g = (p[4] || "").replace(/^-+$/, "").replace(/[|&@#]/g, "").trim();
     /* (19.60.1) "Conhecimentos Específicos (50%)": o "(50%)" é o mínimo do bloco, não parte do nome */
     const mg = g.match(/^(.*?)\s*\(\s*(?:m[íi]n(?:imo)?\s*:?\s*)?(\d+(?:[.,]\d+)?)\s*(%|acertos?)?\s*\)\s*$/i);
@@ -827,11 +981,14 @@ function epLerIA(txt) {
     const kg = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     const jaExiste = c.grupos.find((x) => kg(x.nome) === kg(g));
     if (jaExiste) g = jaExiste.nome;
+    let ondeMin;
     if (g && !/^(nenhum|n[aã]o|sem)$/i.test(g)) {
       d.grupo = g; d.min = null;
       if (!c.grupos.some((x) => x.nome === g)) c.grupos.push({ nome: g, min: null });
       if (min) minimos[g] = min;
-    } else { d.grupo = ""; d.min = min; }
+      ondeMin = min ? t("ep_iac_min_bloco", { m: epMinTexto(min), g }) : t("ep_iac_bloco_sem", { g });
+    } else { d.grupo = ""; d.min = min; ondeMin = min ? t("ep_iac_min_dela", { m: epMinTexto(min) }) : t("ep_iac_sem_min"); }
+    rel(n, ln, prob.length ? "aviso" : "ok", hubDiscCurtaSeg(d0) + ": " + oQue + "; " + ondeMin + "." + (prob.length ? " " + prob.join(" ") : ""));
     lidas++;
   });
   c.grupos.forEach((g) => { if (minimos[g.nome]) g.min = minimos[g.nome]; });
@@ -840,10 +997,46 @@ function epLerIA(txt) {
   if (comPontos && comPontos < comVale) avisos.push(t("ep_ia_av_misto"));
   if (comVale && comVale === c.ds.length) c.peso = "sim";
   else if (comVale) avisos.push(t("ep_ia_av_parcial", { n: comVale, t: c.ds.length, l: c.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome).join(", ") }));
+  const semLinha = nomes.filter((x) => !vistas[x]);
+  if (lidas && semLinha.length) avisos.push(t("ep_iac_sem_linha", { l: semLinha.join(", ") }));
   if (c.grupos.some((g) => g.min) || c.ds.some((d) => d.min)) c.minimo = "sim";
   epPintar();
-  if ($("epMsg")) $("epMsg").textContent = lidas ? t("ep_ia_lido", { n: lidas }) + (avisos.length ? " " + avisos.join(" ") : "") : t("ep_ia_nada");
-  return { lidas, avisos };
+  epMarcarMudancas();
+  /* (19.63.0) a contagem vem dos DADOS (o que muda no edital), não de quantos campos estão na tela */
+  const mudados = epMudancas(c).length + (c.discursiva !== (c.orig || {}).discursiva || JSON.stringify(c.disc) !== JSON.stringify((c.orig || {}).disc) ? 1 : 0)
+    + (c.grupos.length !== ((c.orig || {}).grupos || []).length ? 1 : 0);
+  const resumo = lidas ? t("ep_ia_lido", { n: lidas, m: mudados }) : t("ep_ia_nada");
+  if ($("epMsg")) $("epMsg").textContent = resumo + (avisos.length ? " " + avisos.join(" ") : "");
+  epPintarConfIA({ lidas, mudados, avisos, linhas, resumo });
+  try { reg("EDITAL", "como a prova pontua: resposta da IA lida", lidas + " linha(s), " + mudados + " campo(s) mudaram, " + linhas.filter((x) => x.tipo !== "ok").length + " com problema"); } catch (e) {}
+  return { lidas, avisos, linhas, mudados };
+}
+
+/* o relatório do "preencher", logo abaixo da caixa: o resumo, os avisos e cada linha com ✓ ⚠ ✕ ℹ */
+function epPintarConfIA(r) {
+  const cx = $("epIaConf");
+  if (!cx) return;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  cx.innerHTML = "";
+  cx.hidden = false;
+  cx.className = "ep-ia-conf " + (r.lidas ? "ep-iac-feito" : "ep-iac-nada");
+  cx.append(el("div", "ep-iac-resumo", (r.lidas ? "✓ " : "✕ ") + r.resumo));
+  r.avisos.forEach((a) => cx.append(el("div", "ep-iac-aviso", "⚠ " + a)));
+  if (r.linhas.length) {
+    const ul = el("ul", "ep-iac-linhas");
+    const SIMB = { ok: "✓", aviso: "⚠", erro: "✕", info: "ℹ" };
+    r.linhas.forEach((x) => {
+      const li = el("li", "ep-iac-" + x.tipo);
+      li.append(el("span", "ep-iac-n", SIMB[x.tipo] + " " + t("ep_iac_linha", { n: x.n })));
+      li.append(el("code", "ep-iac-txt", x.txt.length > 90 ? x.txt.slice(0, 88) + "…" : x.txt));
+      li.append(el("span", "ep-iac-msg", x.msg));
+      ul.append(li);
+    });
+    cx.append(ul);
+  }
+  if (!r.lidas) cx.append(el("div", "ep-iac-formato", t("ep_iac_formato")));
+  try { if (cx.scrollIntoView) cx.scrollIntoView({ block: "nearest" }); } catch (e) {}
+  try { toastMsg(r.resumo, 5000); } catch (e) {}
 }
 
 if (typeof document !== "undefined" && document.getElementById && document.getElementById("dlgEdPontua")) {

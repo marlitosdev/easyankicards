@@ -99,7 +99,7 @@ async function testes() {
   ok(lido.lidas === 5 && lido.avisos.some((a) => /Química/.test(a)), "P5b le as linhas e avisa a disciplina desconhecida");
   ok(c3.minimo === "sim" && c3.grupos[0] && c3.grupos[0].min.valor === 50 && c3.ds.find((d) => d.nome === "Português").min.valor === 50 && c3.ds.find((d) => d.nome === "Português").abs === 20,
     "P5c preenche grupo, minimos e pontos");
-  ok(c3.peso === "nao" && lido.avisos.some((a) => /Só 3 de 5/.test(a)), "P5d so algumas com numero: os pesos ficam estimados, com aviso");
+  ok(c3.peso === "nao" && lido.avisos.some((a) => /só trouxe o número de questões \(ou pontos\) de 3 das 5/.test(a)), "P5d so algumas com numero: os pesos ficam estimados, com aviso");
   ok(api.$("dlgEdPontua").open, "P5e preencher nao grava nem fecha");
 
   /* ---- blocos à vista (19.56.0) ---- */
@@ -262,7 +262,7 @@ async function testes() {
     api.$("editalTexto").value = T;
     ok(api.epAbrir() === true, "C1 a janela abre");
     const at = api.$("epAtual").textContent;
-    ok(/Cadastrado agora/.test(at) && /Alfa/.test(at) && /peso 5 \(1 a 5\)/.test(at) && /≈80%/.test(at) && /não cadastrada/.test(at), "C2 'cadastrado agora' mostra peso, quanto vale e a discursiva: " + at.slice(0, 300));
+    ok(/Cadastrado agora/.test(at) && /Alfa/.test(at) && /Alfapeso 5escala de 1 a 5/.test(at) && /≈80%/.test(at) && /não cadastrada/.test(at), "C2 'cadastrado agora' mostra peso, quanto vale e a discursiva: " + at.slice(0, 300));
     ok(api.$("epRegras") && (require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").match(/data-i18n="ep_regra_[1-8]"/g) || []).length === 8, "C3 as regras dos pesos estão na janela");
     const sel = api.$("epPeso15_1");
     ok(sel && sel.value === "2", "C4 sem números, o peso 1-5 aparece para mudar");
@@ -409,7 +409,7 @@ async function testes() {
     api.$("editalTexto").value = T;
     api.epAbrir();
     const at = api.$("epAtual").textContent;
-    ok(/Exato para as disciplinas com o número do edital \(40 de 100/.test(at) && /≈/.test(at) && /Port20pontos\d+%/.test(at.replace(/\s/g, "")) && /Log20pontos\d+%/.test(at.replace(/\s/g, "")) && !/Port20pontos≈/.test(at.replace(/\s/g, "")), "H7 cadastrado agora diz o que é exato e o que é ≈: " + at.slice(250, 520));
+    ok(/Exato para as disciplinas com o número do edital \(40 de 100/.test(at) && /≈/.test(at) && /Port20pontosnúmerodoedital\d+%/.test(at.replace(/\s/g, "")) && /Log20pontosnúmerodoedital\d+%/.test(at.replace(/\s/g, "")) && !/Port20pontosnúmerodoedital≈/.test(at.replace(/\s/g, "")), "H7 cadastrado agora diz o que é exato e o que é ≈: " + at.slice(250, 520));
     const r2 = api.lerEdital(T);
     const cx = api.edConferenciaEdital(r2, pl, "h1");
     ok(cx && /divide os 60 que sobram da objetiva \(100\)/.test(cx.textContent), "H8 a conferência explica a divisão");
@@ -446,8 +446,62 @@ async function testes() {
     try { api.$("dlgEdPontua").close(); } catch (e) {}
   }
 
+  /* ---- (19.63.0) L: "preencher" diz o que fez, linha por linha; campos mudados marcados; guia dos campos ---- */
+  {
+    const T = ["# L | prova: 2030-11-29 | horas: 10", "@ Alfa :: 5", "+ a :: 5", "@ Beta :: 4", "+ b :: 4", "@ Gama :: 3", "+ c :: 3"].join("\n");
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    ok(/O que pôr em|Sem os números do edital/.test(api.$("epTabela").textContent), "L1 a tabela começa com o guia do que pôr nos campos");
+    const r = api.epLerIA(["Disciplina | questões | pontos | mínimo | grupo", "Alfa | 10 | 20 | 50% | -", "Beta | dez | - | metade | -",
+      "Inventada | 5 | - | - | -", "texto solto sem barras", "Alfa | 12 | - | - | -", "Discursiva | 40 | - | 50% | 25-30 | - | Alfa; Zeta"].join("\n"));
+    const tipos = r.linhas.map((x) => x.n + ":" + x.tipo).join(" ");
+    ok(tipos === "1:info 2:ok 3:aviso 4:erro 5:aviso 6:aviso 7:aviso", "L2 cada linha com o seu estado: " + tipos);
+    const msg = (n) => (r.linhas.find((x) => x.n === n) || {}).msg || "";
+    ok(/10 questões e 20 pontos \(uso os pontos/.test(msg(2)) && /“dez” na coluna questões não é um número/.test(msg(3)) && /Mínimo “metade” não foi entendido/.test(msg(3)), "L3 o que foi lido e o que está errado, em palavras: " + msg(2) + " / " + msg(3));
+    ok(/“Inventada” não é uma disciplina do seu edital/.test(msg(4)) && /não tem as partes separadas/.test(msg(5)) && /apareceu de novo/.test(msg(6)), "L4 disciplina desconhecida, linha sem '|' e repetida");
+    ok(/Falta: quanto vale a objetiva/.test(msg(7)) && /não achei no edital: Zeta/.test(msg(7)), "L5 discursiva incompleta diz o que falta: " + msg(7));
+    ok(/Sem linha na resposta \(ficam como estão\): Gama/.test(r.avisos.join(" ")), "L6 disciplina sem linha é avisada");
+    ok(!api.$("epIaConf").hidden && /Pronto: li \d+ linha/.test(api.$("epIaConf").textContent) && /linha 3/.test(api.$("epIaConf").textContent), "L7 o relatório aparece abaixo da caixa: " + String(api.$("epIaConf").textContent).slice(0, 160));
+    ok(r.mudados >= 1 && api.$("epVale_0") && api.$("epVale_0").classList.contains("ep-campo-mudou"), "L8 campo que mudou fica marcado (" + r.mudados + ")");
+    const r0 = api.epLerIA("nada aqui\noutra linha");
+    ok(r0.lidas === 0 && /Não consegui ler nenhuma linha/.test(api.$("epIaConf").textContent) && /5 partes separadas por/.test(api.$("epIaConf").textContent), "L9 sem nada legível: diz e mostra o formato");
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
+  /* ---- (19.64.0) I: incluir disciplina pela janela ---- */
+  {
+    const T = ["# I | prova: 2030-11-29 | horas: 10", "& Específicos | minimo: 50%", "@ Alfa :: 5", "+ a :: 5", "++ r :: 3", "@ Beta :: 4", "+ b :: 4"].join("\n");
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    ok(/\+ incluir disciplina/.test(api.$("epTabela").textContent), "I1 o botão está embaixo da tabela");
+    const pRep = api.epIncluirDisciplina("Alfa", "");
+    for (let i = 0; i < 3; i++) { await Promise.resolve(); api.uiModalResponder(true); }
+    ok((await pRep) === false && /já está no edital/.test(api.$("epMsg").textContent), "I2 nome repetido é recusado");
+    ok((await api.epIncluirDisciplina("  Gama | @ ", "")) === true, "I3 inclui (limpa sinais do nome)");
+    const c = api.epCtxAtual();
+    const g = c.ds.find((d) => d.nome === "Gama");
+    ok(g && g.novo && g.topico === "Conteúdo geral de Gama" && /nova/.test(api.$("epTabela").textContent), "I4 entra marcada, com o tópico padrão");
+    const mud = api.epMudancas(c);
+    ok(mud.some((m) => /disciplina nova: Gama/.test(m.txt)), "I5 a confirmação lista a disciplina nova: " + JSON.stringify(mud));
+    ok(/＋/.test(String(api.$("epResumo").textContent)), "I6 o 'como fica' marca a nova em verde");
+    g.peso = 2; g.grupo = "Específicos";
+    ok(api.epGravar() === true, "I7 grava com a trava aceitando exatamente a disciplina nova: " + api.$("epMsg").textContent);
+    const r = api.lerEdital(api.$("editalTexto").value);
+    const dg = r.disciplinas.find((d) => d.nome === "Gama");
+    ok(dg && dg.peso === 2 && dg.topicos.length === 1 && dg.topicos[0].nome === "Conteúdo geral de Gama" && dg.bloco === "Específicos", "I8 no edital: peso, 1 tópico e o bloco: " + api.$("editalTexto").value);
+    ok(r.disciplinas.find((d) => d.nome === "Alfa").topicos[0].ramos.length === 1, "I9 o resto do edital fica igual");
+    /* tirar antes de gravar */
+    api.epAbrir();
+    await api.epIncluirDisciplina("Delta", "Primeiro assunto");
+    const c2 = api.epCtxAtual();
+    ok(c2.ds.some((d) => d.nome === "Delta") && api.$("btnEpTirarNova_3"), "I10 a nova tem o botão de tirar");
+    api.$("btnEpTirarNova_3").onclick();
+    ok(!api.epCtxAtual().ds.some((d) => d.nome === "Delta") && !api.epMudancas(api.epCtxAtual()).length, "I11 tirar desfaz a inclusão");
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos", "ep_regra_8", "ep_atual_sub_hibrida", "ed_conf_pesos_hibrida", "ep_fatia_hibrida", "ep_res_novos", "ep_res_mudou", "ep_res_sai", "ep_res_antes"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos", "ep_regra_8", "ep_atual_sub_hibrida", "ed_conf_pesos_hibrida", "ep_fatia_hibrida", "ep_res_novos", "ep_res_mudou", "ep_res_sai", "ep_res_antes", "ep_nova_btn", "ep_nova_pergunta", "ep_mud_nova", "ep_nova_ok"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

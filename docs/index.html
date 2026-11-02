@@ -1893,6 +1893,41 @@ dialog.ed-mud-dlg[open]{width:min(760px,96vw);max-height:92vh}
 .ed-mud-mantem summary,.ed-mud-chip.ed-mud-mantem{color:var(--info)}
 .ed-mud-alerta{border-color:var(--erro);background:rgba(239,68,68,.18)}
 .ed-mud-alerta summary{color:var(--erro)}
+/* (19.64.0) disciplina incluída na janela */
+.ep-lin-nova{background:rgba(34,197,94,.08);border-left:4px solid var(--ok);padding-left:6px}
+.ep-nova-tag{margin-left:6px;font-size:11px;font-weight:800;color:var(--ok);border:1px solid var(--ok);border-radius:999px;padding:0 6px}
+.ep-nova-tirar{margin-left:6px;padding:0 6px}
+#btnEpIncluirDisc{margin-top:6px;align-self:flex-start}
+/* (19.63.0) cadastrado agora em tabela; campo mudado; relatório do "preencher"; guia dos campos */
+.ep-atual-tabela{width:100%;border-collapse:collapse;margin:6px 0;font-size:13.5px}
+.ep-atual-tabela th{text-align:left;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--sutil);padding:4px 8px;border-bottom:2px solid var(--borda)}
+.ep-atual-tabela td{padding:6px 8px;vertical-align:top;border-bottom:1px solid var(--borda)}
+.ep-atual-tabela tbody tr:nth-child(even){background:rgba(127,127,127,.06)}
+.ep-atual-tabela .ep-num-col{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.ep-atual-nome{font-weight:600}
+.ep-atual-tabela strong{display:block}
+.ep-atual-sub{display:block;font-size:12px;color:var(--sutil)}
+.ep-atual-leg{font-size:12px;color:var(--sutil);margin:2px 0 6px}
+.ep-atual-disc{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;font-size:13px;padding:6px 8px;border-radius:8px;background:rgba(127,127,127,.06)}
+.ep-atual-disc-tit{font-weight:800;width:100%}
+.ep-atual-par{display:inline-flex;gap:5px;align-items:baseline}
+.ep-atual-rot{color:var(--sutil);font-size:12px}
+.ep-campo-mudou{outline:2px solid var(--atencao);outline-offset:1px;background:rgba(245,158,11,.10)}
+.ep-guia{font-size:12.5px;line-height:1.45;padding:6px 10px;border-left:4px solid var(--info);background:rgba(59,130,246,.08);border-radius:6px;white-space:pre-line}
+.ep-ia-conf{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:13px;border:1px solid var(--borda)}
+.ep-iac-feito{border-color:var(--ok)}
+.ep-iac-nada{border-color:var(--erro)}
+.ep-iac-resumo{font-weight:700}
+.ep-iac-aviso{color:var(--atencao);margin-top:4px}
+.ep-iac-linhas{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.ep-iac-linhas li{border-left:4px solid;padding:3px 8px;border-radius:4px}
+.ep-iac-ok{border-color:var(--ok)}.ep-iac-aviso,.ep-iac-linhas .ep-iac-aviso{border-color:var(--atencao)}
+.ep-iac-erro{border-color:var(--erro);background:rgba(239,68,68,.07)}.ep-iac-info{border-color:var(--sutil)}
+.ep-iac-linhas .ep-iac-aviso{background:rgba(245,158,11,.07);color:inherit}
+.ep-iac-n{font-weight:700;margin-right:6px}
+.ep-iac-txt{display:block;font-size:12px;color:var(--sutil);white-space:pre-wrap;word-break:break-word}
+.ep-iac-msg{display:block}
+.ep-iac-formato{margin-top:6px;white-space:pre-line}
 /* (19.62.0) "Como fica" com o que mudou: as cores do painel da revisão, sempre com o símbolo */
 .ep-res-leg{list-style:none;margin:0 0 4px -18px;display:flex;flex-wrap:wrap;gap:6px}
 .ep-res-chip{font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid}
@@ -1930,7 +1965,7 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ep-perg legend{font-weight:700;margin-bottom:4px}
 .ep-perg label{display:flex;gap:6px;align-items:flex-start;font-size:13.5px;margin:2px 0}
 .ep-tabela{display:flex;flex-direction:column;gap:4px;margin:6px 0}
-.ep-lin{display:grid;grid-template-columns:minmax(150px,1.6fr) minmax(130px,1fr) minmax(200px,1.4fr);gap:8px;align-items:center;font-size:13.5px;padding:4px 0;border-bottom:1px solid var(--borda)}
+.ep-lin{display:grid;grid-template-columns:minmax(150px,1.6fr) minmax(150px,1.1fr) 58px minmax(190px,1.4fr);gap:8px;align-items:center;font-size:13.5px;padding:4px 0;border-bottom:1px solid var(--borda)}
 .ep-cab{font-size:12px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.03em}
 .ep-c-vale,.ep-c-min,.ep-mincampo{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .ep-num{width:64px}
@@ -10632,7 +10667,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <li data-i18n="ep_ia_p2"></li>
       <li><span data-i18n="ep_ia_p3"></span>
         <textarea id="epIaResp" rows="5" style="width:100%;box-sizing:border-box" data-i18n-ph="ep_ia_ph"></textarea>
-        <button type="button" class="btn-min btn-min-ok" id="btnEpIaLer" data-i18n="ep_ia_ler"></button></li>
+        <button type="button" class="btn-min btn-min-ok" id="btnEpIaLer" data-i18n="ep_ia_ler"></button>
+        <div id="epIaConf" class="ep-ia-conf" role="status" aria-live="polite" hidden></div></li>
     </ol>
   </details>
   <fieldset class="ep-perg">
