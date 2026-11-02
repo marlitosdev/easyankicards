@@ -326,6 +326,26 @@ function matEscapar(s) {
  * está renderizado, sem os "**" e "##" que só existem no markdown de origem.
  * A formatação viaja na área de transferência como text/html — é de lá que
  * ela tem de ser lida, senão o resumo chega achatado. */
+/* (19.66.0) FÓRMULA DESENHADA NUMA PÁGINA (KaTeX, MathJax, MathML, o "data-math" do Gemini): o texto de dentro é o
+ * desenho repetido duas vezes (a versão acessível e a visual) e sairia embaralhado. Fica só a fórmula, em LaTeX
+ * ("$…$" ou "$$…$$"), que o resumo desenha e que dá para converter em símbolos. null = não é fórmula. */
+function matTexDoNo(el) {
+  if (!el || el.nodeType !== 1) return null;
+  const cls = String(el.getAttribute("class") || "");
+  const tag = el.tagName.toLowerCase();
+  const bloco = /katex-display|math-block|math-display|MathJax_Display|display/.test(cls) || el.getAttribute("display") === "block" || tag === "div" && el.hasAttribute("data-math");
+  if (el.hasAttribute("data-math")) return { tex: el.getAttribute("data-math"), bloco };
+  if (/\bkatex(-display)?\b/.test(cls) || tag === "math" || /MathJax|mjx-container/.test(cls) || tag === "mjx-container") {
+    const an = el.querySelector && (el.querySelector('annotation[encoding="application/x-tex"]') || el.querySelector("annotation"));
+    if (an && an.textContent.trim()) return { tex: an.textContent.trim(), bloco: bloco || !!(el.querySelector && el.querySelector(".katex-display")) };
+    const alt = el.getAttribute("alttext") || el.getAttribute("aria-label");
+    if (alt) return { tex: alt, bloco };
+  }
+  if (tag === "script" && /math\/tex/.test(el.getAttribute("type") || "")) return { tex: el.textContent, bloco: /mode=display/.test(el.getAttribute("type") || "") };
+  return null;
+}
+const matTexEmTexto = (m) => (m.bloco ? "$$" + m.tex.trim() + "$$" : "$" + m.tex.trim() + "$");
+
 function matHtmlParaMarcas(html) {
   const doc = document.implementation.createHTMLDocument("");
   doc.body.innerHTML = String(html || "");
@@ -336,6 +356,8 @@ function matHtmlParaMarcas(html) {
     no.childNodes.forEach((f) => {
       if (f.nodeType === 3) { s += f.nodeValue.replace(/\s+/g, " "); return; }
       if (f.nodeType !== 1) return;
+      const fm = matTexDoNo(f);
+      if (fm) { s += matTexEmTexto(fm); return; }
       const tag = f.tagName.toLowerCase();
       const dentro = inline(f);
       if (!dentro.trim()) { s += dentro; return; }
@@ -357,6 +379,8 @@ function matHtmlParaMarcas(html) {
         return;
       }
       if (f.nodeType !== 1) return;
+      const fm = matTexDoNo(f);
+      if (fm) { saida.push(matTexEmTexto(Object.assign({}, fm, { bloco: true }))); return; }
       const tag = f.tagName.toLowerCase();
       if (/^h[1-2]$/.test(tag)) { saida.push("# " + inline(f).trim()); return; }
       if (/^h[3-6]$/.test(tag)) { saida.push("## " + inline(f).trim()); return; }
@@ -659,6 +683,64 @@ function matTexParaHtml(src) {
   return out.replace(/ {2,}/g, " ");
 }
 
+/* (19.66.0) LaTeX → TEXTO com símbolos, para GRAVAR (com confirmação). Só o que vira texto sem perder sentido: lógica,
+ * conjuntos, comparações, letras gregas, expoente e índice curtos (2ⁿ, xᵢ). Fração empilhada, raiz, combinação e
+ * somatório com limites ficam em LaTeX — continuam desenhados na leitura. Devolve o texto ou null (= manter). */
+const MAT_SUP = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾",
+  a: "ᵃ", b: "ᵇ", c: "ᶜ", d: "ᵈ", e: "ᵉ", f: "ᶠ", g: "ᵍ", h: "ʰ", i: "ⁱ", j: "ʲ", k: "ᵏ", l: "ˡ", m: "ᵐ", n: "ⁿ", o: "ᵒ", p: "ᵖ", r: "ʳ", s: "ˢ", t: "ᵗ", u: "ᵘ", v: "ᵛ", w: "ʷ", x: "ˣ", y: "ʸ", z: "ᶻ" };
+const MAT_SUB = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋", "=": "₌", "(": "₍", ")": "₎",
+  a: "ₐ", e: "ₑ", h: "ₕ", i: "ᵢ", j: "ⱼ", k: "ₖ", l: "ₗ", m: "ₘ", n: "ₙ", o: "ₒ", p: "ₚ", r: "ᵣ", s: "ₛ", t: "ₜ", u: "ᵤ", v: "ᵥ", x: "ₓ" };
+function matTexParaTexto(latex) {
+  const h = matTexParaHtml(matEscapar(latex));
+  if (/mt-frac|mt-raiz|mt-binom|<br>/.test(h)) return null;
+  if (/[ΣΠ∫]\s*<su[bp]>/.test(h)) return null;
+  const troca = (x, mapa, sinal) => {
+    const t2 = x.replace(/<[^>]+>/g, "");
+    if (t2.split("").every((ch) => mapa[ch])) return t2.split("").map((ch) => mapa[ch]).join("");
+    return sinal + (t2.length > 1 ? "(" + t2 + ")" : t2);
+  };
+  let t2 = h
+    .replace(/<sup>([\s\S]*?)<\/sup>/g, (m0, x) => troca(x, MAT_SUP, "^"))
+    .replace(/<sub>([\s\S]*?)<\/sub>/g, (m0, x) => troca(x, MAT_SUB, "_"))
+    .replace(/<span class="mt-barra">([\s\S]*?)<\/span>/g, (m0, x) => x.replace(/<[^>]+>/g, "").split("").map((ch) => ch + "\u0305").join(""))
+    .replace(/<[^>]+>/g, "");
+  if (/[<>]/.test(t2.replace(/&lt;|&gt;/g, ""))) return null;
+  t2 = t2.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").replace(/\s{2,}/g, " ").trim();
+  return t2 || null;
+}
+/* uma linha: { nova, conv, mant } — conv = fórmulas convertidas, mant = as que ficam em LaTeX */
+function matTexConverterLinha(l) {
+  let conv = 0, mant = 0;
+  const bloco = String(l).match(/^(\s*)\$\$([\s\S]+?)\$\$\s*$/) || String(l).match(/^(\s*)\\\[([\s\S]+?)\\\]\s*$/);
+  if (bloco) {
+    const x = matTexParaTexto(bloco[2].trim());
+    if (x == null) return { nova: l, conv: 0, mant: 1 };
+    return { nova: bloco[1] + x, conv: 1, mant: 0 };
+  }
+  const nova = String(l).replace(MAT_TEX_INLINE, (m0, a, b, c) => {
+    if (c && !matTexTemCara(c)) return m0;
+    const x = matTexParaTexto((a || b || c).trim());
+    if (x == null) { mant++; return m0; }
+    conv++;
+    return x;
+  });
+  return { nova, conv, mant };
+}
+/* o texto inteiro: { texto, itens:[{linha, antes, depois}], mant } */
+function matTexConverterTexto(txt) {
+  const L = String(txt || "").split("\n");
+  const itens = [];
+  let mant = 0;
+  const out = L.map((l, k) => {
+    if (l.indexOf("$") < 0 && l.indexOf("\\(") < 0 && l.indexOf("\\[") < 0) return l;
+    const r = matTexConverterLinha(l);
+    mant += r.mant;
+    if (r.conv && r.nova !== l) itens.push({ linha: k, antes: l, depois: r.nova });
+    return r.nova;
+  });
+  return { texto: out.join("\n"), itens, mant };
+}
+
 /* fórmula de uma linha só ("$$ … $$" sozinha na linha): bloco centralizado */
 function matTexBloco(s) {
   const m = String(s).match(/^\$\$([\s\S]+?)\$\$$|^\\\[([\s\S]+?)\\\]$/);
@@ -711,7 +793,9 @@ function matParaHtml(txt, prova, opc) {
     .replace(/==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-prova" data-marca="prova">$1</mark>')
     .replace(/==~((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-peg" data-marca="pegadinha">$1</mark>')
     .replace(/==@((?:[^=\n]|=(?!=))+)==/g, '<mark class="m-nota" data-marca="nota">$1</mark>')
-    .replace(/==((?:[^=\n]|=(?!=))+)==/g, '<mark data-marca="destaque">$1</mark>');
+    .replace(/==((?:[^=\n]|=(?!=))+)==/g, '<mark data-marca="destaque">$1</mark>')
+    /* (19.66.0) *itálico* com um asterisco de cada lado (como o Gemini escreve): depois do negrito e das marcas */
+    .replace(MAT_ITALICO_AST, "$1<i>$2</i>");
   /* uma só, fora do laço: era recriada a cada linha, e o cartão de questão
    * precisa dela ANTES do ponto onde estava declarada */
   let emDica = false, emDicaJust = false;
@@ -2334,11 +2418,84 @@ function matPintarDuvidas() {
 }
 
 function matPintarConserto() {
+  try { matPintarFormulas(); } catch (e) {}
   const b = $("btnMatConsertar");
   if (!b) return;
   const q = matAtual ? matNegritoQuebrado(matAtual.chave) : [];
   b.hidden = !q.length;
   if (q.length) b.textContent = t("mat_consertar_btn", { n: q.length });
+}
+
+/* (19.66.0) CONVERTER AS FÓRMULAS, COM CONFIRMAÇÃO. A mesma janela do "consertar marcação": cada linha com o antes
+ * (riscado, vermelho) e o depois (verde). "Converter para símbolos" troca no editor (vale ao salvar); "Manter como está"
+ * não muda nada — e não pergunta de novo pelas mesmas fórmulas deste resumo. origem: "colar" | "salvar" | "botao". */
+const matTexRecusado = {};
+function matTexPendentes() {
+  const ta = $("matTexto");
+  return ta ? matTexConverterTexto(ta.value) : { itens: [], mant: 0, texto: "" };
+}
+function matPintarFormulas() {
+  const b = $("btnMatFormulas");
+  if (!b) return;
+  const n = matAtual ? matTexPendentes().itens.length : 0;
+  b.hidden = !n;
+  if (n) b.textContent = t("mtx_btn", { n });
+}
+async function matFormulasOferecer(origem) {
+  if (!matAtual || !$("matTexto")) return false;
+  const ta = $("matTexto");
+  const plano = matTexConverterTexto(ta.value);
+  if (!plano.itens.length) { if (origem === "botao") await uiAlert(t("mtx_nada")); return false; }
+  const assinatura = plano.itens.map((x) => x.antes).join("\n");
+  if (origem !== "botao" && matTexRecusado[matAtual.chave] === assinatura) return false;
+  const box = $("cnsLista");
+  box.innerHTML = "";
+  plano.itens.forEach((p) => {
+    const li = document.createElement("div");
+    li.className = "cns-item";
+    const onde = document.createElement("div");
+    onde.className = "cns-onde"; onde.textContent = t("cns_linha", { n: p.linha + 1 });
+    const a1 = document.createElement("div"); a1.className = "cns-antes"; a1.textContent = p.antes.slice(0, 300);
+    const d1 = document.createElement("div"); d1.className = "cns-depois"; d1.textContent = p.depois.slice(0, 300);
+    li.append(onde, a1, d1);
+    box.append(li);
+  });
+  const dlg = $("dlgMatConserto");
+  const tit = dlg.querySelector("h3"), aj = dlg.querySelector("p.nota");
+  const titAntes = tit ? tit.textContent : "", ajAntes = aj ? aj.textContent : "";
+  if (tit) tit.textContent = t("mtx_titulo");
+  if (aj) aj.textContent = t("mtx_ajuda");
+  $("cnsResumo").textContent = t("mtx_resumo", { n: plano.itens.length }) + (plano.mant ? " " + t("mtx_mantidas", { m: plano.mant }) : "");
+  const okAntes = $("btnCnsOk").textContent, naoAntes = $("btnCnsNao").textContent;
+  $("btnCnsOk").textContent = t("mtx_ok"); $("btnCnsNao").textContent = t("mtx_nao");
+  $("btnCnsOk").disabled = false;
+  const sim = await new Promise((resolve) => {
+    const fim = (v) => {
+      $("btnCnsOk").onclick = null; $("btnCnsNao").onclick = null;
+      if (dlg.open) dlg.close();
+      resolve(v);
+    };
+    $("btnCnsOk").onclick = () => fim(true);
+    $("btnCnsNao").onclick = () => fim(false);
+    abrirModal("dlgMatConserto");
+  });
+  if (tit) tit.textContent = titAntes;
+  if (aj) aj.textContent = ajAntes;
+  $("btnCnsOk").textContent = okAntes; $("btnCnsNao").textContent = naoAntes;
+  if (!sim) {
+    matTexRecusado[matAtual.chave] = assinatura;
+    try { reg("MATERIAL", "fórmulas mantidas em LaTeX", plano.itens.length + " linha(s) · " + origem); } catch (e) {}
+    return false;
+  }
+  /* troca no editor como uma edição (dá para desfazer com Ctrl+Z); quem grava é o fluxo de sempre */
+  const novo = matTexConverterTexto(ta.value).texto;
+  if (typeof matTrocarTrecho === "function") matTrocarTrecho(ta, 0, ta.value.length, novo, 0, 0);
+  else ta.value = novo;
+  try { reg("MATERIAL", "fórmulas convertidas para símbolos", plano.itens.length + " linha(s) · " + origem); } catch (e) {}
+  if (origem === "salvar" || origem === "botao") matSalvarEstado();
+  try { matRender(); } catch (e) {}
+  matPintarFormulas();
+  return true;
 }
 
 async function matConsertarAbrir() {
@@ -2821,6 +2978,8 @@ function matSalvarEstado() {
    * que continuava dizendo "ainda sem material" depois de salvar */
   matPintarSub();
   matRender();
+  /* (19.66.0) salvou com LaTeX? oferece converter (salvo já está; se aceitar, salva de novo com os símbolos) */
+  try { if (typeof matFormulasOferecer === "function") setTimeout(() => { matFormulasOferecer("salvar"); }, 0); } catch (e) {}
   return true;
 }
 
@@ -3059,7 +3218,8 @@ function matAplicarColagem(txt) {
   matTrocarTrecho(ta, ini, !depois.trim() ? v.length : b, novo, ini + novo.length, ini + novo.length);
   $("dlgMatColar").close();
   reg("MATERIAL", "colagem limpa", txt.length + " → " + limpo.length + " caracteres");
-  uiAlert(t("mat_colado", { n: limpo.split(/\n/).length }));
+  /* (19.66.0) colou com LaTeX: primeiro o aviso da colagem, depois a oferta de converter as fórmulas */
+  Promise.resolve(uiAlert(t("mat_colado", { n: limpo.split(/\n/).length }))).then(() => { try { matFormulasOferecer("colar"); } catch (e) {} });
 }
 
 function matGravarEditor() {
@@ -4212,6 +4372,13 @@ function matIniciar() {
     });
   }
   $("btnMatColarOk").onclick = () => matAplicarColagem($("matColarTexto").value);
+  /* (19.66.0) colar direto no editor: se veio LaTeX, oferece converter (depois que o texto entrou) */
+  if ($("matTexto")) $("matTexto").addEventListener("paste", (ev) => {
+    const tx = ev.clipboardData && ev.clipboardData.getData ? ev.clipboardData.getData("text/plain") : "";
+    if (!/\$[^$\n]*\\|\\\(|\\\[|\$\$/.test(tx || "")) return;
+    setTimeout(() => { try { matFormulasOferecer("colar"); } catch (e) {} }, 0);
+  });
+  matBotao("btnMatFormulas", "converter fórmulas", () => matFormulasOferecer("botao"));
   $("btnMatColarFechar").onclick = () => $("dlgMatColar").close();
   const matLerEditarTrocar = () => {
     if (matModo === "editar") matGravar(matAtual.chave, $("matTexto").value,
@@ -5775,13 +5942,19 @@ function matNegritoQuebrado(chave) {
  * par para ímpar e o "consertar marcação" acendia sozinho — no primeiro
  * uso do botão, sem que nada estivesse torto. Antes de contar, saem os
  * delimitadores de marca; o que sobra é só formatação de verdade. */
+/* (19.66.0) "*texto*" é ITÁLICO (o Gemini e o Markdown escrevem assim), não negrito quebrado: o "consertar marcação"
+ * propunha trocar por "**texto**" — 27 linhas de um resumo de lógica viravam negrito. Asterisco colado num lado só
+ * ("**Titulo:*") continua sendo defeito. */
+const MAT_ITALICO_AST = /(^|[^*\w\\])\*(?![\s*])([^*\n]{1,200}?)(?<![\s*\\])\*(?!\*)/g;
+function matSemItalico(l) { return String(l).replace(MAT_ITALICO_AST, "$1$2"); }
+
 function matSemMarcas(l) {
   return String(l).replace(new RegExp("==" + MAT_SUF, "g"), "");
 }
 
 function matLinhaTorta(l) {
   const cru = String(l).replace(/^(\s*[-*]\s+)/, "");
-  const s = matSemMarcas(cru);
+  const s = matSemItalico(matSemMarcas(cru));
   const pares = (s.match(/\*\*/g) || []).length;
   const soltos = (s.match(/\*/g) || []).length - pares * 2;
   return pares % 2 === 1 || soltos > 0 || matMarcaOrfa(cru);
@@ -5814,7 +5987,12 @@ function matConsertarLinha(l0) {
   corpo = corpo.replace(new RegExp("==" + MAT_SUF, "g"), (m) => {
     guardados.push(m); return GUARDA;
   });
+  /* (19.66.0) o itálico "*texto*" também sai de cena: ele está certo */
+  const ITA = "\u0003", italicos = [];
+  corpo = corpo.replace(MAT_ITALICO_AST, (m0) => { italicos.push(m0); return ITA; });
   corpo = corpo.replace(/\*+/g, (seq) => (seq.length % 2 === 1 ? seq + "*" : seq));
+  let ii = 0;
+  corpo = corpo.replace(new RegExp(ITA, "g"), () => italicos[ii++]);
   let gi = 0;
   corpo = corpo.replace(new RegExp(GUARDA, "g"), () => guardados[gi++]);
   if (corpo !== antesAst) motivos.push("asterisco_devolvido");

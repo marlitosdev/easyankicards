@@ -47,6 +47,28 @@ async function testes() {
   api.setLanguage("pt");
   const pr = api.riaPrompt({ topico: "Lógica", disciplina: "RL", prof: "padrao" });
   ok(/não use LaTeX/.test(pr) && /¬/.test(pr) && /↔/.test(pr), "F5 o pedido de resumo pede símbolos em vez de LaTeX");
+
+  /* ---- (19.66.0) I: "*texto*" é itálico, não negrito quebrado ---- */
+  const it = H(`* Frases interrogativas (*"Qual é a sua idade?"*) e **negrito** e ==*caiu na prova==`);
+  ok(/<i>"Qual é a sua idade\?"<\/i>/.test(it) && /<b>negrito<\/b>/.test(it) && /m-prova/.test(it), "I1 *texto* vira itálico; negrito e marca de prova continuam: " + it);
+  ok(!api.matLinhaTorta(`* Frases interrogativas (*"Qual é a sua idade?"*).`), "I2 itálico com asterisco não é 'marcação torta'");
+  ok(api.matLinhaTorta("**Titulo:*") && api.matLinhaTorta("*Titulo:**"), "I3 asterisco perdido continua sendo defeito");
+  const cl = api.matConsertarLinha(`Paradoxos (*"Esta frase é falsa"* ou **Titulo:*)`);
+  ok(/\(\*"Esta frase é falsa"\* ou \*\*Titulo:\*\*\)/.test(cl.nova), "I4 o conserto mexe só no negrito quebrado, não no itálico: " + cl.nova);
+
+  /* ---- (19.66.0) C: converter LaTeX em texto com símbolos (para gravar) ---- */
+  const conv = (l) => api.matTexConverterLinha(l);
+  ok(conv(R`Identidade ($p \leftrightarrow p$).`).nova === "Identidade (p ↔ p).", "C1 inline vira símbolos");
+  ok(conv(R`$$\sim(p \wedge q) \equiv \sim p \vee \sim q$$`).nova === "~(p ∧ q) ≡ ~p ∨ ~q", "C2 bloco vira a linha com símbolos");
+  ok(conv(R`$$\text{Linhas} = 2^n$$`).nova === "Linhas = 2ⁿ" && conv(R`alterna de $2^{n-1}$`).nova === "alterna de 2ⁿ⁻¹" && conv(R`$x_i$ e $x_{10}$`).nova === "xᵢ e x₁₀", "C3 expoente e índice curtos viram ² ⁿ ᵢ: " + conv(R`alterna de $2^{n-1}$`).nova);
+  ok(conv(R`$\exists x \in \mathbb{R} \mid x + 2 = 5$`).nova === "∃ x ∈ ℝ | x + 2 = 5" && conv(R`$\underline{\vee}$ e $\&$`).nova === "⊻ e &", "C4 conjuntos, ⊻ e &");
+  const fr = conv(R`Média $\bar{x} = \frac{\sum x}{n}$ e $p \wedge q$`);
+  ok(/\$\\bar\{x\} = \\frac\{\\sum x\}\{n\}\$/.test(fr.nova) && /e p ∧ q/.test(fr.nova) && fr.mant === 1 && fr.conv === 1, "C5 fração fica em LaTeX (desenhada), o resto converte: " + fr.nova);
+  ok(conv("Custa R$ 100,00 e $ 3.").nova === "Custa R$ 100,00 e $ 3." && conv("Custa R$ 100,00 e $ 3.").conv === 0, "C6 dinheiro não é fórmula");
+  const tt = api.matTexConverterTexto([R`linha $p \vee q$`, "sem fórmula", R`$$\frac{a}{b}$$`].join("\n"));
+  ok(tt.itens.length === 1 && tt.itens[0].linha === 0 && tt.mant === 1 && /linha p ∨ q\nsem fórmula\n\$\$\\frac/.test(tt.texto), "C7 o texto inteiro: lista o que muda e conta o que fica");
+
+  /* (19.66.0) H — colar página com fórmula desenhada: conferido no navegador (o ambiente de teste não tem o leitor de HTML) */
   return Object.assign(falhas, { quantas: n });
 }
 

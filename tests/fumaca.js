@@ -685,7 +685,7 @@ function rodar(opc) {
     qsUiOpcoesDoSelect, qsUiLimparFiltros, qsUiTirarFiltro,
     resBibAbrir, resBibPintar, resBibDefinir: (o) => { Object.assign(resBib, o); resBibPintar(); }, matGravarCartoes,
     matChaveViva, matChaveNormal, leiJurLadoALado,
-    matObter, concursoAtual, matParaHtml, matAgrupado, matTrocarModo,
+    matObter, concursoAtual, matParaHtml, matAgrupado, matTrocarModo, matTexConverterLinha, matTexConverterTexto, matTexParaTexto, matFormulasOferecer,
     matLimparColagem, matGravarCartoes, matContarCartoes, matAplicarColagem,
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
