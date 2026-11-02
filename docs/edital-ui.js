@@ -1363,6 +1363,9 @@ function edColarModoDefinir(modo) {
 }
 /* o texto que o botão do passo 1 copia, conforme o modo */
 function edColarPedidoTexto() {
+  /* (19.60.0) o marcador "só disciplinas e pesos": pedido curto, vale nos dois modos (com o plano já lido) */
+  if ($("edColarSoPesos") && $("edColarSoPesos").checked && edColarTemPlano() && typeof edPromptSoPesos === "function")
+    return edPromptSoPesos($("editalTexto").value);
   if (edColarModo === "corrigir") return edPromptRevisao($("editalTexto").value, edAchadosAtuais());
   /* (19.56.0) montar de novo a partir do edital: o MESMO pedido da criação — com a regra dos ramos quando o plano atual
    * já os tem (sem ela, a IA devolvia os tópicos sem as ramificações, que sumiriam) */
@@ -1383,7 +1386,10 @@ function edColarSemaforo() {
   const sem = $("edColarSem");
   if (!sem) return null;
   const novo = $("edColarTexto").value;
-  const est = hubColarEstado(novo, $("editalTexto").value);
+  let est = hubColarEstado(novo, $("editalTexto").value);
+  /* (19.60.0) resposta "só pesos": disciplinas sem tópicos não é defeito — é o pedido curto; os tópicos do plano ficam */
+  if (typeof edColarSoPesosResp === "function" && edColarSoPesosResp(novo, $("editalTexto").value))
+    est = Object.assign(est, { estado: "ok", soPesos: true, ign: 0, rep: 0, sem: 0, esc: 0 });
   const cls = HUB_SEM_CLASSE[est.estado] || "sem-vazio";
   sem.className = "ednovo-sem " + cls;
   $("edColarSemIco").textContent = HUB_SEM_ICONE[cls];
@@ -1394,6 +1400,7 @@ function edColarSemaforo() {
   if (est.esc) partes.push(t("ed_novo_p_escolha", { n: est.esc, l: (est.escNomes || []).slice(0, 2).join(", ") }));
   $("edColarSemTxt").textContent = est.estado === "vazio" ? t("ed_colar_sem_vazio")
     : est.estado === "igual" ? t("ed_colar_sem_igual")
+    : est.soPesos ? t("ed_colar_sem_pesos", { d: est.d })
     : est.estado === "ok" ? t("ed_colar_sem_ok", { d: est.d, t: est.t })
     : est.estado === "atencao" ? t("ed_novo_sem_atencao", { p: partes.join(", ") })
     : est.estado === "cru" ? t("ed_novo_sem_cru", { i: est.ign })
@@ -1415,6 +1422,9 @@ function edColarSemaforo() {
   /* "Substituir o plano" só liga quando o que está na caixa PODE ser uma resposta */
   const ap = $("btnEdColarAplicar");
   if (ap) ap.disabled = !!ED_COLAR_BLOQUEIA[est.estado];
+  /* (19.60.0) "só pesos" não substitui o plano: o botão e a explicação dizem o que acontece de fato */
+  if (ap) ap.textContent = t(est.soPesos ? "ed_colar_aplicar_pesos" : "ed_colar_aplicar");
+  if ($("edColarAplicarExp")) $("edColarAplicarExp").textContent = t(est.soPesos ? "ed_colar_aplicar_pesos_exp" : "ed_colar_aplicar_exp");
   const p2 = $("edColarPasso2");
   if (p2 && est.estado === "ok") p2.className = "ednovo-passo feito";
   return est;
@@ -4628,10 +4638,16 @@ function edConferirColagem() {
     return null;
   }
 
-  const c = edCompararColagem($("editalTexto").value, novoTxt, edProgresso);
+  /* (19.60.0) resposta "só pesos": compara (e aplica) o plano MESCLADO — os mesmos tópicos, com os pesos novos */
+  let efetivo = novoTxt, soPesos = null;
+  if (typeof edColarSoPesosResp === "function" && edColarSoPesosResp(novoTxt, $("editalTexto").value)) {
+    soPesos = edMesclarPesos($("editalTexto").value, novoTxt);
+    if (soPesos.texto) efetivo = soPesos.texto;
+  }
+  const c = edCompararColagem($("editalTexto").value, efetivo, edProgresso);
   av.hidden = false;
   av.innerHTML = "";
-  av.classList.toggle("grave", c.grave || c.vazio);
+  av.classList.toggle("grave", c.grave || c.vazio || !!(soPesos && soPesos.erro));
 
   /* A conferência deixou de ser uma frase e virou uma lista. O texto antigo
    * dizia só "perdeu N tópicos" — e não dizia nada quando o número batia,
@@ -4647,6 +4663,13 @@ function edConferirColagem() {
 
   linha(t("ed_colar_conf", { a: c.topicosAntes, d: c.topicosDepois,
                              da: c.discAntes, dd: c.discDepois }));
+  if (soPesos) {
+    if (soPesos.erro) { linha(t("ed_colar_pesos_erro", { e: soPesos.erro }), "perigo"); return Object.assign(c, { novoTxt: efetivo, soPesos }); }
+    linha(t("ed_colar_pesos_info", { n: soPesos.casadas }), "ok");
+    if (soPesos.faltaram.length) linha(t("ed_colar_pesos_faltaram", { l: soPesos.faltaram.join(", ") }), "aviso");
+    if (soPesos.semPar.length) linha(t("ed_colar_pesos_sempar", { l: soPesos.semPar.join(", ") }), "aviso");
+    if (soPesos.misto) linha(t("ed_colar_pesos_misto", { l: soPesos.semNumero.join(", ") }), "aviso");
+  }
 
   if (c.suspeito === "prompt") { linha(t("ed_colar_e_o_prompt"), "perigo"); return Object.assign(c, { novoTxt }); }
   if (c.vazio) { linha(t("ed_colar_vazio"), "perigo"); return Object.assign(c, { novoTxt }); }
@@ -4689,7 +4712,7 @@ function edConferirColagem() {
   if (!c.orfaos.length && !c.discSomem.length && !c.pesosMudam.length && !c.somem.length)
     linha(t("ed_colar_sem_perda"), "ok");
 
-  return Object.assign(c, { novoTxt });
+  return Object.assign(c, { novoTxt: efetivo, soPesos });
 }
 
 /* ------------------------------------------------------------------
@@ -4915,6 +4938,11 @@ async function edAplicarColagem() {
   }
   if (c.vazio) {
     await uiAlert(t("ed_colar_vazio_erro"));
+    return;
+  }
+  /* (19.60.0) a mescla "só pesos" não fechou a conta de tópicos: nada é aplicado */
+  if (c.soPesos && c.soPesos.erro) {
+    await uiAlert(t("ed_colar_pesos_erro", { e: c.soPesos.erro }));
     return;
   }
   /* (19.57.0) O PAINEL DAS MUDANÇAS substitui as perguntas em sequência: antes de aplicar, uma tela só com o que SAI

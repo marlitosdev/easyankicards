@@ -3414,6 +3414,12 @@ function edConsertarColagem(txt) {
     });
     /* as linhas em branco entre tópicos eram só o espaçamento da tela */
     L = N.filter((l, i) => l.trim() || (N[i + 1] !== undefined && /^\s*[#@&]/.test(N[i + 1])));
+  } else if (L.some((l) => /^\s*[*•]\s+\S[^\n]*::/.test(l))) {
+    /* (19.59.2) "*" no lugar do "+" com os "++" já certos (a IA trocou só o marcador do tópico). Antes, um "++" no texto
+     * bastava para o conserto achar que estava tudo no formato — e o edital era gravado com 133 tópicos em "*" e uma
+     * linha em branco entre cada um. */
+    L = L.map((l) => { if (/^\s*[*•]\s+\S[^\n]*::/.test(l)) { out.topicos++; return l.replace(/^\s*[*•]\s+/, "+ "); } return l; });
+    L = L.filter((l, i) => l.trim() || !(/^\s*\+/.test(L[i - 1] || "") && /^\s*\+/.test(L[i + 1] || "")));
   }
   /* o cabeçalho sem "#": a primeira linha com "| prova:"/"| horas:", a "discursiva |" e a "fase 2:" */
   if (!L.some((l) => /^\s*#/.test(l))) {

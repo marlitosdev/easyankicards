@@ -1893,6 +1893,8 @@ dialog.ed-mud-dlg[open]{width:min(760px,96vw);max-height:92vh}
 .ed-mud-mantem summary,.ed-mud-chip.ed-mud-mantem{color:var(--info)}
 .ed-mud-alerta{border-color:var(--erro);background:rgba(239,68,68,.18)}
 .ed-mud-alerta summary{color:var(--erro)}
+/* (19.60.0) revisão só dos pesos */
+.ed-colar-so-pesos{display:flex;gap:6px;align-items:center;font-weight:700;margin:6px 0 0}
 /* (19.59.0) como a prova pontua: o cadastrado agora, as regras, o peso 1-5 e a fatia ao vivo */
 .ep-atual,.ep-regras{border:1px solid var(--borda);border-radius:9px;padding:6px 10px;margin:6px 0}
 .ep-atual>summary,.ep-regras>summary{cursor:pointer;font-weight:800}
@@ -11359,6 +11361,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <button type="button" class="btn-min" id="btnEdColarModoCor" aria-pressed="false" data-i18n="ed_colar_modo_cor"></button>
     </div>
     <span class="nota" id="edColarModoExp"></span>
+    <!-- (19.60.0) pedido curto: só as disciplinas e os pesos (a resposta é mesclada, os tópicos ficam) -->
+    <label class="ed-colar-so-pesos"><input type="checkbox" id="edColarSoPesos"> <span data-i18n="ed_colar_so_pesos"></span></label>
+    <span class="nota" data-i18n="ed_colar_so_pesos_exp"></span>
     <button class="btn btn-roxo" id="btnEdColarPedido" data-i18n="ed_rev_pedir"></button>
     <p class="nota ednovo-prompt-msg ed-colar-pedido-msg" id="edColarPedidoMsg" role="status"></p>
   </div>
@@ -11413,7 +11418,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="ed-colar-decidir">
     <div class="ed-colar-acao">
       <button class="btn btn-verde" id="btnEdColarAplicar" data-i18n="ed_colar_aplicar"></button>
-      <span class="nota" data-i18n="ed_colar_aplicar_exp"></span>
+      <span class="nota" id="edColarAplicarExp" data-i18n="ed_colar_aplicar_exp"></span>
     </div>
     <div class="ed-colar-acao">
       <button class="btn btn-cinza" id="btnEdColarLimpar" data-i18n="ed_colar_limpar"></button>

@@ -221,6 +221,12 @@ async function testes() {
     ok(!api.edConsertarColagem(c.texto).mudou, "X7 consertar de novo não muda nada");
     const certo = ["# A | prova: 2030-01-01 | horas: 5", "& B | minimo: 50%", "@ A :: 3", "+ t :: 3 :: x * y", "++ r :: 2"].join("\n");
     ok(!api.edConsertarColagem(certo).mudou, "X8 um plano já certo volta igual");
+    /* (19.59.2) "*" no tópico com os "++" já em linha própria: o "++" não pode fazer o conserto achar que está tudo certo */
+    const meio = ["# M | prova: 2030-01-01 | horas: 5", "@ A :: 5", "", "* t1 :: 5 :: x !d", "++ r1 :: 4 :: y", "", "* t2 :: 3 :: z", "", "@ B :: 10q", "", "* t3 :: 2"].join("\n");
+    const cm = api.edConsertarColagem(meio);
+    ok(cm.mudou && cm.topicos === 3 && !/^\s*\*/m.test(cm.texto) && api.lerEdital(cm.texto).disciplinas[0].topicos[0].ramos.length === 1, "X11 '*' vira '+' mesmo com '++' no texto: " + cm.texto);
+    ok(/r1 :: 4 :: y\n\+ t2/.test(cm.texto), "X12 as linhas em branco entre tópicos saem: " + JSON.stringify(cm.texto));
+    ok(!api.edConsertarColagem(cm.texto).mudou, "X13 de novo não muda");
     ok(/Português, Lógica/.test(api.edConsertoTexto(c)) && api.edConsertoTexto({ mudou: false }) === "", "X9 o aviso diz o que foi feito");
     /* na caixa: colar conserta e avisa */
     api.$("edColarTexto").value = tela;
@@ -309,8 +315,55 @@ async function testes() {
     try { api.$("dlgEdPontua").close(); } catch (e) {}
   }
 
+  /* ---- (19.60.0) S: revisão SÓ DOS PESOS — pedido curto, resposta mesclada, tópicos intactos ---- */
+  {
+    const A = ["# S | prova: 2030-11-29 | horas: 10", "& Específicos | minimo: 50%", "@ Tributário :: 5", "+ a :: 5 :: x !d", "++ r1 :: 4", "+ b :: 3",
+      "@ Administrativo :: 3", "+ c :: 4", "& Básicos", "@ Português :: 4", "+ d :: 5", "@ Inglês :: 2 | escolha: Língua", "+ e :: 3", "@ Espanhol :: 2 | escolha: Língua", "+ f :: 3"].join("\n");
+    const conta = (tx) => { const r = api.lerEdital(tx); return r.disciplinas.length + "|" + r.disciplinas.reduce((x, d) => x + d.topicos.length + d.topicos.reduce((y, tp) => y + (tp.ramos || []).length, 0), 0); };
+    api.$("editalTexto").value = A;
+    /* o pedido */
+    api.$("edColarSoPesos").checked = true;
+    const pr = api.edColarPedidoTexto();
+    ok(/SÓ OS PESOS DAS DISCIPLINAS/.test(pr) && /@ Tributário :: 5/.test(pr) && !/\+ a :: 5/.test(pr) && /Tributário: 2 tópicos/.test(pr), "S1 o pedido curto leva só disciplinas, blocos e o tamanho de cada uma");
+    ok(pr.length < api.edPromptRevisao(A, []).length / 2 && /PROVA DISCURSIVA/.test(pr) && /escolha/.test(pr), "S2 bem menor, com a regra da discursiva e das escolhas");
+    api.$("edColarSoPesos").checked = false;
+    ok(!/SÓ OS PESOS/.test(api.edColarPedidoTexto()), "S3 sem o marcador, o pedido é o de sempre");
+    /* a mescla */
+    const R1 = ["# Outro | prova: 2020-01-01 | horas: 99", "# discursiva | pontos: 30 | objetiva: 70 | disciplinas: tributario", "& Específicos | minimo: 60%",
+      "@ TRIBUTÁRIO :: 20q", "@ Administrativo :: 10q", "& Português | minimo: 50%", "@ Português :: 10q", "@ Inglês :: 5q | escolha: Língua", "@ Espanhol :: 5q | escolha: Língua", "@ Nova :: 5q"].join("\n");
+    ok(api.edColarSoPesosResp(R1, A) && !api.edColarSoPesosResp(A, A), "S4 resposta sem tópicos é 'só pesos'; plano com tópicos não");
+    const m = api.edMesclarPesos(A, R1);
+    const rm = api.lerEdital(m.texto);
+    const D = (n) => rm.disciplinas.find((d) => d.nome === n);
+    ok(!m.erro && conta(m.texto) === conta(A), "S5 tópicos e ramos idênticos depois da mescla: " + m.erro);
+    ok(D("Tributário").abs === 20 && D("Português").abs === 10 && D("Inglês").escolha === "Língua", "S6 pesos novos, escolha mantida");
+    ok(rm.cfg.prova === "2030-11-29" && rm.cfg.horas === 10, "S7 o cabeçalho (data e horas) continua o do app");
+    ok(rm.cfg.discursiva && rm.cfg.discursiva.pontos === 30 && rm.cfg.discursiva.disciplinas.join() === "Tributário", "S8 a discursiva da resposta entra, com o nome do plano");
+    ok((rm.blocos || []).find((b) => b.nome === "Específicos").minimo.valor === 60 && (rm.blocos || []).find((b) => b.nome === "Português"), "S9 blocos e mínimos da resposta");
+    ok(m.semPar.join() === "Nova" && !rm.disciplinas.some((d) => d.nome === "Nova") && m.casadas === 5, "S10 disciplina sem par é ignorada e avisada");
+    ok(/\+ a :: 5 :: x !d/.test(m.texto) && /\+\+ r1 :: 4/.test(m.texto), "S11 as linhas dos tópicos ficam exatamente como estavam");
+    /* resposta parcial e misturada */
+    const m2 = api.edMesclarPesos(A, ["@ Tributário :: 20q", "@ Português :: 4"].join("\n"));
+    ok(!m2.erro && m2.faltaram.join() === "Administrativo,Inglês,Espanhol" && m2.misto && /Português/.test(m2.semNumero.join()), "S12 o que faltou fica como estava; mistura avisada: " + JSON.stringify(m2.faltaram));
+    /* na janela: conferir e aplicar pelo painel */
+    api.$("edColarTexto").value = R1;
+    const c = api.edConferirColagem();
+    ok(c && c.soPesos && conta(c.novoTxt) === conta(A) && /Só pesos: 5 disciplina/.test(api.$("edColarAviso").textContent), "S13 a conferência compara o plano mesclado e diz 'só pesos'");
+    ok(!api.$("btnEdColarAplicar").disabled && api.$("btnEdColarAplicar").textContent === "Aplicar os pesos", "S14 o botão de aplicar fica livre e diz o que faz");
+    const pa = api.edAplicarColagem();
+    for (let i = 0; i < 8; i++) { await Promise.resolve(); api.uiModalResponder(true); }
+    await pa;
+    ok(/@ Tributário :: 20q/.test(api.$("editalTexto").value) && conta(api.$("editalTexto").value) === conta(A), "S15 aplicado: pesos novos e os mesmos tópicos");
+    /* resposta COMPLETA com o marcador ligado: decide pelo conteúdo, fluxo normal */
+    api.$("editalTexto").value = A;
+    api.$("edColarTexto").value = A.replace("@ Tributário :: 5", "@ Tributário :: 4");
+    const c2 = api.edConferirColagem();
+    ok(c2 && !c2.soPesos, "S16 resposta com tópicos segue o fluxo normal");
+    api.$("edColarTexto").value = "";
+  }
+
   /* ---- textos ---- */
-  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15"].forEach((k) => {
+  ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");

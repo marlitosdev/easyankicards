@@ -1929,6 +1929,29 @@ function edPromptRevisao(textoPlano, achados) {
   return L.join("\n");
 }
 
+/* (19.60.0) O PEDIDO SÓ DE PESOS. Quanto cada disciplina vale na agenda vem do peso DELA (1 a 5 ou "10q"); o peso dos
+ * tópicos só ordena dentro dela. Então a revisão dos pesos não precisa do plano inteiro: vão as linhas "#", "&" e "@" e,
+ * para a IA estimar quando o edital não traz números, quantos tópicos cada disciplina tem. Pedido de ~3 mil caracteres em
+ * vez de ~35 mil, resposta de ~15 linhas em vez de ~250. A resposta é MESCLADA ao plano (edMesclarPesos), nunca o
+ * substitui: os tópicos não vão e não voltam. */
+function edPromptSoPesos(textoPlano) {
+  const r = lerEdital(String(textoPlano || ""));
+  const linhas = String(textoPlano || "").split(/\r?\n/).filter((l) => /^\s*[&@]/.test(l) || /^\s*#\s*discursiva\b/i.test(l))
+    .map((l) => l.trim());
+  const temDisc = !!(r.cfg && r.cfg.discursiva);
+  const tam = r.disciplinas.filter((d) => !d.inativa).map((d) => {
+    const ps = d.topicos.map((tp) => tp.peso || 3);
+    const media = ps.length ? (ps.reduce((a, b) => a + b, 0) / ps.length).toFixed(1).replace(".", ",") : "-";
+    return t("ed_pp_tam", { d: d.nome, n: d.topicos.length, m: media });
+  });
+  const L = [t("ed_pp_cab"), "", t("ed_pp_formato"), "", t("ed_pp_regras"),
+    t("ed_pp_r1"), t("ed_pp_r2"), t("ed_pp_r3"), t("ed_pp_r4"),
+    t(temDisc ? "ed_prompt_rev_disc_manter" : "ed_prompt_rev_disc", { n: 5 }), t("ed_pp_r6"), "",
+    t("ed_pp_atual"), linhas.join("\n"), "", t("ed_pp_tam_tit"), tam.join("\n"), "",
+    t("ed_pp_edital"), "", t("ed_pp_onde")];
+  return L.join("\n");
+}
+
 /* =====================================================================
  * O CAMPO "RESPOSTA DA IA" COMO SEMÁFORO — a estratégia visual contra o erro de colar a coisa errada.
  *

@@ -612,6 +612,75 @@ function edManterPontuacao(antigo, novo) {
   return out;
 }
 
+/* =====================================================================
+ * (19.60.0) MESCLAR UMA RESPOSTA "SÓ PESOS" NO PLANO
+ * A resposta tem só "#", "&" e "@" — usada para substituir o plano, apagaria os tópicos e o progresso. Aqui ela é
+ * MESCLADA: muda só o peso de cada "@" (pelo nome, sem acento/maiúscula), os blocos e mínimos ("&") e a discursiva; o
+ * cabeçalho (data, horas) é do app; disciplina sem par não é criada nem apagada (vai para o aviso). A garantia: o número de
+ * disciplinas, tópicos e ramos depois é IGUAL ao de antes — senão nada é devolvido.
+ * Devolve { texto, casadas, semPar, faltaram, misto, erro }.
+ * ===================================================================== */
+function edColarSoPesosResp(txt, atual) {
+  const s = String(txt || "");
+  if (!s.trim() || /^\s*\+/m.test(s)) return false;
+  const r = lerEdital(s);
+  if (!r.disciplinas.length || r.disciplinas.some((d) => d.topicos.length)) return false;
+  const a = lerEdital(String(atual || ""));
+  return a.disciplinas.some((d) => d.topicos.length > 0);
+}
+
+function edMesclarPesos(atual, resp) {
+  const out = { texto: "", casadas: 0, semPar: [], faltaram: [], misto: false, erro: "" };
+  const k = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  const RE = /^\s*@\s*(.+?)\s*::\s*([^|]*?)\s*(\|.*)?$/;
+  /* o peso e a escolha de cada disciplina da resposta, como a IA escreveu */
+  const daResp = {};
+  String(resp || "").split(/\r?\n/).forEach((l) => {
+    const m = l.match(RE);
+    if (!m) return;
+    const suf = String(m[3] || "").replace(/\s*\|\s*m[íi]nimo\s*:\s*[^|]*/i, "").trim();
+    daResp[k(m[1])] = { nome: m[1].trim(), peso: m[2].trim(), escolha: /escolha\s*:/i.test(suf) ? suf : "" };
+  });
+  const usadas = new Set();
+  const meio = String(atual || "").split(/\r?\n/).map((l) => {
+    const m = l.match(RE) || l.match(/^\s*@\s*(.+?)\s*$/);
+    if (!m || !/^\s*@/.test(l)) return l;
+    const nome = m[1].trim(), x = daResp[k(nome)];
+    if (!x || !x.peso) { out.faltaram.push(nome); return l; }
+    usadas.add(k(nome));
+    out.casadas++;
+    const escAtual = m[3] && /escolha\s*:/i.test(m[3]) ? m[3].trim() : "";
+    const esc = x.escolha || escAtual;
+    return "@ " + nome + " :: " + x.peso + (esc ? " " + esc : "");
+  }).join("\n");
+  Object.keys(daResp).forEach((kk) => { if (!usadas.has(kk)) out.semPar.push(daResp[kk].nome); });
+  /* blocos, mínimos e discursiva: os da resposta, quando ela traz; senão ficam os do plano */
+  const en = epEstado(meio), er = epEstado(resp);
+  const nomeNoPlano = (n) => { const d = en.ds.find((x) => k(x.nome) === k(n)); return d ? d.nome : ""; };
+  const temBlocos = er.grupos.length > 0 || er.ds.some((d) => d.min);
+  if (temBlocos) {
+    en.ds.forEach((d) => { const r2 = er.ds.find((x) => k(x.nome) === k(d.nome)); d.grupo = r2 ? r2.grupo : ""; d.min = r2 ? r2.min : null; });
+    en.grupos = er.grupos.map((g) => ({ nome: g.nome, min: g.min }));
+    en.minimo = "sim";
+  }
+  if (er.discursiva === "sim" && er.disc.pontos > 0) {
+    en.disc = Object.assign({}, er.disc, { disciplinas: er.disc.disciplinas.map(nomeNoPlano).filter(Boolean) });
+    en.discursiva = "sim";
+  }
+  en.peso = "manter";            /* os pesos já foram escritos acima, como a IA mandou */
+  let texto = meio;
+  try { texto = epNovoTexto(meio, en); } catch (e) { out.erro = String(e && e.message || e); return out; }
+  /* a garantia */
+  const conta = (tx) => { const r = lerEdital(tx); return r.disciplinas.length + "|" + r.disciplinas.reduce((a, d) => a + d.topicos.length + d.topicos.reduce((b, tp) => b + ((tp.ramos || []).length), 0), 0); };
+  if (conta(texto) !== conta(atual)) { out.erro = t("ep_erro_conta"); return out; }
+  const rd = lerEdital(texto).disciplinas.filter((d) => !d.inativa);
+  const comNum = rd.filter((d) => d.abs > 0).length;
+  out.misto = comNum > 0 && comNum < rd.length;
+  out.semNumero = out.misto ? rd.filter((d) => !(d.abs > 0)).map((d) => d.nome) : [];
+  out.texto = texto;
+  return out;
+}
+
 /* ---------------- preencher com IA ---------------- */
 function epPromptIA() {
   const c = epCtx;
