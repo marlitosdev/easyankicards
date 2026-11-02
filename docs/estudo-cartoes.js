@@ -175,6 +175,8 @@ function estcPintar() {
     frente.append(gerEl("div", "est-txt", estcTxt(c.front)));
   }
   cx.append(frente);
+  /* (19.67.0) fórmulas em LaTeX ("$p \wedge q$", "$\frac{a}{b}$") desenhadas, como no resumo */
+  if (typeof matTexDesenharEm === "function") matTexDesenharEm(frente);
   if (estcRev) {
     const verso = gerEl("div", "est-verso");
     /* no básico o verso É a resposta; na lacuna e na múltipla escolha ele é a justificativa (a resposta já está na frente) */
@@ -184,11 +186,13 @@ function estcPintar() {
       verso.append(gerEl("div", "est-just", estcTxt(c.back)));
     }
     cx.append(verso);
+    if (typeof matTexDesenharEm === "function") matTexDesenharEm(verso);
     if (c.more) {
       const sb = gerEl("button", "est-saiba-b", "✚ " + t("est_saiba"));
       sb.type = "button";
       const corpo = gerEl("div", "est-saiba");
       estcSaibaMais(corpo, c.more);
+      if (typeof matTexDesenharEm === "function") matTexDesenharEm(corpo);
       corpo.hidden = !estcSaiba;
       sb.onclick = () => { estcSaiba = !estcSaiba; corpo.hidden = !estcSaiba; };
       cx.append(sb, corpo);

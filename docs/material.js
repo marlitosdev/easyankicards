@@ -741,6 +741,48 @@ function matTexConverterTexto(txt) {
   return { texto: out.join("\n"), itens, mant };
 }
 
+/* (19.67.0) DESENHAR AS FÓRMULAS DENTRO DE UM ELEMENTO JÁ MONTADO (o cartão na tela de estudo): percorre os textos e
+ * troca cada "$…$", "$$…$$", "\(…\)" e "\[…\]" pelo desenho. Só mexe em nó de texto — links, lacunas e botões ficam.
+ * Devolve quantas fórmulas desenhou. */
+const MAT_TEX_NO = /\$\$([^$]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
+function matTexDesenharEm(raiz) {
+  if (!raiz || !raiz.childNodes || typeof document === "undefined") return 0;
+  let n = 0;
+  const visita = (no) => {
+    [].slice.call(no.childNodes || []).forEach((f) => {
+      if (f.nodeType === 1) {
+        if (!/^(script|style|textarea|input|button)$/i.test(f.tagName || "") && !/\bmt\b/.test(String(f.className || ""))) visita(f);
+        return;
+      }
+      if (f.nodeType !== 3) return;
+      const v = String(f.nodeValue || "");
+      if (v.indexOf("$") < 0 && v.indexOf("\\(") < 0 && v.indexOf("\\[") < 0) return;
+      const partes = [];
+      let ult = 0, m, achou = 0;
+      MAT_TEX_NO.lastIndex = 0;
+      while ((m = MAT_TEX_NO.exec(v))) {
+        if (m[4] && !matTexTemCara(m[4])) continue;
+        const corpo = (m[1] || m[2] || m[3] || m[4]).trim();
+        const bloco = !!(m[1] || m[2]);
+        if (m.index > ult) partes.push(document.createTextNode(v.slice(ult, m.index)));
+        const sp = document.createElement("span");
+        sp.className = bloco ? "mt mt-bloco" : "mt";
+        sp.innerHTML = matTexParaHtml(matEscapar(corpo));
+        partes.push(sp);
+        ult = m.index + m[0].length;
+        achou++;
+      }
+      if (!achou) return;
+      if (ult < v.length) partes.push(document.createTextNode(v.slice(ult)));
+      partes.forEach((x) => no.insertBefore(x, f));
+      no.removeChild(f);
+      n += achou;
+    });
+  };
+  try { visita(raiz); } catch (e) { return n; }
+  return n;
+}
+
 /* fórmula de uma linha só ("$$ … $$" sozinha na linha): bloco centralizado */
 function matTexBloco(s) {
   const m = String(s).match(/^\$\$([\s\S]+?)\$\$$|^\\\[([\s\S]+?)\\\]$/);

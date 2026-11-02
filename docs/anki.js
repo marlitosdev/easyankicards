@@ -158,6 +158,18 @@ function apkgAgruparDecks(cards, deckName, tituloGeral, extras) {
  * gerado: enquanto ele saia dos campos ja formatados, toda melhoria de
  * apresentacao (um <hr> novo, um <div> de paragrafo) mudava o guid de todos
  * os cartoes e a reimportacao duplicava o baralho inteiro. */
+/* (19.67.0) FÓRMULAS NO ANKI. O Anki desenha LaTeX só quando vem como "\(…\)" (na linha) ou "\[…\]" (em destaque) —
+ * o "$…$" que a IA escreve chegava cru no cartão. Na exportação: "$$…$$" → "\[…\]" e "$…$" → "\(…\)". O "$" de dinheiro
+ * ("R$ 100,00", "US$ 5") fica: só vira fórmula o que tem cara de fórmula (comando com "\", "^", "_", "=" ou uma variável). */
+function apkgTexAnki(s) {
+  const tx = String(s == null ? "" : s);
+  if (tx.indexOf("$") < 0) return tx;
+  const cara = (x) => /[\\^_=]/.test(x) || /^[A-Za-z]{1,3}$/.test(x.trim());
+  return tx
+    .replace(/\$\$([^$]+?)\$\$/g, (m0, a) => "\\[" + a.trim() + "\\]")
+    .replace(/(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g, (m0, a) => (cara(a) ? "\\(" + a + "\\)" : m0));
+}
+
 function guidDoCartao(c) {
   return guidFor(c.front, [c.back || "", c.more || ""].join("\x1f"));
 }
@@ -483,7 +495,7 @@ async function buildApkg(cards, deckName, estilo, titulo, alinha, extras) {
       campos = [c.front, verso, maisEmBlocos(c.more), c.titulo || titulo];
     }
     const noteId = id++;
-    const flds = campos.join("\x1f");
+    const flds = campos.map(apkgTexAnki).join("\x1f");
     const tags = c.tags.length ? " " + c.tags.join(" ") + " " : "";
     db.run(
       "INSERT INTO notes VALUES (?,?,?,?,-1,?,?,?,0,0,'')",

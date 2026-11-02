@@ -68,6 +68,11 @@ async function testes() {
   const tt = api.matTexConverterTexto([R`linha $p \vee q$`, "sem fórmula", R`$$\frac{a}{b}$$`].join("\n"));
   ok(tt.itens.length === 1 && tt.itens[0].linha === 0 && tt.mant === 1 && /linha p ∨ q\nsem fórmula\n\$\$\\frac/.test(tt.texto), "C7 o texto inteiro: lista o que muda e conta o que fica");
 
+  /* ---- (19.67.0) A: no Anki, "$…$" vira "\(…\)" e "$$…$$" vira "\[…\]"; dinheiro fica ---- */
+  ok(api.apkgTexAnki(R`Regra: $\sim(p \wedge q)$ e $x$.`) === R`Regra: \(\sim(p \wedge q)\) e \(x\).`, "A1 inline vira \(…\): " + api.apkgTexAnki(R`Regra: $\sim(p \wedge q)$ e $x$.`));
+  ok(api.apkgTexAnki(R`$$\frac{a}{b}$$`) === R`\[\frac{a}{b}\]`, "A2 bloco vira \[…\]");
+  ok(api.apkgTexAnki("Custa R$ 100,00 e US$ 5; total $ 3.") === "Custa R$ 100,00 e US$ 5; total $ 3.", "A3 dinheiro fica");
+  ok(api.apkgTexAnki(R`{{c1::$p \vee q$::conectivo?}}`) === R`{{c1::\(p \vee q\)::conectivo?}}`, "A4 dentro da lacuna também");
   /* (19.66.0) H — colar página com fórmula desenhada: conferido no navegador (o ambiente de teste não tem o leitor de HTML) */
   return Object.assign(falhas, { quantas: n });
 }
