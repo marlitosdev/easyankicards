@@ -552,6 +552,124 @@ function matProvaCartao(b, idx, resp) {
   return h;
 }
 
+/* =====================================================================
+ * (19.65.0) FÓRMULAS NO RESUMO
+ * A IA (Gemini, ChatGPT) mostra fórmulas desenhadas, mas o que se COPIA é o código LaTeX delas: "$$\sim(p \wedge q)
+ * \equiv \sim p \vee \sim q$$". O resumo mostrava esse código cru — e lógica e estatística ficavam ilegíveis. Aqui o
+ * código vira texto com os símbolos (¬ ∧ ∨ → ↔ ≡ ∀ ∃ Σ √ ≤ …), fração empilhada, expoente e índice. Sem biblioteca
+ * (funciona sem internet) e sem mudar o texto salvo: a tradução é só na hora de mostrar.
+ * Entra o texto JÁ escapado (matEscapar): "&" chega como "&amp;", "<" como "&lt;".
+ * ===================================================================== */
+const MAT_TEX_SIMB = {
+  sim: "~", neg: "¬", lnot: "¬", wedge: "∧", land: "∧", vee: "∨", lor: "∨", oplus: "⊕", veebar: "⊻", barwedge: "⊼",
+  rightarrow: "→", to: "→", Rightarrow: "⇒", implies: "⇒", leftarrow: "←", Leftarrow: "⇐", gets: "←",
+  leftrightarrow: "↔", Leftrightarrow: "⇔", iff: "⇔", longrightarrow: "⟶", longleftrightarrow: "⟷", mapsto: "↦",
+  equiv: "≡", forall: "∀", exists: "∃", nexists: "∄", top: "⊤", bot: "⊥", therefore: "∴", because: "∵", vdash: "⊢", models: "⊨",
+  in: "∈", notin: "∉", ni: "∋", subset: "⊂", subseteq: "⊆", supset: "⊃", supseteq: "⊇", nsubseteq: "⊈",
+  cap: "∩", cup: "∪", setminus: "∖", emptyset: "∅", varnothing: "∅", complement: "∁", mid: "|", vert: "|", Vert: "‖",
+  cdot: "·", times: "×", div: "÷", pm: "±", mp: "∓", ast: "∗", star: "⋆", circ: "∘", bullet: "•",
+  leq: "≤", le: "≤", geq: "≥", ge: "≥", neq: "≠", ne: "≠", approx: "≈", sim_: "∼", simeq: "≃", cong: "≅", propto: "∝",
+  ll: "≪", gg: "≫", lt: "&lt;", gt: "&gt;", infty: "∞", partial: "∂", nabla: "∇", degree: "°", prime: "′",
+  sum: "Σ", prod: "Π", int: "∫", oint: "∮", lim: "lim", log: "log", ln: "ln", exp: "exp", max: "máx", min: "mín",
+  sin: "sen", cos: "cos", tan: "tg", ldots: "…", dots: "…", cdots: "⋯", vdots: "⋮", ddots: "⋱",
+  langle: "⟨", rangle: "⟩", lfloor: "⌊", rfloor: "⌋", lceil: "⌈", rceil: "⌉", lbrace: "{", rbrace: "}", backslash: "\\",
+  alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", varepsilon: "ε", zeta: "ζ", eta: "η", theta: "θ", vartheta: "ϑ",
+  iota: "ι", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", pi: "π", rho: "ρ", sigma: "σ", varsigma: "ς", tau: "τ",
+  upsilon: "υ", phi: "φ", varphi: "φ", chi: "χ", psi: "ψ", omega: "ω",
+  Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π", Sigma: "Σ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
+  quad: "\u2003", qquad: "\u2003\u2003", checkmark: "✓", square: "□", blacksquare: "■", triangle: "△", angle: "∠", perp: "⊥", parallel: "∥",
+};
+const MAT_TEX_BB = { R: "ℝ", N: "ℕ", Z: "ℤ", Q: "ℚ", C: "ℂ", P: "ℙ" };
+
+function matTexParaHtml(src) {
+  const s = String(src || "");
+  let i = 0;
+  /* um argumento: {…} (com chaves aninhadas), um comando "\x" ou um caractere */
+  const arg = () => {
+    while (s[i] === " ") i++;
+    if (s[i] === "{") {
+      let n = 1, j = i + 1;
+      while (j < s.length && n) { if (s[j] === "\\") { j += 2; continue; } if (s[j] === "{") n++; else if (s[j] === "}") n--; j++; }
+      const dentro = s.slice(i + 1, j - 1);
+      i = j;
+      return dentro;
+    }
+    if (s[i] === "\\") { const m = s.slice(i).match(/^\\([A-Za-z]+|.)/); i += m ? m[0].length : 1; return m ? m[0] : ""; }
+    const c = s[i] || "";
+    i++;
+    return c;
+  };
+  /* uma "&amp;"/"&lt;" do texto escapado é UM caractere, não quatro */
+  const umChar = () => { const m = s.slice(i).match(/^&(?:amp|lt|gt|quot|#\d+);/); if (m) { i += m[0].length; return m[0]; } return s[i++]; };
+  let out = "";
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "\\") {
+      const m = s.slice(i).match(/^\\([A-Za-z]+|.)/);
+      if (!m) { i++; continue; }
+      i += m[0].length;
+      const cmd = m[1];
+      if (/^(text|mathrm|textrm|textbf|mathbf|textit|mathit|mbox|operatorname|textsf|mathsf|texttt)$/.test(cmd)) {
+        const a = arg();
+        out += /bf/.test(cmd) ? "<b>" + matTexParaHtml(a) + "</b>" : '<span class="mt-txt">' + a.replace(/\\([&%$#_{} ])/g, "$1") + "</span>";
+      } else if (cmd === "mathbb" || cmd === "Bbb") { const a = arg(); out += MAT_TEX_BB[a] || a; }
+      else if (cmd === "underline") { const a = arg(); out += /^\\(vee|lor)$/.test(a.trim()) ? "⊻" : "<u>" + matTexParaHtml(a) + "</u>"; }
+      else if (/^(frac|dfrac|tfrac|cfrac)$/.test(cmd)) {
+        const a = arg(), b = arg();
+        out += '<span class="mt-frac"><span class="mt-num">' + matTexParaHtml(a) + '</span><span class="mt-den">' + matTexParaHtml(b) + "</span></span>";
+      } else if (cmd === "binom") {
+        const a = arg(), b = arg();
+        out += '(<span class="mt-frac mt-binom"><span>' + matTexParaHtml(a) + "</span><span>" + matTexParaHtml(b) + "</span></span>)";
+      } else if (cmd === "sqrt") {
+        let ind = "";
+        if (s[i] === "[") { const j = s.indexOf("]", i); ind = s.slice(i + 1, j); i = j + 1; }
+        const a = arg();
+        out += (ind ? "<sup>" + matTexParaHtml(ind) + "</sup>" : "") + '√<span class="mt-raiz">' + matTexParaHtml(a) + "</span>";
+      } else if (cmd === "bar" || cmd === "overline") out += '<span class="mt-barra">' + matTexParaHtml(arg()) + "</span>";
+      else if (cmd === "hat" || cmd === "widehat") out += matTexParaHtml(arg()) + "\u0302";
+      else if (cmd === "vec") out += matTexParaHtml(arg()) + "\u20D7";
+      else if (cmd === "tilde" || cmd === "widetilde") out += matTexParaHtml(arg()) + "\u0303";
+      else if (cmd === "dot") out += matTexParaHtml(arg()) + "\u0307";
+      else if (cmd === "left" || cmd === "right" || cmd === "big" || cmd === "Big" || cmd === "bigg" || cmd === "Bigg" || cmd === "displaystyle" || cmd === "limits" || cmd === "nolimits") { /* só tamanho: some */ }
+      else if (cmd === "not") { const a = arg(); const x = matTexParaHtml(a); out += x === "∈" ? "∉" : x === "≡" ? "≢" : x === "=" ? "≠" : x + "\u0338"; }
+      else if (cmd === "begin" || cmd === "end") arg();
+      else if (cmd === " " || cmd === "," || cmd === ";" || cmd === ":" || cmd === ">") out += " ";
+      else if (cmd === "!") { /* espaço negativo */ }
+      else if (cmd === "\\") out += "<br>";
+      else if (cmd.length === 1 && /[&%$#_{}|]/.test(cmd)) out += cmd === "&" ? "&" : cmd;   /* "\&amp;" → "&" + "amp;" que segue */
+      else if (Object.prototype.hasOwnProperty.call(MAT_TEX_SIMB, cmd)) {
+        out += MAT_TEX_SIMB[cmd];
+        /* a negação gruda no que nega ("\sim p" → "~p"): em LaTeX o espaço depois do comando não conta */
+        if (/^(sim|neg|lnot)$/.test(cmd)) while (s[i] === " ") i++;
+      }
+      else out += cmd;
+      continue;
+    }
+    if (c === "^" || c === "_") {
+      i++;
+      const a = arg();
+      out += (c === "^" ? "<sup>" : "<sub>") + matTexParaHtml(a) + (c === "^" ? "</sup>" : "</sub>");
+      continue;
+    }
+    if (c === "{" || c === "}") { i++; continue; }
+    if (c === "&") { out += umChar(); continue; }
+    out += c;
+    i++;
+  }
+  return out.replace(/ {2,}/g, " ");
+}
+
+/* fórmula de uma linha só ("$$ … $$" sozinha na linha): bloco centralizado */
+function matTexBloco(s) {
+  const m = String(s).match(/^\$\$([\s\S]+?)\$\$$|^\\\[([\s\S]+?)\\\]$/);
+  return m ? '<div class="mt-bloco">' + matTexParaHtml((m[1] || m[2]).trim()) + "</div>" : "";
+}
+/* fórmulas dentro da frase: "$$…$$", "\(…\)" e "$…$" — este só quando tem cara de fórmula (não "R$ 100,00") */
+const MAT_TEX_INLINE = /\$\$([^$\n]+?)\$\$|\\\(([^\n]+?)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
+function matTexTemCara(x) {
+  return /[\\^_=]/.test(x) || /^[A-Za-z]{1,3}$/.test(x.trim()) || /^[A-Za-z0-9+\-*/().,\s]{1,15}$/.test(x) && /[A-Za-z]/.test(x) && !/\s\w{4,}\s/.test(" " + x + " ");
+}
+
 function matParaHtml(txt, prova, opc) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
@@ -566,7 +684,18 @@ function matParaHtml(txt, prova, opc) {
   (prova && prova.blocos ? prova.blocos : []).forEach((b, i) => {
     for (let k = b.ini; k <= b.fim; k++) porLinha[k] = (k === b.ini) ? { b, i } : { pula: true };
   });
-  const inline = (s) => s
+  /* (19.65.0) as fórmulas saem antes da formatação ("_" e "*" de LaTeX não podem virar itálico e negrito) e voltam no fim */
+  const inline = (s0) => {
+    const prot = [];
+    const s1 = String(s0).replace(MAT_TEX_INLINE, (m0, a, b, c) => {
+      const corpo = a || b || c;
+      if (c && !matTexTemCara(c)) return m0;
+      prot.push('<span class="mt">' + matTexParaHtml(corpo) + "</span>");
+      return "\u0002" + (prot.length - 1) + "\u0002";
+    });
+    return inlineFmt(s1).replace(/\u0002(\d+)\u0002/g, (m0, k) => prot[Number(k)]);
+  };
+  const inlineFmt = (s) => s
     .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
     /* O miolo aceita QUALQUER tamanho e aceita "=" solto — só não aceita
@@ -667,6 +796,9 @@ function matParaHtml(txt, prova, opc) {
       return;
     }
     if (/^-{3,}$/.test(s)) { fecharLista(); saida.push("<hr" + dl(kLinha) + ">"); return; }
+    /* (19.65.0) "$$ … $$" sozinha na linha: a fórmula em destaque, centralizada */
+    const blocoTex = matTexBloco(s);
+    if (blocoTex) { fecharLista(); saida.push(blocoTex.replace(/^<div/, "<div" + dl(kLinha))); return; }
     if (!s) { fecharLista(); return; }
     fecharLista();
     /* opc.classeDaLinha: uma classe para o parágrafo (a lei esmaece o dispositivo que consta como revogado) */

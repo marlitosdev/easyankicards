@@ -52,6 +52,8 @@ function riaPrompt(o) {
   /* sem ramo nenhum, "sugerir" é DIVIDIR o tópico; com ramos, é apontar o que falta */
   if (!o.ramo && o.sugerir) L.push(t((o.ramos || []).some((r) => r && String(r.nome || "").trim()) ? "ria_p_sugerir" : "ria_p_sugerir_sem"));
   L.push(t("ria_p_regras"));
+  /* (19.65.0) fórmulas com símbolos: o LaTeX ("$\wedge$") vira código cru quando a resposta é copiada da tela da IA */
+  L.push(t("ria_p_formulas"));
   /* citação completa: é o que faz cada "art. X" virar link no resumo */
   L.push(t("ria_p_citar"));
   if ((o.leis || []).length) {
