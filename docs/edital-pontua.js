@@ -110,6 +110,20 @@ function epPintar() {
     } else {
       /* (19.59.0) sem os números do edital, o peso de 1 a 5 da disciplina pode ser mudado aqui */
       const v = el("span", "ep-c-vale");
+      if (d.abs > 0 && !epLimpaNumeros(c)) {
+        /* (19.60.1) esta já tem o número do edital: ele fica (para tirá-lo, "Sim" e depois "Não") */
+        v.append(el("span", "ep-num-fica", epPesoTexto(d, "sim", false)));
+        lin.append(v);
+        const fz0 = el("span", "ep-c-fatia"); fz0.id = "epFatia_" + k; lin.append(fz0);
+        if (c.minimo === "sim") {
+          const m0 = el("span", "ep-c-min");
+          if (d.grupo) m0.append(el("span", "ep-no-bloco", t("ep_no_bloco", { g: d.grupo })));
+          else m0.append(epCampoMin("epMinD_" + k, d.min, (nm) => { d.min = nm; epResumo(); }));
+          lin.append(m0);
+        }
+        tb.append(lin);
+        return;
+      }
       const sel = document.createElement("select");
       sel.id = "epPeso15_" + k; sel.className = "ep-peso15";
       sel.setAttribute("aria-label", t("ep_col_peso15") + " · " + d.nome);
@@ -304,8 +318,15 @@ function epPintarFatias() {
 }
 
 /* o peso de uma disciplina, em palavras: "10 questões" · "peso 4 (1 a 5)" */
-function epPesoTexto(d, peso) {
-  if (peso === "sim" && d.abs > 0) return t(d.unidade === "p" ? "ep_vale_pontos" : "ep_vale_questoes", { n: d.abs });
+/* (19.60.1) "Não" na pergunta 1 só APAGA os números do edital quando a pessoa trocou de "Sim" para "Não" nesta janela.
+ * Com o edital já misturado (algumas disciplinas com "10q", outras de 1 a 5), "Não" é o estado de partida — e gravar
+ * qualquer outra coisa (um mínimo, a discursiva, a resposta da IA) trocava "10q" por "5" sem ninguém pedir. */
+function epLimpaNumeros(c) {
+  if (!c) return false;
+  return c.orig ? c.orig.peso === "sim" && c.peso === "nao" : !!c.limparNumeros;
+}
+function epPesoTexto(d, peso, limpar) {
+  if (d.abs > 0 && (peso === "sim" || !limpar)) return t(d.unidade === "p" ? "ep_vale_pontos" : "ep_vale_questoes", { n: d.abs });
   return t("ep_peso15_tx", { n: d.peso });
 }
 function epMinDe(d, foto) {
@@ -354,7 +375,7 @@ function epMudancas(c) {
   c.ds.forEach((d) => {
     const a = o.ds.find((x) => x.nome === d.nome);
     if (!a) return;
-    const pa = epPesoTexto(a, o.peso), pb = epPesoTexto(d, c.peso);
+    const pa = epPesoTexto(a, o.peso, false), pb = epPesoTexto(d, c.peso, epLimpaNumeros(c));
     if (pa !== pb) out.push({ tipo: "peso", txt: t("ep_mud_linha", { d: d.nome, a: pa, b: pb }) });
     const ma = epMinDe(a, o), mb = epMinDe(d, c);
     if (ma !== mb) out.push({ tipo: "min", txt: t("ep_mud_min", { d: d.nome, a: ma, b: mb }) });
@@ -485,6 +506,8 @@ function epNovoTexto(texto, c) {
     const m = b.linhas[0].match(/^(\s*@\s*.+?\s*::\s*)([^|]*?)(\s*\|.*)?$/);
     let novo = null;
     if (c.peso === "sim" && b.d.abs > 0) novo = String(b.d.abs) + (b.d.unidade === "p" ? "p" : "q");
+    /* (19.60.1) "Não" sem ter trocado de "Sim": o número que a disciplina tem (ou que a IA trouxe) fica */
+    else if (c.peso === "nao" && b.d.abs > 0 && !epLimpaNumeros(c)) novo = String(b.d.abs) + (b.d.unidade === "p" ? "p" : "q");
     else if (c.peso === "nao" && /^\s*\d+(?:[.,]\d+)?\s*[qp]\s*$/i.test(m ? m[2] : "")) novo = String(b.d.peso || 3);
     /* (19.59.0) o peso de 1 a 5 mudado na janela */
     else if (c.peso === "nao" && b.d.peso0 !== undefined && b.d.peso !== b.d.peso0) novo = String(b.d.peso);
@@ -734,7 +757,16 @@ function epLerIA(txt) {
     if (/%/.test(mtx) && num(mtx) > 0) min = { tipo: "pct", valor: num(mtx) };
     else if (num(mtx) > 0 && /acert|quest/i.test(mtx)) min = { tipo: "abs", valor: num(mtx) };
     else if (num(mtx) > 0) min = { tipo: "pct", valor: num(mtx) };
-    const g = (p[4] || "").replace(/^-+$/, "").replace(/[|&@#]/g, "").trim();
+    let g = (p[4] || "").replace(/^-+$/, "").replace(/[|&@#]/g, "").trim();
+    /* (19.60.1) "Conhecimentos Específicos (50%)": o "(50%)" é o mínimo do bloco, não parte do nome */
+    const mg = g.match(/^(.*?)\s*\(\s*(?:m[íi]n(?:imo)?\s*:?\s*)?(\d+(?:[.,]\d+)?)\s*(%|acertos?)?\s*\)\s*$/i);
+    if (mg && mg[1].trim()) {
+      g = mg[1].trim();
+      if (!min) min = mg[3] && /acert/i.test(mg[3]) ? { tipo: "abs", valor: num(mg[2]) } : { tipo: "pct", valor: num(mg[2]) };
+    }
+    const kg = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const jaExiste = c.grupos.find((x) => kg(x.nome) === kg(g));
+    if (jaExiste) g = jaExiste.nome;
     if (g && !/^(nenhum|n[aã]o|sem)$/i.test(g)) {
       d.grupo = g; d.min = null;
       if (!c.grupos.some((x) => x.nome === g)) c.grupos.push({ nome: g, min: null });
@@ -747,7 +779,7 @@ function epLerIA(txt) {
   /* questões e pontos misturados não somam: se veio algum em pontos, quem veio só em questões fica sem número */
   if (comPontos && comPontos < comVale) avisos.push(t("ep_ia_av_misto"));
   if (comVale && comVale === c.ds.length) c.peso = "sim";
-  else if (comVale) avisos.push(t("ep_ia_av_parcial", { n: comVale, t: c.ds.length }));
+  else if (comVale) avisos.push(t("ep_ia_av_parcial", { n: comVale, t: c.ds.length, l: c.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome).join(", ") }));
   if (c.grupos.some((g) => g.min) || c.ds.some((d) => d.min)) c.minimo = "sim";
   epPintar();
   if ($("epMsg")) $("epMsg").textContent = lidas ? t("ep_ia_lido", { n: lidas }) + (avisos.length ? " " + avisos.join(" ") : "") : t("ep_ia_nada");

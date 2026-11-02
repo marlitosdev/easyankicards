@@ -362,6 +362,34 @@ async function testes() {
     api.$("edColarTexto").value = "";
   }
 
+  /* ---- (19.60.1) N: "Não" na pergunta 1 não apaga números que já existem; "(50%)" no nome do bloco é o mínimo ---- */
+  {
+    const T = ["# N | prova: 2030-11-29 | horas: 10", "& Específicos | minimo: 50%", "@ Tributário :: 5", "+ a :: 5", "@ Administrativo :: 4", "+ b :: 4",
+      "& Português | minimo: 50%", "@ Português :: 10q", "+ c :: 5", "@ Lógica :: 5q", "+ d :: 3"].join("\n");
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    const c = api.epCtxAtual();
+    ok(c.peso === "nao" && /Português10 questões/.test(api.$("epTabela").textContent) && !/Português1 · raro/.test(api.$("epTabela").textContent), "N1 edital misturado: a disciplina com número mostra o número, não a lista 1 a 5: " + c.peso + " " + !!api.$("epPeso15_2") + " " + String(api.$("epTabela").textContent).slice(0, 160));
+    c.discursiva = "nao";
+    c.ds.find((d) => d.nome === "Tributário").peso = 4;
+    ok(api.epGravar() === true && /@ Português :: 10q/.test(api.$("editalTexto").value) && /@ Lógica :: 5q/.test(api.$("editalTexto").value) && /@ Tributário :: 4/.test(api.$("editalTexto").value), "N2 gravar com 'Não' de partida mantém os números: " + api.$("editalTexto").value.split("\n").filter((l) => /^@/.test(l)).join(" | "));
+    /* trocar de "Sim" para "Não" nesta janela é o pedido explícito de tirar os números */
+    const T2 = ["# N2 | prova: 2030-11-29 | horas: 10", "@ A :: 10q", "+ a :: 5", "@ B :: 5q", "+ b :: 3"].join("\n");
+    api.$("editalTexto").value = T2;
+    api.epAbrir();
+    api.epCtxAtual().peso = "nao";
+    ok(api.epGravar() === true && !/q/.test(api.$("editalTexto").value.split("\n").filter((l) => /^@/.test(l)).join("")), "N3 'Sim' → 'Não' tira os números (pedido explícito)");
+    /* a resposta da IA com "(50%)" no nome do bloco */
+    api.$("editalTexto").value = T;
+    api.epAbrir();
+    api.epLerIA(["Tributário | - | - | 50% | Específicos (50%)", "Administrativo | - | - | 50% | específicos (50%)", "Português | 10 | 20 | 50% | -", "Lógica | 5 | 5 | 40% | -"].join("\n"));
+    const c3 = api.epCtxAtual();
+    ok(c3.grupos.length === 1 && c3.grupos[0].nome === "Específicos" && c3.grupos[0].min.valor === 50, "N4 '(50%)' sai do nome do bloco e o nome existente é reaproveitado: " + JSON.stringify(c3.grupos));
+    ok(/sem número: Tributário, Administrativo/.test(api.$("epMsg").textContent), "N5 o aviso diz quais ficaram sem número");
+    ok(api.epGravar() === true && /@ Português :: 20p/.test(api.$("editalTexto").value) && /& Específicos \| minimo: 50%/.test(api.$("editalTexto").value), "N6 gravado: os números da IA ficam e o bloco mantém o nome");
+    try { api.$("dlgEdPontua").close(); } catch (e) {}
+  }
+
   /* ---- textos ---- */
   ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
