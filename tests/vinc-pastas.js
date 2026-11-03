@@ -86,6 +86,23 @@ async function testes() {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
   api.setLanguage("pt");
+
+  /* ---- (19.72.0) D: o "desligado" de um pedaço não apaga o vínculo maior feito à mão ---- */
+  {
+    api.citVinculosGravar([]);
+    const ch = "noções de direito administrativo›atos administrativos";
+    const tx = "Exceção: competência exclusiva, por imposição do art. 13 da Lei nº 9.784/1999. E a Lei nº 9.784/1999 sozinha.";
+    api.citVinculoSalvar({ trecho: "Lei nº 9.784/1999", nenhum: true, chave: ch });
+    api.citVinculoSalvar({ trecho: "art. 13 da Lei nº 9.784/1999", leiId: "L9784", artigos: [{ num: "13", numCru: "13" }] });
+    const out = api.citVinculosAplicar(tx, [], ch);
+    const longo = out.find((c) => c.permanente && /art\. 13 da Lei/.test(c.texto));
+    ok(!!longo && longo.leiId === "L9784", "D1 o vínculo maior (todo o app) aparece mesmo com o desligado do pedaço no tópico: " + JSON.stringify(out.map((c) => c.texto)));
+    ok(!out.some((c) => c.texto === "Lei nº 9.784/1999"), "D2 a 'Lei nº 9.784/1999' sozinha continua desligada (texto)");
+    /* desligado do trecho INTEIRO continua vencendo */
+    api.citVinculoSalvar({ trecho: "art. 13 da Lei nº 9.784/1999", nenhum: true, chave: ch });
+    ok(!api.citVinculosAplicar(tx, [], ch).some((c) => /art\. 13/.test(c.texto)), "D3 desligar o mesmo trecho no tópico continua tirando o link");
+    api.citVinculosGravar([]);
+  }
   return Object.assign(falhas, { quantas: n });
 }
 

@@ -4617,7 +4617,12 @@ function citVinculosAplicar(texto, cits, chave) {
     let m;
     while ((m = re.exec(s)) !== null) {
       const ini = m.index, fim = m.index + m[0].length;
-      saida = saida.filter((c) => !(c.ini < fim && ini < c.fim));
+      /* (19.72.0) O DESLIGADO NÃO APAGA UM VÍNCULO MAIOR FEITO À MÃO. Desligar "Lei nº 9.784/1999" num tópico e depois
+       * ligar "art. 13 da Lei nº 9.784/1999" em todo o app: o desligado (do tópico, aplicado por último) cobria um pedaço
+       * do vínculo novo e o tirava da tela — o vínculo ficava guardado e nunca virava link. O desligado continua tirando o
+       * que a leitura automática achou e o vínculo igual ou menor; o vínculo à mão que CONTÉM o trecho desligado fica. */
+      const contemDesligado = (c) => v.nenhum && c.permanente && c.ini <= ini && c.fim >= fim && (c.fim - c.ini) > (fim - ini);
+      saida = saida.filter((c) => !(c.ini < fim && ini < c.fim) || contemDesligado(c));
       /* DESLIGADO: o trecho fica como texto (o que a leitura automática achou ali sai) */
       if (v.nenhum) { if (m[0].length === 0) re.lastIndex++; continue; }
       const a0 = (v.artigos || [])[0] || {};
