@@ -304,7 +304,7 @@ function dsSugerirTemas(e, plano, dc, disc, n) {
     return (!alvo.length || alvo.indexOf(d) >= 0) && (!quer || d === quer);
   });
   const maxB = Math.max(1, ...itens.map((i) => i.bruto || 0));
-  return itens.map((i) => {
+  const lista = itens.map((i) => {
     const nm = dsNorm(i.nome);
     /* igual, ou um contém o outro quando o menor tem corpo (6+ letras): "Tema 30" não "contém" o tópico "a" */
     const treinado = ja.some((x) => x === nm || (Math.min(x.length, nm.length) >= 6 && (x.indexOf(nm) >= 0 || nm.indexOf(x) >= 0)));
@@ -318,7 +318,22 @@ function dsSugerirTemas(e, plano, dc, disc, n) {
     motivos.push(t(treinado ? "ds_sug_m_ja" : "ds_sug_m_novo"));
     if (!i.feito) motivos.push(t("ds_sug_m_estudar"));
     return { disc: i.disciplina, topico: i.nome, peso: i.peso, discPeso: i.disciplinaPeso, feito: !!i.feito, treinado, fase2: !!i.fase2, motivos, score: Math.round(score) };
-  }).sort((a, b) => b.score - a.score || String(a.topico).localeCompare(String(b.topico))).slice(0, n || 6);
+  }).sort((a, b) => b.score - a.score || String(a.topico).localeCompare(String(b.topico)));
+  if (quer) return lista.slice(0, n || 6);
+  /* (19.79.0) RODÍZIO ENTRE AS DISCIPLINAS. Só pelo peso, as 6 sugestões do ISS Caruaru eram todas de Sistema Tributário
+   * e Contabilidade, Constitucional e Administrativo — que também caem na discursiva — nunca apareciam. Agora vem o melhor
+   * tema de cada disciplina, depois o segundo de cada, e assim por diante. Primeiro a disciplina com menos temas já
+   * escritos ou guardados (a que você menos treinou); no empate, a do tema mais forte. */
+  const porD = {};
+  lista.forEach((x) => { (porD[x.disc] || (porD[x.disc] = [])).push(x); });
+  const jaD = {};
+  [].concat(dsRedacoes(e.id), dsPropostas(e.id)).forEach((x) => { if (x.disc) jaD[dsNorm(x.disc)] = (jaD[dsNorm(x.disc)] || 0) + 1; });
+  const ordem = Object.keys(porD).sort((a, b) => (jaD[dsNorm(a)] || 0) - (jaD[dsNorm(b)] || 0) || porD[b][0].score - porD[a][0].score);
+  const out = [];
+  for (let k = 0; out.length < (n || 6) && ordem.some((d) => porD[d][k]); k++) {
+    ordem.forEach((d) => { if (porD[d][k] && out.length < (n || 6)) out.push(porD[d][k]); });
+  }
+  return out;
 }
 
 /* ---------------- os pedidos à IA ---------------- */

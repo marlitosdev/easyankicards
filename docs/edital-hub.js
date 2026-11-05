@@ -413,7 +413,8 @@ function hubPintarAgenda() {
    * edital (o aviso some por 14 dias, ou até o ritmo cair mais), outra meta (com a conta antes de aplicar) e pedir
    * a opinião de uma IA, com o contexto todo. O que se decide fica no registro. */
   if (hubRitmoAvisar || minUsado) cx.append(hubRitmoCaixa(ritmo, minUsado, meta));
-  cx.append(hubModoControles(modosVistos, modoSugerido, diasProx));
+  /* (19.79.0) com o aviso de ritmo na tela, os botões de IA ficam só nele (eram os mesmos dois, repetidos logo abaixo) */
+  cx.append(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }));
   /* (19.47.0) A FAIXA DO EQUILÍBRIO — (19.51.0) com o que ela quer dizer, e mais enxuta: as 3 mais atrasadas e a mais
    * adiantada, nomes sem "Noções de", "vale X% · teve Y%", e o porquê num "?" que abre */
   equilibrios.forEach((q) => {
@@ -617,7 +618,7 @@ function hubModoDefinir(disc, modo) {
 /* a linha "Modo de estudo": o geral (com o que a data sugere) e, recolhido, o de cada disciplina */
 /* (19.49.0) cada modo diz o PRAZO em que o automático o escolhe; o automático diz quantos dias faltam */
 function hubModoRotulo(m) { return t("hub_modo_" + m) + " · " + t("hub_modo_faixa_" + m); }
-function hubModoControles(modosVistos, sugerido, dias) {
+function hubModoControles(modosVistos, sugerido, dias, opc) {
   const v = hubModosLer();
   const cx = document.createElement("div");
   cx.className = "hub-modo";
@@ -646,7 +647,7 @@ function hubModoControles(modosVistos, sugerido, dias) {
   bCol.type = "button"; bCol.className = "btn-min"; bCol.id = "btnHubModoColar";
   bCol.textContent = t("hub_ia_colar"); bCol.title = t("hub_ia_colar_tip");
   bCol.onclick = () => hubIaAbrir();
-  cx.append(bIa, bCol);
+  if (!(opc && opc.semIA)) cx.append(bIa, bCol);
   const discs = Object.keys(modosVistos || {});
   if (discs.length) {
     const det = document.createElement("details");
@@ -1674,7 +1675,20 @@ function hubControlesAgenda() {
   lh.textContent = usados.length > 1
     ? t("hub_cfg_horas_n", { h: totalH, n: usados.length })
     : t("hub_cfg_horas", { h: totalH });
-  lh.title = usados.length > 1
+  /* (19.79.0) COM O RITMO REAL OU UMA META PRÓPRIA EM USO, o topo diz o número que a agenda está usando — "54 h/semana"
+   * continuava ali depois de "planejar com 13h19/semana", e a agenda já era de 13h19 */
+  let usadoMin = 0, usadoMeta = false;
+  try {
+    const mt = hubMetaMin();
+    const rr = hubRitmoReal();
+    usadoMeta = mt > 0;
+    usadoMin = mt || (hubRitmoRealLigado() && rr.ref > 0 ? rr.ref : 0);
+  } catch (e) { usadoMin = 0; }
+  if (usadoMin) {
+    lh.textContent = t("hub_cfg_horas_usando", { r: horasTexto(usadoMin), q: t(usadoMeta ? "hub_cfg_q_meta" : "hub_cfg_q_ritmo"), h: totalH });
+    lh.classList.add("ed-agenda-horas-usando");
+    lh.title = t("hub_cfg_horas_usando_ajuda", { r: horasTexto(usadoMin), h: totalH });
+  } else lh.title = usados.length > 1
     ? t("hub_cfg_horas_n_ajuda", {
         lista: usados.map((e) => (e.nome || "?") + " "
           + ((lerEdital(e.texto || "").cfg || {}).horas || 0) + "h").join(" + ") })

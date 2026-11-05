@@ -204,6 +204,38 @@ async function testes() {
     api.edApagar(ed.id);
     api.diarioPor([]);
   }
+  /* ---- (19.79.0) R: rodízio de temas, o topo com o ritmo em uso, os botões de IA uma vez só ---- */
+  {
+    const TR = ["# Rodizio | prova: " + prova + " | horas: 30", "# discursiva | pontos: 40 | objetiva: 90 | disciplinas: A; B; C",
+      "@ A :: 5", "+ a1 :: 5", "+ a2 :: 5", "+ a3 :: 4", "@ B :: 3", "+ b1 :: 3", "+ b2 :: 2", "@ C :: 2", "+ c1 :: 2", "@ D :: 5", "+ d1 :: 5"].join("\n");
+    const er = api.edCriar("Rodizio", TR);
+    const pr = api.montarPlano(api.lerEdital(TR), { horas: 30, feitos: {} });
+    const dc = api.dsDiscursivaDe(er).dc;
+    const s1 = api.dsSugerirTemas(er, pr, dc, null, 6).map((x) => x.disc);
+    ok(s1.slice(0, 3).sort().join() === "A,B,C" && s1.indexOf("D") < 0 && s1.length === 6, "RZ1 as sugestões passam por todas as disciplinas da discursiva antes de repetir: " + s1.join());
+    api.dsPropostaAdicionar(er.id, { tema: "a1", disc: "A" });
+    const s2 = api.dsSugerirTemas(er, pr, dc, null, 6).map((x) => x.disc);
+    ok(s2[s2.length - 1] === "A" || s2.indexOf("A") > s2.indexOf("B"), "RZ2 a disciplina já treinada vai para depois: " + s2.join());
+    ok(api.dsSugerirTemas(er, pr, dc, "B", 6).every((x) => x.disc === "B"), "RZ3 com uma disciplina escolhida, só ela");
+    /* o topo e os botões */
+    api.hubMetaDefinir(600);
+    api.hubPintarAgenda();
+    /* procura na árvore DESENHADA AGORA (no ambiente de teste, um id de uma pintura anterior continua achável por $) */
+    const achar = (n, f, acc) => { if (!n) return acc; if (f(n)) acc.push(n); for (const c of (n.children || [])) achar(c, f, acc); return acc; };
+    const lh = achar(api.$("edAgendaTopo"), (n) => /ed-agenda-horas/.test(n.className || ""), [])[0];
+    ok(!!lh && /10h\/semana \(sua meta\) · edital: \d+h/.test(lh.textContent), "RZ4 com uma meta própria, o topo mostra a meta em uso e as horas do edital: " + (lh && lh.textContent));
+    /* a caixa da agenda desenhada por último (a pintura anterior pode continuar pendurada no ambiente de teste) */
+    const caixa = () => { const cs = achar(api.$("edAgendaTopo"), (n) => /ed-agenda-cx/.test(n.className || ""), []); return cs[cs.length - 1]; };
+    const cont = caixa();
+    const ids = (raiz) => achar(raiz, (n) => /^btnHub(Ritmo|Modo)(IA|Colar)$/.test(n.id || ""), []).map((n) => n.id).sort().join();
+    ok(!!cont && ids(cont) === "btnHubRitmoColar,btnHubRitmoIA", "RZ5 com o aviso de ritmo, os botões de IA aparecem uma vez só: " + (cont && ids(cont)));
+    api.hubMetaDefinir(0);
+    api.hubPintarAgenda();
+    const lh2 = achar(api.$("edAgendaTopo"), (n) => /ed-agenda-horas/.test(n.className || ""), [])[0];
+    const cont2 = caixa();
+    ok(!!cont2 && ids(cont2) === "btnHubModoColar,btnHubModoIA" && !!lh2 && !/sua meta/.test(lh2.textContent), "RZ6 sem aviso de ritmo, os botões ficam no modo de estudo e o topo volta às horas do edital: " + (cont2 && ids(cont2)));
+    api.edApagar(er.id);
+  }
   return Object.assign(falhas, { quantas: n });
 }
 
