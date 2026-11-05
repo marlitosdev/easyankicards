@@ -831,7 +831,22 @@ function hubRitmoCaixa(ritmo, minUsado, meta) {
   }
   bts.append(bt("btnHubRitmoIA", t("hub_ritmo_ia"), t("hub_ritmo_ia_tip"), () => hubRitmoCopiarIA()));
   bts.append(bt("btnHubRitmoColar", t("hub_ia_colar"), t("hub_ia_colar_tip"), () => hubIaAbrir()));
-  av.append(tx, bts);
+  av.append(tx);
+  /* (19.78.0) as semanas por trás dos números do aviso: o mapa compacto das 5 últimas (a atual e 4 fechadas) */
+  try {
+    if (typeof mpMini === "function" && typeof mpMapaDoDiario === "function") {
+      const metaM = minUsado || (hubRitmoAvisar && hubRitmoAvisar.plano) || 0;
+      const Mr = mpMapaDoDiario(5, null, metaM);
+      const det = document.createElement("details");
+      det.className = "hub-ritmo-mapa";
+      det.id = "hubRitmoMapa";
+      const sm = document.createElement("summary");
+      sm.textContent = t("hub_ritmo_mapa_tit");
+      det.append(sm, mpMini(Mr));
+      av.append(det);
+    }
+  } catch (err) {}
+  av.append(bts);
   return av;
 }
 /* (19.51.0) "outra meta…" NA PRÓPRIA CAIXA: os botões viram  [−] 10h [+] /semana → cabem 11 de 14 (83%) [aplicar] [cancelar].

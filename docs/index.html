@@ -3707,6 +3707,7 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ds-prox{font-weight:800;margin:4px 0}
 .ds-data{display:inline-block;font-size:12px;color:var(--sutil);margin-top:2px}
 .ds-data-perto{color:var(--atencao);font-weight:800}
+.ds-data-f2{display:block}
 .ds-card.ds-flash{outline:2px solid var(--info);outline-offset:2px;transition:outline-color .6s}
 .ds-est{border-left:4px solid var(--info);padding:6px 10px;margin:10px 0;background:rgba(56,189,248,.06);border-radius:6px}
 .ds-est-reta{border-left-color:var(--erro)}.ds-est-intensivo{border-left-color:var(--atencao)}.ds-est-passou{border-left-color:var(--borda)}
@@ -5420,6 +5421,39 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .di-mp-leitura{margin-top:8px;padding:6px 10px;border-left:3px solid var(--info);background:color-mix(in srgb,var(--info) 7%,transparent);border-radius:6px;font-size:12px}
 .di-mp-leitura ul{margin:4px 0 0 16px;padding:0}
 .di-mp-leitura li{margin:2px 0}
+/* (19.78.0) o mapa compacto (agenda, disciplina, discursivas) */
+.mp-mini{margin:6px 0}
+.mp-mini-grade{display:grid;grid-template-columns:38px repeat(7,minmax(16px,1fr)) 64px;gap:2px;align-items:center;max-width:460px}
+.mp-mini-cab{font-size:9px;font-weight:800;text-transform:uppercase;color:var(--sutil);text-align:center}
+.mp-mini-cab-folga{opacity:.55}
+.mp-mini-sem{font-size:9.5px;color:var(--sutil)}
+.mp-mini-cel{all:unset;box-sizing:border-box;cursor:pointer;height:18px;border-radius:4px;border:1px solid var(--borda);font-size:8.5px;font-weight:800;display:flex;align-items:center;justify-content:center;position:relative;color:var(--texto)}
+.mp-mini-cel:disabled{cursor:default}
+.mp-mini-cel.di-mp-bateu::after{font-size:8px;top:-1px;right:2px}
+.mp-mini-hoje{box-shadow:0 0 0 1px var(--acao);border-color:var(--acao)}
+.mp-mini-tot{display:flex;flex-direction:column;align-items:flex-end;font-size:9.5px;color:var(--sutil);line-height:1.1}
+.mp-mini-tot strong{color:var(--texto);font-size:10px}
+.mp-mini-sub{font-size:9px}
+.mp-mini-leg{display:flex;flex-wrap:wrap;gap:3px 8px;margin-top:4px;font-size:10px;color:var(--sutil)}
+.ds-mp-ok{background:color-mix(in srgb,var(--ok) 55%,var(--panel));color:var(--bg)}
+.ds-mp-apert{background:color-mix(in srgb,var(--atencao) 55%,var(--panel))}
+.ds-mp-ruim{background:color-mix(in srgb,var(--erro) 55%,var(--panel))}
+.hub-ritmo-mapa{margin:6px 0}
+.hub-ritmo-mapa>summary,.dsc-mapa>summary{cursor:pointer;font-weight:700;font-size:12.5px}
+.dsc-mapa{margin:8px 0;padding:6px 10px;border:1px solid var(--borda);border-radius:8px}
+.dsc-mapa>summary.dsc-mapa-alerta{color:var(--atencao)}
+/* o "all:unset" do botão compacto apagava a cor: as cores repetidas com a classe do mapa compacto (vencem pela especificidade) */
+.mp-mini-cel.di-mp-n0{background:var(--panel)}
+.mp-mini-cel.di-mp-n1{background:color-mix(in srgb,var(--ok) 18%,var(--panel))}
+.mp-mini-cel.di-mp-n2{background:color-mix(in srgb,var(--ok) 38%,var(--panel))}
+.mp-mini-cel.di-mp-n3{background:color-mix(in srgb,var(--ok) 65%,var(--panel));color:var(--bg)}
+.mp-mini-cel.di-mp-n4{background:var(--ok);color:var(--bg)}
+.mp-mini-cel.ds-mp-ok{background:color-mix(in srgb,var(--ok) 55%,var(--panel));color:var(--bg)}
+.mp-mini-cel.ds-mp-apert{background:color-mix(in srgb,var(--atencao) 55%,var(--panel))}
+.mp-mini-cel.ds-mp-ruim{background:color-mix(in srgb,var(--erro) 55%,var(--panel))}
+.mp-mini-cel.di-mp-folga{border-style:dashed;background-image:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--sutil) 18%,transparent) 4px 5px)}
+.mp-mini-cel.di-mp-falta{border-color:color-mix(in srgb,var(--erro) 55%,var(--borda))}
+.mp-mini-cel.di-mp-futuro{opacity:.4;border-style:dashed;background-image:none}
 @media (max-width:560px){.di-mp-grade{grid-template-columns:34px repeat(7,minmax(0,1fr)) 58px}.di-mp-cel{font-size:9px}.di-mp-tot-sub{font-size:8.5px}}
 .di-sem-extra .di-sem-min{color:var(--ok)}
 .di-saidas{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}

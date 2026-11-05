@@ -734,13 +734,32 @@ function dsPintarTreino(card, e) {
   tr.append(el("div", "ds-sub-tit", t("ds_treino_tit")));
   const sem8 = dsUltimasSemanas(8);
   const feitos = dsTreinos(e.id);
-  const tira = el("div", "ds-semanas");
-  sem8.forEach((s, k) => {
-    const b = el("span", "ds-semana" + (feitos[s] ? " ds-feita" : "") + (k === sem8.length - 1 ? " ds-atual" : ""), feitos[s] ? "✓" : "·");
-    b.title = t(feitos[s] ? "ds_semana_feita" : "ds_semana_vazia", { s });
-    tira.append(b);
-  });
-  tr.append(tira);
+  /* (19.78.0) o mesmo mapa do diário: cada redação no dia em que foi escrita, com a cor da nota contra o corte; a coluna
+   * da semana diz quantas redações (ou "treinou", quando só a semana foi marcada) */
+  if (typeof mpMini === "function" && typeof edMapaDeCalor === "function") {
+    const dc = dsDiscursivaDe(e).dc || {};
+    const minPct = dc.minimo && dc.minimo.tipo === "pct" ? dc.minimo.valor : null;
+    const porDia = {};
+    dsRedacoes(e.id).forEach((x) => { (porDia[x.d] || (porDia[x.d] = [])).push(x); });
+    const M = edMapaDeCalor(dsHoje(), typeof hubPref === "function" ? hubPref("dias", 5) : 5, [], { semanas: 8 });
+    tr.append(mpMini(M, {
+      celula: (d) => {
+        const rs = porDia[d.iso];
+        if (!rs) return { cls: "di-mp-n0", txt: "", tip: d.cod + " " + d.iso.split("-").reverse().join("/"), semFalta: true };
+        const ps = rs.map(dsRedacaoPct).filter((p) => p != null);
+        const p = ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null;
+        const cls = p == null || minPct == null ? "ds-mp-ok" : p < minPct ? "ds-mp-ruim" : p < minPct + 10 ? "ds-mp-apert" : "ds-mp-ok";
+        return { cls, txt: p == null ? "✍" : p + "%", semFalta: true,
+          tip: rs.map((x) => x.tema + " · " + x.nota + "/" + x.max).join("\n") };
+      },
+      total: (s) => {
+        const n = s.dias.reduce((a, d) => a + (porDia[d.iso] ? porDia[d.iso].length : 0), 0);
+        return { txt: n ? t("ds_mp_n", { n }) : feitos[s.ini] ? t("ds_mp_treinou") : "—", sub: "" };
+      },
+      onDia: (iso) => { if (porDia[iso]) { const det = document.getElementById("dsRed_" + e.id); if (det) { det.open = true; try { det.scrollIntoView({ block: "nearest" }); } catch (err) {} } } },
+      legenda: t(minPct == null ? "ds_mp_leg_sem" : "ds_mp_leg", { m: minPct }),
+    }));
+  }
   const n4 = sem8.slice(-4).filter((s) => feitos[s]).length;
   tr.append(el("p", "nota", t(n4 ? "ds_treino_n" : "ds_treino_zero", { n: n4 })));
   const lab = el("label", "ds-marcar");

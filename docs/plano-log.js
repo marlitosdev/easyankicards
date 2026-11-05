@@ -365,6 +365,33 @@ function plRelatorioDiagnostico(plano, r, editalId) {
   } catch (e) { L.push("sem registro suficiente no diario"); }
   L.push("");
 
+  /* (19.78.0) o padrão semanal (o mapa de calor em texto): semana a semana, com a meta da época, os dias com estudo e as
+   * disciplinas; os totais por dia da semana e a leitura. É o que mostra se o problema é tempo, constância ou foco. */
+  try {
+    const diarioT = (typeof edDiario !== "undefined" && edDiario) || [];
+    if (diarioT.length && typeof edMapaDeCalor === "function") {
+      const diasE = typeof hubPref === "function" ? hubPref("dias", 5) : 5;
+      const Mt = typeof mpMapaDoDiario === "function" ? mpMapaDoDiario(8, null, plano.porSemana, diasE)
+        : edMapaDeCalor(plHojeISO(), diasE, diarioT, { metaMin: plano.porSemana, semanas: 8 });
+      L.push("== PADRAO SEMANAL (ultimas 8 semanas, da mais recente) ==");
+      L.push("semana (segunda) | estudado | meta da epoca | % | dias com estudo | disciplinas (min)");
+      Mt.semanas.forEach((s) => {
+        const pd = {};
+        s.dias.forEach((d) => Object.keys(d.porDisc || {}).forEach((k) => { pd[k] = (pd[k] || 0) + d.porDisc[k]; }));
+        const dd = Object.keys(pd).sort((a, b) => pd[b] - pd[a]).map((k) => k + " " + pd[k]).join(", ");
+        L.push([s.ini, s.totalMin + " min", s.metaMin ? s.metaMin + " min" + (s.metaAprox ? " (aprox.)" : "") : "-", s.pct == null ? "-" : s.pct + "%",
+          s.dias.filter((d) => d.feitoMin > 0).length, dd || "-"].join(" | "));
+      });
+      const Lt = edMapaLeitura(Mt);
+      L.push("por dia da semana (soma): " + Object.keys(Lt.porDow).map((k) => k + "=" + Lt.porDow[k] + "min").join(" | "));
+      L.push("leitura: media " + Lt.media + " min/semana nas " + Lt.semanasN + " ultimas fechadas | " + Lt.diasMedia + " dias com estudo/semana"
+        + (Lt.tendencia ? " | tendencia " + Lt.tendencia : "") + (Lt.forte ? " | dia mais forte " + Lt.forte.cod + ", mais fraco " + Lt.fraco.cod : "")
+        + (Lt.zerado ? " | " + Lt.zerado.cod + " sem estudo em " + Lt.zerado.n + " de " + Lt.zerado.t + " semanas" : "")
+        + (Lt.meta ? " | meta batida em " + Lt.meta.n + " de " + Lt.meta.t + " semanas" : ""));
+      L.push("");
+    }
+  } catch (e) {}
+
   L.push("== DEIXADO DE LADO ==");
   const semSemana = pan.filter((d) => d.intocados && !d.itens.some((i) => !i.feito && i.semana === 1)).map((d) => d.nome);
   L.push("disciplinas com topicos pendentes e NADA na agenda desta semana: " + (semSemana.join(", ") || "nenhuma"));

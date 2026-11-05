@@ -176,6 +176,34 @@ async function testes() {
     ok(/Discursiva em data própria/.test(api.hubRitmoPromptIA(ctxF)) && /Até a objetiva, o plano é só o da objetiva/.test(api.hubRitmoPromptIA(ctxF)), "F12 a opinião da IA sobre o ritmo sabe da data própria");
     api.edApagar(ef.id);
   }
+  /* ---- (19.78.0) MP: o mapa compacto na agenda, na disciplina, nas discursivas e no Raio-X ---- */
+  {
+    const dia = (k) => { const d = new Date(); d.setDate(d.getDate() - k); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    const diario = [
+      { d: dia(1), m: 90, a: "feito", disc: "Tributário", n: "a" }, { d: dia(8), m: 30, a: "feito", disc: "Tributário", n: "b" },
+      { d: dia(20), m: 240, a: "feito", disc: "Administrativo", n: "c" }, { d: dia(2), m: 50, a: "pendente", disc: "Tributário", n: "x" },
+    ];
+    api.diarioPor(diario);
+    const M5 = api.mpMapaDoDiario(5, null, 600, 5);
+    const box = api.mpMini(M5);
+    const cels = box.querySelectorAll(".mp-mini-cel"), tots = box.querySelectorAll(".mp-mini-tot");
+    ok(cels.length === 35 && tots.length === 5 && /%/.test(tots[1].textContent), "MP1 o mapa compacto: 5 semanas × 7 dias, total com % da meta");
+    const Mt = api.mpMapaDoDiario(8, (x) => x.disc === "Tributário");
+    ok(Mt.semanas.reduce((a, s) => a + s.totalMin, 0) === 120 && Mt.semanas.every((s) => s.pct === null), "MP2 filtrado por disciplina: só ela, sem meta (pendente não conta)");
+    const rs = api.dscMapaResumo("Tributário", diario);
+    ok(rs.ultimo === dia(1) && rs.dias === 1 && rs.min28 === 120 && api.dscMapaResumo("Português", diario).ultimo === null, "MP3 o último estudo da disciplina e as horas em 4 semanas: " + JSON.stringify(rs));
+    /* discursivas: a redação aparece no dia, com a cor da nota contra o corte */
+    const ed = api.edCriar("MP disc", T);
+    api.dsRedacaoAdicionar(ed.id, { d: dia(0), tema: "x", nota: 18, max: 40 });
+    api.dsRender();
+    const card = api.$("dsCard_" + ed.id);
+    const cel = [...card.querySelectorAll(".mp-mini-cel")].find((c) => c.textContent === "45%");
+    ok(!!cel && /ds-mp-ruim/.test(cel.className) && /1 redação/.test(card.textContent), "MP4 nas discursivas, a redação de 45% fica vermelha (corte 50%) e a semana conta 1 redação");
+    const rel = api.plRelatorio(api.montarPlano(api.lerEdital(T), { horas: 10, feitos: {} }), api.lerEdital(T), [], [], api.lerEdital(T).cfg);
+    ok(/== PADRAO SEMANAL/.test(rel) && /Tributário 90/.test(rel) && /por dia da semana \(soma\)/.test(rel) && /leitura: media/.test(rel), "MP5 o Raio-X leva o padrão semanal");
+    api.edApagar(ed.id);
+    api.diarioPor([]);
+  }
   return Object.assign(falhas, { quantas: n });
 }
 

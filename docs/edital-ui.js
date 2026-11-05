@@ -1991,6 +1991,80 @@ function diarioMapaFiltrado() {
   return !!(diarioBusca.trim() || diarioDisc || diarioCc || diarioTipo);
 }
 
+/* =====================================================================
+ * (19.78.0) O MAPA COMPACTO — o mesmo mapa do diário, em miniatura, para outras telas (agenda, disciplina, discursivas).
+ * M = edMapaDeCalor(...). opc:
+ *   celula(d) → { cls, txt, tip } para trocar o que a célula mostra (padrão: a cor pelas horas, sem texto);
+ *   total(s)  → { txt, sub, pct, tip } da coluna da semana (padrão: horas e, com meta, "· 42%" com barra);
+ *   onDia(iso) → o que tocar num dia faz (padrão: abrir o diário naquele dia);
+ *   legenda   → texto da legenda (padrão: as faixas de horas).
+ * ===================================================================== */
+function mpMini(M, opc) {
+  const o = opc || {};
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("div", "mp-mini");
+  const grade = el("div", "mp-mini-grade");
+  grade.append(el("span", ""));
+  M.semanas[0].dias.forEach((d) => grade.append(el("span", "mp-mini-cab" + (d.estudo ? "" : " mp-mini-cab-folga"), d.cod)));
+  grade.append(el("span", ""));
+  const onDia = o.onDia || ((iso) => { if (typeof diarioIrParaDia === "function") diarioIrParaDia(iso); });
+  M.semanas.forEach((s) => {
+    const lab = el("span", "mp-mini-sem", s.ini.slice(8) + "/" + s.ini.slice(5, 7));
+    lab.title = t("ed_mp_sem_rot", { a: s.ini.split("-").reverse().join("/"), b: s.fim.split("-").reverse().join("/") });
+    grade.append(lab);
+    s.dias.forEach((d) => {
+      const c = el("button", "mp-mini-cel");
+      c.type = "button";
+      const quando = d.cod + " " + d.iso.slice(8) + "/" + d.iso.slice(5, 7);
+      const pad = { cls: "di-mp-n" + d.nivel + (d.bateu ? " di-mp-bateu" : ""), txt: "",
+        tip: t("ed_mp_cel2", { q: quando, f: d.feitoMin ? horasTexto(d.feitoMin) : t("ed_sem_nada") }) };
+      const v = o.celula ? Object.assign({}, pad, o.celula(d) || {}) : pad;
+      c.className += " " + v.cls + (d.estudo ? "" : " di-mp-folga") + (d.futuro ? " di-mp-futuro" : "") + (d.falta && !v.semFalta && !o.semFalta ? " di-mp-falta" : "") + (d.hoje ? " mp-mini-hoje" : "");
+      c.textContent = d.futuro ? "" : v.txt || "";
+      c.title = d.futuro ? quando : v.tip;
+      if (d.futuro) c.disabled = true;
+      else c.onclick = () => onDia(d.iso);
+      grade.append(c);
+    });
+    const tv = o.total ? o.total(s) : { txt: s.totalMin ? horasTexto(s.totalMin) : "—", pct: s.pct, sub: s.pct !== null ? s.pct + "%" : "",
+      tip: s.pct !== null ? t(s.metaAprox ? "ed_mp_sem_tip_aprox" : "ed_mp_sem_tip", { f: horasTexto(s.totalMin), m: horasTexto(s.metaMin), p: s.pct }) : "" };
+    const tot = el("span", "mp-mini-tot");
+    tot.append(el("strong", "", tv.txt || ""));
+    if (tv.sub) tot.append(el("span", "mp-mini-sub", tv.sub));
+    if (tv.pct != null) {
+      const br = el("span", "di-mp-tot-barra");
+      const fl = el("span", "di-mp-tot-fill " + (tv.pct >= 100 ? "ok" : tv.pct >= 50 ? "meio" : "baixo"));
+      fl.style.width = Math.min(100, tv.pct) + "%";
+      br.append(fl); tot.append(br);
+    }
+    if (tv.tip) tot.title = tv.tip;
+    grade.append(tot);
+  });
+  box.append(grade);
+  const leg = el("div", "mp-mini-leg");
+  if (o.legenda) leg.append(el("span", "", o.legenda));
+  else {
+    [0, 1, 2, 3, 4].forEach((n) => { const w = el("span", "di-mp-leg-it"); w.append(el("span", "di-mp-sw di-mp-n" + n), el("span", "", t("ed_mp_leg_h" + n))); leg.append(w); });
+  }
+  box.append(leg);
+  return box;
+}
+/* o mapa do diário (todo, ou só o que passa no filtro), com a meta da época por semana quando não há filtro */
+function mpMapaDoDiario(n, filtro, metaMin, diasDeEstudo) {
+  const hoje = typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10);
+  const diario = ((typeof edDiario !== "undefined" && edDiario) || []).filter((x) => !filtro || filtro(x));
+  const dias = diasDeEstudo || (typeof hubPref === "function" ? hubPref("dias", 5) : 5);
+  let metas = {};
+  if (!filtro && metaMin) {
+    try {
+      const M0 = edMapaDeCalor(hoje, dias, [], { semanas: n });
+      const ids = typeof hubEditaisNaVista === "function" ? hubEditaisNaVista().map((e) => e.id) : null;
+      metas = edMetasDasSemanas(typeof plSnapsLer === "function" ? plSnapsLer() : [], ids, M0.semanas.slice(1).map((x) => x.ini));
+    } catch (e) { metas = {}; }
+  }
+  return edMapaDeCalor(hoje, dias, diario, { metaMin: filtro ? 0 : metaMin || 0, semanas: n, relativa: !!filtro || !metaMin, metasSemana: metas });
+}
+
 /* (19.77.0) o que o mapa mostra (tempo, disciplinas ou questões) e o dia aberto no painel embaixo da grade */
 let diarioMapaVista = "tempo";
 let diarioMapaDia = null;
@@ -4093,6 +4167,7 @@ function edPintarModalDisciplina(nome) {
 
   /* ---- 📚 materiais: o que existe, ver na estante e criar o que falta ---- */
   dscPintarMateriais(d, mats);
+  try { dscPintarMapa(d.nome); } catch (e) {}
 
   /* ---- uma lista de tópicos, com filtros ---- */
   const filtros = $("dscFiltros");
@@ -4124,6 +4199,36 @@ function epMinTextoSeg(m) {
   if (!m) return "";
   if (typeof epMinTexto === "function") return epMinTexto(m);
   return m.tipo === "pct" ? m.valor + "%" : m.valor;
+}
+
+/* (19.78.0) QUANDO VOCÊ ESTUDOU ESTA DISCIPLINA: o mapa compacto das últimas 8 semanas, só com ela, e o último estudo.
+ * "Onde foi o seu tempo (14 dias)" dizia 0%; aqui dá para ver desde quando e em que dias. */
+function dscMapaResumo(nome, diario) {
+  const hoje = typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10);
+  const meus = (diario || []).filter((x) => x && x.disc === nome && x.d && x.d !== "?" && x.a !== "pendente" && Number(x.m) > 0);
+  const ult = meus.reduce((a, x) => (!a || x.d > a ? x.d : a), null);
+  const dias = ult ? Math.round((new Date(hoje + "T00:00:00") - new Date(ult + "T00:00:00")) / 86400000) : null;
+  const desde = (n) => { const d = new Date(hoje + "T00:00:00"); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const soma = (n) => meus.filter((x) => x.d > desde(n)).reduce((a, x) => a + (Number(x.m) || 0), 0);
+  return { ultimo: ult, dias, min28: soma(28), min56: soma(56), total: meus.reduce((a, x) => a + (Number(x.m) || 0), 0) };
+}
+function dscPintarMapa(nome) {
+  const ref = $("dscPontos");
+  if (!ref || !ref.parentNode) return;
+  let cx = $("dscMapa");
+  if (!cx) { cx = document.createElement("details"); cx.id = "dscMapa"; cx.className = "dsc-mapa"; ref.parentNode.insertBefore(cx, ref); }
+  cx.innerHTML = "";
+  const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+  const rs = dscMapaResumo(nome, diario);
+  const sm = document.createElement("summary");
+  sm.textContent = t("dsc_mapa_tit") + " · " + (rs.ultimo
+    ? t("dsc_mapa_ult", { d: rs.ultimo.split("-").reverse().join("/"), n: rs.dias, h4: horasTexto(rs.min28), h8: horasTexto(rs.min56) })
+    : t("dsc_mapa_nunca"));
+  if (rs.dias === null || rs.dias >= 14) sm.className = "dsc-mapa-alerta";
+  cx.append(sm);
+  const M = mpMapaDoDiario(8, (x) => x.disc === nome);
+  /* só esta disciplina: um dia sem ela não é "dia sem estudo" — sem a borda vermelha */
+  cx.append(mpMini(M, { legenda: t("dsc_mapa_leg"), semFalta: true }));
 }
 
 function dscPintarMateriais(d, mats) {
