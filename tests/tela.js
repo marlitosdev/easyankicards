@@ -2584,20 +2584,24 @@ async function testes() {
             const celOmega = celM.find((c) => c.title && /50min/.test(c.title));
             ok(!!celOmega, "DM6 uma célula de outra semana mostra os 50min de 8 dias atrás");
             cHoje.onclick();
-            ok(itensW().length === 1 && itensW()[0].children[0].children[0].textContent === "Alfa", "DM7 clicar num dia do mapa abre o diário naquele dia");
+            const pnD = api.$("diarioMapaDia");
+            ok(!!pnD && /Direito A/.test(pnD.textContent) && /Alfa/.test(pnD.textContent), "DM7a tocar num dia abre o painel do dia: o que foi estudado");
+            api.$("btnMapaDiaVer").onclick();
+            ok(itensW().length === 1 && itensW()[0].children[0].children[0].textContent === "Alfa", "DM7 'ver os registros' abre o diário naquele dia");
             ok(api.$("diarioMapa").hidden === false, "DM7b o mapa continua aberto");
             /* só um assunto: escala relativa, sem % */
             api.$("btnDiarioTopo").onclick();
             api.$("diarioDisc").value = "Direito B"; api.$("diarioDisc").onchange();
             const legF = procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0];
             const totF = procurar(api.$("diarioMapa"), (e) => /di-mp-tot/.test(e.className || ""), []);
-            ok(/melhor dia|best day/.test(legF.children[5].textContent) && totF.every((e) => !/%/.test(e.textContent)), "DM8 com um assunto filtrado a escala é a do melhor dia e os totais não mostram % da meta");
+            const notaF = procurar(api.$("diarioMapa"), (e) => /di-mp-nota/.test(e.className || ""), [])[0];
+            ok(/Filtrado|Filtered/.test(notaF.textContent) && !!legF && totF.every((e) => !/%/.test(e.textContent)), "DM8 com um assunto filtrado o mapa diz que é filtrado e os totais não mostram % da meta");
             const celF = procurar(api.$("diarioMapa"), (e) => /(^|\s)di-mp-cel(\s|$)/.test(e.className || ""), []);
             ok(!celF.some((c) => c.textContent === "30m") && celF.some((c) => c.textContent === "50m"), "DM8b o mapa só conta o assunto filtrado (Direito B: 50min, sem os 30min de Direito A)");
             /* qualquer filtro de assunto (ação, busca) também muda a régua */
             api.$("btnDiarioLimpar").onclick();
             api.$("diarioTipo").value = "feito"; api.$("diarioTipo").onchange();
-            ok(/melhor dia|best day/.test(procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0].children[5].textContent), "DM8c filtrar por ação também põe o mapa na escala do melhor dia");
+            ok(/Filtrado|Filtered/.test(procurar(api.$("diarioMapa"), (e) => /di-mp-nota/.test(e.className || ""), [])[0].textContent), "DM8c filtrar por ação também tira a meta do mapa");
             api.$("btnDiarioLimpar").onclick();
             ok(/meta do dia|day goal/.test(procurar(api.$("diarioMapa"), (e) => /di-mp-leg/.test(e.className || ""), [])[0].children[5].textContent) && celM.filter((c) => /di-mp-folga/.test(c.className)).length === 16, "DM8d sem filtro a régua volta a ser a meta, e os sábados e domingos (16 células) ficam marcados como folga");
             /* semanas */

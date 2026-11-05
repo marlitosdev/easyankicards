@@ -5373,6 +5373,54 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .di-mp-n4{background:var(--ok);color:var(--bg)}
 .di-mp-leg{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;font-size:10px;color:var(--sutil)}
 .di-mp-sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--borda)}
+/* (19.77.0) o mapa legível: cor pelas horas, ✓ da meta, estados distintos, coluna da semana com barra, totais por dia,
+ * vistas (tempo / disciplinas / questões), painel do dia e a leitura em frases */
+.di-mp-grade{grid-template-columns:44px repeat(7,minmax(0,1fr)) 86px;max-height:46vh}
+.di-mp-cel{position:relative;min-height:30px;flex-direction:column;gap:2px;font-size:10.5px}
+.di-mp-cel:disabled{cursor:default}
+.di-mp-falta{border-color:color-mix(in srgb,var(--erro) 55%,var(--borda));color:var(--erro)}
+.di-mp-folga{border-style:dashed;opacity:1;background-image:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--sutil) 18%,transparent) 4px 5px)}
+.di-mp-futuro{opacity:.4;border-style:dashed;background-image:none}
+.di-mp-hoje::before{content:attr(data-rot);position:absolute;top:-1px;left:3px;font-size:7.5px;font-weight:800;color:var(--acao);text-transform:uppercase}
+.di-mp-bateu::after{content:"✓";position:absolute;top:0;right:3px;font-size:9px;font-weight:900;color:var(--bg)}
+.di-mp-n0.di-mp-bateu::after,.di-mp-n1.di-mp-bateu::after,.di-mp-n2.di-mp-bateu::after{color:var(--ok)}
+.di-mp-sel{outline:2px solid var(--info);outline-offset:1px}
+.di-mp-n1{background:color-mix(in srgb,var(--ok) 18%,var(--panel))}
+.di-mp-n2{background:color-mix(in srgb,var(--ok) 38%,var(--panel))}
+.di-mp-n3{background:color-mix(in srgb,var(--ok) 65%,var(--panel));color:var(--bg)}
+.di-mp-n4{background:var(--ok);color:var(--bg)}
+.di-mp-q0{background:var(--panel)}
+.di-mp-q1{background:color-mix(in srgb,var(--erro) 45%,var(--panel))}
+.di-mp-q2{background:color-mix(in srgb,var(--atencao) 45%,var(--panel))}
+.di-mp-q3{background:color-mix(in srgb,var(--ok) 45%,var(--panel))}
+.di-mp-q4{background:var(--ok);color:var(--bg)}
+.di-mp-faixa{display:flex;width:86%;height:5px;border-radius:3px;overflow:hidden;gap:1px}
+.di-mp-pz{display:block;height:100%;min-width:2px}
+.di-mp-vistas{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 6px}
+.di-mp-tot{display:flex;flex-direction:column;align-items:flex-end;gap:1px;line-height:1.15}
+.di-mp-tot strong{font-size:11px;color:var(--texto)}
+.di-mp-tot-sub{font-size:9.5px}
+.di-mp-tot-barra{display:block;width:100%;height:3px;border-radius:2px;background:var(--borda);overflow:hidden}
+.di-mp-tot-fill{display:block;height:100%}
+.di-mp-tot-fill.ok{background:var(--ok)}.di-mp-tot-fill.meio{background:var(--atencao)}.di-mp-tot-fill.baixo{background:var(--erro)}
+.di-mp-dow-rot{font-weight:800;font-size:10px;color:var(--sutil)}
+.di-mp-dow{font-size:10px;text-align:center;color:var(--sutil);font-weight:700;border-top:1px solid var(--borda);padding-top:3px}
+.di-mp-dow-forte{color:var(--ok)}.di-mp-dow-fraco{color:var(--atencao)}
+.di-mp-dia{margin-top:8px;padding:8px 10px;border:1px solid var(--info);border-radius:8px;background:var(--panel)}
+.di-mp-dia-topo{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.di-mp-dia-lin{display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0}
+.di-mp-dia-n{flex:1;min-width:0}
+.di-mp-dia-m{font-variant-numeric:tabular-nums;font-weight:700}
+.di-mp-dia .nota{margin:4px 0;font-size:12px}
+.di-mp-leg{gap:4px 10px}
+.di-mp-leg-it{display:inline-flex;align-items:center;gap:4px;font-size:10.5px}
+.di-mp-sw.di-mp-falta{border-color:var(--erro)}
+.di-mp-sw.di-mp-bateu{position:relative}
+.di-mp-nota{font-size:10.5px;color:var(--sutil);margin:4px 0 0}
+.di-mp-leitura{margin-top:8px;padding:6px 10px;border-left:3px solid var(--info);background:color-mix(in srgb,var(--info) 7%,transparent);border-radius:6px;font-size:12px}
+.di-mp-leitura ul{margin:4px 0 0 16px;padding:0}
+.di-mp-leitura li{margin:2px 0}
+@media (max-width:560px){.di-mp-grade{grid-template-columns:34px repeat(7,minmax(0,1fr)) 58px}.di-mp-cel{font-size:9px}.di-mp-tot-sub{font-size:8.5px}}
 .di-sem-extra .di-sem-min{color:var(--ok)}
 .di-saidas{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
 .di-pd{margin:6px 0 0;border:1px solid var(--borda);border-radius:8px;overflow:hidden}

@@ -2607,16 +2607,30 @@ function edNivelDeCalor(min, ref, relativa) {
   if (relativa) return r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.75 ? 3 : 4;
   return r < 0.5 ? 1 : r < 1 ? 2 : r < 1.25 ? 3 : 4;
 }
+/* (19.77.0) A COR PELAS HORAS. A cor media "quanto da meta do dia" — e com uma meta de 54h/semana (7h41 por dia) que
+ * ninguém seguia, 49 de 53 dias ficavam nos dois tons mais escuros e os dois mais claros nunca apareciam: o mapa dizia
+ * "fracasso" todo dia. Agora a cor é das horas (nada · <1h · 1–2h · 2–4h · 4h+), que não mudam de sentido quando a
+ * meta muda; bater a meta vira um ✓ à parte, com a meta DAQUELA semana. */
+function edNivelHoras(min) {
+  if (!min || min <= 0) return 0;
+  return min < 60 ? 1 : min < 120 ? 2 : min < 240 ? 3 : 4;
+}
+/* opc.metasSemana = { "AAAA-MM-DD" (segunda): minutos } — a meta que valia em cada semana passada (das fotos do plano).
+ * Sem ela, a semana passada usa a meta de hoje e fica marcada "aproximada". */
 function edMapaDeCalor(hoje, diasDeEstudo, diario, opc) {
   const o = opc || {};
   const n = Math.max(1, Math.min(52, Number(o.semanas) || 8));
   const estudo = edDiasDeEstudo(diasDeEstudo);
-  const porDia = {};
+  const porDia = {}, porDiaDisc = {}, porDiaQ = {};
   (diario || []).forEach((x) => {
     if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
-    porDia[x.d] = (porDia[x.d] || 0) + (Number(x.m) || 0);
+    const m = Number(x.m) || 0;
+    porDia[x.d] = (porDia[x.d] || 0) + m;
+    if (m && x.disc) { const pd = porDiaDisc[x.d] || (porDiaDisc[x.d] = {}); pd[x.disc] = (pd[x.disc] || 0) + m; }
+    if (x.q && x.q.feitas > 0) { const q = porDiaQ[x.d] || (porDiaQ[x.d] = { feitas: 0, certas: 0 }); q.feitas += Number(x.q.feitas) || 0; q.certas += Number(x.q.certas) || 0; }
   });
   const metaMin = Math.max(0, Number(o.metaMin) || 0);
+  const metas = o.metasSemana || {};
   const metaDia = estudo.length ? metaMin / estudo.length : 0;
   const relativa = !!o.relativa || !metaDia;
   const ini0 = new Date(edSemanaCalendario(hoje).ini + "T00:00:00");
@@ -2629,19 +2643,84 @@ function edMapaDeCalor(hoje, diasDeEstudo, diario, opc) {
     for (let j = 0; j < 7; j++) {
       const d = new Date(ini); d.setDate(ini.getDate() + j);
       const dt = iso(d), cod = DIAS_SEMANA[d.getDay()];
-      const feito = porDia[dt] || 0;
+      const futuro = dt > hoje;
+      const feito = futuro ? 0 : porDia[dt] || 0;
       if (feito > maxDia) maxDia = feito;
-      dias.push({ cod, iso: dt, estudo: estudo.indexOf(cod) >= 0, feitoMin: feito, nivel: 0, hoje: dt === hoje, futuro: dt > hoje });
+      dias.push({ cod, iso: dt, estudo: estudo.indexOf(cod) >= 0, feitoMin: feito, nivel: 0, nivelMeta: 0, hoje: dt === hoje, futuro,
+        porDisc: futuro ? {} : porDiaDisc[dt] || {}, q: futuro ? null : porDiaQ[dt] || null, bateu: false, falta: false });
     }
     const fim = new Date(ini); fim.setDate(ini.getDate() + 6);
-    semanas.push({ ini: iso(ini), fim: iso(fim), dias, totalMin: dias.reduce((a, d) => a + d.feitoMin, 0), pct: null });
+    semanas.push({ ini: iso(ini), fim: iso(fim), dias, totalMin: dias.reduce((a, d) => a + d.feitoMin, 0), pct: null, metaMin: null, metaAprox: false });
   }
   const ref = relativa ? maxDia : metaDia;
-  semanas.forEach((s) => {
-    s.dias.forEach((d) => { d.nivel = d.futuro ? 0 : edNivelDeCalor(d.feitoMin, ref, relativa); });
-    s.pct = relativa ? null : Math.round((s.totalMin / metaMin) * 100);
+  semanas.forEach((s, k) => {
+    const daEpoca = metas[s.ini];
+    s.metaMin = o.relativa ? null : (daEpoca != null ? daEpoca : metaMin) || null;
+    s.metaAprox = !!(s.metaMin && k > 0 && daEpoca == null);
+    const mD = s.metaMin && estudo.length ? s.metaMin / estudo.length : 0;
+    s.dias.forEach((d) => {
+      d.nivel = d.futuro ? 0 : edNivelHoras(d.feitoMin);
+      d.nivelMeta = d.futuro ? 0 : edNivelDeCalor(d.feitoMin, ref, relativa);
+      d.bateu = !d.futuro && d.estudo && mD > 0 && d.feitoMin >= mD;
+      d.falta = !d.futuro && d.estudo && !d.feitoMin;
+    });
+    s.pct = s.metaMin ? Math.round((s.totalMin / s.metaMin) * 100) : null;
+    const qs = s.dias.filter((d) => d.q);
+    s.q = qs.length ? { feitas: qs.reduce((a, d) => a + d.q.feitas, 0), certas: qs.reduce((a, d) => a + d.q.certas, 0) } : null;
   });
   return { semanas, escala: relativa ? "relativa" : "meta", metaMin: relativa ? 0 : metaMin, metaDiaMin: relativa ? 0 : Math.round(metaDia), maxDiaMin: maxDia, diasDeEstudo: estudo };
+}
+
+/* (19.77.0) a meta de cada semana passada, das fotos do plano: para cada edital, a última foto até o domingo daquela
+ * semana; soma dos editais. Semana sem foto nenhuma fica de fora (o mapa usa a de hoje e diz "aproximada"). */
+function edMetasDasSemanas(snaps, ids, inis) {
+  const out = {};
+  const lista = (snaps || []).filter((x) => x && x.d && x.porSemana > 0 && (!ids || ids.indexOf(x.ed) >= 0));
+  (inis || []).forEach((ini) => {
+    const f = new Date(ini + "T00:00:00"); f.setDate(f.getDate() + 6);
+    const fim = f.getFullYear() + "-" + String(f.getMonth() + 1).padStart(2, "0") + "-" + String(f.getDate()).padStart(2, "0");
+    const ult = {};
+    lista.forEach((x) => { if (x.d <= fim && (!ult[x.ed] || x.d >= ult[x.ed].d)) ult[x.ed] = x; });
+    const ks = Object.keys(ult);
+    if (ks.length) out[ini] = Math.round(ks.reduce((a, k) => a + ult[k].porSemana, 0));
+  });
+  return out;
+}
+
+/* (19.77.0) A LEITURA DO MAPA, em números que viram frases: média das últimas semanas fechadas, dias com estudo, tendência,
+ * o dia da semana mais forte e o mais fraco, o dia de estudo que mais fica zerado, e quantas semanas bateram a meta. */
+function edMapaLeitura(M) {
+  const fechadas = (M && M.semanas ? M.semanas.slice(1) : []);
+  const ult4 = fechadas.slice(0, 4);
+  const media = (xs, f) => (xs.length ? Math.round(xs.reduce((a, x) => a + f(x), 0) / xs.length) : 0);
+  const out = { semanasN: ult4.length, media: media(ult4, (s) => s.totalMin), diasMedia: ult4.length ? Math.round(ult4.reduce((a, s) => a + s.dias.filter((d) => d.feitoMin > 0).length, 0) / ult4.length * 10) / 10 : 0,
+    ult2: null, tendencia: null, forte: null, fraco: null, zerado: null, meta: null, porDow: {} };
+  if (ult4.length >= 4) {
+    const u = media(ult4.slice(0, 2), (s) => s.totalMin), a = media(ult4.slice(2, 4), (s) => s.totalMin);
+    out.ult2 = u;
+    out.tendencia = u > a * 1.2 ? "subindo" : u < a * 0.8 ? "caindo" : "estavel";
+  }
+  const ordem = M && M.semanas && M.semanas[0] ? M.semanas[0].dias.map((d) => d.cod) : [];
+  ordem.forEach((c) => { out.porDow[c] = 0; });
+  (M && M.semanas ? M.semanas : []).forEach((s) => s.dias.forEach((d) => { if (!d.futuro) out.porDow[d.cod] = (out.porDow[d.cod] || 0) + d.feitoMin; }));
+  const comEstudo = ordem.filter((c) => (M.diasDeEstudo || []).indexOf(c) >= 0);
+  const base = comEstudo.length ? comEstudo : ordem;
+  if (base.length && fechadas.some((s) => s.totalMin > 0)) {
+    const ord = base.slice().sort((x, y) => out.porDow[y] - out.porDow[x]);
+    out.forte = { cod: ord[0], min: out.porDow[ord[0]] };
+    out.fraco = { cod: ord[ord.length - 1], min: out.porDow[ord[ord.length - 1]] };
+    let pior = null;
+    base.forEach((c) => {
+      /* só semanas em que houve estudo: as semanas antes de começar não dizem nada sobre o dia */
+      const ativas = fechadas.filter((s) => s.totalMin > 0);
+      const nz = ativas.filter((s) => s.dias.some((d) => d.cod === c && d.estudo && !d.feitoMin)).length;
+      if (!pior || nz > pior.n) pior = { cod: c, n: nz, t: ativas.length };
+    });
+    if (pior && pior.n * 2 >= pior.t && pior.t >= 2) out.zerado = pior;
+  }
+  const comMeta = fechadas.filter((s) => s.pct !== null);
+  if (comMeta.length) out.meta = { n: comMeta.filter((s) => s.pct >= 100).length, t: comMeta.length };
+  return out;
 }
 
 /* ------------------------------------------------------------------
