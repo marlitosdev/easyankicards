@@ -75,6 +75,8 @@ function dsRedacaoAdicionar(id, x) {
     localStorage.setItem("eac_disc_treino", JSON.stringify(v));
   } catch (e) {}
   try { reg("DISCURSIVAS", "redação registrada", tema.slice(0, 60) + " · " + nota + "/" + max); } catch (e) {}
+  /* (19.75.0) a proposta com o mesmo tema fica como escrita */
+  try { if (typeof dsPropostaMarcarEscrita === "function") r.proposta = dsPropostaMarcarEscrita(id, tema); } catch (e) {}
   return r;
 }
 function dsRedacaoApagar(id, rid) {
@@ -165,10 +167,559 @@ function dsPintarRedacoes(card, e, dc) {
   card.append(box);
 }
 
+/* =====================================================================
+ * (19.75.0) A TELA COMPLETA DA DISCURSIVA
+ *  · só os editais com discursiva, na ordem da prova mais próxima (os sem discursiva ficam recolhidos no fim);
+ *  · critérios e cortes: as disciplinas em que ela cai, com o peso de cada uma DENTRO da discursiva, a cobertura e o
+ *    corte do bloco; o mínimo da discursiva em pontos;
+ *  · como é corrigida: os critérios mais usados pelas bancas, com os números deste edital;
+ *  · editar a discursiva aqui mesmo — reescreve só a linha "# discursiva" do edital, com confirmação e desfazer;
+ *  · sugestão de temas pelo que o edital exige: peso do tópico × peso da disciplina, "!d" (cai na discursiva) na
+ *    frente, o que já foi escrito ou guardado vai para o fim;
+ *  · criar propostas com a IA no formato desta prova, colar a resposta e guardar ("eac_disc_propostas");
+ *  · a estratégia: fase pela distância da prova, meta de redações por semana, o método de cada redação e ajustes
+ *    pelo histórico — a mesma meta e o mesmo próximo tema aparecem na agenda, com o atalho para cá.
+ * ===================================================================== */
+
+function dsNorm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
+function dsHoje() { return typeof hubHoje === "function" ? hubHoje() : new Date().toISOString().slice(0, 10); }
+function dsSemanaIni(d) { return typeof edSemanaCalendario === "function" ? edSemanaCalendario(d).ini : d; }
+function dsDataBr(iso) { return String(iso || "").split("-").reverse().join("/"); }
+/* dias até a prova: número (>= 0), -1 se já passou, null sem data */
+function dsDiasProva(e) {
+  try {
+    const s = edSituacao(e);
+    if (s.grupo === "encerrado") return { dias: -1, prova: s.prova || "" };
+    return { dias: s.dias == null ? null : s.dias, prova: s.prova || "" };
+  } catch (err) { return { dias: null, prova: "" }; }
+}
+function dsMinTxt(m) { return m ? (m.tipo === "pct" ? m.valor + "%" : m.valor + " " + t("ds_pontos_abrev")) : "—"; }
+function dsMinPontos(dc) {
+  if (!dc || !dc.minimo) return null;
+  return dc.minimo.tipo === "pct" ? Math.round((dc.minimo.valor / 100) * dc.pontos * 10) / 10 : dc.minimo.valor;
+}
+function dsLinhasTxt(dc) { return dc && dc.linhas && dc.linhas.min ? t("ds_chip_linhas", { a: dc.linhas.min, b: dc.linhas.max }) : t("ds_p_linhas_livre"); }
+
+/* ---------------- as propostas guardadas ---------------- */
+const DS_PROP_CHAVE = "eac_disc_propostas";
+function dsPropostasTodas() {
+  try { const v = JSON.parse(localStorage.getItem(DS_PROP_CHAVE) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; }
+}
+/* as abertas primeiro; dentro de cada grupo, a mais recente primeiro */
+function dsPropostas(id) {
+  return (dsPropostasTodas()[id] || []).slice().sort((a, b) => ((a.escrita ? 1 : 0) - (b.escrita ? 1 : 0)) || (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+}
+function dsPropostasGravar(id, lista) {
+  const v = dsPropostasTodas();
+  v[id] = lista;
+  try { localStorage.setItem(DS_PROP_CHAVE, JSON.stringify(v)); return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
+}
+function dsPropostaAdicionar(id, x) {
+  const tema = String((x && x.tema) || "").trim();
+  if (!tema) return { erro: t("ds_prop_falta_tema") };
+  const lista = dsPropostasTodas()[id] || [];
+  const enun = String(x.enunciado || "").trim();
+  if (lista.some((p) => dsNorm(p.tema) === dsNorm(tema) && dsNorm(p.enunciado) === dsNorm(enun))) return { erro: t("ds_prop_repetida", { t: tema }) };
+  const p = { id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), d: dsHoje(), tema: tema.slice(0, 200),
+    disc: String(x.disc || "").slice(0, 120), enunciado: enun.slice(0, 4000), espelho: String(x.espelho || "").trim().slice(0, 6000),
+    fonte: x.fonte === "ia" ? "ia" : "sugestao", escrita: false };
+  if (!dsPropostasGravar(id, lista.concat([p]))) return { erro: t("ds_red_sem_espaco") };
+  try { reg("DISCURSIVAS", "proposta guardada", tema.slice(0, 60) + " · " + p.fonte); } catch (e) {}
+  return p;
+}
+function dsPropostaApagar(id, pid) { return dsPropostasGravar(id, (dsPropostasTodas()[id] || []).filter((p) => p.id !== pid)); }
+/* escrever a redação de uma proposta a marca como escrita (pelo tema) */
+function dsPropostaMarcarEscrita(id, tema) {
+  const lista = dsPropostasTodas()[id] || [];
+  const n = dsNorm(tema);
+  const p = lista.find((x) => !x.escrita && dsNorm(x.tema) === n);
+  if (!p) return null;
+  p.escrita = true;
+  dsPropostasGravar(id, lista);
+  return p.id;
+}
+
+/* a disciplina que a IA escreveu, trazida para o nome do edital */
+function dsAcharDisc(nome, lista) {
+  const n = dsNorm(nome);
+  if (!n) return "";
+  return (lista || []).find((x) => dsNorm(x) === n) || (lista || []).find((x) => dsNorm(x).indexOf(n) >= 0 || n.indexOf(dsNorm(x)) >= 0) || String(nome).trim();
+}
+
+/* a resposta da IA: blocos com os rótulos TEMA / DISCIPLINA / ENUNCIADO / ESPELHO (com ou sem **, #, numeração) */
+function dsPropostasLer(texto, disciplinas) {
+  const rot = /^\s*(?:[#>*\-\d.)\s]*)\**\s*(tema|disciplina|enunciado|espelho(?:\s+de\s+corre[cç][aã]o)?)\s*\**\s*[:：]\s*\**\s*(.*)$/i;
+  const out = [];
+  let cur = null, campo = null;
+  String(texto || "").replace(/\r/g, "").split("\n").forEach((ln) => {
+    const m = ln.match(rot);
+    if (m) {
+      const k0 = dsNorm(m[1]);
+      const k = k0.indexOf("espelho") === 0 ? "espelho" : k0 === "disciplina" ? "disc" : k0;
+      if (k === "tema" || !cur) { cur = { tema: "", disc: "", enunciado: "", espelho: "" }; out.push(cur); }
+      campo = k;
+      const v = m[2].replace(/\*+\s*$/, "").trim();
+      cur[campo] = cur[campo] ? cur[campo] + "\n" + v : v;
+      return;
+    }
+    if (cur && campo) cur[campo] += "\n" + ln;
+  });
+  return out.map((p) => ({ tema: p.tema.trim().split("\n")[0].trim(), disc: dsAcharDisc(p.disc.trim().split("\n")[0], disciplinas),
+    enunciado: p.enunciado.trim(), espelho: p.espelho.trim() })).filter((p) => p.tema && (p.enunciado || p.espelho));
+}
+
+/* ---------------- sugestão de temas pelo que o edital exige ---------------- */
+function dsSugerirTemas(e, plano, dc, disc, n) {
+  if (!plano || !plano.itens) return [];
+  const alvo = ((dc && dc.disciplinas) || []).map(dsNorm);
+  const quer = disc ? dsNorm(disc) : null;
+  const ja = [].concat(dsRedacoes(e.id).map((x) => x.tema), dsPropostas(e.id).map((x) => x.tema)).map(dsNorm).filter(Boolean);
+  const itens = plano.itens.filter((i) => {
+    const d = dsNorm(i.disciplina);
+    return (!alvo.length || alvo.indexOf(d) >= 0) && (!quer || d === quer);
+  });
+  const maxB = Math.max(1, ...itens.map((i) => i.bruto || 0));
+  return itens.map((i) => {
+    const nm = dsNorm(i.nome);
+    /* igual, ou um contém o outro quando o menor tem corpo (6+ letras): "Tema 30" não "contém" o tópico "a" */
+    const treinado = ja.some((x) => x === nm || (Math.min(x.length, nm.length) >= 6 && (x.indexOf(nm) >= 0 || nm.indexOf(x) >= 0)));
+    let score = ((i.bruto || 0) / maxB) * 100;
+    if (i.fase2) score *= 1.5;
+    if (i.faixa === "alta") score *= 1.2;
+    if (treinado) score *= 0.35;
+    const motivos = [];
+    if (i.fase2) motivos.push(t("ds_sug_m_fase2"));
+    if (i.peso >= 4) motivos.push(t("ds_sug_m_peso", { p: i.peso }));
+    motivos.push(t(treinado ? "ds_sug_m_ja" : "ds_sug_m_novo"));
+    if (!i.feito) motivos.push(t("ds_sug_m_estudar"));
+    return { disc: i.disciplina, topico: i.nome, peso: i.peso, discPeso: i.disciplinaPeso, feito: !!i.feito, treinado, fase2: !!i.fase2, motivos, score: Math.round(score) };
+  }).sort((a, b) => b.score - a.score || String(a.topico).localeCompare(String(b.topico))).slice(0, n || 6);
+}
+
+/* ---------------- os pedidos à IA ---------------- */
+function dsPromptProposta(e, dc, disc, temas, n) {
+  const discs = disc ? [disc] : (dc.disciplinas || []);
+  const lista = (temas || []).length ? temas.map((x) => "- " + x).join("\n") : t("ds_prompt_sem_temas");
+  return t("ds_prompt_prop", { c: e.nome || "", p: dc.pontos, m: dsMinTxt(dc.minimo), l: dsLinhasTxt(dc), d: discs.join("; ") || "-",
+    temas: lista, n: n || 1, corr: dc.corrigida ? " " + t("ds_prompt_corrigida", { n: dc.corrigida }) : "" });
+}
+function dsPromptCorrecao(e, dc, p) {
+  return t("ds_prompt_corr", { c: e.nome || "", p: dc.pontos, l: dsLinhasTxt(dc), m: dsMinTxt(dc.minimo), tema: p.tema,
+    enun: p.enunciado || p.tema, esp: p.espelho || t("ds_prompt_sem_espelho") });
+}
+function dsCopiar(texto, aviso) {
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).catch(() => {}); } catch (err) {}
+  try { toastMsg(aviso, 6000); } catch (err) {}
+}
+
+/* ---------------- a estratégia ---------------- */
+function dsRedacoesNaSemana(id) { const ini = dsSemanaIni(dsHoje()); return dsRedacoes(id).filter((x) => dsSemanaIni(x.d) === ini).length; }
+/* as redações desta semana; sem nenhuma registrada, o "treinei" marcado vale uma */
+function dsFeitasSemana(id) { const n = dsRedacoesNaSemana(id); return n || (dsTreinos(id)[dsSemanaIni(dsHoje())] ? 1 : 0); }
+function dsEstrategia(dias, res, dc) {
+  let fase, meta;
+  if (dias == null) { fase = "sem_data"; meta = 1; }
+  else if (dias < 0) { fase = "passou"; meta = 0; }
+  else if (dias <= 21) { fase = "reta"; meta = 2; }
+  else if (dias <= 60) { fase = "intensivo"; meta = 3; }
+  else if (dias <= 120) { fase = "construcao"; meta = 2; }
+  else { fase = "fundacao"; meta = 1; }
+  const ajustes = [];
+  if (fase !== "passou") {
+    if (!res || !res.n) ajustes.push(t("ds_aj_primeira"));
+    else {
+      if (res.minPct != null && res.media5 != null && res.media5 < res.minPct + 10) {
+        meta = Math.min(4, meta + 1);
+        ajustes.push(t(res.media5 < res.minPct ? "ds_aj_abaixo" : "ds_aj_perto", { m: res.media5, c: res.minPct }));
+      }
+      if (res.fora) ajustes.push(t("ds_aj_tamanho", { n: res.fora }));
+      if (res.tendencia === "caindo") ajustes.push(t("ds_aj_caindo"));
+      if (res.tendencia === "subindo") ajustes.push(t("ds_aj_subindo"));
+    }
+    if (dc && dc.corrigida) ajustes.push(t("ds_aj_corrigida", { n: dc.corrigida }));
+  }
+  return { fase, meta, dias, nome: t("ds_fase_" + fase), foco: t("ds_fase_" + fase + "_foco"), passos: [1, 2, 3, 4, 5, 6].map((k) => t("ds_metodo_" + k)), ajustes };
+}
+/* o próximo tema: a proposta aberta mais recente; sem nenhuma, a primeira sugestão */
+function dsProximoTema(e, plano, dc) {
+  const ab = dsPropostas(e.id).filter((p) => !p.escrita);
+  if (ab.length) return { tema: ab[0].tema, disc: ab[0].disc, proposta: true };
+  const s = dsSugerirTemas(e, plano, dc, null, 1)[0];
+  return s ? { tema: s.topico, disc: s.disc, proposta: false } : null;
+}
+
+/* ---------------- os critérios de correção ---------------- */
+function dsCriterios(dc) {
+  const out = [
+    { k: "conteudo", tx: t("ds_crit_conteudo") },
+    { k: "estrutura", tx: t("ds_crit_estrutura") },
+    { k: "lingua", tx: t("ds_crit_lingua") },
+    { k: "tamanho", tx: t("ds_crit_tamanho", { l: dsLinhasTxt(dc) }) },
+    { k: "zero", tx: t("ds_crit_zero") },
+  ];
+  if (dc.minimo) out.push({ k: "corte", tx: t("ds_crit_corte", { m: dsMinTxt(dc.minimo), x: dsMinPontos(dc), p: dc.pontos }) });
+  if (dc.corrigida) out.push({ k: "corrigida", tx: t("ds_crit_corrigida", { n: dc.corrigida }) });
+  return out;
+}
+
+/* ---------------- critérios e cortes: as disciplinas da discursiva ---------------- */
+function dsCortes(plano, dc) {
+  if (!plano) return [];
+  let pan = [];
+  try { pan = panoramaDisciplinas(plano); } catch (e) { pan = []; }
+  const nomes = (dc.disciplinas || []).length ? dc.disciplinas : pan.map((d) => d.nome);
+  const linhas = nomes.map((nome) => {
+    const d = pan.find((x) => dsNorm(x.nome) === dsNorm(nome));
+    const b = (plano.blocos || []).find((x) => (x.disciplinas || []).some((y) => dsNorm(y) === dsNorm(nome)));
+    return { nome: d ? d.nome : nome, existe: !!d, peso: d ? d.peso : null, fatia: d ? d.fatia || 0 : 0, cobertura: d ? d.pesoFeito : null,
+      bloco: b && b.minPct != null ? { nome: b.nome, minPct: b.minPct, pct: b.pct, abaixo: b.abaixo, apertado: b.apertado } : null };
+  });
+  const soma = linhas.reduce((a, x) => a + x.fatia, 0) || 1;
+  linhas.forEach((x) => { x.naDisc = Math.round((x.fatia / soma) * 100); });
+  return linhas.sort((a, b) => b.naDisc - a.naDisc);
+}
+
+/* ---------------- editar a discursiva do edital ---------------- */
+function dsValidarDiscursiva(d) {
+  if (!d || !(d.pontos > 0)) return t("ds_ed_err_pontos");
+  if (d.minimo) {
+    if (!(d.minimo.valor > 0)) return t("ds_ed_err_min");
+    if (d.minimo.tipo === "pct" && d.minimo.valor > 100) return t("ds_ed_err_min");
+    if (d.minimo.tipo !== "pct" && d.minimo.valor > d.pontos) return t("ds_ed_err_min_pts", { p: d.pontos });
+  }
+  if (d.linhas && (!(d.linhas.min > 0) || !(d.linhas.max >= d.linhas.min))) return t("ds_ed_err_linhas");
+  if (!(d.disciplinas || []).length) return t("ds_ed_err_disc");
+  return "";
+}
+/* troca só a linha "# discursiva" (d = null tira); os tópicos e o resto do texto ficam como estão */
+function dsTextoComDiscursiva(texto, d) {
+  const sem = String(texto || "").split("\n").filter((ln) => !/^\s*#\s*discursiva\s*(\||$)/i.test(ln));
+  if (d) {
+    const linha = edLinhaDiscursiva(d);
+    const k = sem.findIndex((ln) => /^\s*#/.test(ln));
+    let fim = k;
+    while (fim >= 0 && fim + 1 < sem.length && /^\s*#/.test(sem[fim + 1])) fim++;
+    if (k >= 0) sem.splice(fim + 1, 0, linha); else sem.unshift(linha);
+  }
+  return sem.join("\n");
+}
+function dsDiscursivaGravar(id, d) {
+  const e = (typeof editais !== "undefined" ? editais : []).find((x) => x.id === id);
+  if (!e) return { erro: "?" };
+  if (d) { const f = dsValidarDiscursiva(d); if (f) return { erro: f }; }
+  const antes = e.texto || "";
+  const novo = dsTextoComDiscursiva(antes, d);
+  const conta = (tx) => { const r = lerEdital(tx); return r.disciplinas.length + "|" + r.disciplinas.reduce((a, x) => a + x.topicos.length, 0); };
+  if (conta(novo) !== conta(antes)) return { erro: t("ep_erro_conta") };
+  e.texto = novo;
+  edSalvarLista();
+  try { if (typeof editalAtual !== "undefined" && editalAtual === id && document.getElementById("editalTexto")) document.getElementById("editalTexto").value = novo; } catch (err) {}
+  try { reg("DISCURSIVAS", d ? "discursiva do edital atualizada" : "discursiva tirada do edital", (e.nome || id) + (d ? " · " + edLinhaDiscursiva(d) : "")); } catch (err) {}
+  return { ok: true, antes, novo };
+}
+function dsDesfazerTexto(id, antes) {
+  const e = editais.find((x) => x.id === id);
+  if (!e) return;
+  e.texto = antes;
+  edSalvarLista();
+  try { if (editalAtual === id && document.getElementById("editalTexto")) document.getElementById("editalTexto").value = antes; } catch (err) {}
+  dsRender();
+}
+
+function dsPintarEditor(box, e, r, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const d0 = dc || { pontos: 0, objetiva: 0, minimo: null, linhas: null, corrigida: 0, disciplinas: [] };
+  const f = el("div", "ds-red-form ds-ed-form");
+  const campo = (rot, inp, dica) => { const l = el("label", "ds-red-campo"); l.append(el("span", "", rot), inp); if (dica) l.title = dica; f.append(l); return inp; };
+  const num = (id, v, ph) => { const x = document.createElement("input"); x.type = "number"; x.min = "0"; x.step = "any"; x.className = "ep-num"; x.id = id + "_" + e.id; if (v) x.value = v; if (ph) x.placeholder = ph; return x; };
+  const iPts = campo(t("ds_ed_pontos"), num("dsEdPts", d0.pontos), t("ds_ed_pontos_dica"));
+  const iObj = campo(t("ds_ed_objetiva"), num("dsEdObj", d0.objetiva), t("ds_ed_objetiva_dica"));
+  const iMin = campo(t("ds_ed_minimo"), num("dsEdMin", d0.minimo ? d0.minimo.valor : ""), t("ds_ed_minimo_dica"));
+  const sMin = document.createElement("select"); sMin.id = "dsEdMinTipo_" + e.id;
+  [["pct", "%"], ["abs", t("ds_pontos_abrev")]].forEach(([v, tx]) => { const o = document.createElement("option"); o.value = v; o.textContent = tx; sMin.append(o); });
+  sMin.value = d0.minimo && d0.minimo.tipo !== "pct" ? "abs" : "pct";
+  campo(t("ds_ed_min_tipo"), sMin);
+  const iLa = campo(t("ds_ed_lin_min"), num("dsEdLinA", d0.linhas ? d0.linhas.min : ""));
+  const iLb = campo(t("ds_ed_lin_max"), num("dsEdLinB", d0.linhas ? d0.linhas.max : ""));
+  const iCor = campo(t("ds_ed_corrigida"), num("dsEdCor", d0.corrigida), t("ds_ed_corrigida_dica"));
+  box.append(f);
+  /* as disciplinas: as do edital, marcadas as que já estão na discursiva */
+  const nomes = ((r && r.disciplinas) || []).filter((x) => !x.inativa).map((x) => x.nome);
+  (d0.disciplinas || []).forEach((x) => { if (!nomes.some((y) => dsNorm(y) === dsNorm(x))) nomes.push(x); });
+  const dw = el("div", "ds-ed-discs");
+  dw.append(el("div", "ds-red-campo", t("ds_ed_disciplinas")));
+  const marcas = nomes.map((nome, k) => {
+    const l = el("label", "ds-ed-disc");
+    const ck = document.createElement("input"); ck.type = "checkbox"; ck.id = "dsEdDisc_" + e.id + "_" + k; ck.value = nome;
+    ck.checked = (d0.disciplinas || []).some((x) => dsNorm(x) === dsNorm(nome));
+    l.append(ck, el("span", "", nome));
+    dw.append(l);
+    return ck;
+  });
+  box.append(dw);
+  const msg = el("p", "nota ds-red-msg");
+  const bar = el("div", "ds-ia");
+  const salvar = el("button", "btn-min btn-min-ok", t(dc ? "ds_ed_salvar" : "ds_ed_cadastrar"));
+  salvar.type = "button"; salvar.id = "btnDsEdSalvar_" + e.id;
+  const ler = () => {
+    const n = (x) => (x.value === "" ? 0 : Number(String(x.value).replace(",", ".")));
+    const d = { pontos: n(iPts), objetiva: n(iObj), minimo: n(iMin) > 0 ? { tipo: sMin.value === "abs" ? "abs" : "pct", valor: n(iMin) } : null,
+      linhas: n(iLa) || n(iLb) ? { min: n(iLa), max: n(iLb) } : null, corrigida: n(iCor), disciplinas: marcas.filter((c) => c.checked).map((c) => c.value) };
+    return d;
+  };
+  salvar.onclick = async () => {
+    const d = ler();
+    const falha = dsValidarDiscursiva(d);
+    if (falha) { msg.textContent = falha; return; }
+    const antesL = dc ? edLinhaDiscursiva(dc) : t("ds_ed_nenhuma");
+    if (!(await uiConfirm(t("ds_ed_conf", { e: e.nome || "", a: antesL, d: edLinhaDiscursiva(d) }), { ok: t("ds_ed_conf_ok") }))) return;
+    const res = dsDiscursivaGravar(e.id, d);
+    if (res.erro) { msg.textContent = res.erro; return; }
+    dsRender();
+    try { toastDesfazer(t("ds_ed_ok"), () => dsDesfazerTexto(e.id, res.antes)); } catch (err) {}
+    try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (err) {}
+  };
+  bar.append(salvar);
+  if (dc) {
+    const tirar = el("button", "btn-min", t("ds_ed_tirar"));
+    tirar.type = "button";
+    tirar.onclick = async () => {
+      if (!(await uiConfirm(t("ds_ed_tirar_conf", { e: e.nome || "" }), { ok: t("ds_ed_tirar_ok"), perigo: true }))) return;
+      const res = dsDiscursivaGravar(e.id, null);
+      if (res.erro) { msg.textContent = res.erro; return; }
+      dsRender();
+      try { toastDesfazer(t("ds_ed_tirada"), () => dsDesfazerTexto(e.id, res.antes)); } catch (err) {}
+    };
+    bar.append(tirar);
+  }
+  box.append(bar, msg, el("p", "nota", t("ds_ed_ajuda")));
+}
+
+/* ---------------- os pedaços do cartão ---------------- */
+function dsIrPara(id) {
+  if (typeof trocarModo === "function") trocarModo("discursivas"); else dsRender();
+  setTimeout(() => {
+    const c = document.getElementById("dsCard_" + id);
+    if (!c) return;
+    try { c.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+    c.classList.add("ds-flash");
+    setTimeout(() => c.classList.remove("ds-flash"), 1800);
+  }, 0);
+}
 function dsAbrirEdital(id, depois) {
   if (typeof hubAbrirEdital === "function") hubAbrirEdital(id);
   if (typeof trocarModo === "function") trocarModo("edital");
   if (depois) setTimeout(depois, 0);
+}
+/* abre o registro de redação já com o tema e a disciplina */
+function dsEscreverTema(id, tema, disc) {
+  const det = document.getElementById("dsRed_" + id);
+  if (det) det.open = true;
+  const it = document.getElementById("dsRedTema_" + id);
+  if (it) { it.value = tema; try { it.focus(); } catch (e) {} }
+  const s = document.getElementById("dsRedDisc_" + id);
+  if (s && disc) { const o = [...s.options].find((x) => dsNorm(x.value) === dsNorm(disc)); if (o) s.value = o.value; }
+  try { toastMsg(t("ds_escrever_toast", { t: tema }), 6000); } catch (e) {}
+}
+
+function dsPintarEstrategia(card, e, dc, sit) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const res = dsRedacoesResumo(e.id, dc);
+  const est = dsEstrategia(sit.dias, res, dc);
+  const feitas = dsFeitasSemana(e.id);
+  const box = el("div", "ds-est ds-est-" + est.fase);
+  box.id = "dsEst_" + e.id;
+  box.append(el("div", "ds-sub-tit", t("ds_est_tit", { f: est.nome })));
+  box.append(el("p", "", est.foco));
+  if (est.meta) {
+    const meta = el("p", "ds-est-meta" + (feitas >= est.meta ? " ds-est-ok" : ""), t(feitas >= est.meta ? "ds_est_meta_ok" : "ds_est_meta", { n: feitas, m: est.meta }));
+    box.append(meta);
+  }
+  if (est.ajustes.length) { const ul = el("ul", "ds-est-aj"); est.ajustes.forEach((a) => ul.append(el("li", "", a))); box.append(ul); }
+  const met = el("details", "ds-det");
+  met.append(el("summary", "", t("ds_metodo_tit")));
+  const ol = el("ol", "ds-est-passos"); est.passos.forEach((p) => ol.append(el("li", "", p)));
+  met.append(ol);
+  box.append(met);
+  card.append(box);
+  return est;
+}
+
+function dsPintarCortes(card, plano, dc, rd) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("div", "ds-cortes");
+  box.append(el("div", "ds-sub-tit", t("ds_cortes_tit")));
+  const res = [];
+  if (dc.minimo) res.push(t("ds_cortes_min", { m: dsMinTxt(dc.minimo), x: dsMinPontos(dc), p: dc.pontos }));
+  else res.push(t("ds_cortes_sem_min"));
+  if (rd && rd.share != null) res.push(t("ds_cortes_share", { s: rd.share, o: dc.objetiva || "?" }));
+  box.append(el("p", "nota", res.join(" ")));
+  const linhas = dsCortes(plano, dc);
+  if (linhas.length) {
+    const cab = el("div", "ds-cortes-lin ds-cortes-cab");
+    ["ds_cortes_c_disc", "ds_cortes_c_na", "ds_cortes_c_cob", "ds_cortes_c_bloco"].forEach((k) => cab.append(el("span", "", t(k))));
+    box.append(cab);
+    linhas.forEach((x) => {
+      const ln = el("div", "ds-cortes-lin" + (x.bloco && x.bloco.abaixo ? " ds-cortes-ruim" : x.bloco && x.bloco.apertado ? " ds-cortes-apert" : ""));
+      ln.append(el("span", "ds-cortes-n", x.nome + (x.existe ? "" : " " + t("ds_cortes_nao_existe"))));
+      ln.append(el("span", "ds-num", x.existe ? x.naDisc + "%" : "—"));
+      ln.append(el("span", "ds-num", x.cobertura == null ? "—" : x.cobertura + "%"));
+      ln.append(el("span", "ds-cortes-b", x.bloco ? t("ds_cortes_bloco", { b: x.bloco.nome, m: x.bloco.minPct, c: x.bloco.pct }) : t("ds_cortes_sem_bloco")));
+      box.append(ln);
+    });
+    box.append(el("p", "nota", t("ds_cortes_ajuda")));
+  }
+  card.append(box);
+}
+
+function dsPintarCriterios(card, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const det = el("details", "ds-det ds-crit");
+  det.append(el("summary", "", t("ds_crit_tit")));
+  const ul = el("ul", "ds-crit-lista");
+  dsCriterios(dc).forEach((c) => { const li = el("li", "ds-crit-" + c.k); li.append(el("strong", "", t("ds_crit_n_" + c.k) + ": "), document.createTextNode(c.tx)); ul.append(li); });
+  det.append(ul, el("p", "nota", t("ds_crit_nota")));
+  card.append(det);
+}
+
+/* a disciplina escolhida nas sugestões, por edital (só nesta sessão) */
+const dsDiscEscolhida = {};
+function dsPintarSugestoes(card, e, plano, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("div", "ds-sug");
+  box.id = "dsSug_" + e.id;
+  box.append(el("div", "ds-sub-tit", t("ds_sug_tit")));
+  box.append(el("p", "nota", t("ds_sug_ajuda")));
+  const lin = el("div", "ds-ia");
+  const sel = document.createElement("select"); sel.id = "dsSugDisc_" + e.id; sel.className = "ds-sel";
+  [""].concat(dc.disciplinas || []).forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n || t("ds_sug_todas"); sel.append(o); });
+  sel.value = dsDiscEscolhida[e.id] || "";
+  sel.onchange = () => { dsDiscEscolhida[e.id] = sel.value; dsRender(); };
+  lin.append(sel);
+  const sug = dsSugerirTemas(e, plano, dc, sel.value || null, 6);
+  const criar = el("button", "btn-min btn-min-ok", t("ds_sug_criar_ia"));
+  criar.type = "button"; criar.id = "btnDsCriarIa_" + e.id;
+  criar.title = t("ds_sug_criar_ia_tip");
+  criar.onclick = () => {
+    dsCopiar(dsPromptProposta(e, dc, sel.value || null, sug.map((s) => s.topico + " (" + s.disc + ")"), 3), t("ds_prop_copiado"));
+    const det = document.getElementById("dsColar_" + e.id); if (det) det.open = true;
+  };
+  lin.append(criar);
+  box.append(lin);
+  if (!sug.length) box.append(el("p", "nota", t("ds_sug_vazio")));
+  sug.forEach((s, k) => {
+    const ln = el("div", "ds-sug-lin" + (s.treinado ? " ds-sug-ja" : ""));
+    const tx = el("div", "ds-sug-tx");
+    tx.append(el("strong", "", (k + 1) + ". " + s.topico), el("span", "ds-sug-d", " · " + s.disc));
+    tx.append(el("div", "ds-sug-m", s.motivos.join(" · ")));
+    ln.append(tx);
+    const b1 = el("button", "btn-min", t("ds_sug_ia_um"));
+    b1.type = "button"; b1.title = t("ds_sug_ia_um_tip");
+    b1.onclick = () => { dsCopiar(dsPromptProposta(e, dc, s.disc, [s.topico], 1), t("ds_prop_copiado")); const det = document.getElementById("dsColar_" + e.id); if (det) det.open = true; };
+    const b2 = el("button", "btn-min", t("ds_sug_guardar"));
+    b2.type = "button"; b2.id = "btnDsSugGuardar_" + e.id + "_" + k;
+    b2.onclick = () => {
+      const r = dsPropostaAdicionar(e.id, { tema: s.topico, disc: s.disc, fonte: "sugestao" });
+      if (r.erro) { try { toastMsg(r.erro, 4000); } catch (err) {} return; }
+      dsRender();
+    };
+    ln.append(b1, b2);
+    box.append(ln);
+  });
+  card.append(box);
+}
+
+function dsPintarColar(card, e, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const det = el("details", "ds-det");
+  det.id = "dsColar_" + e.id;
+  det.append(el("summary", "", t("ds_colar_tit")));
+  det.append(el("p", "nota", t("ds_colar_ajuda")));
+  const ta = document.createElement("textarea"); ta.id = "dsColarTx_" + e.id; ta.className = "ds-colar"; ta.rows = 6; ta.placeholder = t("ds_colar_ph");
+  const msg = el("p", "nota ds-red-msg");
+  const b = el("button", "btn-min btn-min-ok", t("ds_colar_ler"));
+  b.type = "button"; b.id = "btnDsColar_" + e.id;
+  b.onclick = () => {
+    const lidas = dsPropostasLer(ta.value, dc.disciplinas || []);
+    if (!lidas.length) { msg.textContent = t("ds_colar_nada"); return; }
+    let ok = 0; const rep = [];
+    lidas.forEach((p) => { const r = dsPropostaAdicionar(e.id, Object.assign({ fonte: "ia" }, p)); if (r.erro) rep.push(r.erro); else ok++; });
+    try { toastMsg(t("ds_colar_ok", { n: ok }) + (rep.length ? " " + rep.join(" ") : ""), 6000); } catch (err) {}
+    dsRender();
+    const pl = document.getElementById("dsProps_" + e.id); if (pl) pl.open = true;
+  };
+  det.append(ta, b, msg);
+  card.append(det);
+}
+
+function dsPintarPropostas(card, e, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const lista = dsPropostas(e.id);
+  const abertas = lista.filter((p) => !p.escrita).length;
+  const det = el("details", "ds-det ds-props");
+  det.id = "dsProps_" + e.id;
+  det.append(el("summary", "", t("ds_prop_tit", { n: lista.length, a: abertas })));
+  if (!lista.length) det.append(el("p", "nota", t("ds_prop_vazio")));
+  lista.forEach((p) => {
+    const it = el("div", "ds-prop" + (p.escrita ? " ds-prop-escrita" : ""));
+    const cab = el("div", "ds-prop-cab");
+    cab.append(el("strong", "", (p.escrita ? "✓ " : "") + p.tema), el("span", "ds-sug-d", (p.disc ? " · " + p.disc : "") + " · " + t(p.fonte === "ia" ? "ds_prop_fonte_ia" : "ds_prop_fonte_sug") + " · " + dsDataBr(p.d)));
+    it.append(cab);
+    if (p.enunciado) it.append(el("div", "ds-prop-enun", p.enunciado));
+    if (p.espelho) { const es = el("details", "ds-det"); es.append(el("summary", "", t("ds_prop_espelho")), el("div", "ds-prop-enun", p.espelho)); it.append(es); }
+    const bar = el("div", "ds-ia");
+    const w = el("button", "btn-min" + (p.escrita ? "" : " btn-min-ok"), t("ds_prop_escrever"));
+    w.type = "button"; w.title = t("ds_prop_escrever_tip");
+    w.onclick = () => dsEscreverTema(e.id, p.tema, p.disc);
+    const c = el("button", "btn-min", t(p.enunciado ? "ds_prop_corrigir" : "ds_prop_gerar"));
+    c.type = "button";
+    c.title = t(p.enunciado ? "ds_prop_corrigir_tip" : "ds_prop_gerar_tip");
+    c.onclick = () => {
+      if (p.enunciado) dsCopiar(dsPromptCorrecao(e, dc, p), t("ds_corr_copiado"));
+      else { dsCopiar(dsPromptProposta(e, dc, p.disc || null, [p.tema], 1), t("ds_prop_copiado")); const d2 = document.getElementById("dsColar_" + e.id); if (d2) d2.open = true; }
+    };
+    const x = el("button", "btn-min ds-red-del", "✕");
+    x.type = "button"; x.title = t("ds_prop_apagar_tip");
+    x.onclick = async () => {
+      if (!(await uiConfirm(t("ds_prop_apagar_conf", { t: p.tema }), { ok: t("ds_red_apagar_ok"), perigo: true }))) return;
+      dsPropostaApagar(e.id, p.id);
+      dsRender();
+      const d2 = document.getElementById("dsProps_" + e.id); if (d2) d2.open = true;
+    };
+    bar.append(w, c, x);
+    it.append(bar);
+    det.append(it);
+  });
+  card.append(det);
+}
+
+function dsPintarTreino(card, e) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const tr = el("div", "ds-treino");
+  tr.append(el("div", "ds-sub-tit", t("ds_treino_tit")));
+  const sem8 = dsUltimasSemanas(8);
+  const feitos = dsTreinos(e.id);
+  const tira = el("div", "ds-semanas");
+  sem8.forEach((s, k) => {
+    const b = el("span", "ds-semana" + (feitos[s] ? " ds-feita" : "") + (k === sem8.length - 1 ? " ds-atual" : ""), feitos[s] ? "✓" : "·");
+    b.title = t(feitos[s] ? "ds_semana_feita" : "ds_semana_vazia", { s });
+    tira.append(b);
+  });
+  tr.append(tira);
+  const n4 = sem8.slice(-4).filter((s) => feitos[s]).length;
+  tr.append(el("p", "nota", t(n4 ? "ds_treino_n" : "ds_treino_zero", { n: n4 })));
+  const lab = el("label", "ds-marcar");
+  const ck = document.createElement("input");
+  ck.type = "checkbox"; ck.id = "dsTreino_" + e.id;
+  ck.checked = !!feitos[sem8[sem8.length - 1]];
+  ck.onchange = () => {
+    if (typeof hubDiscTreinoMarcar === "function") hubDiscTreinoMarcar(e.id, ck.checked);
+    dsRender();
+    if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (err) {} }
+  };
+  lab.append(ck, el("span", "", t("ds_marcar")));
+  tr.append(lab);
+  card.append(tr);
 }
 
 function dsRender() {
@@ -177,22 +728,32 @@ function dsRender() {
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
   cx.innerHTML = "";
   const lista = (typeof editais !== "undefined" ? editais : []) || [];
-  const com = [], sem = [];
-  lista.forEach((e) => { const x = dsDiscursivaDe(e); (x.dc ? com : sem).push(Object.assign({ e }, x)); });
   if (!lista.length) { cx.append(el("p", "nota", t("ds_sem_editais"))); return; }
+  const com = [], sem = [];
+  lista.forEach((e) => { const x = dsDiscursivaDe(e); (x.dc ? com : sem).push(Object.assign({ e, sit: dsDiasProva(e) }, x)); });
+  /* a prova mais próxima primeiro; sem data depois; as que já passaram por último */
+  const chave = (s) => (s.dias == null ? 1e6 : s.dias < 0 ? 2e6 : s.dias);
+  com.sort((a, b) => chave(a.sit) - chave(b.sit) || String(a.e.nome).localeCompare(String(b.e.nome)));
 
-  com.forEach(({ e, r, dc }) => {
+  const prox = com.find((x) => x.sit.dias != null && x.sit.dias >= 0);
+  if (prox) cx.append(el("p", "ds-prox", t("ds_prox", { e: prox.e.nome || "?", n: prox.sit.dias, d: dsDataBr(prox.sit.prova) })));
+  else if (!com.length) cx.append(el("p", "nota", t("ds_nenhum_com")));
+
+  com.forEach(({ e, r, dc, sit }) => {
     const card = el("div", "ed-caixa ds-card");
     card.id = "dsCard_" + e.id;
     const topo = el("div", "ds-topo");
-    topo.append(el("div", "ed-caixa-tit", e.nome || "?"));
+    const tt = el("div", "");
+    tt.append(el("div", "ed-caixa-tit", e.nome || "?"));
+    tt.append(el("span", "ds-data" + (sit.dias != null && sit.dias >= 0 && sit.dias <= 30 ? " ds-data-perto" : ""),
+      sit.dias == null ? t("ds_data_sem") : sit.dias < 0 ? t("ds_data_passou", { d: dsDataBr(sit.prova) }) : t("ds_data", { d: dsDataBr(sit.prova), n: sit.dias })));
+    topo.append(tt);
     const abrir = el("button", "btn-min", t("ds_abrir_edital"));
     abrir.type = "button";
     abrir.onclick = () => dsAbrirEdital(e.id);
     topo.append(abrir);
     card.append(topo);
 
-    /* como pontua */
     let plano = null, rd = null;
     try {
       plano = montarPlano(r, { horas: r.cfg.horas, prova: r.cfg.prova, feitos: e.progresso || {} });
@@ -209,6 +770,9 @@ function dsRender() {
     card.append(chips);
     card.append(el("p", "nota", t("ds_cai_em", { d: (dc.disciplinas || []).join(", ") || "—" })));
 
+    /* a estratégia vem primeiro: é o que fazer esta semana */
+    dsPintarEstrategia(card, e, dc, sit);
+
     /* o risco de corte, com a barra e a linha do corte (a mesma do painel de riscos) */
     if (rd && rd.minPct !== null) {
       const rs = el("div", "ds-risco" + (rd.abaixo ? " ed-min-abaixo" : rd.apertado ? " ed-min-apertado" : ""));
@@ -222,45 +786,28 @@ function dsRender() {
     }
     if (dc.corrigida) card.append(el("p", "nota ed-min-disc-corr", t("ed_min_disc_corrigida", { n: dc.corrigida })));
 
-    /* o treino de escrita: esta semana + as últimas 8 */
-    const tr = el("div", "ds-treino");
-    tr.append(el("div", "ds-sub-tit", t("ds_treino_tit")));
-    const sem8 = dsUltimasSemanas(8);
-    const feitos = dsTreinos(e.id);
-    const tira = el("div", "ds-semanas");
-    sem8.forEach((s, k) => {
-      const b = el("span", "ds-semana" + (feitos[s] ? " ds-feita" : "") + (k === sem8.length - 1 ? " ds-atual" : ""), feitos[s] ? "✓" : "·");
-      b.title = t(feitos[s] ? "ds_semana_feita" : "ds_semana_vazia", { s });
-      tira.append(b);
-    });
-    tr.append(tira);
-    const n4 = sem8.slice(-4).filter((s) => feitos[s]).length;
-    tr.append(el("p", "nota", t(n4 ? "ds_treino_n" : "ds_treino_zero", { n: n4 })));
-    const lab = el("label", "ds-marcar");
-    const ck = document.createElement("input");
-    ck.type = "checkbox"; ck.id = "dsTreino_" + e.id;
-    ck.checked = !!feitos[sem8[sem8.length - 1]];
-    ck.onchange = () => {
-      if (typeof hubDiscTreinoMarcar === "function") hubDiscTreinoMarcar(e.id, ck.checked);
-      dsRender();
-      if (typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (err) {} }
-    };
-    lab.append(ck, el("span", "", t("ds_marcar")));
-    tr.append(lab);
-    card.append(tr);
-
+    dsPintarCortes(card, plano, dc, rd);
+    dsPintarCriterios(card, dc);
+    dsPintarSugestoes(card, e, plano, dc);
+    dsPintarColar(card, e, dc);
+    dsPintarPropostas(card, e, dc);
+    dsPintarTreino(card, e);
     /* (19.74.0) as redações escritas */
     dsPintarRedacoes(card, e, dc);
 
-    /* temas prováveis com a IA */
+    /* editar a discursiva deste edital, aqui mesmo */
+    const ed = el("details", "ds-det ds-editar");
+    ed.id = "dsEditar_" + e.id;
+    ed.append(el("summary", "", t("ds_ed_tit")));
+    dsPintarEditor(ed, e, r, dc);
+    card.append(ed);
+
     const ia = el("div", "ds-ia");
-    const bt = el("button", "btn-min btn-min-ok", t("ds_ia_btn"));
+    const bt = el("button", "btn-min", t("ds_ia_btn"));
     bt.type = "button"; bt.id = "btnDsIa_" + e.id;
     bt.title = t("ds_ia_tip");
     bt.onclick = () => {
-      const p = dsPromptTemas(e, dc);
-      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(p).catch(() => {}); } catch (err) {}
-      try { toastMsg(t("ds_ia_copiado"), 5000); } catch (err) {}
+      dsCopiar(dsPromptTemas(e, dc), t("ds_ia_copiado"));
       try { reg("DISCURSIVAS", "pedido de temas copiado", e.nome || e.id); } catch (err) {}
     };
     const aj = el("button", "btn-min", t("ds_ajustar"));
@@ -272,17 +819,20 @@ function dsRender() {
   });
 
   if (sem.length) {
-    const box = el("div", "ed-caixa ds-sem");
-    box.append(el("div", "ed-caixa-tit", t("ds_sem_tit", { n: sem.length })));
+    const box = el("details", "ed-caixa ds-sem");
+    if (!com.length) box.open = true;
+    box.append(el("summary", "ed-caixa-tit", t("ds_sem_tit", { n: sem.length })));
     box.append(el("p", "nota", t("ds_sem_ajuda")));
-    sem.forEach(({ e }) => {
+    sem.forEach(({ e, r }) => {
       const ln = el("div", "ds-sem-lin");
       ln.append(el("span", "", e.nome || "?"));
       const b = el("button", "btn-min", t("ds_cadastrar"));
-      b.type = "button";
-      b.onclick = () => dsAbrirEdital(e.id, () => { if (typeof epAbrir === "function") epAbrir(); });
+      b.type = "button"; b.id = "btnDsCadastrar_" + e.id;
+      const area = el("div", "ds-sem-ed");
+      area.hidden = true;
+      b.onclick = () => { area.hidden = !area.hidden; if (!area.hidden && !area.childNodes.length) dsPintarEditor(area, e, r, null); };
       ln.append(b);
-      box.append(ln);
+      box.append(ln, area);
     });
     cx.append(box);
   }

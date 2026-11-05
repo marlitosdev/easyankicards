@@ -3703,6 +3703,38 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ds-red-ruim-t{color:var(--atencao);font-weight:700}
 @media (max-width:560px){.ds-red-lin{grid-template-columns:64px minmax(0,1fr) 84px 28px}.ds-red-l{display:none}}
 .ds-sem-lin{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--borda)}
+/* (19.75.0) a tela completa da discursiva */
+.ds-prox{font-weight:800;margin:4px 0}
+.ds-data{display:inline-block;font-size:12px;color:var(--sutil);margin-top:2px}
+.ds-data-perto{color:var(--atencao);font-weight:800}
+.ds-card.ds-flash{outline:2px solid var(--info);outline-offset:2px;transition:outline-color .6s}
+.ds-est{border-left:4px solid var(--info);padding:6px 10px;margin:10px 0;background:rgba(56,189,248,.06);border-radius:6px}
+.ds-est-reta{border-left-color:var(--erro)}.ds-est-intensivo{border-left-color:var(--atencao)}.ds-est-passou{border-left-color:var(--borda)}
+.ds-est p{margin:4px 0}
+.ds-est-meta{font-weight:800}.ds-est-ok{color:var(--ok)}
+.ds-est-aj{margin:4px 0 4px 18px;padding:0}.ds-est-aj li{margin:2px 0}
+.ds-est-passos{margin:6px 0 4px 18px;padding:0}
+.ds-det{margin:8px 0}.ds-det>summary{cursor:pointer;font-weight:800}
+.ds-cortes{margin:10px 0}
+.ds-cortes-lin{display:grid;grid-template-columns:minmax(0,1.3fr) 84px 70px minmax(0,1.4fr);gap:8px;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--borda)}
+.ds-cortes-cab{font-size:11px;color:var(--sutil);font-weight:800;text-transform:uppercase}
+.ds-num{text-align:right;font-variant-numeric:tabular-nums}
+.ds-cortes-ruim .ds-cortes-b{color:var(--erro);font-weight:700}.ds-cortes-apert .ds-cortes-b{color:var(--atencao);font-weight:700}
+.ds-crit-lista{margin:6px 0 4px 18px;padding:0}.ds-crit-lista li{margin:4px 0}
+.ds-sug{margin:10px 0}
+.ds-sel{background:var(--campo);color:var(--texto);border:1px solid var(--borda);border-radius:6px;padding:4px 6px;color-scheme:light dark}
+.ds-sug-lin{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--borda)}
+.ds-sug-tx{flex:1;min-width:0}
+.ds-sug-d{color:var(--sutil);font-size:12px}
+.ds-sug-m{color:var(--sutil);font-size:12px}
+.ds-sug-ja{opacity:.65}
+.ds-colar{width:100%;box-sizing:border-box;background:var(--campo);color:var(--texto);border:1px solid var(--borda);border-radius:6px;padding:6px;font:inherit;margin:4px 0}
+.ds-prop{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0}
+.ds-prop-escrita{opacity:.7}
+.ds-prop-enun{white-space:pre-wrap;font-size:13px;margin:4px 0}
+.ds-ed-discs{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0}
+.ds-ed-disc{display:flex;gap:4px;align-items:center;font-size:13px}
+@media (max-width:560px){.ds-cortes-lin{grid-template-columns:minmax(0,1fr) 64px 56px}.ds-cortes-b{grid-column:1/-1;font-size:12px}.ds-sug-lin{flex-wrap:wrap}}
 .modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
 .modo-ic{font-size:15px;line-height:1;filter:grayscale(.35)}
 .modo-btn.ativo .modo-ic{filter:none}

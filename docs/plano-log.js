@@ -336,6 +336,15 @@ function plRelatorioDiagnostico(plano, r, editalId) {
       const rr = dsRedacoesResumo(editalId, dcR);
       L.push("redacoes escritas: " + rr.n + (rr.n ? " | media das ultimas 5: " + (rr.media5 == null ? "-" : rr.media5 + "%") + " | tendencia: " + (rr.tendencia || "-")
         + " | abaixo do minimo: " + rr.abaixo + " | fora do tamanho: " + rr.fora + (rr.ultima ? " | ultima: " + rr.ultima.d + " (" + rr.ultima.tema + ")" : "") : ""));
+      /* (19.75.0) a estratégia e as propostas guardadas */
+      if (typeof dsEstrategia === "function") {
+        let dias = null;
+        try { const ed = (typeof editais !== "undefined" ? editais : []).find((x) => x.id === editalId); if (ed) dias = dsDiasProva(ed).dias; } catch (e2) {}
+        const es = dsEstrategia(dias, rr, dcR);
+        const pr = dsPropostas(editalId);
+        L.push("estrategia da discursiva: fase " + es.fase + " | meta " + es.meta + " redacao(oes)/semana | feitas esta semana: " + dsFeitasSemana(editalId)
+          + " | propostas guardadas: " + pr.length + " (" + pr.filter((x) => !x.escrita).length + " por escrever)");
+      }
     }
   } catch (e) {}
   L.push("");

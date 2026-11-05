@@ -255,7 +255,7 @@ function hubPintarAgenda() {
     if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
-    if (cfg.discursiva && cfg.discursiva.pontos > 0 && s.dias !== null && s.dias !== undefined && s.dias >= 0) discs.push({ id: e.id, nome: e.nome || cfg.concurso || "", d: cfg.discursiva });
+    if (cfg.discursiva && cfg.discursiva.pontos > 0 && s.dias !== null && s.dias !== undefined && s.dias >= 0) discs.push({ id: e.id, nome: e.nome || cfg.concurso || "", d: cfg.discursiva, dias: s.dias, e, plano });
     try {
       const pend = typeof edConfPendencias === "function" ? edConfPendencias(r, plano, e.id) : [];
       if (pend.length) confs.push({ id: e.id, nome: e.nome || cfg.concurso || "", pend });
@@ -353,20 +353,41 @@ function hubPintarAgenda() {
 
   /* (19.56.0) O TREINO DA DISCURSIVA. Discursiva se treina escrevendo, não só estudando o conteúdo: com a discursiva
    * cadastrada, a semana pede uma dissertação no formato do edital. "feito esta semana" é guardado por semana. */
+  /* (19.75.0) a meta da semana vem da estratégia da tela Discursivas (fase pela distância da prova, ajustada pelas
+   * notas), com o próximo tema (a proposta aberta ou a primeira sugestão) e o atalho para lá */
   discs.forEach((q) => {
     const ln = document.createElement("div");
-    const feito = hubDiscTreinoFeito(q.id);
+    const dd = q.d;
+    let est = null, feitas = hubDiscTreinoFeito(q.id) ? 1 : 0, prox = null;
+    try {
+      if (typeof dsEstrategia === "function") {
+        est = dsEstrategia(q.dias, dsRedacoesResumo(q.id, dd), dd);
+        feitas = dsFeitasSemana(q.id);
+        prox = dsProximoTema(q.e, q.plano, dd);
+      }
+    } catch (err) { est = null; }
+    const meta = est ? Math.max(1, est.meta) : 1;
+    const feito = feitas >= meta;
     ln.className = "hub-disc-treino" + (feito ? " feito" : "");
     ln.id = "hubDiscTreino_" + q.id;
     const tx = document.createElement("span");
-    const dd = q.d;
-    tx.textContent = t(feito ? "hub_disc_treino_ok" : "hub_disc_treino", { e: q.nome, d: (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-",
-      l: dd.linhas && dd.linhas.min ? dd.linhas.min + "–" + dd.linhas.max : "?" });
+    const l = dd.linhas && dd.linhas.min ? dd.linhas.min + "–" + dd.linhas.max : "?";
+    const d = (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-";
+    tx.textContent = est
+      ? t(feito ? "hub_disc_meta_ok" : "hub_disc_meta", { e: q.nome, f: est.nome, n: feitas, m: meta, l: typeof dsLinhasTxt === "function" ? dsLinhasTxt(dd) : l, d })
+        + (prox && !feito ? " " + t(prox.proposta ? "hub_disc_prox_prop" : "hub_disc_prox_sug", { t: prox.tema }) : "")
+      : t(feito ? "hub_disc_treino_ok" : "hub_disc_treino", { e: q.nome, d, l });
+    const ir = document.createElement("button");
+    ir.type = "button"; ir.className = "btn-min" + (feito ? "" : " btn-min-ok");
+    ir.id = "btnHubDisc_" + q.id;
+    ir.textContent = t("hub_disc_ir");
+    ir.onclick = () => { if (typeof dsIrPara === "function") dsIrPara(q.id); };
     const b = document.createElement("button");
-    b.type = "button"; b.className = "btn-min" + (feito ? "" : " btn-min-ok");
-    b.textContent = t(feito ? "hub_disc_treino_desfazer" : "hub_disc_treino_feito");
-    b.onclick = () => { hubDiscTreinoMarcar(q.id, !feito); hubPintarAgenda(); };
-    ln.append(tx, b);
+    const marcado = hubDiscTreinoFeito(q.id);
+    b.type = "button"; b.className = "btn-min";
+    b.textContent = t(marcado ? "hub_disc_treino_desfazer" : "hub_disc_treino_feito");
+    b.onclick = () => { hubDiscTreinoMarcar(q.id, !marcado); hubPintarAgenda(); };
+    ln.append(tx, ir, b);
     cx.append(ln);
   });
   /* (19.54.0) a conferência do edital, em uma linha por edital que ainda tem pendência (o detalhe fica no edital) */

@@ -83,7 +83,61 @@ async function testes() {
     const todas = [];
     Object.keys(api.BK_CHAVES).forEach((g) => api.BK_CHAVES[g].forEach((k) => todas.push(k)));
     ok(["eac_disc_treino", "eac_disc_redacoes", "eac_ed_conferencia", "eac_ag_modo", "eac_ag_meta_min", "eac_ger_pastas"].every((k) => todas.indexOf(k) >= 0), "S14 o backup leva o treino, as redações e as decisões do plano");
-    api.edApagar(e1.id); api.edApagar(e2.id);
+    /* ---- (19.75.0) a tela completa: ordem pela prova, critérios, sugestões, propostas, estratégia, edição, agenda ---- */
+    const perto = (() => { const d = new Date(); d.setDate(d.getDate() + 10); return d.toISOString().slice(0, 10); })();
+    const e3 = api.edCriar("Perto", ["# Perto | prova: " + perto + " | horas: 10", "# discursiva | pontos: 20 | objetiva: 80 | disciplinas: Civil", "@ Civil :: 5", "+ contratos :: 5", "+ posse :: 2"].join("\n"));
+    api.dsRender();
+    const ordem = [...api.$("dsLista").querySelectorAll(".ds-card")].map((c) => c.id);
+    ok(ordem[0] === "dsCard_" + e3.id && ordem.indexOf("dsCard_" + e1.id) > 0, "S15 a prova mais próxima vem primeiro: " + ordem.join());
+    const tx3 = String(api.$("dsLista").textContent || "");
+    ok(/Próxima discursiva: Perto, em 10 dia/.test(tx3) && /faltam 10 dia/.test(tx3), "S16 o topo e o cartão dizem quanto falta");
+    ok(/Critérios e cortes deste edital/.test(tx3) && /Corte da discursiva: 50% = 20 de 40 pontos/.test(tx3) && /Específicos: mínimo 50%/.test(tx3), "S17 critérios e cortes, com o corte em pontos e o do bloco");
+    ok(/Como a discursiva é corrigida/.test(tx3) && /Estratégia — Intensivo|Estratégia — Construção/.test(tx3) && /Estratégia — Reta final/.test(tx3), "S18 critérios de correção e a estratégia por fase");
+    const crit = api.dsCriterios(dc).map((c) => c.k).join();
+    ok(crit === "conteudo,estrutura,lingua,tamanho,zero,corte,corrigida", "S19 os critérios levam o corte e o 'só os N primeiros': " + crit);
+    const cortes = api.dsCortes(api.montarPlano(r, { horas: 10, feitos: {} }), dc);
+    ok(cortes.length === 1 && cortes[0].nome === "Tributário" && cortes[0].naDisc === 100 && cortes[0].bloco && cortes[0].bloco.minPct === 50, "S20 a disciplina da discursiva com o corte do bloco: " + JSON.stringify(cortes));
+    /* sugestões: o peso manda; o que já foi escrito ou guardado vai para o fim */
+    const plE1 = api.montarPlano(api.lerEdital(e1.texto), { horas: 10, feitos: {} });
+    const sug = api.dsSugerirTemas(e1, plE1, dc, null, 6);
+    ok(sug.length === 2 && sug[0].topico === "a" && sug[0].disc === "Tributário", "S21 temas sugeridos pelo peso no edital: " + JSON.stringify(sug.map((s) => s.topico)));
+    const prop = api.dsPromptProposta(e1, dc, null, sug.map((s) => s.topico), 3);
+    ok(/TEMA:/.test(prop) && /ENUNCIADO:/.test(prop) && /ESPELHO:/.test(prop) && /25 a 30 linhas/.test(prop) && /- a\n- b/.test(prop) && /50 primeiros/.test(prop), "S22 o pedido à IA leva o formato da prova e os temas");
+    const resp = "Aqui estão:\n\n**1. TEMA:** Lançamento tributário\n**DISCIPLINA:** tributario\n**ENUNCIADO:** Disserte sobre o lançamento.\nAborde: 1) conceito; 2) modalidades.\n**ESPELHO:** conceito 20; modalidades 20.\n\nTEMA: a\nDisciplina: Tributário\nEnunciado: Explique a.\nEspelho: x 40";
+    const lidas = api.dsPropostasLer(resp, dc.disciplinas);
+    ok(lidas.length === 2 && lidas[0].tema === "Lançamento tributário" && lidas[0].disc === "Tributário" && /modalidades\./.test(lidas[0].enunciado) && /conceito 20/.test(lidas[0].espelho), "S23 a resposta colada vira propostas: " + JSON.stringify(lidas[0]));
+    lidas.forEach((p) => api.dsPropostaAdicionar(e1.id, Object.assign({ fonte: "ia" }, p)));
+    ok(api.dsPropostas(e1.id).length === 2 && !!api.dsPropostaAdicionar(e1.id, lidas[0]).erro && !!api.dsPropostaAdicionar(e1.id, { tema: "" }).erro, "S24 guarda, recusa repetida e sem tema");
+    const sug2 = api.dsSugerirTemas(e1, plE1, dc, null, 6);
+    ok(sug2[0].topico === "b" && sug2[1].treinado === true, "S25 o tema já guardado vai para o fim: " + JSON.stringify(sug2.map((s) => s.topico + ":" + s.treinado)));
+    ok(api.dsProximoTema(e1, plE1, dc).proposta === true, "S26 o próximo tema é a proposta aberta");
+    api.dsRedacaoAdicionar(e1.id, { tema: "a", nota: 30, max: 40, linhas: 27 });
+    ok(api.dsPropostas(e1.id).find((p) => p.tema === "a").escrita === true && api.dsFeitasSemana(e1.id) >= 1, "S27 registrar a redação marca a proposta como escrita e conta na semana");
+    /* a estratégia pela distância da prova */
+    const fz = [200, 90, 40, 10, -1, null].map((d) => { const x = api.dsEstrategia(d, { n: 3, media5: 80, minPct: 50 }, {}); return x.fase + ":" + x.meta; }).join();
+    ok(fz === "fundacao:1,construcao:2,intensivo:3,reta:2,passou:0,sem_data:1", "S28 fases e metas: " + fz);
+    const ab = api.dsEstrategia(40, { n: 4, media5: 45, minPct: 50, fora: 1, tendencia: "caindo" }, { corrigida: 50 });
+    ok(ab.meta === 4 && ab.ajustes.length === 4 && ab.passos.length === 6, "S29 abaixo do corte sobe a meta e explica: " + JSON.stringify(ab.ajustes));
+    /* editar a discursiva do edital por aqui */
+    ok(!!api.dsDiscursivaGravar(e2.id, { pontos: 0, disciplinas: ["A"] }).erro && !!api.dsDiscursivaGravar(e2.id, { pontos: 30, disciplinas: [] }).erro
+      && !!api.dsDiscursivaGravar(e2.id, { pontos: 30, minimo: { tipo: "abs", valor: 40 }, disciplinas: ["A"] }).erro, "S30 a edição valida pontos, disciplinas e mínimo");
+    const g = api.dsDiscursivaGravar(e2.id, { pontos: 30, objetiva: 70, minimo: { tipo: "pct", valor: 40 }, linhas: { min: 20, max: 30 }, corrigida: 0, disciplinas: ["A"] });
+    const d2 = api.dsDiscursivaDe(e2).dc;
+    ok(g.ok && d2 && d2.pontos === 30 && d2.minimo.valor === 40 && d2.linhas.max === 30 && d2.disciplinas.join() === "A" && api.lerEdital(g.novo).disciplinas[0].topicos.length === 1, "S31 gravou a linha da discursiva sem mexer nos tópicos: " + g.novo);
+    const g2 = api.dsDiscursivaGravar(e2.id, { pontos: 35, minimo: { tipo: "pct", valor: 40 }, disciplinas: ["A"] });
+    ok((g2.novo.match(/# discursiva/g) || []).length === 1 && /pontos: 35/.test(g2.novo), "S32 atualizar troca a linha, não duplica");
+    const g3 = api.dsDiscursivaGravar(e2.id, null);
+    ok(g3.ok && !/discursiva/.test(g3.novo) && !api.dsDiscursivaDe(e2).dc, "S33 tirar a discursiva");
+    /* a agenda: meta da fase, próximo tema e o atalho para cá */
+    try { api.hubPintarAgenda(); } catch (err) {}
+    const ag = api.$("hubDiscTreino_" + e3.id) || api.$("hubDiscTreino_" + e1.id);
+    ok(!ag || (/redação\(ões\) esta semana|meta da semana cumprida/.test(ag.textContent) && !!(api.$("btnHubDisc_" + e3.id) || api.$("btnHubDisc_" + e1.id))), "S34 a agenda mostra a meta e o atalho: " + (ag ? ag.textContent : "(agenda sem editais ativos no teste)"));
+    const todas2 = [];
+    Object.keys(api.BK_CHAVES).forEach((gk) => api.BK_CHAVES[gk].forEach((k) => todas2.push(k)));
+    ok(todas2.indexOf("eac_disc_propostas") >= 0, "S35 o backup leva as propostas");
+    const relE = api.plRelatorio(plE1, api.lerEdital(e1.texto), [], [], api.lerEdital(e1.texto).cfg, e1.id);
+    ok(/estrategia da discursiva: fase/.test(relE) || /estrategia da discursiva/.test(api.plRelatorioDiagnostico(plE1, api.lerEdital(e1.texto), e1.id)), "S36 o Raio-X leva a estratégia e as propostas");
+    api.edApagar(e1.id); api.edApagar(e2.id); api.edApagar(e3.id);
   }
   return Object.assign(falhas, { quantas: n });
 }
