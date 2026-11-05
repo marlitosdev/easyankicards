@@ -3670,6 +3670,23 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .modo-btn[data-modo="edital"]{--modo-cor:#3b82f6}
 .modo-btn[data-modo="material"]{--modo-cor:#f59e0b}
 .modo-btn[data-modo="questoes"]{--modo-cor:#22d3ee}
+.modo-btn[data-modo="discursivas"]{--modo-cor:#f472b6}
+/* (19.73.0) tela das discursivas */
+.ds-cab h2{margin:0 0 4px}
+.ds-lista{display:flex;flex-direction:column;gap:12px;margin-top:10px}
+.ds-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ds-risco{margin:8px 0}
+.ds-risco-tit{font-weight:800;margin-bottom:4px}
+.ds-risco.ed-min-abaixo .ds-risco-tit{color:var(--erro)}
+.ds-risco.ed-min-apertado .ds-risco-tit{color:var(--atencao)}
+.ds-sub-tit{font-weight:800;margin:10px 0 4px}
+.ds-semanas{display:flex;gap:4px}
+.ds-semana{width:28px;height:28px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--borda);color:var(--sutil);font-weight:800}
+.ds-semana.ds-feita{background:rgba(34,197,94,.18);border-color:var(--ok);color:var(--ok)}
+.ds-semana.ds-atual{outline:2px solid var(--info);outline-offset:1px}
+.ds-marcar{display:flex;gap:6px;align-items:center;font-weight:700;margin:4px 0}
+.ds-ia{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ds-sem-lin{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--borda)}
 .modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
 .modo-ic{font-size:15px;line-height:1;filter:grayscale(.35)}
 .modo-btn.ativo .modo-ic{filter:none}
@@ -6859,6 +6876,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div id="cartoes"></div>
     </div>
   </div>
+</section>
+
+<!-- (19.73.0) DISCURSIVAS: como pontua, risco de corte, treino de escrita e temas com a IA, por edital -->
+<section id="secDiscursivas" data-modo="discursivas" hidden>
+  <div class="ds-cab">
+    <h2 data-i18n="ds_titulo"></h2>
+    <p class="nota" data-i18n="ds_sub"></p>
+  </div>
+  <div id="dsLista" class="ds-lista"></div>
 </section>
 
 <section id="secQuestoes" data-modo="questoes" hidden>
@@ -11819,6 +11845,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital-hub.js"></script>
 <script src="edital-ui.js"></script>
 <script src="edital-pontua.js"></script>
+<script src="discursivas.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

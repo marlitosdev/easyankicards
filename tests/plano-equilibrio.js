@@ -84,7 +84,9 @@ async function testes() {
     ok(api.edModoAuto(120) === "avancar" && api.edModoAuto(45) === "equilibrado" && api.edModoAuto(20) === "consolidar" && api.edModoAuto(null) === "equilibrado",
       "M1 automatico segue a data: >90 avancar, 30-90 equilibrado, <30 consolidar");
     /* Tributário: Fato gerador feito há 10 dias (revisão vencida, sem estar MUITO atrasada), Lançamento e Crédito novos */
-    const fe = { "tributário›fato gerador": { e: "feito", d: "2026-10-20" } };
+    /* (19.73.0) a data é RELATIVA a hoje: fixa ("2026-10-20") deixava de ser "há 10 dias" com o passar do calendário */
+    const ha10 = (() => { const d = new Date(); d.setDate(d.getDate() - 10); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+    const fe = { "tributário›fato gerador": { e: "feito", d: ha10 } };
     const trib = (p) => p.fila.filter((i) => i.disciplina === "Tributário").map((i) => i.nome + (i.ehRevisao ? "(rev)" : ""));
     const pA = api.montarPlano(r, Object.assign({}, base, { feitos: fe, tempoRecente: null, modos: { geral: "avancar", disc: {} } }));
     ok(trib(pA)[0] === "Fato gerador(rev)" || trib(pA).indexOf("Fato gerador(rev)") >= 0, "M2 avancar: a revisao continua na fila, pelo peso: " + trib(pA).join(", "));

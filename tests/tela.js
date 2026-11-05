@@ -1112,7 +1112,8 @@ async function testes() {
     /* a importacao de arquivo mudou de casa: tem de estar DENTRO do modo
      * ferramentas, senao volta a poluir a bancada */
     ok(!!api.$("btnImportar"), "K1c o botao de importar sumiu");
-    ok(api.MODOS[0].id === "cartoes", "K2 o modo de cartoes devia ser o primeiro");
+    /* (19.73.0) a ordem pedida: Edital, Cartões, Discursivas, Questões e o resto */
+    ok(api.MODOS.slice(0, 4).map((m) => m.id).join() === "edital,cartoes,discursivas,questoes", "K2 a ordem do menu devia ser edital, cartões, discursivas, questões: " + api.MODOS.map((m) => m.id).join());
     api.trocarModo("edital");
     ok(api.modoAtual === "edital", "K3 nao trocou para o modo edital");
     /* sem a guarda abaixo, um modo apontando para secao inexistente estoura

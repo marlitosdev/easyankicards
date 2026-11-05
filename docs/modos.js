@@ -20,12 +20,14 @@
 /* "rotuloCurto" é opcional — só quem precisa de um rótulo mais curto para
  * caber na fileira de uma linha só do celular o declara. Sem ele,
  * montarBarraModos() repete o rótulo cheio; só "material" precisa hoje. */
+/* (19.73.0) a ordem pedida: Edital, Cartões, Discursivas, Questões e o resto */
 const MODOS = [
-  { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
   { id: "edital", secao: "secEdital", icone: "📋", rotulo: "modo_edital", pronto: true },
+  { id: "cartoes", secao: "secCartoes", icone: "🗂", rotulo: "modo_cartoes", pronto: true },
+  { id: "discursivas", secao: "secDiscursivas", icone: "✍", rotulo: "modo_discursivas", pronto: true },
+  { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material",
     rotuloCurto: "modo_material_curto", pronto: true },
-  { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
 ];
 
@@ -58,6 +60,8 @@ function trocarModo(id) {
   if (typeof medirRodape === "function") medirRodape();
   /* (19.39.0) a tela de Questões se refaz ao ser aberta: o banco (IndexedDB) e os editais podem ter chegado depois */
   if (id === "questoes" && typeof qsUiRender === "function") { try { qsUiRender(); } catch (e) {} }
+  /* (19.73.0) a tela das discursivas também se refaz ao abrir (o treino pode ter sido marcado na agenda) */
+  if (id === "discursivas" && typeof dsRender === "function") { try { dsRender(); } catch (e) {} }
   try { localStorage.setItem("eac_modo", id); } catch (e) {}
   if (typeof reg === "function") reg("MODO", "modo " + id);
 }

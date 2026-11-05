@@ -47,6 +47,24 @@ async function testes() {
   ok(/== TEMPO REAL/.test(rel) && /== DEIXADO DE LADO ==/.test(rel) && /ramos pulados/.test(rel) && /tirados da agenda por voce/.test(rel), "D2d tempo real e deixado de lado");
   ok(/== REVISOES ==/.test(rel) && /== MATERIAIS POR DISCIPLINA ==/.test(rel) && /== O QUE AINDA E ESTIMATIVA/.test(rel), "D2e revisões, materiais e o que é estimativa");
   ok(/== POR DISCIPLINA ==/.test(rel) && /== SEMANA 1, NA ORDEM ==/.test(rel), "D2f o que já existia continua");
+  /* ---- (19.73.0) S: a tela das Discursivas e a ordem do menu ---- */
+  {
+    const ids = api.MODOS.map((m) => m.id);
+    ok(ids.slice(0, 4).join() === "edital,cartoes,discursivas,questoes" && !!api.$("secDiscursivas"), "S1 menu: edital, cartões, discursivas, questões; a seção existe");
+    const e1 = api.edCriar("Com discursiva", T);
+    const e2 = api.edCriar("Sem discursiva", ["# Sem | prova: " + prova + " | horas: 5", "@ A :: 3", "+ x :: 3"].join("\n"));
+    api.trocarModo("discursivas");
+    const txt = String(api.$("dsLista").textContent || "");
+    ok(/Com discursiva/.test(txt) && /vale 40 pontos/.test(txt) && /31% da nota final/.test(txt) && /25 a 30 linhas/.test(txt) && /corrigida só para os 50 primeiros/.test(txt), "S2 o cartão do edital mostra como a discursiva pontua: " + txt.slice(0, 300));
+    ok(/Treino de escrita/.test(txt) && /Nenhum treino nas últimas 4 semanas/.test(txt), "S3 treino de escrita das últimas semanas");
+    ok(/Editais sem discursiva cadastrada \(1\)/.test(txt) && /Sem discursiva/.test(txt), "S4 o edital sem discursiva aparece com o atalho para cadastrar");
+    const ck = api.$("dsTreino_" + e1.id);
+    ck.checked = true; ck.onchange();
+    ok(/Treinou em 1 das últimas 4 semanas/.test(String(api.$("dsLista").textContent || "")), "S5 marcar o treino da semana conta");
+    const pr = api.dsPromptTemas(e1, api.dsDiscursivaDe(e1).dc);
+    ok(/3 temas prováveis/.test(pr) && /ESPELHO DE CORREÇÃO/.test(pr) && /25 a 30 linhas/.test(pr) && /Tributário/.test(pr), "S6 o pedido de temas à IA leva o formato desta prova");
+    api.edApagar(e1.id); api.edApagar(e2.id);
+  }
   return Object.assign(falhas, { quantas: n });
 }
 
