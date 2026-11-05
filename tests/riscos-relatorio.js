@@ -63,6 +63,26 @@ async function testes() {
     ok(/Treinou em 1 das últimas 4 semanas/.test(String(api.$("dsLista").textContent || "")), "S5 marcar o treino da semana conta");
     const pr = api.dsPromptTemas(e1, api.dsDiscursivaDe(e1).dc);
     ok(/3 temas prováveis/.test(pr) && /ESPELHO DE CORREÇÃO/.test(pr) && /25 a 30 linhas/.test(pr) && /Tributário/.test(pr), "S6 o pedido de temas à IA leva o formato desta prova");
+    /* ---- (19.74.0) o registro das redações ---- */
+    const dc = api.dsDiscursivaDe(e1).dc;
+    ok(api.dsRedacaoAdicionar(e1.id, { tema: "", nota: 10, max: 40 }).erro && api.dsRedacaoAdicionar(e1.id, { tema: "x", nota: 50, max: 40 }).erro, "S7 sem tema ou com nota acima da máxima não grava");
+    const hoje = new Date();
+    const dia = (k) => { const d = new Date(hoje); d.setDate(d.getDate() - k); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+    [[30, 12, 26], [24, 16, 31], [17, 18, 28], [10, 24, 27], [3, 28, 40], [0, 30, 29]].forEach(([k, nota, lin]) => api.dsRedacaoAdicionar(e1.id, { d: dia(k), tema: "Tema " + k, nota, max: 40, linhas: lin, disc: "Tributário" }));
+    const rr = api.dsRedacoesResumo(e1.id, dc);
+    ok(rr.n === 6 && rr.media5 === 58 && rr.tendencia === "subindo", "S8 média das últimas 5 e tendência: " + JSON.stringify(rr));
+    ok(rr.abaixo === 3 && rr.fora === 2 && rr.ultima.tema === "Tema 0", "S9 abaixo do mínimo, fora do tamanho e a última: " + JSON.stringify(rr));
+    ok(JSON.parse(api.loja.getItem("eac_disc_treino") || "{}")[e1.id] && Object.keys(JSON.parse(api.loja.getItem("eac_disc_treino"))[e1.id]).length >= 5, "S10 registrar a redação marca a semana como treinada");
+    api.dsRender();
+    const tx2 = String(api.$("dsLista").textContent || "");
+    ok(/Redações escritas \(6\)/.test(tx2) && /média das últimas 5: 58%/.test(tx2) && /3 redação\(ões\) abaixo do mínimo/.test(tx2) && /2 fora do tamanho/.test(tx2), "S11 a tela mostra o histórico e os alertas");
+    api.dsRedacaoApagar(e1.id, api.dsRedacoes(e1.id)[0].id);
+    ok(api.dsRedacoes(e1.id).length === 5, "S12 apagar tira do registro");
+    const relD = api.plRelatorio(api.montarPlano(api.lerEdital(T), { horas: 10, feitos: {} }), api.lerEdital(T), [], [], api.lerEdital(T).cfg);
+    ok(/redacoes escritas: 0|redacoes escritas:/.test(relD), "S13 o Raio-X tem a linha das redações");
+    const todas = [];
+    Object.keys(api.BK_CHAVES).forEach((g) => api.BK_CHAVES[g].forEach((k) => todas.push(k)));
+    ok(["eac_disc_treino", "eac_disc_redacoes", "eac_ed_conferencia", "eac_ag_modo", "eac_ag_meta_min", "eac_ger_pastas"].every((k) => todas.indexOf(k) >= 0), "S14 o backup leva o treino, as redações e as decisões do plano");
     api.edApagar(e1.id); api.edApagar(e2.id);
   }
   return Object.assign(falhas, { quantas: n });

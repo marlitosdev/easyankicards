@@ -3686,6 +3686,22 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ds-semana.ds-atual{outline:2px solid var(--info);outline-offset:1px}
 .ds-marcar{display:flex;gap:6px;align-items:center;font-weight:700;margin:4px 0}
 .ds-ia{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* (19.74.0) registro das redações */
+.ds-red{border:1px solid var(--borda);border-radius:10px;padding:6px 10px;margin:10px 0}
+.ds-red>summary{cursor:pointer;font-weight:800}
+.ds-red-alerta{color:var(--atencao);font-weight:700;margin:6px 0}
+.ds-red-form{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin:8px 0}
+.ds-red-campo{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--sutil)}
+.ds-red-form input,.ds-red-form select{background:var(--campo);color:var(--texto);border:1px solid var(--borda);border-radius:6px;padding:4px 6px;color-scheme:light dark}
+.ds-red-tema{min-width:220px}
+.ds-red-msg{color:var(--erro);margin:0}
+.ds-red-lista{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.ds-red-lin{display:grid;grid-template-columns:78px minmax(0,1fr) 70px 104px 30px;gap:8px;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--borda)}
+.ds-red-d{color:var(--sutil);font-variant-numeric:tabular-nums}
+.ds-red-n{text-align:right;font-variant-numeric:tabular-nums}
+.ds-red-ruim .ds-red-n{color:var(--erro)}
+.ds-red-ruim-t{color:var(--atencao);font-weight:700}
+@media (max-width:560px){.ds-red-lin{grid-template-columns:64px minmax(0,1fr) 84px 28px}.ds-red-l{display:none}}
 .ds-sem-lin{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--borda)}
 .modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
 .modo-ic{font-size:15px;line-height:1;filter:grayscale(.35)}

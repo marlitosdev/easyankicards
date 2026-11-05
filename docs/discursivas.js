@@ -38,6 +38,133 @@ function dsPromptTemas(e, dc) {
     m: dc.minimo ? (dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor) : "-" });
 }
 
+/* =====================================================================
+ * (19.74.0) O REGISTRO DAS REDAÇÕES
+ * Cada redação escrita: data, tema, disciplina, linhas e a nota pelo espelho (nota e nota máxima). Por edital, em
+ * "eac_disc_redacoes" = { editalId: [ {id, d, tema, disc, linhas, nota, max, obs} ] }. Registrar uma redação marca a
+ * semana dela como treinada. O resumo diz a média das últimas 5, a tendência, quantas ficaram abaixo do mínimo e
+ * quantas fora do tamanho — o que o Raio-X também leva para a IA.
+ * ===================================================================== */
+const DS_RED_CHAVE = "eac_disc_redacoes";
+function dsRedacoesTodas() {
+  try { const v = JSON.parse(localStorage.getItem(DS_RED_CHAVE) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; }
+}
+function dsRedacoes(id) { return (dsRedacoesTodas()[id] || []).slice().sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0)); }
+function dsRedacoesGravar(id, lista) {
+  const v = dsRedacoesTodas();
+  v[id] = lista;
+  try { localStorage.setItem(DS_RED_CHAVE, JSON.stringify(v)); return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
+}
+function dsRedacaoPct(x) { return x && x.max > 0 && x.nota >= 0 ? Math.round((x.nota / x.max) * 100) : null; }
+/* a redação nova: valida e grava; devolve o registro ou { erro } */
+function dsRedacaoAdicionar(id, x) {
+  const tema = String((x && x.tema) || "").trim();
+  const nota = Number(x && x.nota), max = Number(x && x.max);
+  if (!tema) return { erro: t("ds_red_falta_tema") };
+  if (!(max > 0) || !(nota >= 0) || nota > max) return { erro: t("ds_red_falta_nota") };
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(x.d || "")) ? x.d : (typeof hubHoje === "function" ? hubHoje() : new Date().toISOString().slice(0, 10));
+  const r = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), d, tema: tema.slice(0, 200),
+    disc: String(x.disc || "").slice(0, 120), linhas: Number(x.linhas) > 0 ? Math.round(Number(x.linhas)) : null, nota, max, obs: String(x.obs || "").slice(0, 500) };
+  const lista = (dsRedacoesTodas()[id] || []).concat([r]);
+  if (!dsRedacoesGravar(id, lista)) return { erro: t("ds_red_sem_espaco") };
+  /* escrever uma redação É treinar: a semana dela fica marcada */
+  try {
+    const v = JSON.parse(localStorage.getItem("eac_disc_treino") || "{}") || {};
+    const sem = typeof edSemanaCalendario === "function" ? edSemanaCalendario(d).ini : d;
+    v[id] = Object.assign({}, v[id] || {}, { [sem]: true });
+    localStorage.setItem("eac_disc_treino", JSON.stringify(v));
+  } catch (e) {}
+  try { reg("DISCURSIVAS", "redação registrada", tema.slice(0, 60) + " · " + nota + "/" + max); } catch (e) {}
+  return r;
+}
+function dsRedacaoApagar(id, rid) {
+  const lista = (dsRedacoesTodas()[id] || []).filter((x) => x.id !== rid);
+  return dsRedacoesGravar(id, lista);
+}
+/* o resumo do histórico: n, média das últimas 5, tendência, abaixo do mínimo, fora do tamanho */
+function dsRedacoesResumo(id, dc) {
+  const l = dsRedacoes(id);
+  const pcts = l.map(dsRedacaoPct).filter((x) => x != null);
+  const media = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  const ult5 = media(pcts.slice(0, 5));
+  const ult3 = media(pcts.slice(0, 3)), ant3 = media(pcts.slice(3, 6));
+  const tendencia = ult3 != null && ant3 != null ? (ult3 > ant3 + 5 ? "subindo" : ult3 < ant3 - 5 ? "caindo" : "estavel") : null;
+  const minPct = dc && dc.minimo && dc.minimo.tipo === "pct" ? dc.minimo.valor : null;
+  const abaixo = minPct == null ? 0 : pcts.filter((p) => p < minPct).length;
+  const fora = dc && dc.linhas && dc.linhas.min ? l.filter((x) => x.linhas && (x.linhas < dc.linhas.min || x.linhas > dc.linhas.max)).length : 0;
+  return { n: l.length, media5: ult5, tendencia, abaixo, fora, minPct, ultima: l[0] || null };
+}
+
+function dsPintarRedacoes(card, e, dc) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("details", "ds-red");
+  box.id = "dsRed_" + e.id;
+  const res = dsRedacoesResumo(e.id, dc);
+  const sum = el("summary", "", t("ds_red_tit", { n: res.n }));
+  if (res.n) sum.append(el("span", "dsc-mat-cont", t("ds_red_cont", { m: res.media5 == null ? "—" : res.media5 + "%", t: t("ds_tend_" + (res.tendencia || "nd")) })));
+  box.append(sum);
+  if (res.n) {
+    const al = [];
+    if (res.abaixo) al.push(t("ds_red_abaixo", { n: res.abaixo, m: res.minPct }));
+    if (res.fora) al.push(t("ds_red_fora", { n: res.fora, a: dc.linhas.min, b: dc.linhas.max }));
+    if (al.length) box.append(el("p", "ds-red-alerta", al.join(" ")));
+  }
+  /* o formulário */
+  const f = el("div", "ds-red-form");
+  const campo = (rot, inp) => { const l = el("label", "ds-red-campo"); l.append(el("span", "", rot), inp); f.append(l); return inp; };
+  const mk = (type, id, ph) => { const x = document.createElement("input"); x.type = type; x.id = id; if (ph) x.placeholder = ph; return x; };
+  const iData = campo(t("ds_red_data"), mk("date", "dsRedData_" + e.id));
+  iData.value = typeof hubHoje === "function" ? hubHoje() : new Date().toISOString().slice(0, 10);
+  const iTema = campo(t("ds_red_tema"), mk("text", "dsRedTema_" + e.id, t("ds_red_tema_ph")));
+  iTema.className = "ds-red-tema";
+  const sel = document.createElement("select");
+  sel.id = "dsRedDisc_" + e.id;
+  [""].concat(dc.disciplinas || []).forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n || t("ds_red_disc_qualquer"); sel.append(o); });
+  campo(t("ds_red_disc"), sel);
+  const iLin = campo(t("ds_red_linhas"), mk("number", "dsRedLinhas_" + e.id, dc.linhas && dc.linhas.min ? dc.linhas.min + "–" + dc.linhas.max : ""));
+  const iNota = campo(t("ds_red_nota"), mk("number", "dsRedNota_" + e.id, "ex.: 32"));
+  const iMax = campo(t("ds_red_max"), mk("number", "dsRedMax_" + e.id));
+  iMax.value = dc.pontos || 100;
+  [iLin, iNota, iMax].forEach((x) => { x.min = "0"; x.step = "any"; x.className = "ep-num"; });
+  const msg = el("p", "nota ds-red-msg");
+  const bt = el("button", "btn-min btn-min-ok", t("ds_red_add"));
+  bt.type = "button"; bt.id = "btnDsRedAdd_" + e.id;
+  bt.onclick = () => {
+    const r = dsRedacaoAdicionar(e.id, { d: iData.value, tema: iTema.value, disc: sel.value, linhas: iLin.value, nota: iNota.value === "" ? NaN : iNota.value, max: iMax.value });
+    if (r.erro) { msg.textContent = r.erro; return; }
+    try { toastMsg(t("ds_red_ok", { p: dsRedacaoPct(r) }), 4000); } catch (err) {}
+    dsRender();
+    const novo = document.getElementById("dsRed_" + e.id); if (novo) novo.open = true;
+  };
+  f.append(bt);
+  box.append(f, msg);
+  /* a lista, a mais recente primeiro */
+  const lista = dsRedacoes(e.id);
+  if (lista.length) {
+    const ul = el("div", "ds-red-lista");
+    lista.slice(0, 30).forEach((x) => {
+      const p = dsRedacaoPct(x);
+      const ln = el("div", "ds-red-lin" + (res.minPct != null && p != null && p < res.minPct ? " ds-red-ruim" : ""));
+      ln.append(el("span", "ds-red-d", x.d.split("-").reverse().join("/")), el("span", "ds-red-t", x.tema + (x.disc ? " · " + x.disc : "")));
+      const foraTam = dc.linhas && dc.linhas.min && x.linhas && (x.linhas < dc.linhas.min || x.linhas > dc.linhas.max);
+      ln.append(el("span", "ds-red-l" + (foraTam ? " ds-red-ruim-t" : ""), x.linhas ? t("ds_red_l", { n: x.linhas }) : ""));
+      ln.append(el("strong", "ds-red-n", (x.nota + "/" + x.max) + (p != null ? " · " + p + "%" : "")));
+      const del = el("button", "btn-min ds-red-del", "✕");
+      del.type = "button"; del.title = t("ds_red_apagar_tip");
+      del.onclick = async () => {
+        if (!(await uiConfirm(t("ds_red_apagar_conf", { t: x.tema }), { ok: t("ds_red_apagar_ok"), perigo: true }))) return;
+        dsRedacaoApagar(e.id, x.id);
+        dsRender();
+        const novo = document.getElementById("dsRed_" + e.id); if (novo) novo.open = true;
+      };
+      ln.append(del);
+      ul.append(ln);
+    });
+    box.append(ul);
+  }
+  card.append(box);
+}
+
 function dsAbrirEdital(id, depois) {
   if (typeof hubAbrirEdital === "function") hubAbrirEdital(id);
   if (typeof trocarModo === "function") trocarModo("edital");
@@ -121,6 +248,9 @@ function dsRender() {
     lab.append(ck, el("span", "", t("ds_marcar")));
     tr.append(lab);
     card.append(tr);
+
+    /* (19.74.0) as redações escritas */
+    dsPintarRedacoes(card, e, dc);
 
     /* temas prováveis com a IA */
     const ia = el("div", "ds-ia");

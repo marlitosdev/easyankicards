@@ -25,7 +25,8 @@ const BK_CHAVES = {
    * ali. E fazia pior: o restauro gravava o histórico do ARQUIVO por cima do local, apagando a versão "antes de
    * restaurar backup" que acabara de ser guardada. A mesma lógica de "eac_backup_hist": histórico local não viaja.
    * Backup antigo que traz "eac_hist" é restaurado normalmente — a chave só não é lida. */
-  cartoes: ["eac_texto", "eac_recortes", "eac_revisados"],
+  /* (19.74.0) as pastas do gerenciador e o registro do "elevar ao padrão" também são trabalho seu */
+  cartoes: ["eac_texto", "eac_recortes", "eac_revisados", "eac_ger_pastas", "eac_ce_revisados"],
   /* "eac_editais" é a lista nova; os dois "eac_edital_*" continuam no backup
    * porque um arquivo gerado antes da v8.68 os traz, e restaurá-lo tem de
    * reconstituir o edital único — que a migração então converte na lista. */
@@ -41,7 +42,11 @@ const BK_CHAVES = {
            /* a jurisprudência é material do mesmo nível do resumo e da
             * lei seca: meses de teses copiadas dos tribunais, que não
             * se reconstituem de lugar nenhum */
-           "eac_juris"],
+           "eac_juris",
+           /* (19.74.0) decisões e registros que estavam ficando de fora: o treino e as redações da discursiva, os itens
+            * marcados "o edital não informa", o modo de estudo, a meta e o ritmo, e o que você escondeu da agenda */
+           "eac_disc_treino", "eac_disc_redacoes", "eac_ed_conferencia", "eac_ag_modo", "eac_ag_meta_min",
+           "eac_ag_ritmo_real", "eac_ag_ritmo_recusa", "eac_agenda_disc_ocultas", "eac_ag_editais_ocultos"],
   /* FORA DO BACKUP, DE PROPÓSITO: "eac_chave_gemini".
    *
    * Toda a lógica deste arquivo é "não esqueça de incluir" — e esta é a

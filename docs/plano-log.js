@@ -329,6 +329,15 @@ function plRelatorioDiagnostico(plano, r, editalId) {
   if (rd) L.push("discursiva | corte " + (rd.minPct == null ? "-" : rd.minPct + "%") + " | cobertura das disciplinas dela " + rd.cobertura + "%"
     + " | treino de escrita: " + rd.treinos + " das ultimas 4 semanas" + (rd.corrigida ? " | so os " + rd.corrigida + " primeiros sao corrigidos" : "")
     + " | " + (rd.abaixo ? "ABAIXO DO CORTE" : rd.apertado ? "APERTADO" : rd.minPct == null ? "sem minimo" : "ok"));
+  /* (19.74.0) as redações escritas: é o único sinal de DESEMPENHO na discursiva */
+  try {
+    const dcR = plano.discursivaCfg;
+    if (dcR && typeof dsRedacoesResumo === "function") {
+      const rr = dsRedacoesResumo(editalId, dcR);
+      L.push("redacoes escritas: " + rr.n + (rr.n ? " | media das ultimas 5: " + (rr.media5 == null ? "-" : rr.media5 + "%") + " | tendencia: " + (rr.tendencia || "-")
+        + " | abaixo do minimo: " + rr.abaixo + " | fora do tamanho: " + rr.fora + (rr.ultima ? " | ultima: " + rr.ultima.d + " (" + rr.ultima.tema + ")" : "") : ""));
+    }
+  } catch (e) {}
   L.push("");
 
   L.push("== BURACOS (o que falta estudar, pelo peso na prova) ==");
