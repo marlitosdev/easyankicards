@@ -255,7 +255,12 @@ function hubPintarAgenda() {
     if (s.dias !== null && s.dias !== undefined && (diasProx === null || s.dias < diasProx)) diasProx = s.dias;
     const rk = (m) => ["avancar", "equilibrado", "consolidar"].indexOf(m);
     if (!modoSugerido || rk(plano.modoSugerido) > rk(modoSugerido)) modoSugerido = plano.modoSugerido;
-    if (cfg.discursiva && cfg.discursiva.pontos > 0 && s.dias !== null && s.dias !== undefined && s.dias >= 0) discs.push({ id: e.id, nome: e.nome || cfg.concurso || "", d: cfg.discursiva, dias: s.dias, e, plano });
+    /* (19.76.0) a discursiva em data própria (fase 2) também entra, contada até a data DELA */
+    try {
+      const dx = typeof dsDiscursivaDe === "function" ? dsDiscursivaDe(e).dc : (cfg.discursiva && cfg.discursiva.pontos > 0 ? cfg.discursiva : null);
+      const sd = typeof dsDiasProva === "function" ? dsDiasProva(e) : s;
+      if (dx && sd.dias !== null && sd.dias !== undefined && sd.dias >= 0) discs.push({ id: e.id, nome: e.nome || cfg.concurso || "", d: dx, dias: sd.dias, sit: sd, e, plano });
+    } catch (err) {}
     try {
       const pend = typeof edConfPendencias === "function" ? edConfPendencias(r, plano, e.id) : [];
       if (pend.length) confs.push({ id: e.id, nome: e.nome || cfg.concurso || "", pend });
@@ -361,7 +366,7 @@ function hubPintarAgenda() {
     let est = null, feitas = hubDiscTreinoFeito(q.id) ? 1 : 0, prox = null;
     try {
       if (typeof dsEstrategia === "function") {
-        est = dsEstrategia(q.dias, dsRedacoesResumo(q.id, dd), dd);
+        est = dsEstrategia(q.dias, dsRedacoesResumo(q.id, dd), dd, q.sit);
         feitas = dsFeitasSemana(q.id);
         prox = dsProximoTema(q.e, q.plano, dd);
       }
@@ -375,6 +380,7 @@ function hubPintarAgenda() {
     const d = (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-";
     tx.textContent = est
       ? t(feito ? "hub_disc_meta_ok" : "hub_disc_meta", { e: q.nome, f: est.nome, n: feitas, m: meta, l: typeof dsLinhasTxt === "function" ? dsLinhasTxt(dd) : l, d })
+        + (dd.fase2 && q.sit && q.sit.separada ? " " + t("hub_disc_data_f2", { d: q.sit.prova.split("-").reverse().join("/"), n: q.dias }) : "")
         + (prox && !feito ? " " + t(prox.proposta ? "hub_disc_prox_prop" : "hub_disc_prox_sug", { t: prox.tema }) : "")
       : t(feito ? "hub_disc_treino_ok" : "hub_disc_treino", { e: q.nome, d, l });
     const ir = document.createElement("button");
@@ -907,7 +913,14 @@ function hubRitmoPromptIA(ctx) {
     const dd = plano.discursivaCfg;
     L.push(t("hub_ia_discursiva", { p: dd.pontos || "?", s: plano.discursiva ? plano.discursiva.s : "?", d: (dd.disciplinas || []).join(", ") || "?",
       m: dd.minimo ? (dd.minimo.tipo === "pct" ? dd.minimo.valor + "%" : dd.minimo.valor) : "-", l: dd.linhas ? dd.linhas.min + "–" + dd.linhas.max : "-", c: dd.corrigida || "-" }));
-  } else L.push(t("hub_ia_discursiva_sem"));
+  } else if (!(c.cfg.fase2 && c.cfg.fase2.prova)) L.push(t("hub_ia_discursiva_sem"));
+  /* (19.76.0) a discursiva em data própria: a IA precisa saber que até a objetiva o plano é dela, e que a escrita vem depois */
+  if (c.cfg.fase2 && c.cfg.fase2.prova) {
+    const fx = c.cfg.fase2;
+    const ndD = c.r ? (c.r.disciplinas || []).reduce((a, d) => a + d.topicos.filter((tp) => tp.fase2).length, 0) : 0;
+    L.push(t("hub_ia_fase2", { n: fx.nome || "2ª fase", d: fx.prova.split("-").reverse().join("/"), o: c.cfg.prova ? c.cfg.prova.split("-").reverse().join("/") : "?", t: ndD,
+      f: plano.fase && plano.fase.n === 2 ? t("hub_ia_fase2_agora2") : t("hub_ia_fase2_agora1") }));
+  }
   /* (19.54.0) os pesos são do edital ou estimados? A IA precisa saber o quanto confiar no "vale na prova" */
   L.push(t(plano.fatiaExata ? "hub_ia_fatia_exata" : "hub_ia_fatia_est"));
   /* as notas mínimas: as que o edital tem no app, com a cobertura de hoje — ou o aviso de que não estão cadastradas */
@@ -1945,9 +1958,20 @@ function edPromptRevisao(textoPlano, achados) {
   const L = [t("ed_prompt_rev_cab"), ""];
   if (itens.length) L.push(t("ed_prompt_rev_achados"), itens.join("\n"), "");
   /* (19.57.0) a discursiva: com a linha no plano, mantê-la; sem ela, só incluir se o texto colado trouxer a discursiva */
-  const temDisc = /^\s*#\s*discursiva\b/im.test(String(textoPlano || ""));
-  L.push(miolo, t("ed_prompt_rev_regra", { n: n + 1 }), t(temDisc ? "ed_prompt_rev_disc_manter" : "ed_prompt_rev_disc", { n: n + 2 }), "", t("ed_prompt_rev_plano"), String(textoPlano || ""), "", t("ed_prompt_onde"));
+  L.push(miolo, t("ed_prompt_rev_regra", { n: n + 1 }), edRegraDiscursiva(textoPlano, n + 2), "", t("ed_prompt_rev_plano"), String(textoPlano || ""), "", t("ed_prompt_onde"));
   return L.join("\n");
+}
+
+/* (19.76.0) a regra da discursiva nos pedidos de revisão, conforme o plano: com/sem a linha "# discursiva" e com/sem a
+ * discursiva em data própria ("# fase 2"). Na data própria, a IA mantém a data e a linha da fase 2, e a linha da
+ * discursiva leva só o formato (sem data). */
+function edRegraDiscursiva(textoPlano, n) {
+  const tx = String(textoPlano || "");
+  const temDisc = /^\s*#\s*discursiva\b/im.test(tx);
+  let f2 = null;
+  try { const c = lerEdital(tx).cfg || {}; if (c.fase2 && c.fase2.prova) f2 = { d: c.fase2.prova.split("-").reverse().join("/"), o: c.prova ? c.prova.split("-").reverse().join("/") : "?" }; } catch (e) {}
+  if (f2) return t(temDisc ? "ed_prompt_rev_disc_manter_f2" : "ed_prompt_rev_disc_f2", { n, d: f2.d, o: f2.o });
+  return t(temDisc ? "ed_prompt_rev_disc_manter" : "ed_prompt_rev_disc", { n });
 }
 
 /* (19.60.0) O PEDIDO SÓ DE PESOS. Quanto cada disciplina vale na agenda vem do peso DELA (1 a 5 ou "10q"); o peso dos
@@ -1957,7 +1981,7 @@ function edPromptRevisao(textoPlano, achados) {
  * substitui: os tópicos não vão e não voltam. */
 function edPromptSoPesos(textoPlano) {
   const r = lerEdital(String(textoPlano || ""));
-  const linhas = String(textoPlano || "").split(/\r?\n/).filter((l) => /^\s*[&@]/.test(l) || /^\s*#\s*discursiva\b/i.test(l))
+  const linhas = String(textoPlano || "").split(/\r?\n/).filter((l) => /^\s*[&@]/.test(l) || /^\s*#\s*discursiva\b/i.test(l) || /^\s*#\s*fase\s*2\s*:/i.test(l))
     .map((l) => l.trim());
   const temDisc = !!(r.cfg && r.cfg.discursiva);
   const tam = r.disciplinas.filter((d) => !d.inativa).map((d) => {
@@ -1967,7 +1991,7 @@ function edPromptSoPesos(textoPlano) {
   });
   const L = [t("ed_pp_cab"), "", t("ed_pp_formato"), "", t("ed_pp_regras"),
     t("ed_pp_r1"), t("ed_pp_r2"), t("ed_pp_r3"), t("ed_pp_r4"),
-    t(temDisc ? "ed_prompt_rev_disc_manter" : "ed_prompt_rev_disc", { n: 5 }), t("ed_pp_r6"), "",
+    edRegraDiscursiva(textoPlano, 5), t("ed_pp_r6"), "",
     t("ed_pp_atual"), linhas.join("\n"), "", t("ed_pp_tam_tit"), tam.join("\n"), "",
     t("ed_pp_edital"), "", t("ed_pp_onde")];
   return L.join("\n");
@@ -2290,6 +2314,12 @@ function hubNovoTexto(d) {
   else if (d.previsto) cab.push("previsto: " + String(d.previsto).replace(/[|]/g, "/"));
   if (d.horas) cab.push("horas: " + d.horas);
   L.push("# " + cab.join(" | "));
+  /* (19.76.0) a data da 2ª fase que a IA achou no edital vale quando a caixa não trouxe uma: sem isso, a discursiva em
+   * data própria (SEFAZ-AL) sumia ao montar o plano */
+  if (!d.f2Prova) {
+    const f2IA = String(d.plano || "").split(/\r?\n/).find((l) => /^\s*#\s*fase\s*2\s*:/i.test(l) && /\|\s*prova\s*:\s*\d{4}-\d{2}-\d{2}/i.test(l));
+    if (f2IA) L.push(f2IA.trim());
+  }
   if (d.f2Prova) {
     const c2 = ["fase 2: " + (String(d.f2Nome || "").trim() || "2ª fase")];
     c2.push("prova: " + d.f2Prova);

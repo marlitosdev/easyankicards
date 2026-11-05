@@ -10,9 +10,24 @@
  *  · e, para o edital que ainda não a cadastrou, o atalho para cadastrar.
  * ===================================================================== */
 
+/* (19.76.0) A DISCURSIVA EM DATA PRÓPRIA. Concurso de duas fases (SEFAZ-AL: objetiva em dezembro, discursiva em janeiro)
+ * cadastra a data da escrita na linha "# fase 2: … | prova: …" e marca com "!d" os tópicos que caem nela. Isso também é
+ * discursiva: o formato (pontos, linhas, mínimo) vem da linha "# discursiva", quando houver; a DATA vem da fase 2. Sem a
+ * linha "# discursiva", ela aparece igual, com o formato a cadastrar e as disciplinas dos tópicos "!d". */
 function dsDiscursivaDe(e) {
-  try { const r = lerEdital(e.texto || ""); return { r, dc: r.cfg && r.cfg.discursiva && r.cfg.discursiva.pontos > 0 ? r.cfg.discursiva : null }; }
-  catch (err) { return { r: null, dc: null }; }
+  try {
+    const r = lerEdital(e.texto || "");
+    const cfg = r.cfg || {};
+    const f2 = cfg.fase2 && cfg.fase2.prova ? cfg.fase2 : null;
+    let dc = cfg.discursiva && cfg.discursiva.pontos > 0 ? Object.assign({}, cfg.discursiva) : null;
+    if (!dc && f2) {
+      const comD = [];
+      (r.disciplinas || []).forEach((d) => { if (!d.inativa && d.topicos.some((tp) => tp.fase2) && comD.indexOf(d.nome) < 0) comD.push(d.nome); });
+      dc = { pontos: 0, objetiva: 0, minimo: null, linhas: null, corrigida: 0, disciplinas: comD, semFormato: true };
+    }
+    if (dc && f2) dc.fase2 = { nome: f2.nome || "", prova: f2.prova, objetiva: cfg.prova || "" };
+    return { r, dc };
+  } catch (err) { return { r: null, dc: null }; }
 }
 
 /* as segundas-feiras (ISO) das últimas n semanas, da mais antiga à atual */
@@ -34,7 +49,7 @@ function dsTreinos(id) {
 /* o pedido à IA: temas prováveis no formato desta discursiva, com o espelho de correção */
 function dsPromptTemas(e, dc) {
   const linhas = dc.linhas && dc.linhas.min ? dc.linhas.min + " a " + dc.linhas.max + " linhas" : t("ds_p_linhas_livre");
-  return t("ds_prompt", { c: e.nome || "", d: (dc.disciplinas || []).join("; ") || "-", l: linhas, p: dc.pontos,
+  return t("ds_prompt", { c: e.nome || "", d: (dc.disciplinas || []).join("; ") || "-", l: linhas, p: dc.pontos || "?",
     m: dc.minimo ? (dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor) : "-" });
 }
 
@@ -187,6 +202,16 @@ function dsSemanaIni(d) { return typeof edSemanaCalendario === "function" ? edSe
 function dsDataBr(iso) { return String(iso || "").split("-").reverse().join("/"); }
 /* dias até a prova: número (>= 0), -1 se já passou, null sem data */
 function dsDiasProva(e) {
+  /* a discursiva em data própria conta os dias até ELA, não até a objetiva */
+  try {
+    const cfg = lerEdital(e.texto || "").cfg || {};
+    if (cfg.fase2 && cfg.fase2.prova) {
+      const hoje = new Date(dsHoje() + "T00:00:00");
+      const dias = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? Math.round((new Date(iso + "T00:00:00") - hoje) / 86400000) : null);
+      const d2 = dias(cfg.fase2.prova), d1 = dias(cfg.prova);
+      return { dias: d2 == null ? null : (d2 < 0 ? -1 : d2), prova: cfg.fase2.prova, separada: true, objetiva: cfg.prova || "", diasObjetiva: d1 };
+    }
+  } catch (err) {}
   try {
     const s = edSituacao(e);
     if (s.grupo === "encerrado") return { dias: -1, prova: s.prova || "" };
@@ -300,11 +325,13 @@ function dsSugerirTemas(e, plano, dc, disc, n) {
 function dsPromptProposta(e, dc, disc, temas, n) {
   const discs = disc ? [disc] : (dc.disciplinas || []);
   const lista = (temas || []).length ? temas.map((x) => "- " + x).join("\n") : t("ds_prompt_sem_temas");
-  return t("ds_prompt_prop", { c: e.nome || "", p: dc.pontos, m: dsMinTxt(dc.minimo), l: dsLinhasTxt(dc), d: discs.join("; ") || "-",
-    temas: lista, n: n || 1, corr: dc.corrigida ? " " + t("ds_prompt_corrigida", { n: dc.corrigida }) : "" });
+  const extra = (dc.corrigida ? " " + t("ds_prompt_corrigida", { n: dc.corrigida }) : "")
+    + (dc.fase2 ? " " + t("ds_prompt_f2", { d: dsDataBr(dc.fase2.prova), o: dsDataBr(dc.fase2.objetiva) }) : "");
+  return t("ds_prompt_prop", { c: e.nome || "", p: dc.pontos || "?", m: dsMinTxt(dc.minimo), l: dsLinhasTxt(dc), d: discs.join("; ") || "-",
+    temas: lista, n: n || 1, corr: extra });
 }
 function dsPromptCorrecao(e, dc, p) {
-  return t("ds_prompt_corr", { c: e.nome || "", p: dc.pontos, l: dsLinhasTxt(dc), m: dsMinTxt(dc.minimo), tema: p.tema,
+  return t("ds_prompt_corr", { c: e.nome || "", p: dc.pontos || "?", l: dsLinhasTxt(dc), m: dsMinTxt(dc.minimo), tema: p.tema,
     enun: p.enunciado || p.tema, esp: p.espelho || t("ds_prompt_sem_espelho") });
 }
 function dsCopiar(texto, aviso) {
@@ -316,7 +343,7 @@ function dsCopiar(texto, aviso) {
 function dsRedacoesNaSemana(id) { const ini = dsSemanaIni(dsHoje()); return dsRedacoes(id).filter((x) => dsSemanaIni(x.d) === ini).length; }
 /* as redações desta semana; sem nenhuma registrada, o "treinei" marcado vale uma */
 function dsFeitasSemana(id) { const n = dsRedacoesNaSemana(id); return n || (dsTreinos(id)[dsSemanaIni(dsHoje())] ? 1 : 0); }
-function dsEstrategia(dias, res, dc) {
+function dsEstrategia(dias, res, dc, sit) {
   let fase, meta;
   if (dias == null) { fase = "sem_data"; meta = 1; }
   else if (dias < 0) { fase = "passou"; meta = 0; }
@@ -325,6 +352,12 @@ function dsEstrategia(dias, res, dc) {
   else if (dias <= 120) { fase = "construcao"; meta = 2; }
   else { fase = "fundacao"; meta = 1; }
   const ajustes = [];
+  /* (19.76.0) discursiva em data própria com a objetiva ainda pela frente: até a objetiva, 1 redação por semana para não
+   * perder a mão; o grosso do treino fica para a janela entre as provas (a fase muda sozinha quando a objetiva passa) */
+  if (fase !== "passou" && sit && sit.separada && sit.diasObjetiva != null && sit.diasObjetiva >= 0) {
+    meta = 1;
+    ajustes.push(t("ds_aj_separada", { o: dsDataBr(sit.objetiva), d: dsDataBr(sit.prova), n: dias - sit.diasObjetiva }));
+  }
   if (fase !== "passou") {
     if (!res || !res.n) ajustes.push(t("ds_aj_primeira"));
     else {
@@ -459,7 +492,8 @@ function dsPintarEditor(box, e, r, dc) {
   box.append(dw);
   const msg = el("p", "nota ds-red-msg");
   const bar = el("div", "ds-ia");
-  const salvar = el("button", "btn-min btn-min-ok", t(dc ? "ds_ed_salvar" : "ds_ed_cadastrar"));
+  const temFormato = !!(dc && dc.pontos > 0);
+  const salvar = el("button", "btn-min btn-min-ok", t(temFormato ? "ds_ed_salvar" : "ds_ed_cadastrar"));
   salvar.type = "button"; salvar.id = "btnDsEdSalvar_" + e.id;
   const ler = () => {
     const n = (x) => (x.value === "" ? 0 : Number(String(x.value).replace(",", ".")));
@@ -471,7 +505,7 @@ function dsPintarEditor(box, e, r, dc) {
     const d = ler();
     const falha = dsValidarDiscursiva(d);
     if (falha) { msg.textContent = falha; return; }
-    const antesL = dc ? edLinhaDiscursiva(dc) : t("ds_ed_nenhuma");
+    const antesL = temFormato ? edLinhaDiscursiva(dc) : t("ds_ed_nenhuma");
     if (!(await uiConfirm(t("ds_ed_conf", { e: e.nome || "", a: antesL, d: edLinhaDiscursiva(d) }), { ok: t("ds_ed_conf_ok") }))) return;
     const res = dsDiscursivaGravar(e.id, d);
     if (res.erro) { msg.textContent = res.erro; return; }
@@ -480,7 +514,7 @@ function dsPintarEditor(box, e, r, dc) {
     try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (err) {}
   };
   bar.append(salvar);
-  if (dc) {
+  if (temFormato) {
     const tirar = el("button", "btn-min", t("ds_ed_tirar"));
     tirar.type = "button";
     tirar.onclick = async () => {
@@ -493,6 +527,7 @@ function dsPintarEditor(box, e, r, dc) {
     bar.append(tirar);
   }
   box.append(bar, msg, el("p", "nota", t("ds_ed_ajuda")));
+  if (dc && dc.fase2) box.append(el("p", "nota", t("ds_ed_ajuda_f2", { d: dsDataBr(dc.fase2.prova) })));
 }
 
 /* ---------------- os pedaços do cartão ---------------- */
@@ -525,7 +560,7 @@ function dsEscreverTema(id, tema, disc) {
 function dsPintarEstrategia(card, e, dc, sit) {
   const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
   const res = dsRedacoesResumo(e.id, dc);
-  const est = dsEstrategia(sit.dias, res, dc);
+  const est = dsEstrategia(sit.dias, res, dc, sit);
   const feitas = dsFeitasSemana(e.id);
   const box = el("div", "ds-est ds-est-" + est.fase);
   box.id = "dsEst_" + e.id;
@@ -747,6 +782,8 @@ function dsRender() {
     tt.append(el("div", "ed-caixa-tit", e.nome || "?"));
     tt.append(el("span", "ds-data" + (sit.dias != null && sit.dias >= 0 && sit.dias <= 30 ? " ds-data-perto" : ""),
       sit.dias == null ? t("ds_data_sem") : sit.dias < 0 ? t("ds_data_passou", { d: dsDataBr(sit.prova) }) : t("ds_data", { d: dsDataBr(sit.prova), n: sit.dias })));
+    if (sit.separada && sit.diasObjetiva != null && sit.diasObjetiva >= 0)
+      tt.append(el("div", "ds-data ds-data-f2", t("ds_data_f2", { o: dsDataBr(sit.objetiva), n: sit.diasObjetiva })));
     topo.append(tt);
     const abrir = el("button", "btn-min", t("ds_abrir_edital"));
     abrir.type = "button";
@@ -762,13 +799,15 @@ function dsRender() {
     const share = rd ? rd.share : (dc.objetiva ? Math.round(dc.pontos / (dc.objetiva + dc.pontos) * 100) : null);
     const chips = el("div", "dsc-chips");
     const chip = (tx, cls) => chips.append(el("span", "dsc-chip" + (cls ? " " + cls : ""), tx));
-    chip(t("ds_chip_pontos", { p: dc.pontos }));
+    if (dc.semFormato) chip(t("ds_chip_sem_formato"), "dsc-chip-fora");
+    else chip(t("ds_chip_pontos", { p: dc.pontos }));
     if (share != null) chip(t("ds_chip_share", { s: share }));
     if (dc.minimo) chip(t("ds_chip_min", { m: dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor }));
     if (dc.linhas && dc.linhas.min) chip(t("ds_chip_linhas", { a: dc.linhas.min, b: dc.linhas.max }));
     if (dc.corrigida) chip(t("ds_chip_corrigida", { n: dc.corrigida }), "dsc-chip-fora");
     card.append(chips);
     card.append(el("p", "nota", t("ds_cai_em", { d: (dc.disciplinas || []).join(", ") || "—" })));
+    if (dc.semFormato) card.append(el("p", "nota ds-red-alerta", t("ds_sem_formato")));
 
     /* a estratégia vem primeiro: é o que fazer esta semana */
     dsPintarEstrategia(card, e, dc, sit);
@@ -799,6 +838,7 @@ function dsRender() {
     const ed = el("details", "ds-det ds-editar");
     ed.id = "dsEditar_" + e.id;
     ed.append(el("summary", "", t("ds_ed_tit")));
+    if (dc.semFormato) ed.open = true;
     dsPintarEditor(ed, e, r, dc);
     card.append(ed);
 

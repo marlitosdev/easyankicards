@@ -139,6 +139,43 @@ async function testes() {
     ok(/estrategia da discursiva: fase/.test(relE) || /estrategia da discursiva/.test(api.plRelatorioDiagnostico(plE1, api.lerEdital(e1.texto), e1.id)), "S36 o Raio-X leva a estratégia e as propostas");
     api.edApagar(e1.id); api.edApagar(e2.id); api.edApagar(e3.id);
   }
+  /* ---- (19.76.0) F: a discursiva em DATA PRÓPRIA (fase 2, como na SEFAZ-AL) ---- */
+  {
+    const em = (k) => { const d = new Date(); d.setDate(d.getDate() + k); return d.toISOString().slice(0, 10); };
+    const TF = ["# Sefaz | prova: " + em(45) + " | horas: 40", "# fase 2: Discursivas | prova: " + em(66) + " | horas: 40",
+      "@ Tributário :: 5", "+ ICMS :: 5 :: cai sempre !d", "+ Taxas :: 2", "@ Contabilidade :: 4", "+ Balanço :: 4 :: !d", "@ Português :: 3", "+ Crase :: 3"].join("\n");
+    const ef = api.edCriar("Sefaz F2", TF);
+    const x = api.dsDiscursivaDe(ef);
+    ok(x.dc && x.dc.semFormato && x.dc.disciplinas.join() === "Tributário,Contabilidade" && x.dc.fase2 && x.dc.fase2.prova === em(66), "F1 a fase 2 conta como discursiva, com as disciplinas dos tópicos !d: " + JSON.stringify(x.dc));
+    const sd = api.dsDiasProva(ef);
+    ok(sd.dias === 66 && sd.separada && sd.diasObjetiva === 45, "F2 os dias contam até a discursiva, não até a objetiva: " + JSON.stringify(sd));
+    api.dsRender();
+    const txF = String(api.$("dsLista").textContent || "");
+    ok(/Sefaz F2/.test(txF) && !/Editais sem discursiva cadastrada \(\d+\)[\s\S]*Sefaz F2/.test(txF) && /faltam 66 dia/.test(txF) && /a objetiva vem antes/.test(txF) && /pontos, linhas e mínimo a cadastrar/.test(txF), "F3 a tela mostra a data própria e pede o formato");
+    const es = api.dsEstrategia(66, { n: 0 }, x.dc, sd);
+    ok(es.fase === "construcao" && es.meta === 1 && /depois da objetiva/.test(es.ajustes[0]), "F4 com a objetiva antes, 1 redação por semana: " + JSON.stringify([es.meta, es.ajustes[0]]));
+    /* gravar o formato: a linha "# discursiva" entra sem mexer na fase 2 nem nos pesos da objetiva */
+    const antes = api.montarPlano(api.lerEdital(ef.texto), { horas: 40, feitos: {} });
+    const g = api.dsDiscursivaGravar(ef.id, { pontos: 60, objetiva: 100, minimo: { tipo: "pct", valor: 50 }, linhas: { min: 20, max: 30 }, disciplinas: ["Tributário", "Contabilidade"] });
+    const rf = api.lerEdital(g.novo);
+    const depois = api.montarPlano(rf, { horas: 40, feitos: {} });
+    ok(g.ok && rf.cfg.fase2 && rf.cfg.fase2.prova === em(66) && rf.cfg.discursiva.pontos === 60, "F5 o formato grava e a data da fase 2 fica: " + g.novo.split("\n").slice(0, 3).join(" / "));
+    ok(JSON.stringify(antes.fatia) === JSON.stringify(depois.fatia) && !depois.discursiva, "F6 com data própria, a discursiva não mexe nos pesos da objetiva: " + JSON.stringify([antes.fatia, depois.fatia]));
+    /* pedidos à IA */
+    const rev = api.edPromptRevisao(g.novo, []);
+    ok(/DATA PRÓPRIA/.test(rev) && new RegExp(em(66).split("-").reverse().join("/")).test(rev) && /mantenha a linha “# fase 2”/i.test(rev), "F7 a revisão com IA mantém a data própria e a linha da discursiva");
+    const rev0 = api.edPromptRevisao(TF, []);
+    ok(/MANTENHA a linha “# fase 2”/.test(rev0) && /SEM data/.test(rev0) && /"!d"/.test(rev0), "F8 sem o formato, a revisão pede só o formato, sem data");
+    const sp = api.edPromptSoPesos(g.novo);
+    ok(/# fase 2: Discursivas/.test(sp) && /DATA PRÓPRIA/.test(sp), "F9 o pedido só de pesos leva a fase 2 e a regra");
+    const cria = api.edPromptEdital(false, "", { tem: false });
+    ok(/escreva AS DUAS linhas/.test(cria) && /A DATA da discursiva vai SÓ nesta linha da fase 2/.test(cria), "F10 a criação com IA explica as duas linhas");
+    const novo = api.hubNovoTexto({ nome: "Novo", prova: em(45), horas: 30, plano: "# Novo | prova: " + em(45) + "\n# fase 2: discursiva | prova: " + em(66) + " | horas: 30\n# discursiva | pontos: 60\n@ A :: 3\n+ x :: 3 :: !d" });
+    ok(/# fase 2: discursiva \| prova: /.test(novo) && /# discursiva \| pontos: 60/.test(novo), "F11 montar o plano novo guarda a data da fase 2 que a IA achou: " + novo.split("\n").slice(0, 3).join(" / "));
+    const ctxF = { e: ef, r: rf, s: { prova: em(45), dias: 45 }, cfg: rf.cfg, plano: depois };
+    ok(/Discursiva em data própria/.test(api.hubRitmoPromptIA(ctxF)) && /Até a objetiva, o plano é só o da objetiva/.test(api.hubRitmoPromptIA(ctxF)), "F12 a opinião da IA sobre o ritmo sabe da data própria");
+    api.edApagar(ef.id);
+  }
   return Object.assign(falhas, { quantas: n });
 }
 

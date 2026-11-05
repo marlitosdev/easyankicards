@@ -1411,7 +1411,9 @@ function montarPlano(r, opcoes) {
 
   const disc = cfg.discursiva;
   let discInfo = null;
-  if (!fase.so2 && disc && disc.pontos > 0 && (disc.disciplinas || []).length) {
+  /* (19.76.0) discursiva em DATA PRÓPRIA (fase 2): até a objetiva, o plano é o da objetiva — a escrita tem o plano dela
+   * depois (os tópicos "!d"). Misturar o peso dela aqui puxaria horas de dezembro para o que só se cobra em janeiro. */
+  if (!fase.so2 && !fase.temFase2 && disc && disc.pontos > 0 && (disc.disciplinas || []).length) {
     const porD = {};
     const ativas = (r.disciplinas || []).filter((d) => !d.inativa);
     const exataD = ativas.length && ativas.every((d) => d.abs > 0);
