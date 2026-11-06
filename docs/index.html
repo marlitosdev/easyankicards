@@ -6383,6 +6383,51 @@ dialog.ger-dest-dlg[open]{display:flex;flex-direction:column;width:min(620px,96v
 /* ---- EDITAL VERTICALIZADO: a folha é "papel" (cores fixas, não as do tema): a prévia e a impressão são a mesma coisa ---- */
 dialog.ev-dlg{width:min(980px,96vw);max-width:min(980px,96vw)}
 .ev-opcs{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:6px 0}
+/* (19.91.0) UMA rolagem: o diálogo em coluna; só a lista (viva) ou a folha rola, e as opções ficam à vista */
+dialog.ev-dlg[open]{display:flex;flex-direction:column;max-height:94vh;max-height:94dvh;overflow:hidden}
+dialog.ev-dlg[open]>*{flex:0 0 auto}
+dialog.ev-dlg[open] #evPrevia:not([hidden]){flex:1 1 auto;min-height:0;max-height:none;overflow:auto}
+dialog.ev-dlg[open] #evViva:not([hidden]){flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+dialog.ev-dlg.ev-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
+#evViva>*{flex:0 0 auto}
+/* a lista é a ÚNICA que cresce e rola (a regra de cima, por ser de id, venceria o .evv-rol sozinho) */
+#evViva>.evv-rol{flex:1 1 auto;min-height:0;overflow:auto}
+.ev-modos{display:flex;gap:6px;margin:4px 0 2px}
+.ev-modo{font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--sutil);cursor:pointer}
+.ev-modo.sel{color:var(--texto);border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.evv-resumo{font-weight:700;font-size:13.5px;margin:4px 0}
+.evv-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
+.evv-sel{background:var(--campo);color:var(--texto);border:1px solid var(--borda);border-radius:6px;padding:4px 6px;max-width:260px;color-scheme:light dark}
+.evv-csv{margin-left:auto}
+.evv-leg{margin:2px 0 6px;font-size:11.5px}
+.evv-rol{flex:1 1 auto;min-height:0;overflow:auto;border:1px solid var(--borda);border-radius:8px;color-scheme:light dark}
+.evv-disc{margin:0 0 8px}
+.evv-faixa{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;background:var(--panel);border-bottom:2px solid var(--texto);padding:7px 10px;min-height:20px}
+.evv-faixa-nome{font-weight:800;font-size:13.5px;text-transform:uppercase;letter-spacing:.2px}
+.evv-faixa-tag{font-size:11.5px;color:var(--sutil)}
+.evv-faixa-barra{flex:0 0 120px;height:6px;border-radius:3px;background:var(--borda);overflow:hidden;margin-left:auto}
+.evv-faixa-fill{display:block;height:100%;background:var(--ok)}
+.evv-tab{width:100%;border-collapse:collapse;font-size:13px}
+.evv-tab th{position:sticky;top:36px;z-index:2;background:var(--campo);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--sutil);padding:5px 6px;text-align:center}
+.evv-tab th.evv-c{text-align:left}
+.evv-tab td{padding:5px 6px;border-bottom:1px solid var(--borda)}
+.evv-n{width:44px;text-align:center;color:var(--sutil);font-weight:700}
+.evv-c{text-align:left}
+.evv-k{width:96px;text-align:center;white-space:nowrap}
+.evv-ck{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.evv-ck input:disabled{cursor:help}
+.evv-data{font-size:11.5px;color:var(--sutil)}
+.evv-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;background:var(--borda);vertical-align:middle;flex:none}
+.evv-lin.ev-pai .evv-tx{font-weight:700}
+.evv-lin.ev-pai .evv-n{color:var(--erro)}
+.evv-lin.ev-ramo .evv-c{padding-left:22px}
+.evv-lin.ev-pulado{opacity:.5}
+.evv-rev-ok{color:var(--ok);font-weight:700;font-size:12px}
+.evv-rev-venc{color:var(--erro);font-weight:700;font-size:12px}
+.evv-rev-dia{color:var(--sutil);font-size:12px}
+.evv-q{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:700}
+.evv-q.ruim{color:var(--erro)}.evv-q.meio{color:var(--atencao)}.evv-q.bom{color:var(--ok)}
+@media (max-width:640px){.evv-kc{display:none}.evv-k{width:auto}.evv-faixa-barra{flex-basis:80px}}
 .ev-opc{display:flex;align-items:center;gap:6px;font-size:13px}
 .ev-papel{background:#fff;color:#111;border-radius:8px;padding:14px;max-height:52vh;overflow:auto;border:1px solid var(--borda)}
 .ev-folha{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111}
@@ -11630,20 +11675,29 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgEdVert" class="ui-modal ev-dlg">
   <div class="cov-cab">
     <h3 data-i18n="vert_tit"></h3>
-    <button type="button" class="qs-x" id="btnEdVertX" aria-label="Fechar">✕</button>
+    <span class="cl-cab-bts">
+      <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnEvCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
+      <button type="button" class="qs-x" id="btnEdVertX" aria-label="Fechar">✕</button>
+    </span>
   </div>
-  <p class="nota" data-i18n="vert_ajuda"></p>
+  <!-- (19.91.0) duas abas: a versão VIVA (ligada ao app) e a FOLHA de imprimir (igual a antes) -->
+  <div class="ev-modos" role="tablist">
+    <button type="button" class="ev-modo sel" id="btnEvModoViva" role="tab" aria-selected="true" data-i18n="vert_modo_viva"></button>
+    <button type="button" class="ev-modo" id="btnEvModoFolha" role="tab" aria-selected="false" data-i18n="vert_modo_folha"></button>
+  </div>
+  <p class="nota" id="evModoAj"></p>
   <div class="ev-opcs">
     <label class="ev-opc"><span data-i18n="vert_ordem"></span>
       <select id="evOrdem"><option value="peso" data-i18n="vert_ordem_peso"></option><option value="edital" data-i18n="vert_ordem_edital"></option></select></label>
     <label class="ev-opc"><input type="checkbox" id="evRamos" checked> <span data-i18n="vert_ramos"></span></label>
     <label class="ev-opc"><input type="checkbox" id="evMotivo"> <span data-i18n="vert_motivo"></span></label>
-    <label class="ev-opc"><input type="checkbox" id="evProgresso"> <span data-i18n="vert_progresso"></span></label>
+    <label class="ev-opc" id="evProgressoCx"><input type="checkbox" id="evProgresso"> <span data-i18n="vert_progresso"></span></label>
     <label class="ev-opc"><input type="checkbox" id="evFaixa" checked> <span data-i18n="vert_faixa"></span></label>
     <label class="ev-opc" id="evFase2Cx" hidden><input type="checkbox" id="evFase2"> <span data-i18n="vert_fase2"></span></label>
     <label class="ev-opc"><input type="checkbox" id="evOptOcultar"> <span data-i18n="vert_opt_ocultar"></span></label>
   </div>
   <p class="nota" id="evResumo"></p>
+  <div class="evv" id="evViva"></div>
   <div class="ev-papel" id="evPrevia"></div>
   <div class="dlg-rodape">
     <button type="button" class="btn btn-azul" id="btnEdVertImprimir" data-i18n="vert_imprimir"></button>
