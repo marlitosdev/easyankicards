@@ -376,7 +376,7 @@ function hubPintarAgenda() {
     ln.className = "hub-disc-treino" + (feito ? " feito" : "");
     ln.id = "hubDiscTreino_" + q.id;
     const tx = document.createElement("span");
-    const l = dd.linhas && dd.linhas.min ? dd.linhas.min + "–" + dd.linhas.max : "?";
+    const l = edLinhasTxt(dd.linhas, true) || "?";
     const d = (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-";
     tx.textContent = est
       ? t(feito ? "hub_disc_meta_ok" : "hub_disc_meta", { e: q.nome, f: est.nome, n: feitas, m: meta, l: typeof dsLinhasTxt === "function" ? dsLinhasTxt(dd) : l, d })
@@ -928,7 +928,7 @@ function hubRitmoPromptIA(ctx) {
   if (plano.discursivaCfg) {
     const dd = plano.discursivaCfg;
     L.push(t("hub_ia_discursiva", { p: dd.pontos || "?", s: plano.discursiva ? plano.discursiva.s : "?", d: (dd.disciplinas || []).join(", ") || "?",
-      m: dd.minimo ? (dd.minimo.tipo === "pct" ? dd.minimo.valor + "%" : dd.minimo.valor) : "-", l: dd.linhas ? dd.linhas.min + "–" + dd.linhas.max : "-", c: dd.corrigida || "-" }));
+      m: dd.minimo ? (dd.minimo.tipo === "pct" ? dd.minimo.valor + "%" : dd.minimo.valor) : "-", l: edLinhasTxt(dd.linhas, true) || "-", c: dd.corrigida || "-" }));
   } else if (!(c.cfg.fase2 && c.cfg.fase2.prova)) L.push(t("hub_ia_discursiva_sem"));
   /* (19.76.0) a discursiva em data própria: a IA precisa saber que até a objetiva o plano é dela, e que a escrita vem depois */
   if (c.cfg.fase2 && c.cfg.fase2.prova) {

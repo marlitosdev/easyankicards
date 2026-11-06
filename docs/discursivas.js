@@ -48,7 +48,7 @@ function dsTreinos(id) {
 
 /* o pedido à IA: temas prováveis no formato desta discursiva, com o espelho de correção */
 function dsPromptTemas(e, dc) {
-  const linhas = dc.linhas && dc.linhas.min ? dc.linhas.min + " a " + dc.linhas.max + " linhas" : t("ds_p_linhas_livre");
+  const linhas = edLinhasTxt(dc.linhas) || t("ds_p_linhas_livre");
   return t("ds_prompt", { c: e.nome || "", d: (dc.disciplinas || []).join("; ") || "-", l: linhas, p: dc.pontos || "?",
     m: dc.minimo ? (dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor) : "-" });
 }
@@ -108,7 +108,7 @@ function dsRedacoesResumo(id, dc) {
   const tendencia = ult3 != null && ant3 != null ? (ult3 > ant3 + 5 ? "subindo" : ult3 < ant3 - 5 ? "caindo" : "estavel") : null;
   const minPct = dc && dc.minimo && dc.minimo.tipo === "pct" ? dc.minimo.valor : null;
   const abaixo = minPct == null ? 0 : pcts.filter((p) => p < minPct).length;
-  const fora = dc && dc.linhas && dc.linhas.min ? l.filter((x) => x.linhas && (x.linhas < dc.linhas.min || x.linhas > dc.linhas.max)).length : 0;
+  const fora = dc && dc.linhas && dc.linhas.max ? l.filter((x) => x.linhas && (x.linhas < (dc.linhas.min || 0) || x.linhas > dc.linhas.max)).length : 0;
   return { n: l.length, media5: ult5, tendencia, abaixo, fora, minPct, ultima: l[0] || null };
 }
 
@@ -123,7 +123,7 @@ function dsPintarRedacoes(card, e, dc) {
   if (res.n) {
     const al = [];
     if (res.abaixo) al.push(t("ds_red_abaixo", { n: res.abaixo, m: res.minPct }));
-    if (res.fora) al.push(t("ds_red_fora", { n: res.fora, a: dc.linhas.min, b: dc.linhas.max }));
+    if (res.fora) al.push(t("ds_red_fora2", { n: res.fora, l: edLinhasTxt(dc.linhas) }));
     if (al.length) box.append(el("p", "ds-red-alerta", al.join(" ")));
   }
   /* o formulário */
@@ -138,7 +138,7 @@ function dsPintarRedacoes(card, e, dc) {
   sel.id = "dsRedDisc_" + e.id;
   [""].concat(dc.disciplinas || []).forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n || t("ds_red_disc_qualquer"); sel.append(o); });
   campo(t("ds_red_disc"), sel);
-  const iLin = campo(t("ds_red_linhas"), mk("number", "dsRedLinhas_" + e.id, dc.linhas && dc.linhas.min ? dc.linhas.min + "–" + dc.linhas.max : ""));
+  const iLin = campo(t("ds_red_linhas"), mk("number", "dsRedLinhas_" + e.id, edLinhasTxt(dc.linhas, true)));
   const iNota = campo(t("ds_red_nota"), mk("number", "dsRedNota_" + e.id, "ex.: 32"));
   const iMax = campo(t("ds_red_max"), mk("number", "dsRedMax_" + e.id));
   iMax.value = dc.pontos || 100;
@@ -163,7 +163,7 @@ function dsPintarRedacoes(card, e, dc) {
       const p = dsRedacaoPct(x);
       const ln = el("div", "ds-red-lin" + (res.minPct != null && p != null && p < res.minPct ? " ds-red-ruim" : ""));
       ln.append(el("span", "ds-red-d", x.d.split("-").reverse().join("/")), el("span", "ds-red-t", x.tema + (x.disc ? " · " + x.disc : "")));
-      const foraTam = dc.linhas && dc.linhas.min && x.linhas && (x.linhas < dc.linhas.min || x.linhas > dc.linhas.max);
+      const foraTam = dc.linhas && dc.linhas.max && x.linhas && (x.linhas < (dc.linhas.min || 0) || x.linhas > dc.linhas.max);
       ln.append(el("span", "ds-red-l" + (foraTam ? " ds-red-ruim-t" : ""), x.linhas ? t("ds_red_l", { n: x.linhas }) : ""));
       ln.append(el("strong", "ds-red-n", (x.nota + "/" + x.max) + (p != null ? " · " + p + "%" : "")));
       const del = el("button", "btn-min ds-red-del", "✕");
@@ -223,7 +223,7 @@ function dsMinPontos(dc) {
   if (!dc || !dc.minimo) return null;
   return dc.minimo.tipo === "pct" ? Math.round((dc.minimo.valor / 100) * dc.pontos * 10) / 10 : dc.minimo.valor;
 }
-function dsLinhasTxt(dc) { return dc && dc.linhas && dc.linhas.min ? t("ds_chip_linhas", { a: dc.linhas.min, b: dc.linhas.max }) : t("ds_p_linhas_livre"); }
+function dsLinhasTxt(dc) { return (dc && edLinhasTxt(dc.linhas)) || t("ds_p_linhas_livre"); }
 
 /* ---------------- as propostas guardadas ---------------- */
 const DS_PROP_CHAVE = "eac_disc_propostas";
@@ -435,7 +435,8 @@ function dsValidarDiscursiva(d) {
     if (d.minimo.tipo === "pct" && d.minimo.valor > 100) return t("ds_ed_err_min");
     if (d.minimo.tipo !== "pct" && d.minimo.valor > d.pontos) return t("ds_ed_err_min_pts", { p: d.pontos });
   }
-  if (d.linhas && (!(d.linhas.min > 0) || !(d.linhas.max >= d.linhas.min))) return t("ds_ed_err_linhas");
+  /* só o máximo também vale ("até 30 linhas"); com os dois, o mínimo não passa do máximo */
+  if (d.linhas && (!(d.linhas.max > 0) || (d.linhas.min > 0 && d.linhas.max < d.linhas.min))) return t("ds_ed_err_linhas");
   if (!(d.disciplinas || []).length) return t("ds_ed_err_disc");
   return "";
 }
@@ -837,7 +838,7 @@ function dsRender() {
     else chip(t("ds_chip_pontos", { p: dc.pontos }));
     if (share != null) chip(t("ds_chip_share", { s: share }));
     if (dc.minimo) chip(t("ds_chip_min", { m: dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor }));
-    if (dc.linhas && dc.linhas.min) chip(t("ds_chip_linhas", { a: dc.linhas.min, b: dc.linhas.max }));
+    if (dc.linhas && dc.linhas.max) chip(edLinhasTxt(dc.linhas));
     if (dc.corrigida) chip(t("ds_chip_corrigida", { n: dc.corrigida }), "dsc-chip-fora");
     card.append(chips);
     card.append(el("p", "nota", t("ds_cai_em", { d: (dc.disciplinas || []).join(", ") || "—" })));

@@ -157,6 +157,8 @@ function leiNovaFim(motivo) {
   leiNovaFaixaPintar();
   /* (19.49.0) a lei nasceu: quem a pediu (a janela de vínculo) continua, já com ela */
   if (volta && typeof leiIdAtual !== "undefined" && leiIdAtual) { try { volta(leiIdAtual); } catch (e) {} }
+  /* (19.81.0) e o último passo: identificar a lei (nome, link, data, até que alteração, sigla, cidade) */
+  if (typeof leiProcAbrirNova === "function" && typeof leiIdAtual !== "undefined" && leiIdAtual) setTimeout(() => { try { leiProcAbrirNova(); } catch (e) {} }, 0);
   return true;
 }
 

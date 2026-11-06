@@ -75,7 +75,7 @@ async function testes() {
     ok(JSON.parse(api.loja.getItem("eac_disc_treino") || "{}")[e1.id] && Object.keys(JSON.parse(api.loja.getItem("eac_disc_treino"))[e1.id]).length >= 5, "S10 registrar a redação marca a semana como treinada");
     api.dsRender();
     const tx2 = String(api.$("dsLista").textContent || "");
-    ok(/Redações escritas \(6\)/.test(tx2) && /média das últimas 5: 58%/.test(tx2) && /3 redação\(ões\) abaixo do mínimo/.test(tx2) && /2 fora do tamanho/.test(tx2), "S11 a tela mostra o histórico e os alertas");
+    ok(/Redações escritas \(6\)/.test(tx2) && /média das últimas 5: 58%/.test(tx2) && /3 redação\(ões\) abaixo do mínimo/.test(tx2) && /2 redação\(ões\) fora do tamanho/.test(tx2), "S11 a tela mostra o histórico e os alertas");
     api.dsRedacaoApagar(e1.id, api.dsRedacoes(e1.id)[0].id);
     ok(api.dsRedacoes(e1.id).length === 5, "S12 apagar tira do registro");
     const relD = api.plRelatorio(api.montarPlano(api.lerEdital(T), { horas: 10, feitos: {} }), api.lerEdital(T), [], [], api.lerEdital(T).cfg);

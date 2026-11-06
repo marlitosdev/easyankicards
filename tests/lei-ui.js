@@ -1315,6 +1315,11 @@ async function testes() {
     preparar(api, "Direito Constitucional", "Fiscalização financeira");
     api.leiAbrir("Direito Constitucional", "Fiscalização financeira");
     api.leiVincularAbrir();
+    /* (19.81.0) a janela abre filtrada nesta disciplina; "todas" mostra os dois grupos, esta disciplina primeiro */
+    const soDesta = api.$("leiVincCx").querySelectorAll(".duv-titulo").map((d) => d.textContent);
+    ok(soDesta.length === 1 && /Constituição Federal de 1988/.test(soDesta[0]),
+       "U23z a janela abre só com as leis desta disciplina: " + soDesta.join(" | "));
+    api.$("leiVincF_todas").onclick();
     const grupos = api.$("leiVincCx").querySelectorAll(".lei-vinc-grupo")
       .map((g) => g.textContent);
     ok(grupos.some((g) => /Direito Constitucional/.test(g)),

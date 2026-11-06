@@ -798,7 +798,7 @@ function rodar(opc) {
     leiBotao, leiLog0: () => leiLog.filter((x) => x.t === "erro").length,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado, leiAjudaAbrir,
     leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
-    leiTrocarPara, leiVincularAbrir, leiProcAbrir, leiProcSalvar, leiCamposDoNome,
+    leiTrocarPara, leiVincularAbrir, leiVincFiltrar, leiVincNorm, leiProcSugestoes, leiProcAbrirNova, leiAbreviarNorma, leiProcAbrir, leiProcSalvar, leiCamposDoNome,
     leiClozeAbrir, leiClozeConferir, leiClozeAplicar, leiRanking, leiIrPintar, leiIrIr,
     leiTextoDoTopico, leiAvisoNomePintar, leiRelatorioVinculos, leiAlvosCtx, leiAlvoEscolher, leiAlteracoesRecebidas, leiAlteracoesDe, leiChipsRecebidos, leiFaixaAlvoPintar, leiFaixaAlvoExpandidaLer, leiFaixaAlvoAlternar, LEI_FAIXA_ALVO_LIMITE, leiLacunaChip, leiLacunaClique, leiConsultaAbrir, leiCitacaoHtml, leiLacunasRegAtual: () => leiLacunasReg, leiAlvoCtxAtual: () => leiAlvoCtx, leiSecoes, leiArtigosDaSecao, leiAlvosCandidatos, leiArtigoDoAlvo, leiDispositivos, leiDescreverLacuna, leiLacunasDoBloco, leiArtigoParaConsulta, leiIdentidadeTela, leiIdentidadeDesfazerTela, leiIdentBotoes, leiIdentidadeDivergente, leiIdentidadesDivergentes, leiCorrigirIdentidades, leiIdentidadesDesfazer, leiIdentidadesRecibo, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiPintar, leiIrArtigo, leiAbrirNoArtigo, leiIrAbrir, leiNovaAbrir,
@@ -1170,7 +1170,7 @@ function rodar(opc) {
     edAcertosPorTopico, edCombinarFatores, difMapaDetalhado, ED_AC_TOP, edAcertos,
     REV_PASSOS, edIntervaloRevisao, edRevisaoVenceu, edNRevDaMarca, edMarcaNova, edMarcaDoDiario, edNivelDoFator, regNRevDepois, regTipoPorqueTexto,
     plItemConta, plPorDisciplina, plSinais, plSnapDe, plSnapGravar, plSnapsLer,
-    plSnapsDoEdital, plSnapDiferenca, plRelatorio, plArmazenamento, edRiscoDiscursiva, plRelatorioDiagnostico, dsRender, dsPromptTemas, dsDiscursivaDe, dsSugerirTemas, dsPropostasLer, dsPropostaAdicionar, dsPropostas, dsPropostaApagar, dsPropostaMarcarEscrita, dsEstrategia, dsProximoTema, dsFeitasSemana, dsPromptProposta, dsPromptCorrecao, dsCriterios, dsCortes, dsDiscursivaGravar, dsTextoComDiscursiva, dsValidarDiscursiva, dsDiasProva, dsIrPara, hubPintarAgenda, edRegraDiscursiva, mpMini, mpMapaDoDiario, dscMapaResumo, edMapaDeCalor, dsRedacaoAdicionar, dsRedacaoApagar, dsRedacoes, dsRedacoesResumo,
+    plSnapsDoEdital, plSnapDiferenca, plRelatorio, plArmazenamento, edRiscoDiscursiva, plRelatorioDiagnostico, dsRender, dsPromptTemas, dsDiscursivaDe, dsSugerirTemas, dsPropostasLer, dsPropostaAdicionar, dsPropostas, dsPropostaApagar, dsPropostaMarcarEscrita, dsEstrategia, dsProximoTema, dsFeitasSemana, dsPromptProposta, dsPromptCorrecao, dsCriterios, dsCortes, dsDiscursivaGravar, dsTextoComDiscursiva, dsValidarDiscursiva, dsDiasProva, dsIrPara, hubPintarAgenda, edRegraDiscursiva, edLinhasTxt, epValidar, mpMini, mpMapaDoDiario, dscMapaResumo, edMapaDeCalor, dsRedacaoAdicionar, dsRedacaoApagar, dsRedacoes, dsRedacoesResumo,
     plPodasDisponiveis, plPodaLogs, plPodaRascunhos, plPodaSnaps, plTamanho,
     plBytes, plAbrir, plPintar, plIniciar, plContexto,
     /* o raio-X em tela cheia: o painel nao cabe numa janela de 500px */

@@ -4893,7 +4893,10 @@ function leiGravar(opc) {
     const lc = leiDe(leiIdAtual);
     if (typeof leiNovaEtapa === "function") leiNovaEtapa("criar");
     if (leiAltFilaDaCriacao(lc)) setTimeout(() => { try { leiAltFilaComecar(); } catch (e) {} }, 0);
-  } else if (leiNova && typeof leiNovaFim === "function") leiNovaFim("criada sem leis que alteram");
+  } else if (leiNova && typeof leiNovaFim === "function") {
+    /* (19.81.0) a lei nasceu: pede o nome e de onde veio (com o assistente, quem pede é o fim dele) */
+    if (!leiNovaFim("criada sem leis que alteram")) setTimeout(() => { try { leiProcAbrirNova(); } catch (e) {} }, 0);
+  }
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
   leiPintar();
   toast("lei_salva");
@@ -5383,9 +5386,18 @@ function leiDupPintar() {
       const chip = document.createElement("span");
       const tp = cand.sinais.tipo;
       chip.className = "lei-dup-chip " + (tp === "redacao" ? "ok"
-        : (tp === "revogado" || tp === "vetado" || tp === "vazio" ? "ruim" : ""));
+        : (tp === "revogado" || tp === "vetado" || tp === "vazio" || tp === "incompleto" ? "ruim" : ""));
       chip.textContent = t("lei_dup_c_" + (tp || "nenhum"));
       op.append(chip);
+      /* (19.82.0) O QUE ACONTECE COM ESTA OCORRÊNCIA, dito na própria linha: fica, ou sai do texto (com as linhas dela,
+       * incisos inclusive). A ajuda dizia que a repetição dentro do artigo "não apaga nada", e aqui ela apaga. */
+      if (dec && dec.manter !== "todas") {
+        const ef = document.createElement("span");
+        const fica = dec.manter === cand.indice;
+        ef.className = "lei-dup-efeito " + (fica ? "fica" : "sai");
+        ef.textContent = fica ? t("lei_dup_fica") : t(cand.linhaFim > cand.linha ? "lei_dup_sai_n" : "lei_dup_sai", { a: cand.linha, b: cand.linhaFim, n: cand.linhaFim - cand.linha + 1 });
+        op.append(ef);
+      }
 
       const palavras = leiPalavrasDiferentes(cand.corpo, ref ? ref.corpo : "");
       const desenha = (lista) => {
@@ -7796,62 +7808,194 @@ function leiVincularAbrir(siglaParaLembrar) {
     !(l.topicos || []).some((c) => leisChaveComparavel(c) === minha));
   if (!outras.length) { uiAlert(t("lei_vincular_vazio")); return; }
 
+  /* (19.81.0) A JANELA COM BUSCA. Com 30+ leis guardadas, achar a 4.320 rolando uma lista era o trabalho todo. Agora:
+   * uma busca que acha pelo nome, pela sigla (CTN), pelo número com ou sem ponto ("4320" acha "4.320") e pelos tópicos
+   * em que a lei já é usada; filtros desta disciplina / outras / todas; ordem por uso ou A–Z; e Enter liga a lei quando
+   * só sobra uma. A lista mostra o que decide: nome, siglas, artigos e onde já é usada. */
+  const desta = outras.filter((l) => leiDisciplinasDe(l).some((d) =>
+    leisChaveComparavel(d) === leisChaveComparavel(leiAtual.disciplina)));
+  const ligar = (l) => {
+    leiLigar(l.id, leiAtual.chave);
+    if (sigla) {
+      try {
+        if (leiApelidoAdicionar(l.id, sigla)) {
+          leiReg("vinculo", "sigla vinculada à lei à força", sigla + " → " + l.nome);
+        }
+      } catch (e) {}
+    }
+    $("dlgLeiVincular").close();
+    leiTrocarPara(l.id);
+  };
+  const st = { q: "", grupo: desta.length ? "desta" : "todas", ordem: "uso" };
+  const barra = $("leiVincBarra");
+  if (barra) {
+    barra.innerHTML = "";
+    const busca = document.createElement("input");
+    busca.type = "search"; busca.id = "leiVincBusca"; busca.className = "lei-vinc-busca";
+    busca.placeholder = t("lei_vinc_busca_ph");
+    busca.setAttribute("aria-label", t("lei_vinc_busca_ph"));
+    busca.oninput = () => { st.q = busca.value; pinta(); };
+    busca.onkeydown = (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const vis = leiVincFiltrar(outras, desta, st);
+      if (vis.length === 1) ligar(vis[0]);
+    };
+    const linha = document.createElement("div");
+    linha.className = "lei-vinc-filtros";
+    const chips = document.createElement("div");
+    chips.className = "lei-vinc-chips"; chips.setAttribute("role", "group");
+    [["desta", t("lei_vinc_f_desta", { n: desta.length })], ["outras", t("lei_vinc_f_outras", { n: outras.length - desta.length })], ["todas", t("lei_vinc_f_todas", { n: outras.length })]]
+      .forEach(([k, rot]) => {
+        if (k === "desta" && !desta.length) return;
+        if (k === "outras" && outras.length === desta.length) return;
+        const b = document.createElement("button");
+        b.type = "button"; b.id = "leiVincF_" + k; b.className = "di-per"; b.textContent = rot;
+        b.onclick = () => { st.grupo = k; pinta(); };
+        chips.append(b);
+      });
+    const ord = document.createElement("select");
+    ord.id = "leiVincOrdem"; ord.className = "lei-vinc-ordem";
+    [["uso", t("lei_vinc_o_uso")], ["az", t("lei_vinc_o_az")], ["artigos", t("lei_vinc_o_artigos")]].forEach(([v, rot]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = rot; ord.append(o);
+    });
+    ord.onchange = () => { st.ordem = ord.value; pinta(); };
+    linha.append(chips, ord);
+    const conta = document.createElement("div");
+    conta.id = "leiVincConta"; conta.className = "nota lei-vinc-conta";
+    barra.append(busca, linha, conta);
+  }
+
   const item = (l) => {
     const el = document.createElement("div");
-    el.className = "duv-item";
+    el.className = "duv-item lei-vinc-item";
+    const corpo = document.createElement("div");
+    corpo.className = "lei-vinc-corpo";
     const tit = document.createElement("div");
-    tit.className = "duv-titulo";
-    tit.textContent = l.nome;
+    tit.className = "duv-titulo lei-vinc-nome";
+    leiVincMarcar(tit, l.nome, st.q);
+    /* só as siglas de verdade: as palavras que já estão no nome ("CÓDIGO", "TRIBUTÁRIO") não ajudam a reconhecer a lei */
+    const doNome = leiVincNorm(l.nome).split(/[^a-z0-9]+/);
+    const aps = String(l.apelido || "").split(/[\s/,]+/).filter(Boolean)
+      .filter((a, i, arr) => arr.findIndex((b) => leiVincNorm(b) === leiVincNorm(a)) === i)
+      .filter((a) => a.length <= 10 && doNome.indexOf(leiVincNorm(a)) < 0);
+    if (aps.length) {
+      const sg = document.createElement("span");
+      sg.className = "lei-vinc-siglas";
+      aps.slice(0, 4).forEach((a) => { const c = document.createElement("span"); c.className = "lei-vinc-sigla"; c.textContent = a; sg.append(c); });
+      tit.append(" ", sg);
+    }
     const sub = document.createElement("div");
-    sub.className = "nota";
-    /* dizer QUEM já usa a lei é o que dá confiança de que é a mesma:
-     * "a 4.320 que você já leu em Receita" */
-    sub.textContent = t("lei_vinc_sub", {
-      n: leiArtigos(l.texto).length,
-      onde: (l.topicos || []).map((c) => String(c).split("›").pop()).join(", ") || "—",
-    });
+    sub.className = "nota lei-vinc-sub";
+    /* dizer QUEM já usa a lei é o que dá confiança de que é a mesma: "a 4.320 que você já leu em Receita" */
+    const tops = (l.topicos || []).map((c) => String(c).split("›").pop());
+    const onde = tops.slice(0, 3).join(", ") + (tops.length > 3 ? " " + t("lei_vinc_mais", { n: tops.length - 3 }) : "");
+    sub.textContent = t("lei_vinc_sub2", { n: leiArtigos(l.texto).length, u: tops.length, onde: onde || "—" });
+    if (tops.length > 3) sub.title = tops.join(", ");
+    corpo.append(tit, sub);
     const b = document.createElement("button");
-    b.className = "btn-min btn-min-ok";
+    b.className = "btn-min btn-min-ok lei-vinc-ligar";
     b.textContent = t("lei_vincular_este");
-    b.onclick = () => {
-      leiLigar(l.id, leiAtual.chave);
-      if (sigla) {
-        try {
-          if (leiApelidoAdicionar(l.id, sigla)) {
-            leiReg("vinculo", "sigla vinculada à lei à força", sigla + " → " + l.nome);
-          }
-        } catch (e) {}
-      }
-      $("dlgLeiVincular").close();
-      leiTrocarPara(l.id);
-    };
-    el.append(tit, sub, b);
+    b.onclick = () => ligar(l);
+    el.append(corpo, b);
     return el;
   };
 
-  /* AGRUPAR POR DISCIPLINA — sem isso a lista mistura leis de disciplinas
-   * inteiramente diferentes, e "reutilizar lei já existente na
-   * disciplina" (o pedido) vira "procurar na lista inteira do app". A
-   * disciplina do tópico atual vem primeiro; o resto, depois. */
-  const desta = outras.filter((l) => leiDisciplinasDe(l).some((d) =>
-    leisChaveComparavel(d) === leisChaveComparavel(leiAtual.disciplina)));
-  const outrasDisc = outras.filter((l) => desta.indexOf(l) < 0);
-
-  if (desta.length) {
-    const rot = document.createElement("div");
-    rot.className = "lei-vinc-grupo";
-    rot.textContent = t("lei_vinc_grupo_disc", { d: leiAtual.disciplina });
-    cx.append(rot);
-    desta.forEach((l) => cx.append(item(l)));
+  function pinta() {
+    cx.innerHTML = "";
+    ["desta", "outras", "todas"].forEach((k) => {
+      const b = $("leiVincF_" + k);
+      if (b) { b.classList.toggle("ativa", st.grupo === k); b.setAttribute("aria-pressed", st.grupo === k ? "true" : "false"); }
+    });
+    const vis = leiVincFiltrar(outras, desta, st);
+    const total = st.grupo === "desta" ? desta.length : st.grupo === "outras" ? outras.length - desta.length : outras.length;
+    if ($("leiVincConta")) $("leiVincConta").textContent = st.q.trim() ? t("lei_vinc_conta", { n: vis.length, t: total }) : t("lei_vinc_conta_tudo", { t: total });
+    if (!vis.length) {
+      const v = document.createElement("p");
+      v.className = "nota lei-vinc-vazio";
+      v.textContent = st.q.trim() ? t("lei_vinc_nada", { q: st.q.trim() }) : t("lei_vincular_vazio");
+      cx.append(v);
+      if (st.q.trim() && st.grupo !== "todas" && leiVincFiltrar(outras, desta, Object.assign({}, st, { grupo: "todas" })).length) {
+        const b = document.createElement("span");
+        b.className = "lei-vinc-link"; b.setAttribute("role", "link"); b.tabIndex = 0;
+        b.textContent = t("lei_vinc_buscar_todas");
+        b.onclick = () => { st.grupo = "todas"; pinta(); };
+        cx.append(b);
+      }
+      return;
+    }
+    /* em "todas", sem busca, os dois grupos continuam separados (a disciplina do tópico primeiro) */
+    if (st.grupo === "todas" && !st.q.trim() && desta.length && desta.length < outras.length) {
+      const rot1 = document.createElement("div");
+      rot1.className = "lei-vinc-grupo";
+      rot1.textContent = t("lei_vinc_grupo_disc", { d: leiAtual.disciplina });
+      cx.append(rot1);
+      vis.filter((l) => desta.indexOf(l) >= 0).forEach((l) => cx.append(item(l)));
+      const rot2 = document.createElement("div");
+      rot2.className = "lei-vinc-grupo";
+      rot2.textContent = t("lei_vinc_grupo_outras");
+      cx.append(rot2);
+      vis.filter((l) => desta.indexOf(l) < 0).forEach((l) => cx.append(item(l)));
+    } else vis.forEach((l) => cx.append(item(l)));
   }
-  if (outrasDisc.length) {
-    const rot = document.createElement("div");
-    rot.className = "lei-vinc-grupo";
-    rot.textContent = t("lei_vinc_grupo_outras");
-    cx.append(rot);
-    outrasDisc.forEach((l) => cx.append(item(l)));
-  }
+  pinta();
   abrirModal("dlgLeiVincular");
+  try { if ($("leiVincBusca")) setTimeout(() => { try { $("leiVincBusca").focus(); } catch (e) {} }, 0); } catch (e) {}
+}
+
+/* (19.81.0) PURA: as leis que passam no filtro e na busca, na ordem pedida. A busca casa cada palavra (todas precisam
+ * aparecer) no nome, nas siglas, no número e nos tópicos/disciplinas em que a lei já é usada; sem acento, sem
+ * maiúscula, e com os números sem ponto ("4320" acha "Lei 4.320/1964"). */
+function leiVincNorm(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/(\d)\.(?=\d)/g, "$1").replace(/\s+/g, " ").trim();
+}
+function leiVincFiltrar(outras, desta, st) {
+  const base = st.grupo === "desta" ? desta : st.grupo === "outras" ? outras.filter((l) => desta.indexOf(l) < 0) : outras.slice();
+  const termos = leiVincNorm(st.q).split(" ").filter(Boolean);
+  const casa = (l) => {
+    if (!termos.length) return true;
+    const alvo = leiVincNorm([l.nome, l.apelido, l.numero, l.especie, (l.topicos || []).join(" ").replace(/›/g, " ")].join(" "));
+    return termos.every((x) => alvo.indexOf(x) >= 0);
+  };
+  const vis = base.filter(casa);
+  const uso = (l) => (l.topicos || []).length;
+  if (st.ordem === "az") vis.sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt"));
+  else if (st.ordem === "artigos") vis.sort((a, b) => leiArtigos(b.texto).length - leiArtigos(a.texto).length);
+  else vis.sort((a, b) => uso(b) - uso(a) || String(a.nome || "").localeCompare(String(b.nome || ""), "pt"));
+  /* com busca, o que casa no NOME vem antes do que só casa nos tópicos */
+  if (termos.length) {
+    const noNome = (l) => termos.every((x) => leiVincNorm(l.nome + " " + (l.apelido || "")).indexOf(x) >= 0) ? 0 : 1;
+    vis.sort((a, b) => noNome(a) - noNome(b));
+  }
+  return vis;
+}
+/* o nome com os trechos buscados em destaque (sem innerHTML: texto e <mark>) */
+function leiVincMarcar(el, nome, q) {
+  const txt = String(nome || "");
+  const termos = leiVincNorm(q).split(" ").filter((x) => x.length >= 2);
+  if (!termos.length) { el.textContent = txt; return; }
+  const n = leiVincNorm(txt);
+  /* o normalizado tira acentos e pontos entre números: o mapa leva cada posição do normalizado à do original */
+  const mapa = [];
+  let norm = "";
+  for (let i = 0; i < txt.length; i++) {
+    const ch = txt[i];
+    if (ch === "." && /\d/.test(txt[i - 1] || "") && /\d/.test(txt[i + 1] || "")) continue;
+    const c = ch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    for (let k = 0; k < c.length; k++) { norm += c[k]; mapa.push(i); }
+  }
+  const marca = new Array(txt.length).fill(false);
+  termos.forEach((x) => { let p = norm.indexOf(x); while (p >= 0) { for (let k = p; k < p + x.length; k++) marca[mapa[k]] = true; p = norm.indexOf(x, p + 1); } });
+  let i = 0;
+  while (i < txt.length) {
+    let j = i;
+    while (j < txt.length && marca[j] === marca[i]) j++;
+    if (marca[i]) { const m = document.createElement("mark"); m.textContent = txt.slice(i, j); el.append(m); }
+    else el.append(document.createTextNode(txt.slice(i, j)));
+    i = j;
+  }
+  if (n === "") el.textContent = txt;
 }
 
 /* ---------------------------------------------------------------------
@@ -7863,6 +8007,9 @@ function leiProcAbrir() {
   if (!l) { uiAlert(t("lei_proc_sem_lei")); return; }
   $("leiProcNome").value = l.nome || "";
   $("leiProcFonte").value = l.fonte || "";
+  /* (19.81.0) aberta pelo menu, sem o aviso de "lei recém-criada" nem as marcas de sugestão */
+  if ($("leiProcNovaAviso")) $("leiProcNovaAviso").hidden = true;
+  ["leiProcNome", "leiProcFonte", "leiProcData", "leiProcVersao", "leiProcApelido", "leiProcEnte"].forEach((id) => { const x = $(id); if (x && x.classList) x.classList.remove("lei-proc-sug"); });
   /* SEM DATA SALVA, O CAMPO NASCE VAZIO — nunca "hoje" por padrão.
    * Chutar hoje fazia abrir esta janela só para corrigir o link e
    * clicar "guardar" registrar "consultada hoje" mesmo que ninguém
@@ -7878,6 +8025,79 @@ function leiProcAbrir() {
       .filter(Boolean).join(", ");
   }
   abrirModal("dlgLeiProc");
+}
+
+/* =====================================================================
+ * (19.81.0) IDENTIFICAR A LEI LOGO DEPOIS DE CRIAR. A lei nascia só com o nome tirado do cabeçalho e ninguém pedia o
+ * resto: sem link e sem data, o leitor dizia "não dá para saber se está atualizado"; sem a sigla, uma citação "LRF" não
+ * achava a LC 101. Agora, ao terminar a criação, a janela "De onde veio esta lei" abre com o aviso e com sugestões
+ * tiradas do próprio texto (marcadas como sugestão — nada é gravado sem "guardar"):
+ *  · data em que copiou: hoje (é o dia em que o texto entrou);
+ *  · até que alteração reflete: a norma mais recente citada nas notas "(Redação dada/Incluído/Revogado pela …)";
+ *  · sigla: as consagradas para as leis mais citadas (LRF, CTN, CPC…);
+ *  · cidade: "Município de …" no começo do texto, nas leis municipais.
+ * ===================================================================== */
+const LEI_SIGLAS_CONHECIDAS = {
+  "lei complementar|101|2000": "LRF", "lei|5172|1966": "CTN", "lei|14133|2021": "NLLC", "lei|9784|1999": "LPA",
+  "lei|8429|1992": "LIA", "lei|12527|2011": "LAI", "lei|13709|2018": "LGPD", "lei|8078|1990": "CDC",
+  "lei|10406|2002": "CC", "lei|13105|2015": "CPC", "decreto-lei|2848|1940": "CP", "decreto-lei|3689|1941": "CPP",
+  "lei|6404|1976": "LSA", "lei|7210|1984": "LEP", "lei|8069|1990": "ECA", "lei|9503|1997": "CTB",
+  "decreto-lei|4657|1942": "LINDB", "decreto-lei|5452|1943": "CLT", "lei|9605|1998": "LCA", "lei|13869|2019": "LAA",
+};
+function leiAbreviarNorma(s) {
+  const m = String(s || "").match(/(Lei Complementar|Emenda Constitucional|Emenda Constitucional de Revisão|Medida Provisória|Decreto-Lei|Decreto Legislativo|Decreto|Lei)\s*(?:n[º°o.]*\s*)?([\d.]+(?:-[A-Z])?)\s*,?\s*de\s*(?:\d{1,2}\s*(?:º|o)?\s*(?:de\s+)?[a-zç]+\s*de\s*|\d{1,2}[./]\d{1,2}[./])?(\d{4})/i);
+  if (!m) return String(s || "").replace(/\s+/g, " ").trim();
+  const ab = { "lei complementar": "LC", "emenda constitucional": "EC", "medida provisória": "MP", "medida provisoria": "MP", "decreto-lei": "Decreto-Lei", "decreto": "Decreto", "lei": "Lei" }[m[1].toLowerCase()] || m[1];
+  return ab + " " + m[2] + "/" + m[3];
+}
+function leiProcSugestoes(l) {
+  const out = { data: typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10), versao: "", apelido: "", ente: "" };
+  const txt = String((l && l.texto) || "");
+  /* a alteração mais recente citada (o ano maior; no empate, a última que aparece) */
+  let melhor = null;
+  const re = /\(\s*(?:Reda[cç][aã]o\s+dada|Inclu[ií]d[oa]s?|Revogad[oa]s?|Acrescid[oa]s?|Acrescentad[oa]s?|Renumerad[oa]s?)\s+(?:pel[ao]s?|por)\s+([^)]{4,160})\)/gi;
+  let m;
+  while ((m = re.exec(txt))) {
+    const anos = String(m[1]).match(/(?:19|20)\d{2}/g);
+    const ano = anos ? Number(anos[anos.length - 1]) : 0;
+    if (ano && (!melhor || ano >= melhor.ano)) melhor = { ano, fonte: m[1] };
+  }
+  if (melhor) out.versao = t("lei_proc_sug_versao", { f: leiAbreviarNorma(melhor.fonte) });
+  /* a sigla consagrada */
+  try {
+    const c = leiCamposDoNome((l && l.nome) || "");
+    const k = String(c.especie || "").toLowerCase() + "|" + String(c.numero || "").replace(/\./g, "") + "|" + String(c.ano || "");
+    if (LEI_SIGLAS_CONHECIDAS[k]) out.apelido = LEI_SIGLAS_CONHECIDAS[k];
+  } catch (e) {}
+  /* a cidade, nas leis municipais: "Município de Caruaru" / "MUNICÍPIO DE CARUARU" no começo */
+  const mc = txt.slice(0, 1500).match(/Munic[íi]pio[ \t]+d[eo][ \t]+([^\n,.;:()–—-]{2,60})/i);
+  if (mc) {
+    const pal = [];
+    for (const w of mc[1].trim().split(/[ \t]+/)) {
+      if (/^(lei|leis|decreto|estado|gabinete|prefeitura|c[aâ]mara|secretaria|n[ºo°]|que|e)$/i.test(w) || pal.length >= 4) break;
+      pal.push(w);
+    }
+    out.ente = pal.map((w, i) => (i && /^d[aeo]s?$/i.test(w) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(" ");
+  }
+  return out;
+}
+function leiProcAbrirNova() {
+  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  if (!l) return false;
+  leiProcAbrir();
+  const sug = leiProcSugestoes(l);
+  const por = (id, v) => { const x = $(id); if (x && !String(x.value || "").trim() && v) { x.value = v; if (x.classList) x.classList.add("lei-proc-sug"); } };
+  por("leiProcData", sug.data);
+  por("leiProcVersao", sug.versao);
+  por("leiProcApelido", sug.apelido);
+  por("leiProcEnte", sug.ente);
+  if ($("leiProcNovaAviso")) {
+    $("leiProcNovaAviso").hidden = false;
+    $("leiProcNovaAviso").textContent = t("lei_proc_nova_aviso", { n: l.nome || "" });
+  }
+  try { leiReg("procedencia", "identificar a lei recém-criada: janela aberta", l.nome + " · sugestões: " + JSON.stringify(sug)); } catch (e) {}
+  setTimeout(() => { try { const f = $("leiProcFonte"); if (f && !f.value) f.focus(); else if ($("leiProcNome")) $("leiProcNome").focus(); } catch (e) {} }, 0);
+  return true;
 }
 
 /* O NOME É A FONTE DA VERDADE DE ESPÉCIE, NÚMERO E ANO.

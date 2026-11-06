@@ -504,6 +504,42 @@ async function testes() {
   ["ep_tit", "ep_sub", "ep_btn", "ep_q1", "ep_q2", "ep_frase_grupo", "ep_frase_disc", "ep_ia_pedido", "ep_gravado", "ed_conf_resolver", "ed_banc_texto", "ed_mud_tit", "ed_mud_aplicar", "ed_prompt_disc", "ed_prompt_rev_disc", "ed_conf_discursiva_tit", "ed_conf_discursiva_curto", "ed_conserto_feito", "ed_conserto_min", "ed_conf_pesos_faltam", "ep_atual_tit", "ep_regras_tit", "ep_regra_7", "ep_conf_botoes", "ep_sair_conf", "ep_col_peso15", "ed_colar_so_pesos", "ed_colar_so_pesos_exp", "ed_pp_cab", "ed_pp_r2", "ed_colar_pesos_misto", "ed_colar_sem_pesos", "ep_regra_8", "ep_atual_sub_hibrida", "ed_conf_pesos_hibrida", "ep_fatia_hibrida", "ep_res_novos", "ep_res_mudou", "ep_res_sai", "ep_res_antes", "ep_nova_btn", "ep_nova_pergunta", "ep_mud_nova", "ep_nova_ok"].forEach((k) => {
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I1 falta " + k + " em " + lg); });
   });
+  /* ---- (19.80.0) TJ PB: a discursiva sem disciplinas no edital, "30 linhas" e o mínimo do total da objetiva ---- */
+  {
+    const TJ = ["# TJ PB | prova: 2027-01-24 | horas: 20", "@ Lingua Portuguesa :: 3", "+ a :: 3", "@ Etica e Gestao no Servico Publico :: 3", "+ b :: 3",
+      "@ Nocoes de Informatica e Protecao de Dados :: 3", "+ c :: 3", "@ Direito Constitucional :: 4", "+ d :: 4", "@ Direito Administrativo :: 5", "+ e :: 5",
+      "@ Direito Penal :: 4", "+ f :: 4"].join("\n");
+    const et = api.edCriar("TJ PB teste", TJ);
+    api.hubAbrirEdital(et.id || et);
+    api.$("editalTexto").value = TJ;
+    api.epAbrir();
+    const cj = api.epCtxAtual();
+    const resp = ["Lingua Portuguesa | 10 | 10 | - | -", "Etica e Gestao no Servico Publico | 5 | 5 | - | -", "Nocoes de Informatica e Protecao de Dados | 5 | 5 | - | -",
+      "Direito Constitucional | - | - | - | Conhecimentos Específicos: -", "Direito Administrativo | - | - | - | Conhecimentos Específicos: -", "Direito Penal | - | - | - | Conhecimentos Específicos: -",
+      "Discursiva | 40 | 60 | - | 30 | 300 | -", "", "O trecho não estabelece nota mínima por disciplina nem por módulo/grupo (apenas exige o mínimo global de 60% no total da Prova Objetiva para aprovação)."].join("\n");
+    const lj = api.epLerIA(resp);
+    ok(cj.discursiva === "sim" && cj.disc.pontos === 40 && cj.disc.objetiva === 60 && cj.disc.corrigida === 300 && cj.disc.linhas && cj.disc.linhas.max === 30 && cj.disc.linhas.min === 0, "TJ1 '30' nas linhas vira 'até 30 linhas': " + JSON.stringify(cj.disc.linhas));
+    ok(cj.ds.filter((d) => d.grupo === "Conhecimentos Específicos").length === 3, "TJ2 'Conhecimentos Específicos: -' é o grupo (o ': -' não entra no nome): " + cj.ds.map((d) => d.grupo).join("|"));
+    const lnD = lj.linhas.find((x) => /^Discursiva/.test(x.txt));
+    ok(cj.disc.disciplinas.length === 0 && /não diz em quais disciplinas|doesn't say which subjects/.test(lnD.msg), "TJ3 sem disciplinas no edital, a leitura diz que o edital não diz e aponta os atalhos: " + lnD.msg);
+    ok(!!api.$("btnEpDiscTodas") && !!api.$("btnEpDiscGrupo_0") && /Conhecimentos Específicos \(3\)/.test(api.$("btnEpDiscGrupo_0").textContent), "TJ4 atalhos: todas e as do grupo Conhecimentos Específicos");
+    api.$("btnEpDiscGrupo_0").onclick();
+    ok(cj.disc.disciplinas.join() === "Direito Constitucional,Direito Administrativo,Direito Penal" && !api.epValidar(cj), "TJ5 um toque marca as específicas e a gravação deixa de ser recusada");
+    ok(api.epNovoTexto(TJ, cj).indexOf("# discursiva | pontos: 40 | objetiva: 60 | linhas: 30 | corrigida: 300 | disciplinas: Direito Constitucional; Direito Administrativo; Direito Penal") >= 0, "TJ6 a linha gravada: 'linhas: 30'");
+    const dl = api.lerEdital("# X\n# discursiva | pontos: 40 | linhas: 30 | disciplinas: A\n@ A :: 3\n+ a :: 3").cfg.discursiva;
+    ok(dl.linhas.min === 0 && dl.linhas.max === 30 && /^(até 30 linhas|up to 30 lines)$/.test(api.edLinhasTxt(dl.linhas)) && /^25 (a|to) 30/.test(api.edLinhasTxt({ min: 25, max: 30 })), "TJ7 'linhas: 30' lido de volta e mostrado como 'até 30 linhas'");
+    /* o módulo escrito pela IA vira as disciplinas dele; sem grupo, "específicos" = as sem número próprio */
+    cj.disc.disciplinas = [];
+    api.epLerIA("Discursiva | 40 | 60 | - | 30 | 300 | Conhecimentos Específicos");
+    ok(cj.disc.disciplinas.length === 3, "TJ8 'disciplinas: Conhecimentos Específicos' marca as do módulo");
+    /* o mínimo do total da objetiva, como um grupo em todas */
+    const resp2 = resp.split("\n").slice(0, 6).map((l) => l.replace(/\| - \| -$/, "| - | Prova Objetiva: 60%").replace(/Conhecimentos Específicos: -$/, "Prova Objetiva: 60%")).join("\n");
+    api.epLerIA(resp2);
+    ok(cj.minimo === "sim" && cj.grupos.length === 1 && cj.grupos[0].nome === "Prova Objetiva" && cj.grupos[0].min.valor === 60 && cj.ds.every((d) => d.grupo === "Prova Objetiva"), "TJ9 o mínimo do total da objetiva vira um bloco com todas: " + JSON.stringify(cj.grupos));
+    ok(/Prova Objetiva/.test(api.epPromptIA ? api.epPromptIA() : "Prova Objetiva") && /NAO DIZ/.test(api.t("ep_ia_pedido")) && /Prova Objetiva/.test(api.t("ep_ia_pedido")), "TJ10 o pedido à IA explica o mínimo do total e o 'NAO DIZ'");
+    api.$("dlgEdPontua").close();
+    api.edApagar(et.id || et);
+  }
   api.setLanguage("pt");
   return Object.assign(falhas, { quantas: n });
 }

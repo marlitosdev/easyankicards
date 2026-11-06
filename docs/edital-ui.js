@@ -4610,7 +4610,7 @@ function edPintarRiscoDiscursiva(rd) {
   const tr = el("div", "ed-min-acerto" + (rd.semTreino ? " abaixo" : rd.treinos < 2 ? " apertado" : ""));
   tr.textContent = rd.semTreino ? t("ed_min_disc_sem_treino") : t("ed_min_disc_treino", { n: rd.treinos });
   li.append(tr);
-  if (rd.linhas && rd.linhas.min) li.append(el("div", "nota", t("ed_min_disc_linhas", { a: rd.linhas.min, b: rd.linhas.max })));
+  if (rd.linhas && rd.linhas.max) li.append(el("div", "nota", t("ed_min_disc_linhas2", { l: edLinhasTxt(rd.linhas) })));
   if (rd.corrigida) li.append(el("div", "nota ed-min-disc-corr", t("ed_min_disc_corrigida", { n: rd.corrigida })));
   return li;
 }

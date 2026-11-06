@@ -296,7 +296,7 @@ function epFrasesDe(st, hib, objetiva) {
     if ((dd.disciplinas || []).length) add("disc:cai", t("ep_frase_disc_cai", { d: dd.disciplinas.map(hubDiscCurtaSeg).join(", ") }));
     else add("disc:cai", t("ep_frase_disc_sem_disc"));
     if (dd.minimo) add("disc:min", t("ep_frase_disc_min", { m: epMinTexto(dd.minimo) }));
-    if (dd.linhas && dd.linhas.min && dd.linhas.max) add("disc:linhas", t("ep_frase_disc_linhas", { a: dd.linhas.min, b: dd.linhas.max }));
+    if (dd.linhas && dd.linhas.max) add("disc:linhas", t("ep_frase_disc_linhas2", { l: edLinhasTxt(dd.linhas) }));
     if (dd.corrigida > 0) add("disc:corrigida", t("ep_frase_disc_corrigida", { n: dd.corrigida }));
   }
   return F;
@@ -520,7 +520,7 @@ function epPintarAtual() {
     par("ep_atual_d_vale", t("ep_vale_pontos", { n: dd.pontos }));
     if (dd.objetiva) par("ep_atual_d_obj", t("ep_vale_pontos", { n: dd.objetiva }));
     if (dd.minimo) par("ep_atual_d_min", epMinTexto(dd.minimo));
-    if (dd.linhas && dd.linhas.min) par("ep_atual_d_lin", dd.linhas.min + "–" + dd.linhas.max);
+    if (dd.linhas && dd.linhas.max) par("ep_atual_d_lin", edLinhasTxt(dd.linhas, true));
     if (dd.corrigida) par("ep_atual_d_corr", t("ep_atual_d_corr_v", { n: dd.corrigida }));
     par("ep_atual_d_cai", (dd.disciplinas || []).map(hubDiscCurtaSeg).join(", ") || "—");
   }
@@ -582,6 +582,11 @@ async function epGravarConfirmando() {
     if ($("epMsg")) $("epMsg").textContent = falha;
     try { reg("EDITAL", "como a prova pontua: gravação recusada (antes de confirmar)", falha.replace(/\n/g, " · ")); } catch (e) {}
     await uiAlert(t("ep_nao_grava", { f: falha }));
+    /* (19.80.0) leva até o campo que falta (as disciplinas da discursiva são o caso mais comum) */
+    try {
+      const alvo = c.discursiva === "sim" && !c.disc.disciplinas.length ? $("epDiscMarcas") : null;
+      if (alvo && alvo.scrollIntoView) { alvo.scrollIntoView({ behavior: "smooth", block: "center" }); alvo.classList.add("ep-disc-pisca"); setTimeout(() => alvo.classList.remove("ep-disc-pisca"), 2000); }
+    } catch (e) {}
     return false;
   }
   const mud = epMudancas(c);
@@ -657,7 +662,25 @@ function epPintarDiscursiva() {
     campo("epDiscCorr", t("ep_disc_corrigida"), dd.corrigida, (v) => { dd.corrigida = v; }, t("ep_disc_corrigida_ph")));
   cx.append(lin2);
   cx.append(el("div", "ep-sub-tit", t("ep_disc_onde")));
-  const marcas = el("div", "ep-bloco-discs");
+  /* (19.80.0) QUANDO O EDITAL NÃO DIZ ("1 questão discursiva", como no TJ PB): atalhos para marcar todas, as de um grupo
+   * ou as sem número próprio (num edital que numera as gerais, são as específicas) — e o aviso de que é preciso marcar */
+  if (!dd.disciplinas.length) cx.append(el("p", "nota ep-disc-falta-txt", t("ep_disc_nao_diz")));
+  const atalhos = el("div", "ep-disc-atalhos");
+  const atalho = (rot, lista, id) => {
+    const b = el("button", "btn-min", rot);
+    b.type = "button"; b.id = id;
+    b.onclick = () => { dd.disciplinas = lista.slice(); epPintarDiscursiva(); epResumo(); };
+    atalhos.append(b);
+  };
+  atalho(t("ep_disc_todas"), c.ds.map((d) => d.nome), "btnEpDiscTodas");
+  const gruposD = c.ds.map((d) => d.grupo).filter((g, i, a) => g && a.indexOf(g) === i);
+  gruposD.forEach((g, k) => atalho(t("ep_disc_do_grupo", { g, n: c.ds.filter((d) => d.grupo === g).length }), c.ds.filter((d) => d.grupo === g).map((d) => d.nome), "btnEpDiscGrupo_" + k));
+  const semN = c.ds.filter((d) => !(d.abs > 0));
+  if (!gruposD.length && semN.length && semN.length < c.ds.length) atalho(t("ep_disc_sem_numero", { n: semN.length }), semN.map((d) => d.nome), "btnEpDiscSemN");
+  if (dd.disciplinas.length) atalho(t("ep_disc_limpar"), [], "btnEpDiscLimpar");
+  cx.append(atalhos);
+  const marcas = el("div", "ep-bloco-discs" + (dd.disciplinas.length ? "" : " ep-disc-falta"));
+  marcas.id = "epDiscMarcas";
   c.ds.forEach((d, j) => {
     const l = el("label", "ep-bloco-d");
     const ck = document.createElement("input");
@@ -666,6 +689,7 @@ function epPintarDiscursiva() {
     ck.onchange = () => {
       dd.disciplinas = dd.disciplinas.filter((n) => n.toLowerCase() !== d.nome.toLowerCase());
       if (ck.checked) dd.disciplinas.push(d.nome);
+      marcas.classList.toggle("ep-disc-falta", !dd.disciplinas.length);
       epResumo();
     };
     l.append(ck, el("span", "", hubDiscCurtaSeg(d.nome)));
@@ -924,6 +948,7 @@ function epLerIA(txt) {
   const avisos = [], linhas = [];
   let lidas = 0, comVale = 0, comPontos = 0;
   const minimos = {}, vistas = {};
+  const discModulos = [];   /* (19.80.0) "disciplinas: Conhecimentos Específicos" — resolvido depois de ler todas as linhas */
   const rel = (n, txt0, tipo, msg) => linhas.push({ n, txt: txt0, tipo, msg });
   String(txt || "").split(/\r?\n/).forEach((ln0, idx) => {
     const n = idx + 1;
@@ -939,13 +964,23 @@ function epLerIA(txt) {
       if (num(p[2]) > 0) dd.objetiva = num(p[2]); else prob.push(t("ep_iac_d_obj"));
       if (num(p[3]) > 0) dd.minimo = { tipo: "pct", valor: num(p[3]) };
       const ml = String(p[4] || "").match(/(\d+)\D+(\d+)/);
+      const m1 = String(p[4] || "").match(/(\d+)/);
       if (ml) dd.linhas = { min: Number(ml[1]), max: Number(ml[2]) };
+      else if (m1 && Number(m1[1]) > 0) dd.linhas = { min: 0, max: Number(m1[1]) };   /* (19.80.0) "30" = até 30 linhas */
       if (num(p[5]) > 0) dd.corrigida = num(p[5]);
-      const brutos = String(p[6] || "").split(/[;,]/).map((x) => x.trim()).filter(Boolean);
-      const ds2 = brutos.map(achar).filter(Boolean);
-      const naoAchou = brutos.filter((x) => !achar(x));
-      if (ds2.length) dd.disciplinas = ds2; else prob.push(t("ep_iac_d_disc"));
-      if (naoAchou.length) prob.push(t("ep_iac_d_naoachou", { l: naoAchou.join(", ") }));
+      const brutos = String(p[6] || "").split(/[;,]/).map((x) => x.trim()).filter((x) => x && !/^-+$/.test(x));
+      /* (19.80.0) "todas", "não diz" e o nome de um módulo ("Conhecimentos Específicos") também são respostas: o nome do
+       * módulo vira as disciplinas dele (resolvidas no fim, quando todas as linhas já deram o grupo de cada uma) */
+      const kd = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (brutos.some((x) => /^todas?\b/i.test(kd(x)))) dd.disciplinas = c.ds.map((d) => d.nome);
+      else {
+        const naoDiz = brutos.length === 0 || brutos.some((x) => /^n[aã]o\s*diz|^nao informa|^nao especifica/i.test(kd(x)));
+        const ds2 = brutos.map(achar).filter(Boolean);
+        const modulos = brutos.filter((x) => !achar(x) && !/^n[aã]o/i.test(kd(x)));
+        if (ds2.length) dd.disciplinas = ds2;
+        if (modulos.length) discModulos.push({ dd, nomes: modulos, prob, n, ln });
+        else if (!ds2.length) prob.push(t(naoDiz ? "ep_iac_d_naodiz" : "ep_iac_d_disc"));
+      }
       if (dd.pontos > 0) c.discursiva = "sim";
       rel(n, ln, prob.length ? "aviso" : "ok", t("ep_iac_d_ok", { p: dd.pontos || "?", o: dd.objetiva || "?" }) + (prob.length ? " " + t("ep_iac_falta", { l: prob.join("; ") }) : ""));
       lidas++;
@@ -972,6 +1007,9 @@ function epLerIA(txt) {
     else if (num(mtx) > 0) min = { tipo: "pct", valor: num(mtx) };
     else if (!vazio(mtx)) prob.push(t("ep_iac_min", { x: mtx }));
     let g = (p[4] || "").replace(/^-+$/, "").replace(/[|&@#]/g, "").trim();
+    /* (19.80.0) "Conhecimentos Específicos: -" ou "…: 50%": o que vem depois dos dois-pontos é o mínimo, não o nome */
+    const mdp = g.match(/^(.*?)\s*:\s*(-+|\d+(?:[.,]\d+)?\s*%?)\s*$/);
+    if (mdp && mdp[1].trim()) { g = mdp[1].trim(); if (!min && /\d/.test(mdp[2])) min = { tipo: "pct", valor: num(mdp[2]) }; }
     /* (19.60.1) "Conhecimentos Específicos (50%)": o "(50%)" é o mínimo do bloco, não parte do nome */
     const mg = g.match(/^(.*?)\s*\(\s*(?:m[íi]n(?:imo)?\s*:?\s*)?(\d+(?:[.,]\d+)?)\s*(%|acertos?)?\s*\)\s*$/i);
     if (mg && mg[1].trim()) {
@@ -992,6 +1030,22 @@ function epLerIA(txt) {
     lidas++;
   });
   c.grupos.forEach((g) => { if (minimos[g.nome]) g.min = minimos[g.nome]; });
+  /* (19.80.0) a discursiva que "cai em Conhecimentos Específicos": as disciplinas desse grupo; sem grupo com esse nome e
+   * com o nome falando em "específic", as disciplinas sem número próprio (as gerais vêm numeradas, as específicas não) */
+  discModulos.forEach((x) => {
+    const kd = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    let achadas = [];
+    x.nomes.forEach((nm) => {
+      const g = c.ds.filter((d) => d.grupo && (kd(d.grupo) === kd(nm) || kd(d.grupo).indexOf(kd(nm)) >= 0 || kd(nm).indexOf(kd(d.grupo)) >= 0));
+      if (g.length) achadas = achadas.concat(g.map((d) => d.nome));
+      else if (/espec/i.test(kd(nm)) && c.ds.some((d) => d.abs > 0)) achadas = achadas.concat(c.ds.filter((d) => !(d.abs > 0)).map((d) => d.nome));
+    });
+    achadas = achadas.filter((v, i, a) => a.indexOf(v) === i);
+    if (achadas.length) x.dd.disciplinas = (x.dd.disciplinas || []).concat(achadas.filter((v) => (x.dd.disciplinas || []).indexOf(v) < 0));
+    else x.prob.push(t("ep_iac_d_naoachou", { l: x.nomes.join(", ") }));
+    const r0 = linhas.find((y) => y.n === x.n);
+    if (r0) { r0.tipo = x.prob.length ? "aviso" : "ok"; r0.msg = t("ep_iac_d_ok", { p: x.dd.pontos || "?", o: x.dd.objetiva || "?" }) + (achadas.length ? " " + t("ep_iac_d_modulo", { n: achadas.length }) : "") + (x.prob.length ? " " + t("ep_iac_falta", { l: x.prob.join("; ") }) : ""); }
+  });
   c.grupos = c.grupos.filter((g) => c.ds.some((x) => x.grupo === g.nome));
   /* questões e pontos misturados não somam: se veio algum em pontos, quem veio só em questões fica sem número */
   if (comPontos && comPontos < comVale) avisos.push(t("ep_ia_av_misto"));

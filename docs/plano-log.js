@@ -310,7 +310,7 @@ function plRelatorioDiagnostico(plano, r, editalId) {
       + (plano.discursiva ? " = " + plano.discursiva.s + "% da nota final" : "")
       + " | cai em: " + (dc.disciplinas || []).join(", ")
       + (dc.minimo ? " | minimo " + (dc.minimo.tipo === "pct" ? dc.minimo.valor + "%" : dc.minimo.valor) : "")
-      + (dc.linhas ? " | linhas " + dc.linhas.min + "-" + dc.linhas.max : "")
+      + (dc.linhas && dc.linhas.max ? " | linhas " + edLinhasTxt(dc.linhas, true) : "")
       + (dc.corrigida ? " | corrigida so para os " + dc.corrigida + " primeiros da objetiva" : ""));
   } else L.push("discursiva: nao cadastrada");
   L.push("");

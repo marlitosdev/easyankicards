@@ -656,13 +656,17 @@ function leiSinaisDoArtigo(a) {
     return { tipo: "vazio", fonte: "" };
   }
   if (LEI_RE_SINAL_INCLUIDO.test(corpo)) return { tipo: "incluido", fonte: "" };
+  /* (19.82.0) ANUNCIA ITENS QUE NÃO VÊM. "§ 1º … nos seguintes prazos:" e nada depois: os incisos dessa versão estavam
+   * riscados na fonte (LRF, art. 51, no site do Planalto: o tachado pegou os incisos e deixou a cabeça do parágrafo) e
+   * a limpeza os tirou. Um texto que termina em dois-pontos sem a lista é a redação antiga, cortada. */
+  if (/:\s*$/.test(String(corpo).replace(/\([^)]*\)\s*$/g, "").trim())) return { tipo: "incompleto", fonte: "" };
   return { tipo: "", fonte: "" };
 }
 
 /* pontos de EVIDÊNCIA (o texto diz) — a posição entra à parte, só para
  * desempatar, e nunca vira "confiança" */
 function leiPontosDeSinal(tipo) {
-  return ({ redacao: 4, renumerado: 4, incluido: 1, revogado: -6, vetado: -6, vazio: -3 })[tipo] || 0;
+  return ({ redacao: 4, renumerado: 4, incluido: 1, revogado: -6, vetado: -6, vazio: -3, incompleto: -3 })[tipo] || 0;
 }
 
 function leiNormalizaTexto(s) {
@@ -775,7 +779,8 @@ function leiSugerirEntre(cands) {
     motivo = melhor.sinais.tipo === "redacao" ? "redacao"
       : melhor.sinais.tipo === "renumerado" ? "renumerado"
       : (cands.some((c) => c.sinais.tipo === "revogado") ? "revogado"
-        : (cands.some((c) => c.sinais.tipo === "vetado") ? "vetado" : "vazio"));
+        : (cands.some((c) => c.sinais.tipo === "vetado") ? "vetado"
+          : (cands.some((c) => c.sinais.tipo === "incompleto") ? "incompleto" : "vazio")));
     fonte = melhor.sinais.fonte || "";
   } else if (cands.every((c) => leiNormalizaTexto(c.texto) === leiNormalizaTexto(cands[0].texto))) {
     melhor = cands[0];

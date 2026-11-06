@@ -81,6 +81,30 @@ async function testes() {
     const html = JSON.stringify(api.$("leiDupLista").textContent || "");
     ok(/provável \(lei compilada\)/.test(html) && /ficou escolhida a ÚLTIMA/.test(html), "C4c o cartão diz por que e pede conferência");
   }
+  /* ---- 5 (19.82.0): LRF, art. 51 — o § 1º antigo "nos seguintes prazos:" sem os incisos (riscados na fonte) ---- */
+  {
+    const { api } = rodar();
+    const L = ["Art. 50. Texto.", "", "Art. 51. O Poder Executivo da União promoverá a consolidação das contas.", "",
+      "§ 1o Os Estados e os Municípios encaminharão suas contas ao Poder Executivo da União nos seguintes prazos:", "",
+      "§ 1º Os Estados e os Municípios encaminharão suas contas ao Poder Executivo da União até 30 de abril.      (Redação dada pela Lei Complementar nº 178, de 2021)          (Vigência)", "",
+      "§ 2o O descumprimento dos prazos impedirá o recebimento de transferências.", "", "Art. 52. Outro."];
+    const tx = L.join("\n");
+    const g = api.leiDuplicados(tx).find((x) => /§\s*1/.test(x.rotulo));
+    ok(g && g.candidatos[0].sinais.tipo === "incompleto" && g.candidatos[1].sinais.tipo === "redacao" && g.confianca === "forte" && g.sugerido === g.candidatos[1].indice, "C5 a cabeça do § antigo que termina em ':' sem os incisos é reconhecida, e a nova fica");
+    const semNota = tx.replace(/\s*\(Redação dada[^)]*\)\s*\(Vigência\)/, "");
+    const g2 = api.leiDuplicados(semNota).find((x) => /§\s*1/.test(x.rotulo));
+    ok(g2 && g2.confianca === "forte" && g2.motivo === "incompleto" && g2.sugerido === g2.candidatos[1].indice, "C5b mesmo sem a nota 'Redação dada', o ':' sem itens basta para a sugestão segura: " + (g2 && g2.confianca + "/" + g2.motivo));
+    const r = api.leiAplicarDuplicados(tx, [g], { [g.num]: { manter: g.sugerido } });
+    const out = String(r.texto || r);
+    ok(!/nos seguintes prazos/.test(out) && /até 30 de abril/.test(out) && /§ 2o/.test(out), "C5c o texto final fica só com o § 1º novo");
+    const comIncisos = tx.replace("nos seguintes prazos:\n", "nos seguintes prazos:\n\nI - Municípios, até trinta de abril;\n\nII - Estados, até trinta e um de maio.\n");
+    const g3 = api.leiDuplicados(comIncisos).find((x) => /§\s*1/.test(x.rotulo));
+    ok(g3 && g3.candidatos[0].sinais.tipo !== "incompleto" && g3.sugerido === g3.candidatos[1].indice, "C5d com os incisos presentes, não é 'incompleto' (e a nota de redação decide)");
+    api.leiDuplicadosAbrir({ modo: "criar", texto: tx, grupos: [g], aoConfirmar() {} });
+    const tela = String(api.$("leiDupLista").textContent || "");
+    ok(/anuncia itens que não vêm/.test(tela) && /✓ fica no texto/.test(tela) && /✕ sai do texto/.test(tela), "C5e a tela diz o indício e o que fica e o que sai");
+    ok(/SEM indício nenhum/.test(api.t("lei_dup_ajuda")), "C5f a ajuda não diz mais que a repetição dentro do artigo nunca apaga");
+  }
   return falhas;
 }
 

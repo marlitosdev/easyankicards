@@ -628,6 +628,31 @@ async function testes() {
     api.$("leiVincCx").querySelectorAll("button")[0].onclick();
     ok(!(api.leiDe("lei_b1").apelido || ""),
        "L57d vincular sem sigla gravou um apelido do nada");
+
+    /* (19.81.0) A BUSCA NA JANELA: nome, sigla, número sem ponto e tópico; filtro e Enter */
+    api.leiGuardar({ id: "lei_b3", nome: "Código Tributário Nacional", especie: "Lei", numero: "5.172", apelido: "CTN", texto: "Art. 1º. x.\nArt. 2º. y." });
+    api.leiDesligar("lei_b1", ch);
+    api.leiVincularAbrir();
+    const nomesVis = () => Array.from(api.$("leiVincCx").querySelectorAll(".lei-vinc-nome")).map((x) => x.textContent);
+    ok(!!api.$("leiVincBusca") && api.$("leiVincCx").querySelectorAll("button").length === 2, "L58 a janela tem a busca e lista as 2 leis que dá para ligar");
+    const busca = api.$("leiVincBusca");
+    busca.value = "4320"; busca.oninput();
+    ok(nomesVis().length === 0 || nomesVis().every((n) => /4\.320/.test(n)), "L58b '4320' acha a 4.320 sem o ponto (aqui ela já está ligada, então não aparece)");
+    busca.value = "ctn"; busca.oninput();
+    ok(nomesVis().length === 1 && /Código Tributário Nacional/.test(nomesVis()[0]), "L58c a sigla acha a lei: " + nomesVis().join("|"));
+    busca.value = "licitacoes 8666"; busca.oninput();
+    ok(nomesVis().length === 0, "L58d todas as palavras precisam casar");
+    busca.value = "8666"; busca.oninput();
+    ok(nomesVis().length === 1 && /8\.666/.test(nomesVis()[0]) && !!api.$("leiVincCx").querySelector("mark"), "L58e o número sem ponto acha a 8.666 e o trecho fica em destaque");
+    busca.value = "xyzzy"; busca.oninput();
+    ok(/Nenhuma lei com “xyzzy”|No law matching/.test(api.$("leiVincCx").textContent), "L58f sem resultado, a janela diz o que fazer: " + api.$("leiVincCx").textContent);
+    busca.value = "8666"; busca.oninput();
+    let evitou = false;
+    busca.onkeydown({ key: "Enter", preventDefault: () => { evitou = true; } });
+    ok(evitou && (api.leiDe("lei_b1").topicos || []).length > 0, "L58g Enter com um só resultado liga a lei");
+    const L = [{ nome: "B lei", topicos: ["x›a", "x›b"], texto: "Art. 1. a" }, { nome: "A lei", topicos: [], texto: "Art. 1. a\nArt. 2. b\nArt. 3. c" }];
+    ok(api.leiVincFiltrar(L, [], { q: "", grupo: "todas", ordem: "az" })[0].nome === "A lei" && api.leiVincFiltrar(L, [], { q: "", grupo: "todas", ordem: "uso" })[0].nome === "B lei"
+      && api.leiVincNorm("Lei 4.320/1964 — Orçamento") === "lei 4320/1964 — orcamento", "L58h ordem por uso ou A–Z; a busca ignora acento e o ponto do número");
   }
   /* ==============================================================
    * L59-L63: DUAS LEIS "CONSTITUCIONAIS" NA BIBLIOTECA
@@ -731,6 +756,30 @@ async function testes() {
     api.leiProcSalvar();
     ok(api.leiDe("lei_c1").apelido === "CTN",
        "L58a apagar uma sigla do campo nao a desfez: " + api.leiDe("lei_c1").apelido);
+  }
+  /* ---- (19.81.0) IDENTIFICAR A LEI LOGO DEPOIS DE CRIAR ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.matGravar(api.matChave(DISC, TOP), "R.", { disciplina: DISC, topico: TOP });
+    const LRF = ["LEI COMPLEMENTAR Nº 101, DE 4 DE MAIO DE 2000", "Art. 1º Esta Lei Complementar estabelece normas.",
+      "Art. 2º x. (Redação dada pela Lei Complementar nº 131, de 2009)", "Art. 3º y. (Incluído pela Lei Complementar nº 178, de 2021)",
+      "Art. 4º z. (Vide Lei nº 9.000, de 1995)", "Art. 5º w. (Redação dada pela Lei Complementar nº 173, de 2020)"].join("\n");
+    api.leiGuardar({ id: "lei_n1", nome: "LC 101/2000", especie: "Lei Complementar", numero: "101", texto: LRF });
+    const sg = api.leiProcSugestoes(api.leiDe("lei_n1"));
+    ok(/LC 178\/2021/.test(sg.versao) && sg.apelido === "LRF" && /^\d{4}-\d{2}-\d{2}$/.test(sg.data) && !sg.ente, "LN1 sugestões da LRF: a alteração mais recente (LC 178/2021) e a sigla LRF: " + JSON.stringify(sg));
+    ok(api.leiAbreviarNorma("Lei nº 14.133, de 1º de abril de 2021") === "Lei 14.133/2021" && api.leiAbreviarNorma("Emenda Constitucional nº 132, de 2023") === "EC 132/2023", "LN2 a norma citada vira a forma curta");
+    const mun = api.leiProcSugestoes({ nome: "LC 15/2009", texto: "MUNICÍPIO DE CARUARU\nLEI COMPLEMENTAR Nº 15\nArt. 1º x." });
+    ok(mun.ente === "Caruaru" && !mun.apelido, "LN3 lei municipal: a cidade vem do cabeçalho: " + JSON.stringify(mun));
+    api.leiLigar("lei_n1", api.matChave(DISC, TOP));
+    api.leiAbrir(DISC, TOP, "lei_n1");
+    ok(api.leiProcAbrirNova() === true && api.$("leiProcNovaAviso").hidden === false && /Lei criada: LC 101\/2000/.test(api.$("leiProcNovaAviso").textContent)
+      && api.$("leiProcApelido").value === "LRF" && /LC 178\/2021/.test(api.$("leiProcVersao").value) && /lei-proc-sug/.test(api.$("leiProcVersao").className), "LN4 a janela abre com o aviso e as sugestões marcadas");
+    ok(!api.leiDe("lei_n1").apelido && !api.leiDe("lei_n1").versao, "LN5 nada é gravado antes de 'guardar'");
+    api.leiProcSalvar();
+    ok(api.leiDe("lei_n1").apelido === "LRF" && /LC 178\/2021/.test(api.leiDe("lei_n1").versao) && !!api.leiDe("lei_n1").consultadaEm, "LN6 'guardar' grava a sigla, a versão e a data");
+    api.leiProcAbrir();
+    ok(api.$("leiProcNovaAviso").hidden === true && !/lei-proc-sug/.test(api.$("leiProcVersao").className), "LN7 aberta pelo menu, sem o aviso nem as marcas");
   }
 
   if (!n) falhas.push("nenhuma asserção rodou — o arquivo abortou no meio");

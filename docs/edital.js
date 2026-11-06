@@ -124,7 +124,12 @@ function edLerDiscursiva(partes) {
     if (/^pontos?/i.test(k)) d.pontos = num(v);
     else if (/^objetiva/i.test(k)) d.objetiva = num(v);
     else if (/^m[íi]nimo|^min|^corte/i.test(k)) d.minimo = edMinimo(v);
-    else if (/^linhas?/i.test(k)) { const m = v.match(/(\d+)\s*(?:a|-|–|até)\s*(\d+)/i); if (m) d.linhas = { min: Number(m[1]), max: Number(m[2]) }; }
+    else if (/^linhas?/i.test(k)) {
+      /* (19.80.0) "25-30" ou só o máximo ("30", "até 30"): editais como o do TJ PB dizem "30 (trinta) linhas" */
+      const m = v.match(/(\d+)\s*(?:a|-|–|até)\s*(\d+)/i);
+      if (m) d.linhas = { min: Number(m[1]), max: Number(m[2]) };
+      else { const m1 = v.match(/(\d+)/); if (m1 && Number(m1[1]) > 0) d.linhas = { min: 0, max: Number(m1[1]) }; }
+    }
     else if (/^corrigida|^classific/i.test(k)) d.corrigida = num(v);
     else if (/^disciplinas?/i.test(k)) d.disciplinas = v.split(";").map((x) => x.trim()).filter(Boolean);
   });
@@ -136,10 +141,17 @@ function edLinhaDiscursiva(d) {
   if (d.pontos) p.push("pontos: " + d.pontos);
   if (d.objetiva) p.push("objetiva: " + d.objetiva);
   if (d.minimo && d.minimo.valor != null) p.push("minimo: " + (d.minimo.tipo === "pct" ? d.minimo.valor + "%" : d.minimo.valor));
-  if (d.linhas && d.linhas.min && d.linhas.max) p.push("linhas: " + d.linhas.min + "-" + d.linhas.max);
+  if (d.linhas && d.linhas.max) p.push("linhas: " + (d.linhas.min ? d.linhas.min + "-" : "") + d.linhas.max);
   if (d.corrigida) p.push("corrigida: " + d.corrigida);
   if ((d.disciplinas || []).length) p.push("disciplinas: " + d.disciplinas.join("; "));
   return "# " + p.join(" | ");
+}
+/* (19.80.0) o tamanho da resposta em texto: "25 a 30 linhas", ou "até 30 linhas" quando o edital só dá o máximo.
+ * curto = "25–30" / "até 30". Sem tamanho: "". */
+function edLinhasTxt(l, curto) {
+  if (!l || !(l.max > 0)) return "";
+  if (l.min > 0) return curto ? l.min + "–" + l.max : t("ds_chip_linhas", { a: l.min, b: l.max });
+  return t(curto ? "ed_linhas_ate_curto" : "ed_linhas_ate", { b: l.max });
 }
 /* "!d" ou "!d4"; sempre no fim do campo, para não competir com o texto
  * do motivo — que é prosa livre e não pode ganhar sintaxe. */
