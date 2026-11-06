@@ -666,17 +666,22 @@ function epPintarDiscursiva() {
    * ou as sem número próprio (num edital que numera as gerais, são as específicas) — e o aviso de que é preciso marcar */
   if (!dd.disciplinas.length) cx.append(el("p", "nota ep-disc-falta-txt", t("ep_disc_nao_diz")));
   const atalhos = el("div", "ep-disc-atalhos");
-  const atalho = (rot, lista, id) => {
-    const b = el("button", "btn-min", rot);
+  const atalho = (rot, lista, id, cls) => {
+    const b = el("button", "btn-min" + (cls ? " " + cls : ""), rot);
     b.type = "button"; b.id = id;
     b.onclick = () => { dd.disciplinas = lista.slice(); epPintarDiscursiva(); epResumo(); };
     atalhos.append(b);
   };
-  atalho(t("ep_disc_todas"), c.ds.map((d) => d.nome), "btnEpDiscTodas");
-  const gruposD = c.ds.map((d) => d.grupo).filter((g, i, a) => g && a.indexOf(g) === i);
-  gruposD.forEach((g, k) => atalho(t("ep_disc_do_grupo", { g, n: c.ds.filter((d) => d.grupo === g).length }), c.ds.filter((d) => d.grupo === g).map((d) => d.nome), "btnEpDiscGrupo_" + k));
+  /* (19.82.0) as específicas vêm PRIMEIRO e em destaque: num edital que numera as gerais e não as específicas, as sem
+   * número próprio são as específicas. Antes este atalho só aparecia sem nenhum grupo — e o grupo "Prova Objetiva" (o
+   * mínimo de 60% do total, no TJ PB) o escondia, deixando só "marcar as de Prova Objetiva (10)", que é marcar todas.
+   * Grupo com TODAS as disciplinas também não vira atalho: é o mesmo que "marcar todas". */
   const semN = c.ds.filter((d) => !(d.abs > 0));
-  if (!gruposD.length && semN.length && semN.length < c.ds.length) atalho(t("ep_disc_sem_numero", { n: semN.length }), semN.map((d) => d.nome), "btnEpDiscSemN");
+  if (semN.length && semN.length < c.ds.length) atalho(t("ep_disc_sem_numero", { n: semN.length }), semN.map((d) => d.nome), "btnEpDiscSemN", dd.disciplinas.length ? "" : "btn-min-ok");
+  const gruposD = c.ds.map((d) => d.grupo).filter((g, i, a) => g && a.indexOf(g) === i)
+    .filter((g) => c.ds.filter((d) => d.grupo === g).length < c.ds.length);
+  gruposD.forEach((g, k) => atalho(t("ep_disc_do_grupo", { g, n: c.ds.filter((d) => d.grupo === g).length }), c.ds.filter((d) => d.grupo === g).map((d) => d.nome), "btnEpDiscGrupo_" + k));
+  atalho(t("ep_disc_todas"), c.ds.map((d) => d.nome), "btnEpDiscTodas");
   if (dd.disciplinas.length) atalho(t("ep_disc_limpar"), [], "btnEpDiscLimpar");
   cx.append(atalhos);
   const marcas = el("div", "ep-bloco-discs" + (dd.disciplinas.length ? "" : " ep-disc-falta"));

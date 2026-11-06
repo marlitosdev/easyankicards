@@ -537,6 +537,19 @@ async function testes() {
     api.epLerIA(resp2);
     ok(cj.minimo === "sim" && cj.grupos.length === 1 && cj.grupos[0].nome === "Prova Objetiva" && cj.grupos[0].min.valor === 60 && cj.ds.every((d) => d.grupo === "Prova Objetiva"), "TJ9 o mínimo do total da objetiva vira um bloco com todas: " + JSON.stringify(cj.grupos));
     ok(/Prova Objetiva/.test(api.epPromptIA ? api.epPromptIA() : "Prova Objetiva") && /NAO DIZ/.test(api.t("ep_ia_pedido")) && /Prova Objetiva/.test(api.t("ep_ia_pedido")), "TJ10 o pedido à IA explica o mínimo do total e o 'NAO DIZ'");
+    /* (19.82.0) a resposta real do TJ PB: todas no grupo "Prova Objetiva" (60% do total) e a discursiva "NAO DIZ" */
+    cj.disc.disciplinas = [];
+    const resp3 = ["Lingua Portuguesa | 10 | 10 | - | Prova Objetiva: 60%", "Etica e Gestao no Servico Publico | 5 | 5 | - | Prova Objetiva: 60%",
+      "Nocoes de Informatica e Protecao de Dados | 5 | 5 | - | Prova Objetiva: 60%", "Direito Constitucional | - | - | - | Prova Objetiva: 60%",
+      "Direito Administrativo | - | - | - | Prova Objetiva: 60%", "Direito Penal | - | - | - | Prova Objetiva: 60%",
+      "Discursiva | 40 | 60 | - | 30 | 300 | NAO DIZ"].join("\n");
+    api.epLerIA(resp3);
+    ok(cj.grupos.length === 1 && cj.grupos[0].nome === "Prova Objetiva" && cj.disc.disciplinas.length === 0, "TJ11 a resposta real é lida: um grupo 'Prova Objetiva' e a discursiva sem disciplinas");
+    ok(!!api.$("btnEpDiscSemN") && /específicas \(3\)|specific ones \(3\)/.test(api.$("btnEpDiscSemN").textContent) && /btn-min-ok/.test(api.$("btnEpDiscSemN").className), "TJ12 com o grupo de todas, o atalho das específicas continua e vem em destaque: " + (api.$("btnEpDiscSemN") && api.$("btnEpDiscSemN").textContent));
+    const atalhos = (() => { const r = []; const achar = (n) => { if (!n) return; if (/^btnEpDisc/.test(n.id || "") && n.parentNode && /ep-disc-atalhos/.test(n.parentNode.className || "")) r.push(n.id); Array.from(n.children || []).forEach(achar); }; achar(api.$("epDiscCx")); return r; })();
+    ok(atalhos[0] === "btnEpDiscSemN" && atalhos.indexOf("btnEpDiscGrupo_0") < 0, "TJ13 o grupo com todas as disciplinas não vira atalho repetido; as específicas vêm primeiro: " + atalhos.join());
+    api.$("btnEpDiscSemN").onclick();
+    ok(cj.disc.disciplinas.join() === "Direito Constitucional,Direito Administrativo,Direito Penal" && !api.epValidar(cj), "TJ14 um toque e a gravação passa");
     api.$("dlgEdPontua").close();
     api.edApagar(et.id || et);
   }

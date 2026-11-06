@@ -17,7 +17,7 @@ async function testes() {
   const ok = (c, m) => { n++; if (!c) falhas.push(m); };
   const { api } = rodar();
   api.matIniciar(); api.edIniciar();
-  const prova = (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().slice(0, 10); })();
+  const prova = (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
   const T = ["# Riscos | prova: " + prova + " | horas: 10",
     "# discursiva | pontos: 40 | objetiva: 90 | minimo: 50% | linhas: 25-30 | corrigida: 50 | disciplinas: Tributário",
     "& Específicos | minimo: 50%", "@ Tributário :: 5", "+ a :: 5", "+ b :: 4", "@ Administrativo :: 4", "+ c :: 4",
@@ -84,7 +84,7 @@ async function testes() {
     Object.keys(api.BK_CHAVES).forEach((g) => api.BK_CHAVES[g].forEach((k) => todas.push(k)));
     ok(["eac_disc_treino", "eac_disc_redacoes", "eac_ed_conferencia", "eac_ag_modo", "eac_ag_meta_min", "eac_ger_pastas"].every((k) => todas.indexOf(k) >= 0), "S14 o backup leva o treino, as redações e as decisões do plano");
     /* ---- (19.75.0) a tela completa: ordem pela prova, critérios, sugestões, propostas, estratégia, edição, agenda ---- */
-    const perto = (() => { const d = new Date(); d.setDate(d.getDate() + 10); return d.toISOString().slice(0, 10); })();
+    const perto = (() => { const d = new Date(); d.setDate(d.getDate() + 10); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
     const e3 = api.edCriar("Perto", ["# Perto | prova: " + perto + " | horas: 10", "# discursiva | pontos: 20 | objetiva: 80 | disciplinas: Civil", "@ Civil :: 5", "+ contratos :: 5", "+ posse :: 2"].join("\n"));
     api.dsRender();
     const ordem = [...api.$("dsLista").querySelectorAll(".ds-card")].map((c) => c.id);
@@ -141,7 +141,7 @@ async function testes() {
   }
   /* ---- (19.76.0) F: a discursiva em DATA PRÓPRIA (fase 2, como na SEFAZ-AL) ---- */
   {
-    const em = (k) => { const d = new Date(); d.setDate(d.getDate() + k); return d.toISOString().slice(0, 10); };
+    const em = (k) => { const d = new Date(); d.setDate(d.getDate() + k); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };   /* data LOCAL: depois das 21h o UTC já é amanhã */
     const TF = ["# Sefaz | prova: " + em(45) + " | horas: 40", "# fase 2: Discursivas | prova: " + em(66) + " | horas: 40",
       "@ Tributário :: 5", "+ ICMS :: 5 :: cai sempre !d", "+ Taxas :: 2", "@ Contabilidade :: 4", "+ Balanço :: 4 :: !d", "@ Português :: 3", "+ Crase :: 3"].join("\n");
     const ef = api.edCriar("Sefaz F2", TF);
