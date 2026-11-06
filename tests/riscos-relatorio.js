@@ -131,7 +131,7 @@ async function testes() {
     /* a agenda: meta da fase, próximo tema e o atalho para cá */
     try { api.hubPintarAgenda(); } catch (err) {}
     const ag = api.$("hubDiscTreino_" + e3.id) || api.$("hubDiscTreino_" + e1.id);
-    ok(!ag || (/redação\(ões\) esta semana|meta da semana cumprida/.test(ag.textContent) && !!(api.$("btnHubDisc_" + e3.id) || api.$("btnHubDisc_" + e1.id))), "S34 a agenda mostra a meta e o atalho: " + (ag ? ag.textContent : "(agenda sem editais ativos no teste)"));
+    ok(!ag || (/tema\(s\) esta semana|meta da semana cumprida/.test(ag.textContent) && !!(api.$("btnHubDisc_" + e3.id) || api.$("btnHubDisc_" + e1.id))), "S34 a agenda mostra a meta e o atalho: " + (ag ? ag.textContent : "(agenda sem editais ativos no teste)"));
     const todas2 = [];
     Object.keys(api.BK_CHAVES).forEach((gk) => api.BK_CHAVES[gk].forEach((k) => todas2.push(k)));
     ok(todas2.indexOf("eac_disc_propostas") >= 0, "S35 o backup leva as propostas");

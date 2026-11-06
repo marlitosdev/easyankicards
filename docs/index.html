@@ -5501,6 +5501,56 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .ds-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--info);color:#fff;font-weight:800;font-size:11px}
 .ds-fluxo-copiado .ds-passo:first-of-type .ds-passo-n{background:var(--ok)}
 .ds-cortes-comum{margin:4px 0 8px;font-weight:700;font-size:13px}
+/* (19.88.0) o Painel da discursiva: o passo de agora, o ritmo, as pendências e as disciplinas em cores */
+.ds-passo-card{border:2px solid var(--info);border-radius:12px;padding:10px 12px;margin:8px 0 10px;background:color-mix(in srgb,var(--info) 6%,transparent)}
+.ds-passo-card.ds-passo-vermelho{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 6%,transparent)}
+.ds-passo-card.ds-passo-amarelo{border-color:var(--atencao);background:color-mix(in srgb,var(--atencao) 6%,transparent)}
+.ds-passo-card.ds-passo-verde{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 6%,transparent)}
+.ds-passo-rot{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--sutil)}
+.ds-passo-tit{font-size:16px;font-weight:800;margin:2px 0 4px}
+.ds-passo-por{font-size:13px;color:var(--sutil);margin:0 0 6px}
+.ds-passo-disc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;margin:4px 0}
+.ds-passo-disc .ds-sel{max-width:100%}
+.ds-passo-card .ds-fluxo{background:var(--panel)}
+.ds-passo-card textarea.ds-colar{min-height:0;height:84px;resize:vertical}
+.ds-modos{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.ds-modo{font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--sutil);cursor:pointer}
+.ds-modo.sel{color:var(--texto);border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.ds-modo-aj{font-size:12px;color:var(--sutil);margin:2px 0 4px}
+.ds-ritmo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:700;font-size:13.5px;margin:8px 0 4px}
+.ds-ritmo.ok{color:var(--ok)}
+.ds-bolas{letter-spacing:2px}.ds-bola.feita{color:var(--ok)}
+.ds-ritmo-sep{margin:0 0 6px}
+.ds-pends{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.ds-pend{font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--texto);cursor:pointer}
+.ds-pend.ds-pn-vermelho{border-color:var(--erro);color:var(--erro)}
+.ds-pend.ds-pn-amarelo{border-color:var(--atencao);color:var(--atencao)}
+.ds-pend.ativo{background:color-mix(in srgb,var(--info) 14%,var(--campo));color:var(--texto)}
+.ds-pn{margin:6px 0}
+.ds-pn-resumo{font-size:12.5px;color:var(--sutil);margin:0 0 4px}
+.ds-pn-lin{display:grid;grid-template-columns:12px minmax(0,1fr) auto 104px 62px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--borda);font-size:13px}
+.ds-pn-dot{width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--borda);flex:none}
+.ds-pn-vermelho .ds-pn-dot,.ds-pn-dot.ds-pn-vermelho{background:var(--erro)}
+.ds-pn-amarelo .ds-pn-dot,.ds-pn-dot.ds-pn-amarelo{background:var(--atencao)}
+.ds-pn-verde .ds-pn-dot,.ds-pn-dot.ds-pn-verde{background:var(--ok)}
+.ds-pn-nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.ds-pn-peso{font-weight:400;color:var(--sutil);font-size:11.5px;margin-left:6px}
+.ds-pn-cels{display:inline-flex;align-items:center;gap:2px}
+.ds-pn-cel{width:9px;height:9px;border-radius:2px;border:1px solid var(--borda)}
+.ds-pn-cel.cheia{background:var(--ok);border-color:var(--ok)}
+.ds-pn-n{font-variant-numeric:tabular-nums;margin-left:5px;font-size:12px;color:var(--sutil)}
+.ds-pn-cont{font-size:12px;color:var(--sutil);text-align:right;white-space:nowrap}
+.ds-pn-st{font-size:12px;font-weight:800;text-align:right;white-space:nowrap}
+.ds-pn-vermelho .ds-pn-st{color:var(--erro)}.ds-pn-amarelo .ds-pn-st{color:var(--atencao)}.ds-pn-verde .ds-pn-st{color:var(--ok)}
+.ds-aba-pend{font-size:11px;font-weight:800}
+.ds-aba-pend.ds-pn-vermelho{color:var(--erro)}.ds-aba-pend.ds-pn-amarelo{color:var(--atencao)}.ds-aba-pend.ds-pn-verde{color:var(--ok)}
+.ds-mais{margin-top:14px}
+.ds-sug-marque{font-size:13px;font-weight:700;margin:8px 0 2px}
+.ds-sug-ck{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--borda);cursor:pointer}
+.ds-sug-ck input{margin-top:3px;flex:none}
+.hub-disc-tx{display:inline-flex;align-items:center;flex-wrap:wrap;gap:0;flex:1;min-width:0}
+.hub-disc-pontos{display:inline-flex;gap:3px;margin-right:8px}
+@media (max-width:560px){.ds-pn-lin{grid-template-columns:12px minmax(0,1fr) auto 58px}.ds-pn-cont{display:none}}
 .ds-cortes-comum.ds-cortes-ruim{color:var(--erro)}.ds-cortes-comum.ds-cortes-apert{color:var(--atencao)}
 .ds-cortes-lin.ds-cortes-sem-b{grid-template-columns:minmax(0,1.6fr) 90px 80px 70px}
 .ds-cortes-lin{grid-template-columns:minmax(0,1.3fr) 80px 70px 64px minmax(0,1.3fr)}

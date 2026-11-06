@@ -248,6 +248,8 @@ function dsPropostaAdicionar(id, x) {
   const p = { id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), d: dsHoje(), tema: tema.slice(0, 200),
     disc: String(x.disc || "").slice(0, 120), enunciado: enun.slice(0, 4000), espelho: String(x.espelho || "").trim().slice(0, 6000),
     fonte: x.fonte === "ia" ? "ia" : "sugestao", escrita: false };
+  const modelo = String((x && x.modelo) || "").trim();
+  if (modelo.length >= 40) { p.modelo = modelo.slice(0, 12000); p.modeloLinhas = Number(x.linhas) > 0 ? Math.round(Number(x.linhas)) : null; p.modeloEm = p.d; }
   if (!dsPropostasGravar(id, lista.concat([p]))) return { erro: t("ds_red_sem_espaco") };
   try { reg("DISCURSIVAS", "proposta guardada", tema.slice(0, 60) + " · " + p.fonte); } catch (e) {}
   return p;
@@ -273,15 +275,18 @@ function dsAcharDisc(nome, lista) {
 
 /* a resposta da IA: blocos com os rótulos TEMA / DISCIPLINA / ENUNCIADO / ESPELHO (com ou sem **, #, numeração) */
 function dsPropostasLer(texto, disciplinas) {
-  const rot = /^\s*(?:[#>*\-\d.)\s]*)\**\s*(tema|disciplina|enunciado|espelho(?:\s+de\s+corre[cç][aã]o)?)\s*\**\s*[:：]\s*\**\s*(.*)$/i;
+  /* (19.88.0) também RESPOSTA MODELO e LINHAS: o pedido "completo" traz o modelo no mesmo envio */
+  const rot = /^\s*(?:[#>*\-\d.)\s]*)\**\s*(tema|disciplina|enunciado|espelho(?:\s+de\s+corre[cç][aã]o)?|resposta(?:\s+modelo)?|linhas)\s*\**\s*[:：]\s*\**\s*(.*)$/i;
   const out = [];
   let cur = null, campo = null;
   String(texto || "").replace(/\r/g, "").split("\n").forEach((ln) => {
     const m = ln.match(rot);
-    if (m) {
-      const k0 = dsNorm(m[1]);
-      const k = k0.indexOf("espelho") === 0 ? "espelho" : k0 === "disciplina" ? "disc" : k0;
-      if (k === "tema" || !cur) { cur = { tema: "", disc: "", enunciado: "", espelho: "" }; out.push(cur); }
+    const k1 = m ? dsNorm(m[1]) : "";
+    /* "Linhas: 25 a 30" dentro do enunciado é texto; só depois da resposta modelo é a contagem */
+    if (m && !(k1 === "linhas" && campo !== "modelo") && !(k1.indexOf("resposta") === 0 && !cur)) {
+      const k0 = k1;
+      const k = k0.indexOf("espelho") === 0 ? "espelho" : k0 === "disciplina" ? "disc" : k0.indexOf("resposta") === 0 ? "modelo" : k0;
+      if (k === "tema" || !cur) { cur = { tema: "", disc: "", enunciado: "", espelho: "", modelo: "", linhas: "" }; out.push(cur); }
       campo = k;
       const v = m[2].replace(/\*+\s*$/, "").trim();
       cur[campo] = cur[campo] ? cur[campo] + "\n" + v : v;
@@ -289,8 +294,11 @@ function dsPropostasLer(texto, disciplinas) {
     }
     if (cur && campo) cur[campo] += "\n" + ln;
   });
-  return out.map((p) => ({ tema: p.tema.trim().split("\n")[0].trim(), disc: dsAcharDisc(p.disc.trim().split("\n")[0], disciplinas),
-    enunciado: p.enunciado.trim(), espelho: p.espelho.trim() })).filter((p) => p.tema && (p.enunciado || p.espelho));
+  return out.map((p) => {
+    const nl = String(p.linhas || "").match(/\d+/);
+    return { tema: p.tema.trim().split("\n")[0].trim(), disc: dsAcharDisc(p.disc.trim().split("\n")[0], disciplinas),
+      enunciado: p.enunciado.trim(), espelho: p.espelho.trim(), modelo: String(p.modelo || "").trim(), linhas: nl ? Number(nl[0]) : null };
+  }).filter((p) => p.tema && (p.enunciado || p.espelho));
 }
 
 /* ---------------- sugestão de temas pelo que o edital exige ---------------- */
@@ -547,7 +555,11 @@ function dsPintarEditor(box, e, r, dc) {
 }
 
 /* ---------------- os pedaços do cartão ---------------- */
-function dsIrPara(id) {
+function dsIrPara(id, opc) {
+  /* (19.88.0) abre na aba DESTE edital, no Painel (e só com o que falta, quando pedido) */
+  const o = opc || {};
+  try { localStorage.setItem("eac_ds_edital", String(id)); localStorage.setItem("eac_ds_secao", o.secao || "geral"); } catch (e) {}
+  if (o.pend) dsPainelSoPend[id] = true;
   if (typeof trocarModo === "function") trocarModo("discursivas"); else dsRender();
   setTimeout(() => {
     const c = document.getElementById("dsCard_" + id);
@@ -591,14 +603,8 @@ function dsPintarEstrategia(card, e, dc, sit) {
     });
     box.append(tl);
   }
-  /* a meta da semana em bolinhas: ● feita, ○ por fazer */
-  if (est.meta) {
-    const meta = el("div", "ds-est-meta" + (feitas >= est.meta ? " ds-est-ok" : ""));
-    const bol = el("span", "ds-bolas");
-    for (let k = 0; k < Math.max(est.meta, feitas); k++) bol.append(el("span", "ds-bola" + (k < feitas ? " feita" : ""), k < feitas ? "●" : "○"));
-    meta.append(bol, el("span", "", t(feitas >= est.meta ? "ds_est_meta_ok" : "ds_est_meta", { n: feitas, m: est.meta })));
-    box.append(meta);
-  }
+  /* (19.88.0) a meta em bolinhas foi para o Painel, contando TEMAS (gerados pela IA ou escritos), não só redações */
+  void feitas;
   box.append(el("p", "ds-est-foco", est.foco));
   if (est.ajustes.length) {
     const aj = el("details", "ds-det ds-est-ajd");
@@ -704,6 +710,7 @@ function dsFluxoIA(o) {
   const bl = dsEl("button", "btn-min btn-min-ok", o.lerRot || t("ds_f_ler"));
   bl.type = "button"; if (o.idLer) bl.id = o.idLer;
   const msg = dsEl("p", "nota ds-red-msg");
+  box._copiar = bc;
   bc.onclick = () => { dsCopiar(o.prompt(), o.aviso || t("ds_f_copiado")); box.classList.add("ds-fluxo-copiado"); try { ta.focus(); } catch (e) {} };
   bl.onclick = () => { const r = o.aoLer(String(ta.value || "")); if (r && r.erro) msg.textContent = r.erro; };
   box.append(ta, bl, msg);
@@ -863,13 +870,18 @@ function dsPintarTextoDaProva(box, e, dc, plano) {
   box.append(ex);
 }
 
-/* ---------------- TEMAS: sugestões + criar com a IA (o fluxo único) ---------------- */
+/* ---------------- TEMAS: marcar os tópicos e pedir à IA ----------------
+ * (19.88.0) Cada linha tinha "IA" e "guardar", e não se sabia se o botão agia ali ou na caixa de colar de baixo ("se eu
+ * não entendi, outros também não vão entender"). Agora as linhas só se MARCAM (as 3 primeiras já vêm marcadas) e há UM
+ * lugar para agir: o bloco ① ② ③ logo abaixo, que copia o pedido dos marcados e recebe a resposta inteira. O "guardar só
+ * o nome" saiu: o tema entra pronto, com o enunciado e o que a banca cobra. */
 const dsDiscEscolhida = {};
-function dsPintarSugestoes(card, e, plano, dc) {
+const dsSugMarcados = {};
+function dsPintarSugestoes(card, e, plano, dc, sit) {
   const el = dsEl;
   const box = el("div", "ds-sug");
   box.id = "dsSug_" + e.id;
-  box.append(el("div", "ds-sub-tit", t("ds_sug_tit")));
+  box.append(el("div", "ds-sub-tit", t("ds_g_tit")));
   const aj0 = el("details", "ds-info"); aj0.append(el("summary", "", "ⓘ " + t("ds_info_sug")), el("p", "nota", t("ds_sug_ajuda"))); box.append(aj0);
   const lin = el("div", "ds-ia");
   const sel = document.createElement("select"); sel.id = "dsSugDisc_" + e.id; sel.className = "ds-sel";
@@ -878,40 +890,31 @@ function dsPintarSugestoes(card, e, plano, dc) {
   sel.onchange = () => { dsDiscEscolhida[e.id] = sel.value; dsRender(); };
   lin.append(sel);
   box.append(lin);
-  const sug = dsSugerirTemas(e, plano, dc, sel.value || null, 6);
-  /* o pedido do fluxo: 3 propostas dos temas sugeridos, ou 1 do tema escolhido na lista */
-  let pedido = () => dsPromptProposta(e, dc, sel.value || null, sug.map((s) => s.topico + " (" + s.disc + ")"), 3);
+  const modo = dsModoGerar[e.id] || dsModoPadrao(sit ? sit.dias : null);
+  const sug = dsSugerirTemas(e, plano, dc, sel.value || null, 8);
+  const chave = e.id + "|" + (sel.value || "");
+  const k0 = (s0) => s0.topico + "|" + s0.disc;
+  if (!dsSugMarcados[chave]) dsSugMarcados[chave] = new Set(sug.slice(0, 3).map(k0));
+  const marc = dsSugMarcados[chave];
+  let ger = null;
   if (!sug.length) box.append(el("p", "nota", t("ds_sug_vazio")));
-  sug.forEach((s, k) => {
-    const ln = el("div", "ds-sug-lin" + (s.treinado ? " ds-sug-ja" : ""));
+  else box.append(el("p", "ds-sug-marque", t(modo === "ideias" ? "ds_sug_marque_ideias" : "ds_sug_marque")));
+  sug.forEach((s0, k) => {
+    const lb = el("label", "ds-sug-ck" + (s0.treinado ? " ds-sug-ja" : ""));
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.id = "dsSugCk_" + e.id + "_" + k; cb.checked = marc.has(k0(s0));
+    cb.onchange = () => { if (cb.checked) marc.add(k0(s0)); else marc.delete(k0(s0)); if (ger) ger.atualizarRotulo(); };
     const tx = el("div", "ds-sug-tx");
-    tx.append(el("strong", "", (k + 1) + ". " + s.topico), el("span", "ds-sug-d", " · " + s.disc));
-    tx.append(el("div", "ds-sug-m", s.motivos.join(" · ")));
-    ln.append(tx);
-    const b1 = el("button", "btn-min", t("ds_sug_ia_um"));
-    b1.type = "button"; b1.title = t("ds_sug_ia_um_tip");
-    b1.onclick = () => { pedido = () => dsPromptProposta(e, dc, s.disc, [s.topico], 1); dsCopiar(pedido(), t("ds_prop_copiado")); const ta = document.getElementById("dsColarTx_" + e.id); if (ta) try { ta.focus(); ta.scrollIntoView({ block: "center" }); } catch (x) {} };
-    const b2 = el("button", "btn-min", t("ds_sug_guardar"));
-    b2.type = "button"; b2.id = "btnDsSugGuardar_" + e.id + "_" + k;
-    b2.onclick = () => {
-      const r = dsPropostaAdicionar(e.id, { tema: s.topico, disc: s.disc, fonte: "sugestao" });
-      if (r.erro) { try { toastMsg(r.erro, 4000); } catch (err) {} return; }
-      dsRender();
-    };
-    ln.append(b1, b2);
-    box.append(ln);
+    tx.append(el("strong", "", s0.topico), el("span", "ds-sug-d", " · " + s0.disc), el("div", "ds-sug-m", s0.motivos.join(" · ")));
+    lb.append(cb, tx);
+    box.append(lb);
   });
-  box.append(dsFluxoIA({ id: "dsColar_" + e.id, titulo: t("ds_f_tit_propostas"), idCopiar: "btnDsCriarIa_" + e.id, idTa: "dsColarTx_" + e.id, idLer: "btnDsColar_" + e.id,
-    copiarRot: t("ds_sug_criar_ia"), prompt: () => pedido(), aviso: t("ds_prop_copiado"), colarRot: t("ds_f_p3_propostas"), ph: t("ds_colar_ph"), lerRot: t("ds_colar_ler"),
-    aoLer: (txt) => {
-      const lidas = dsPropostasLer(txt, dc.disciplinas || []);
-      if (!lidas.length) return { erro: t("ds_colar_nada") };
-      let ok = 0; const rep = [];
-      lidas.forEach((p) => { const r = dsPropostaAdicionar(e.id, Object.assign({ fonte: "ia" }, p)); if (r.erro) rep.push(r.erro); else ok++; });
-      try { toastMsg(t("ds_colar_ok", { n: ok }) + (rep.length ? " " + rep.join(" ") : ""), 6000); } catch (err) {}
-      dsSecaoIr("propostas", true);
-      return {};
-    } }));
+  const marcados = () => sug.filter((s0) => marc.has(k0(s0)));
+  ger = dsPintarGerador(box, e, plano, dc, { disc: () => sel.value || null, modo,
+    n: () => (modo === "ideias" ? 6 : Math.max(1, Math.min(5, marcados().length || 3))),
+    temas: () => marcados().map((s0) => s0.topico + " (" + s0.disc + ")"),
+    idBase: "dsSug", idFluxo: "dsColar_" + e.id, idCopiar: "btnDsCriarIa_" + e.id, idTa: "dsColarTx_" + e.id, idLer: "btnDsColar_" + e.id,
+    depois: () => dsSecaoIr("propostas", true) });
   card.append(box);
 }
 /* compatibilidade: a caixa de colar agora mora dentro de "Temas" */
@@ -929,6 +932,7 @@ function dsPropostasFiltradas(e, com) {
   if (f.st === "aberta") out = out.filter((x) => !x.p.escrita);
   if (f.st === "escrita") out = out.filter((x) => x.p.escrita);
   if (f.st === "modelo") out = out.filter((x) => x.p.modelo);
+  if (f.st === "semModelo") out = out.filter((x) => !x.p.modelo && !x.p.escrita);
   const q = dsNorm(f.q);
   if (q) out = out.filter((x) => dsNorm(x.p.tema + " " + x.p.disc + " " + (x.p.enunciado || "")).indexOf(q) >= 0);
   return out;
@@ -947,7 +951,7 @@ function dsPintarPropostas(card, e, dc, com) {
   const discs = [];
   (dsPropFiltro.ed === "todos" ? lista0 : [{ e }]).forEach((x) => dsPropostas(x.e.id).forEach((p) => { if (p.disc && discs.indexOf(p.disc) < 0) discs.push(p.disc); }));
   sel("dsPropFDisc_" + e.id, [["", t("ds_pf_disc_todas")]].concat(discs.sort().map((d) => [d, d])), dsPropFiltro.disc, (v) => { dsPropFiltro.disc = v; });
-  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
+  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")], ["semModelo", t("ds_pf_st_semmodelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
   const q = document.createElement("input"); q.type = "search"; q.className = "ds-sel ds-pf-q"; q.id = "dsPropFQ_" + e.id; q.placeholder = t("ds_pf_busca"); q.value = dsPropFiltro.q;
   q.onchange = () => { dsPropFiltro.q = q.value; dsRender(); };
   fb.append(q);
@@ -1030,6 +1034,286 @@ function dsPintarPropostas(card, e, dc, com) {
   card.append(box);
 }
 
+/* =====================================================================
+ * (19.88.0) O PAINEL DA DISCURSIVA: PEGAR PELA MÃO E DAR O RITMO
+ *
+ * O PEDIDO: "um painel que resuma quais disciplinas foram estudadas, quais precisam ser, quantos temas de cada uma;
+ * cores para a urgência; contadores de pendência ('clique para ver o que não foi feito'); não um menu cheio de botões,
+ * mas dizer o que fazer e indicar um ritmo; e a IA em primeiro lugar — na reta final não há tempo de escrever, há tempo
+ * de saber o que pode cair e como é cobrado". Com o backup: o ISS (23 dias) tinha 2 propostas e nenhuma resposta modelo
+ * nas 4 disciplinas da discursiva; SEFAZ e TJ PB, nenhuma. O que mudou:
+ *  · TEMA TRABALHADO é a unidade: um tema gerado pela IA (com enunciado ou espelho) ou uma redação escrita. Escrever conta,
+ *    mas não é o caminho principal;
+ *  · ALVO POR DISCIPLINA até a prova: 2 na reta final (até 21 dias), 3 até 60 dias, 4 antes; +1 nas de peso 5. A cor:
+ *    vermelho = nenhum tema; amarelo = abaixo do alvo; verde = no alvo;
+ *  · RITMO: o que falta para os alvos, dividido pelas semanas que restam (data própria com a objetiva antes: 1 por
+ *    semana até a objetiva, o resto na janela entre as provas);
+ *  · O PASSO: UMA coisa a fazer agora, com a ida à IA dentro do próprio cartão (formato → disciplina mais urgente →
+ *    resposta modelo que falta → manter o ritmo → em dia);
+ *  · O PEDIDO À IA num envio só: tema + como a banca cobraria (enunciado) + espelho + resposta modelo ("completos"), ou
+ *    muitos temas curtos sem modelo ("ideias rápidas", o padrão na reta final).
+ * Funções puras (dsPainel, dsProximoPasso, dsPromptPacote) e as que pintam; a agenda usa as mesmas.
+ * ===================================================================== */
+function dsPreparada(p) { return !!(p && (String(p.enunciado || "").trim() || String(p.espelho || "").trim() || p.modelo)); }
+function dsAlvoDisc(dias, peso) {
+  const base = dias == null ? 3 : dias <= 21 ? 2 : dias <= 60 ? 3 : 4;
+  return base + (Number(peso) >= 5 ? 1 : 0);
+}
+function dsModoPadrao(dias) { return dias != null && dias >= 0 && dias <= 21 ? "ideias" : "completos"; }
+const DS_NIVEIS = ["vermelho", "amarelo", "verde"];
+
+function dsPainel(e, plano, dc, sit) {
+  const dias = sit && sit.dias != null ? sit.dias : null;
+  const props = dsPropostas(e.id), reds = dsRedacoes(e.id);
+  const itens = (plano && plano.itens) || [];
+  const discs = ((dc && dc.disciplinas) || []).map((nome, ordem) => {
+    const n = dsNorm(nome);
+    const its = itens.filter((i) => dsNorm(i.disciplina) === n);
+    const comD = its.filter((i) => i.fase2);
+    const base = comD.length ? comD : its;
+    const peso = its.length ? Number(its[0].disciplinaPeso) || 0 : 0;
+    const pp = props.filter((p) => dsNorm(p.disc) === n);
+    const rr = reds.filter((r) => dsNorm(r.disc) === n);
+    const temas = new Set(pp.filter(dsPreparada).map((p) => dsNorm(p.tema)));
+    rr.forEach((r) => temas.add(dsNorm(r.tema)));
+    const alvo = dsAlvoDisc(dias, peso);
+    const nT = temas.size;
+    return { nome, ordem, peso, alvo, temas: nT, faltam: Math.max(0, alvo - nT), modelos: pp.filter((p) => p.modelo).length,
+      redacoes: rr.length, conteudo: { feitos: base.filter((i) => i.feito).length, total: base.length },
+      nivel: nT === 0 ? "vermelho" : nT < alvo ? "amarelo" : "verde" };
+  });
+  /* a mais urgente primeiro: a cor; depois o peso; no empate, a de menos conteúdo estudado */
+  const urg = (d) => DS_NIVEIS.indexOf(d.nivel) * 1000 - d.peso * 10 + (d.conteudo.total ? d.conteudo.feitos / d.conteudo.total : 0);
+  discs.sort((a, b) => urg(a) - urg(b) || a.ordem - b.ordem);
+  /* a semana: temas distintos trabalhados nela (o mesmo tema gerado e depois com modelo conta uma vez) */
+  const ini = dsSemanaIni(dsHoje());
+  const daSemana = new Set();
+  props.forEach((p) => { if (!dsPreparada(p)) return; const d = p.modeloEm || p.d; if (d && dsSemanaIni(d) === ini) daSemana.add(dsNorm(p.tema)); });
+  reds.forEach((r) => { if (r.d && dsSemanaIni(r.d) === ini) daSemana.add(dsNorm(r.tema)); });
+  let feitas = daSemana.size;
+  if (!feitas && dsTreinos(e.id)[ini]) feitas = 1;
+  /* o ritmo */
+  const faltam = discs.reduce((a, d) => a + d.faltam, 0);
+  const passou = dias != null && dias < 0;
+  const semanas = dias == null ? 4 : Math.max(1, Math.ceil(Math.max(0, dias) / 7));
+  let meta = passou ? 0 : faltam ? Math.min(8, Math.ceil(faltam / semanas)) : 1;
+  let depois = null;
+  if (!passou && sit && sit.separada && sit.diasObjetiva != null && sit.diasObjetiva >= 0) {
+    const semAntes = Math.ceil(sit.diasObjetiva / 7);
+    const janela = Math.max(1, Math.ceil((dias - sit.diasObjetiva) / 7));
+    depois = faltam ? Math.max(1, Math.min(8, Math.ceil(Math.max(0, faltam - semAntes) / janela))) : 1;
+    meta = Math.min(meta, 1);
+  }
+  const cont = { vermelho: 0, amarelo: 0, verde: 0 };
+  discs.forEach((d) => { cont[d.nivel]++; });
+  return { discs, cont, feitas, meta, depois, faltam, semanas, dias, passou, modo: dsModoPadrao(dias),
+    guardadas: props.filter(dsPreparada).length,
+    semModelo: props.filter((p) => dsPreparada(p) && !p.modelo && !p.escrita) };
+}
+
+/* O PASSO: uma coisa só, a mais importante agora */
+function dsProximoPasso(e, plano, dc, sit, P0) {
+  const P = P0 || dsPainel(e, plano, dc, sit);
+  if (P.passou) return null;
+  if (dc && dc.semFormato) return { cod: "formato" };
+  const d = P.discs.find((x) => x.nivel !== "verde");
+  const nGerar = (x) => (P.modo === "ideias" ? 6 : Math.max(1, Math.min(3, x && x.faltam ? x.faltam : 2)));
+  if (d) return { cod: "gerar", disc: d.nome, d, modo: P.modo, n: nGerar(d) };
+  if (P.modo === "completos" && P.semModelo.length) return { cod: "modelo", p: P.semModelo[0] };
+  if (P.feitas < P.meta && P.discs.length) return { cod: "gerar", disc: P.discs[0].nome, d: P.discs[0], modo: P.modo, n: nGerar(P.discs[0]), manter: true };
+  return { cod: "em_dia" };
+}
+/* o passo em uma frase (a agenda usa a mesma) */
+function dsPassoTexto(passo) {
+  if (!passo) return "";
+  if (passo.cod === "formato") return t("ds_passo_formato");
+  if (passo.cod === "modelo") return t("ds_passo_modelo", { t: passo.p.tema });
+  if (passo.cod === "em_dia") return t("ds_passo_em_dia");
+  return t(passo.modo === "ideias" ? "ds_passo_gerar_ideias" : "ds_passo_gerar_completos", { n: passo.n, d: passo.disc });
+}
+
+/* O PEDIDO À IA, num envio só */
+function dsPromptPacote(e, dc, disc, modo, n, temas) {
+  const lista = (temas || []).length ? temas.map((x) => "- " + x).join("\n") : t("ds_prompt_sem_temas");
+  const extra = (dc.corrigida ? " " + t("ds_prompt_corrigida", { n: dc.corrigida }) : "")
+    + (dc.fase2 ? " " + t("ds_prompt_f2", { d: dsDataBr(dc.fase2.prova), o: dsDataBr(dc.fase2.objetiva) }) : "");
+  return t(modo === "ideias" ? "ds_prompt_ideias" : "ds_prompt_completos", { c: e.nome || "", p: dc.pontos || "?", m: dsMinTxt(dc.minimo),
+    l: dsLinhasTxt(dc), d: disc || (dc.disciplinas || []).join("; ") || "-", temas: lista, n: n || 3, corr: extra });
+}
+/* a resposta colada: cada tema vira proposta (com a resposta modelo, quando veio) */
+function dsLerPacote(e, dc, txt) {
+  const lidas = dsPropostasLer(txt, (dc && dc.disciplinas) || []);
+  if (!lidas.length) return { erro: t("ds_colar_nada") };
+  let ok = 0, comModelo = 0;
+  const rep = [];
+  lidas.forEach((p) => {
+    const r = dsPropostaAdicionar(e.id, Object.assign({ fonte: "ia" }, p));
+    if (r.erro) rep.push(r.erro); else { ok++; if (r.modelo) comModelo++; }
+  });
+  try { reg("DISCURSIVAS", "temas da IA guardados", ok + " · " + comModelo + " com modelo"); } catch (x) {}
+  return { ok, comModelo, rep };
+}
+
+/* ---------------- o que pinta ---------------- */
+const dsPainelSoPend = {};
+const dsPassoDisc = {};
+const dsModoGerar = {};
+
+/* o gerador: o modo (ideias / completos) e o bloco ① ② ③ — o mesmo no Painel e em Temas */
+function dsPintarGerador(box, e, plano, dc, o) {
+  const el = dsEl;
+  const modo = o.modo;
+  const md = el("div", "ds-modos");
+  md.setAttribute("role", "group");
+  [["ideias", "ds_g_modo_ideias"], ["completos", "ds_g_modo_completos"]].forEach(([m, k]) => {
+    const b = el("button", "ds-modo" + (m === modo ? " sel" : ""), t(k));
+    b.type = "button"; b.id = o.idBase + "Modo_" + e.id + "_" + m;
+    b.setAttribute("aria-pressed", m === modo ? "true" : "false");
+    b.onclick = () => { dsModoGerar[e.id] = m; dsRender(); };
+    md.append(b);
+  });
+  box.append(md, el("p", "ds-modo-aj", t(modo === "ideias" ? "ds_g_modo_ideias_aj" : "ds_g_modo_completos_aj")));
+  const nAgora = () => (typeof o.n === "function" ? o.n() : o.n);
+  const rot = () => t(modo === "ideias" ? "ds_g_copiar_ideias" : "ds_g_copiar_completos", { n: nAgora() });
+  const fx = dsFluxoIA({ id: o.idFluxo, idCopiar: o.idCopiar, idTa: o.idTa, idLer: o.idLer, copiarRot: rot(),
+    prompt: () => dsPromptPacote(e, dc, typeof o.disc === "function" ? o.disc() : o.disc, modo, nAgora(), o.temas()),
+    aviso: t("ds_prop_copiado"), colarRot: t("ds_g_colar"), ph: t("ds_colar_ph"), lerRot: t("ds_g_ler"), linhas: o.linhas || 6,
+    aoLer: (txt) => {
+      const r = dsLerPacote(e, dc, txt);
+      if (r.erro) return r;
+      try { toastMsg(t("ds_g_ok", { n: r.ok, k: r.comModelo }) + (r.rep.length ? " " + r.rep.join(" ") : ""), 6000); } catch (x) {}
+      if (o.depois) o.depois(r); else dsRender();
+      return {};
+    } });
+  box.append(fx);
+  return { atualizarRotulo: () => { if (fx._copiar) fx._copiar.textContent = rot(); } };
+}
+
+function dsPintarPasso(e, plano, dc, sit, P, passo) {
+  const el = dsEl;
+  const card = el("div", "ds-passo-card");
+  card.id = "dsPasso_" + e.id;
+  card.append(el("div", "ds-passo-rot", t("ds_passo_rot")));
+  const tit = (tx) => card.append(el("div", "ds-passo-tit", tx));
+  const por = (tx) => card.append(el("p", "ds-passo-por", tx));
+  const botao = (id, tx, fn, ok) => { const b = el("button", "btn-min" + (ok ? " btn-min-ok" : ""), tx); b.type = "button"; b.id = id; b.onclick = fn; card.append(b); return b; };
+  if (passo.cod === "formato") {
+    card.classList.add("ds-passo-amarelo");
+    tit(t("ds_passo_formato")); por(t("ds_passo_por_formato"));
+    botao("btnDsPassoFormato_" + e.id, t("ds_passo_formato_ir"), () => dsSecaoIr("editar"), true);
+    return card;
+  }
+  if (passo.cod === "em_dia") {
+    card.classList.add("ds-passo-verde");
+    tit(t("ds_passo_em_dia")); por(t("ds_passo_por_em_dia"));
+    botao("btnDsPassoEscrever_" + e.id, t("ds_passo_escrever_ir"), () => dsSecaoIr("redacoes"));
+    return card;
+  }
+  if (passo.cod === "modelo") {
+    const p = passo.p;
+    card.classList.add("ds-passo-amarelo");
+    tit(t("ds_passo_modelo", { t: p.tema })); por(t("ds_passo_por_modelo"));
+    card.append(dsFluxoIA({ id: "dsPassoModelo_" + e.id, idTa: "dsPassoModeloTx_" + e.id, idLer: "btnDsPassoModelo_" + e.id,
+      copiarRot: t("ds_f_copiar_modelo"), prompt: () => dsPromptModelo(e, dc, p.tema, p.disc, p.enunciado), colarRot: t("ds_f_p3_modelo"),
+      lerRot: t("ds_f_guardar_modelo"), linhas: 6,
+      aoLer: (txt) => {
+        const m = dsModeloLer(txt);
+        if (m.modelo.length < 40) return { erro: t("ds_modelo_curto") };
+        dsPropostaAtualizar(e.id, p.id, { modelo: m.modelo, modeloLinhas: m.linhas, modeloEm: dsHoje(), enunciado: p.enunciado || m.enunciado });
+        try { toastMsg(t("ds_modelo_ok"), 4000); } catch (x) {}
+        dsRender();
+        return {};
+      } }));
+    return card;
+  }
+  /* gerar: a disciplina mais urgente, que a pessoa pode trocar aqui mesmo */
+  const esc = dsPassoDisc[e.id] && P.discs.some((x) => x.nome === dsPassoDisc[e.id]) ? dsPassoDisc[e.id] : passo.disc;
+  const d = P.discs.find((x) => x.nome === esc) || passo.d;
+  const modo = dsModoGerar[e.id] || passo.modo;
+  const n = modo === "ideias" ? 6 : Math.max(1, Math.min(3, d.faltam || 2));
+  card.classList.add("ds-passo-" + d.nivel);
+  tit(t(modo === "ideias" ? "ds_passo_gerar_ideias" : "ds_passo_gerar_completos", { n, d: d.nome }));
+  const porque = d.nivel === "vermelho" ? t("ds_passo_por_vermelho", { d: d.nome, p: d.peso || "?", a: d.alvo })
+    : d.nivel === "amarelo" ? t("ds_passo_por_amarelo", { d: d.nome, n: d.temas, a: d.alvo, p: d.peso || "?" })
+    : t("ds_passo_por_manter", { k: Math.max(1, P.meta - P.feitas) });
+  por(porque + (P.modo === "ideias" && P.dias != null ? " " + t("ds_passo_por_reta", { n: P.dias }) : ""));
+  if (P.discs.length > 1) {
+    const ld = el("label", "ds-passo-disc");
+    ld.append(el("span", "", t("ds_passo_disc")));
+    const s = document.createElement("select");
+    s.className = "ds-sel"; s.id = "dsPassoDisc_" + e.id;
+    P.discs.forEach((x, k) => {
+      const op = document.createElement("option");
+      op.value = x.nome;
+      op.textContent = x.nome + " — " + t("ds_pn_st_" + x.nivel, { n: x.faltam }) + (k === 0 && x.nivel !== "verde" ? t("ds_passo_mais_urgente") : "");
+      s.append(op);
+    });
+    s.value = d.nome;
+    s.onchange = () => { dsPassoDisc[e.id] = s.value; dsRender(); };
+    ld.append(s);
+    card.append(ld);
+  }
+  dsPintarGerador(card, e, plano, dc, { disc: d.nome, modo, n, idBase: "dsPasso", idFluxo: "dsPassoFluxo_" + e.id, idCopiar: "btnDsPassoCopiar_" + e.id,
+    idTa: "dsPassoTx_" + e.id, idLer: "btnDsPassoLer_" + e.id, linhas: 3,
+    temas: () => dsSugerirTemas(e, plano, dc, d.nome, modo === "ideias" ? 8 : Math.max(n, 3)).map((s0) => s0.topico) });
+  return card;
+}
+
+function dsPintarPainel(g, e, plano, dc, sit, P0) {
+  const el = dsEl;
+  const P = P0 || dsPainel(e, plano, dc, sit);
+  const box = el("div", "ds-painel");
+  box.id = "dsPainel_" + e.id;
+  g.append(box);
+  if (P.passou) { box.append(el("p", "nota", t("ds_pn_passou"))); return P; }
+  const passo = dsProximoPasso(e, plano, dc, sit, P);
+  if (passo) box.append(dsPintarPasso(e, plano, dc, sit, P, passo));
+  /* o ritmo, em bolinhas */
+  const rt = el("div", "ds-ritmo" + (P.feitas >= P.meta ? " ok" : ""));
+  rt.id = "dsRitmo_" + e.id;
+  const bol = el("span", "ds-bolas");
+  for (let k = 0; k < Math.max(P.meta, P.feitas); k++) bol.append(el("span", "ds-bola" + (k < P.feitas ? " feita" : ""), k < P.feitas ? "●" : "○"));
+  const dProva = sit && sit.prova ? dsDataBr(sit.prova) : "?";
+  rt.append(bol, el("span", "", P.faltam ? t(P.feitas >= P.meta ? "ds_ritmo_ok" : "ds_ritmo", { m: P.meta, f: P.feitas, d: dProva }) : t("ds_ritmo_completo", { f: P.feitas, m: P.meta })));
+  box.append(rt);
+  if (P.depois != null && sit) box.append(el("p", "nota ds-ritmo-sep", t("ds_ritmo_sep", { o: dsDataBr(sit.objetiva), m: P.depois, d: dProva })));
+  /* as pendências: clicar mostra o que não foi feito */
+  const pends = el("div", "ds-pends");
+  pends.id = "dsPends_" + e.id;
+  const nPend = P.cont.vermelho + P.cont.amarelo;
+  const soPend = !!dsPainelSoPend[e.id] && nPend > 0;
+  const chip = (id, cls, tx, fn, ativo) => { const b = el("button", "ds-pend" + (cls ? " " + cls : "") + (ativo ? " ativo" : ""), tx); b.type = "button"; b.id = id; b.onclick = fn; pends.append(b); };
+  if (nPend) chip("dsPendDiscs_" + e.id, P.cont.vermelho ? "ds-pn-vermelho" : "ds-pn-amarelo", soPend ? t("ds_pend_discs_on") : t("ds_pend_discs", { n: nPend }),
+    () => { dsPainelSoPend[e.id] = !soPend; dsRender(); }, soPend);
+  if (P.modo === "completos" && P.semModelo.length) chip("dsPendModelo_" + e.id, "ds-pn-amarelo", t("ds_pend_modelo", { n: P.semModelo.length }),
+    () => { Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "semModelo", q: "" }); dsSecaoIr("propostas", true); });
+  if (P.guardadas) chip("dsPendLer_" + e.id, "", t("ds_pend_ler", { n: P.guardadas }),
+    () => { Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "", q: "" }); dsSecaoIr("propostas", true); });
+  if (pends.childNodes.length) box.append(pends);
+  /* por disciplina */
+  const pn = el("div", "ds-pn");
+  pn.append(el("div", "ds-sub-tit", t("ds_pn_tit")));
+  pn.append(el("p", "ds-pn-resumo", t("ds_pn_resumo", { v: P.cont.verde, a: P.cont.amarelo, r: P.cont.vermelho })));
+  P.discs.filter((d) => !soPend || d.nivel !== "verde").forEach((d) => {
+    const ln = el("div", "ds-pn-lin ds-pn-" + d.nivel);
+    ln.title = t("ds_pn_tip", { d: d.nome, p: d.peso || "?", n: d.temas, a: d.alvo, m: d.modelos, r: d.redacoes, f: d.conteudo.feitos, t: d.conteudo.total });
+    const nm = el("span", "ds-pn-nome", d.nome);
+    if (d.peso) nm.append(el("span", "ds-pn-peso", t("ds_pn_peso", { p: d.peso })));
+    const cels = el("span", "ds-pn-cels");
+    for (let k = 0; k < Math.max(d.alvo, d.temas); k++) cels.append(el("span", "ds-pn-cel" + (k < d.temas ? " cheia" : "")));
+    cels.append(el("span", "ds-pn-n", t("ds_pn_temas", { n: d.temas, a: d.alvo })));
+    ln.append(el("span", "ds-pn-dot"), nm, cels,
+      el("span", "ds-pn-cont", d.conteudo.total ? t("ds_pn_cont", { f: d.conteudo.feitos, t: d.conteudo.total }) : t("ds_pn_cont_sem")),
+      el("span", "ds-pn-st", t("ds_pn_st_" + d.nivel, { n: d.faltam })));
+    pn.append(ln);
+  });
+  const aj = el("details", "ds-info");
+  aj.append(el("summary", "", "ⓘ " + t("ds_pn_como")), el("p", "nota", t("ds_pn_alvo_aj")));
+  pn.append(aj);
+  box.append(pn);
+  return P;
+}
+
 /* ---------------- as abas ---------------- */
 const DS_SECOES = ["geral", "texto", "temas", "propostas", "redacoes", "criterios", "editar"];
 function dsSecaoAtual() { try { const v = localStorage.getItem("eac_ds_secao"); return DS_SECOES.indexOf(v) >= 0 ? v : "geral"; } catch (e) { return "geral"; } }
@@ -1062,13 +1346,27 @@ function dsRender() {
   else if (!com.length) cx.append(el("p", "nota", t("ds_nenhum_com")));
   const selEd = dsEditalAtual(com);
   const secao = dsSecaoAtual();
+  /* (19.88.0) o plano e o painel de cada edital antes das abas: a aba diz quantas disciplinas pedem temas */
+  com.forEach((x) => {
+    x.plano = null; x.rd = null; x.P = null;
+    try {
+      x.plano = montarPlano(x.r, { horas: x.r.cfg.horas, prova: x.r.cfg.prova, feitos: x.e.progresso || {} });
+      x.rd = typeof edRiscoDiscursiva === "function" ? edRiscoDiscursiva(x.plano, x.e.id) : null;
+    } catch (err) { x.plano = null; x.rd = null; }
+    try { x.P = dsPainel(x.e, x.plano, x.dc, x.sit); } catch (err) { x.P = null; }
+  });
   /* as abas dos editais */
   const abas = el("div", "ds-abas-ed");
   abas.setAttribute("role", "tablist");
-  com.forEach(({ e, sit }) => {
+  com.forEach(({ e, sit, P }) => {
     const b = el("button", "ds-aba-ed" + (selEd === e.id ? " sel" : ""));
     b.type = "button"; b.id = "dsAbaEd_" + e.id; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", selEd === e.id ? "true" : "false");
     b.append(el("span", "ds-aba-n", e.nome || "?"), el("span", "ds-aba-d", sit.dias == null ? t("ds_aba_sem_data") : sit.dias < 0 ? t("ds_aba_passou") : t("ds_aba_dias", { n: sit.dias })));
+    /* (19.88.0) a cor do que falta, já na aba */
+    if (P && !P.passou && P.discs.length) {
+      const np = P.cont.vermelho + P.cont.amarelo;
+      b.append(el("span", "ds-aba-pend ds-pn-" + (P.cont.vermelho ? "vermelho" : np ? "amarelo" : "verde"), "● " + (np ? t("ds_aba_pend", { n: np }) : t("ds_aba_em_dia"))));
+    }
     b.onclick = () => { try { localStorage.setItem("eac_ds_edital", e.id); } catch (x) {} dsRender(); };
     abas.append(b);
   });
@@ -1079,7 +1377,7 @@ function dsRender() {
   }
   cx.append(abas);
 
-  com.forEach(({ e, r, dc, sit }) => {
+  com.forEach(({ e, r, dc, sit, plano, rd, P }) => {
     const card = el("div", "ed-caixa ds-card");
     card.id = "dsCard_" + e.id;
     card.hidden = selEd !== e.id;
@@ -1097,11 +1395,6 @@ function dsRender() {
     topo.append(abrir);
     card.append(topo);
 
-    let plano = null, rd = null;
-    try {
-      plano = montarPlano(r, { horas: r.cfg.horas, prova: r.cfg.prova, feitos: e.progresso || {} });
-      rd = typeof edRiscoDiscursiva === "function" ? edRiscoDiscursiva(plano, e.id) : null;
-    } catch (err) { plano = null; rd = null; }
     const share = rd ? rd.share : (dc.objetiva ? Math.round(dc.pontos / (dc.objetiva + dc.pontos) * 100) : null);
     const chips = el("div", "dsc-chips");
     const chip = (tx, cls) => chips.append(el("span", "dsc-chip" + (cls ? " " + cls : ""), tx));
@@ -1129,9 +1422,15 @@ function dsRender() {
 
     /* visão geral */
     const g = sec("geral");
-    g.append(el("p", "nota", t("ds_cai_em", { d: (dc.disciplinas || []).join(", ") || "—" })));
     if (dc.semFormato) g.append(el("p", "nota ds-red-alerta", t("ds_sem_formato")));
-    dsPintarEstrategia(g, e, dc, sit);
+    /* (19.88.0) o Painel: o passo de agora, o ritmo, as pendências e as disciplinas; o resto fica em "mais" */
+    dsPintarPainel(g, e, plano, dc, sit, P);
+    const mais = el("details", "ds-det ds-mais");
+    mais.id = "dsMais_" + e.id;
+    mais.append(el("summary", "", t("ds_mais_tit")));
+    mais.append(el("p", "nota", t("ds_cai_em", { d: (dc.disciplinas || []).join(", ") || "—" })));
+    g.append(mais);
+    dsPintarEstrategia(mais, e, dc, sit);
     if (rd && rd.minPct !== null) {
       const rs = el("div", "ds-risco" + (rd.abaixo ? " ed-min-abaixo" : rd.apertado ? " ed-min-apertado" : ""));
       rs.append(el("div", "ds-risco-tit", rd.abaixo ? t("ds_risco_abaixo") : rd.apertado ? t("ds_risco_apertado") : t("ds_risco_ok")));
@@ -1140,14 +1439,14 @@ function dsRender() {
       const corte = el("div", "ed-min-corte"); corte.style.left = Math.min(100, rd.minPct) + "%";
       barra.append(fill, corte);
       rs.append(barra, el("div", "ed-min-num", t("ds_risco_num", { c: rd.cobertura, m: rd.minPct })));
-      g.append(rs);
+      mais.append(rs);
     }
-    if (dc.corrigida) g.append(el("p", "nota ed-min-disc-corr", t("ed_min_disc_corrigida", { n: dc.corrigida })));
-    dsPintarTreino(g, e);
+    if (dc.corrigida) mais.append(el("p", "nota ed-min-disc-corr", t("ed_min_disc_corrigida", { n: dc.corrigida })));
+    dsPintarTreino(mais, e);
     /* o texto da prova */
     dsPintarTextoDaProva(sec("texto"), e, dc, plano);
     /* temas */
-    dsPintarSugestoes(sec("temas"), e, plano, dc);
+    dsPintarSugestoes(sec("temas"), e, plano, dc, sit);
     /* propostas */
     dsPintarPropostas(sec("propostas"), e, dc, com);
     /* redações */

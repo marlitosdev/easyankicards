@@ -368,47 +368,63 @@ function hubPintarAgenda() {
    * ===================================================================== */
   const painel = (id) => { const x = document.createElement("div"); x.className = "hub-aviso-painel"; x.id = "hubAvisoPainel_" + id; return x; };
   const pDisc = painel("disc"), pConf = painel("conf"), pRitmo = painel("ritmo"), pEquil = painel("equil");
-  let discF = 0, discM = 0, equilAtras = 0;
+  let discF = 0, discM = 0, equilAtras = 0, discPend = 0, discVerm = 0, discUrg = false;
   /* (19.56.0) O TREINO DA DISCURSIVA. Discursiva se treina escrevendo, não só estudando o conteúdo: com a discursiva
    * cadastrada, a semana pede uma dissertação no formato do edital. "feito esta semana" é guardado por semana. */
   /* (19.75.0) a meta da semana vem da estratégia da tela Discursivas (fase pela distância da prova, ajustada pelas
    * notas), com o próximo tema (a proposta aberta ou a primeira sugestão) e o atalho para lá */
+  /* (19.88.0) A DISCURSIVA NA AGENDA, PELO PAINEL: a semana conta TEMAS (gerados com a IA ou escritos), cada disciplina da
+   * discursiva vira uma bolinha na cor do Painel, a linha diz o passo de agora e há um atalho para "o que falta". O botão
+   * "feito esta semana" saiu daqui (continua no histórico de escrita): o que é feito no app conta sozinho. */
   discs.forEach((q) => {
     const ln = document.createElement("div");
     const dd = q.d;
-    let est = null, feitas = hubDiscTreinoFeito(q.id) ? 1 : 0, prox = null;
+    let P = null, passo = null, est = null;
     try {
-      if (typeof dsEstrategia === "function") {
-        est = dsEstrategia(q.dias, dsRedacoesResumo(q.id, dd), dd, q.sit);
-        feitas = dsFeitasSemana(q.id);
-        prox = dsProximoTema(q.e, q.plano, dd);
-      }
-    } catch (err) { est = null; }
-    const meta = est ? Math.max(1, est.meta) : 1;
+      if (typeof dsPainel === "function") { P = dsPainel(q.e, q.plano, dd, q.sit); passo = dsProximoPasso(q.e, q.plano, dd, q.sit, P); }
+      if (typeof dsEstrategia === "function") est = dsEstrategia(q.dias, dsRedacoesResumo(q.id, dd), dd, q.sit);
+    } catch (err) { P = null; passo = null; }
+    const meta = P ? Math.max(1, P.meta) : 1;
+    const feitas = P ? P.feitas : (hubDiscTreinoFeito(q.id) ? 1 : 0);
+    const pend = P ? P.cont.vermelho + P.cont.amarelo : 0;
     const feito = feitas >= meta;
-    ln.className = "hub-disc-treino" + (feito ? " feito" : "");
+    const agir = !!(passo && passo.cod !== "em_dia");
+    ln.className = "hub-disc-treino" + (feito && !pend ? " feito" : "");
     ln.id = "hubDiscTreino_" + q.id;
     const tx = document.createElement("span");
-    const l = edLinhasTxt(dd.linhas, true) || "?";
-    const d = (dd.disciplinas || []).map((x) => hubDiscCurta(x)).join(", ") || "-";
-    tx.textContent = est
-      ? t(feito ? "hub_disc_meta_ok" : "hub_disc_meta", { e: q.nome, f: est.nome, n: feitas, m: meta, l: typeof dsLinhasTxt === "function" ? dsLinhasTxt(dd) : l, d })
-        + (dd.fase2 && q.sit && q.sit.separada ? " " + t("hub_disc_data_f2", { d: q.sit.prova.split("-").reverse().join("/"), n: q.dias }) : "")
-        + (prox && !feito ? " " + t(prox.proposta ? "hub_disc_prox_prop" : "hub_disc_prox_sug", { t: prox.tema }) : "")
-      : t(feito ? "hub_disc_treino_ok" : "hub_disc_treino", { e: q.nome, d, l });
+    tx.className = "hub-disc-tx";
+    if (P && P.discs.length) {
+      const pt = document.createElement("span");
+      pt.className = "hub-disc-pontos";
+      P.discs.forEach((d) => {
+        const b0 = document.createElement("span");
+        b0.className = "ds-pn-dot ds-pn-" + d.nivel;
+        b0.title = t("hub_disc_dot_tip", { d: d.nome, n: d.temas, a: d.alvo });
+        pt.append(b0);
+      });
+      tx.append(pt);
+    }
+    tx.append(document.createTextNode(t(feito ? "hub_disc_temas_ok" : "hub_disc_temas", { e: q.nome, n: feitas, m: meta, f: est ? est.nome : "" })
+      + (dd.fase2 && q.sit && q.sit.separada ? " " + t("hub_disc_data_f2", { d: q.sit.prova.split("-").reverse().join("/"), n: q.dias }) : "")
+      + (agir ? " " + t("hub_disc_passo", { p: dsPassoTexto(passo) }) : "")));
     const ir = document.createElement("button");
-    ir.type = "button"; ir.className = "btn-min" + (feito ? "" : " btn-min-ok");
+    ir.type = "button"; ir.className = "btn-min" + (agir ? " btn-min-ok" : "");
     ir.id = "btnHubDisc_" + q.id;
-    ir.textContent = t("hub_disc_ir");
+    ir.textContent = t(agir ? "hub_disc_fazer" : "hub_disc_ir");
     ir.onclick = () => { if (typeof dsIrPara === "function") dsIrPara(q.id); };
-    const b = document.createElement("button");
-    const marcado = hubDiscTreinoFeito(q.id);
-    b.type = "button"; b.className = "btn-min";
-    b.textContent = t(marcado ? "hub_disc_treino_desfazer" : "hub_disc_treino_feito");
-    b.onclick = () => { hubDiscTreinoMarcar(q.id, !marcado); hubPintarAgenda(); };
-    ln.append(tx, ir, b);
+    ln.append(tx, ir);
+    if (pend) {
+      const vp = document.createElement("button");
+      vp.type = "button"; vp.className = "btn-min hub-disc-falta";
+      vp.id = "btnHubDiscFalta_" + q.id;
+      vp.textContent = t("hub_disc_ver_falta", { n: pend });
+      vp.onclick = () => { if (typeof dsIrPara === "function") dsIrPara(q.id, { pend: true }); };
+      ln.append(vp);
+    }
     pDisc.append(ln);
     discF += Math.min(feitas, meta); discM += meta;
+    discPend += pend;
+    if (P && P.cont.vermelho) { discVerm += P.cont.vermelho; if (q.dias != null && q.dias <= 30) discUrg = true; }
   });
   /* (19.54.0) a conferência do edital, em uma linha por edital que ainda tem pendência (o detalhe fica no edital) */
   confs.forEach((q) => {
@@ -468,7 +484,10 @@ function hubPintarAgenda() {
 
   /* a faixa: um chip por assunto que tem o que dizer */
   const avisos = [];
-  if (discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc", { f: discF, m: discM }), cls: discF >= discM ? "ok" : "", p: pDisc });
+  /* (19.88.0) o chip conta temas e pendências; vermelho (alerta) com disciplina sem tema a 30 dias ou menos da prova, e
+   * abre sozinho UMA vez quando aparece disciplina sem tema nova (a mesma regra da conferência) */
+  if (discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc2", { f: discF, m: discM }) + (discPend ? " · " + t("hub_av_disc_pend", { n: discPend }) : ""),
+    cls: discUrg ? "alerta" : (discF >= discM && !discPend ? "ok" : ""), p: pDisc, sig: discUrg ? String(discVerm) : "" });
   if (hubRitmoAvisar || minUsado) {
     const usando = !!minUsado;
     avisos.push({ id: "ritmo", txt: usando ? t("hub_av_ritmo_usando", { r: horasTexto(minUsado) }) : t("hub_av_ritmo", { r: horasTexto(hubRitmoAvisar.real), p: horasTexto(hubRitmoAvisar.plano) }),
@@ -492,7 +511,7 @@ function hubPintarAgenda() {
     avisos.forEach((a) => {
       if (!a.sig) return;
       const velho = sigs[a.id];
-      const pior = a.id === "conf" || a.id === "vinc" ? !velho || Number(a.sig) > Number(velho) : velho !== a.sig;
+      const pior = a.id === "conf" || a.id === "vinc" || a.id === "disc" ? !velho || Number(a.sig) > Number(velho) : velho !== a.sig;
       if (pior && !aberto) { aberto = a.id; a.novo = true; }
       sigs[a.id] = a.sig;
     });
