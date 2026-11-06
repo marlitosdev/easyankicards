@@ -1168,16 +1168,45 @@ function matPintarEscopo() {
   bx.hidden = !ramos.length && !sc.secoes.length;
   if (bx.hidden) { matEscopo = "*"; return; }
   if (!opcs.some((o) => o.id === matEscopo)) matEscopo = "*";
+  /* (19.86.0) O QUE JÁ FOI LIDO, NO PRÓPRIO CHIP: "✓" com tudo lido, "2/5" pela metade, nada quando não começou.
+   * Antes era preciso abrir cada seção para saber se ela ainda precisava ser lida. */
+  const lido = matEscopoLeitura(sc, ramos);
   opcs.forEach((o) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "btn-min mat-ficha-esc mat-esc" + (o.tem === false ? " mat-esc-vazio" : "");
-    b.textContent = o.nome;
-    b.title = o.tip + (o.tem === false ? " — " + t("mat_esc_sem_secao") : "");
+    const lt = lido[o.id];
+    const est = !lt || !lt.total ? "" : lt.lidas === lt.total ? " mat-esc-lida" : lt.lidas ? " mat-esc-parcial" : " mat-esc-nao";
+    b.className = "btn-min mat-ficha-esc mat-esc" + (o.tem === false ? " mat-esc-vazio" : "") + est;
+    b.textContent = (est === " mat-esc-lida" ? "✓ " : "") + o.nome + (est === " mat-esc-parcial" ? " · " + lt.lidas + "/" + lt.total : "");
+    b.title = o.tip + (o.tem === false ? " — " + t("mat_esc_sem_secao") : "")
+      + (lt && lt.total ? " — " + t(lt.lidas === lt.total ? "mat_esc_lido_tudo" : "mat_esc_lido", { l: lt.lidas, n: lt.total }) : "");
     b.setAttribute("aria-pressed", o.id === matEscopo ? "true" : "false");
     b.onclick = () => matEscopoEscolher(o.id);
     bx.append(b);
   });
+}
+/* (19.86.0) quanto de cada escopo já foi lido: as seções (títulos) do texto do escopo, casadas com as marcas de leitura
+ * do tópico pelo título e pelo conteúdo (a mesma regra do "lida / mudou" da leitura). { id: { lidas, total } } */
+function matEscopoLeitura(sc, ramos) {
+  const out = {};
+  try {
+    if (typeof rlsSecoes !== "function" || !matAtual) return out;
+    const tudo = ($("matTexto") || {}).value || "";
+    const marcas = rlsMarcasDe(matAtual.chave);
+    const todas = rlsSecoes(tudo).filter((x) => !x.vazia);
+    const linhaDe = (pos) => tudo.slice(0, pos).split("\n").length - 1;
+    /* as seções de leitura (títulos) que caem dentro de [ini, fim) — a do próprio título do ramo inclusive */
+    const conta = (ini, fimC) => {
+      const a = linhaDe(ini), b = linhaDe(fimC);
+      const ss = todas.filter((x) => x.l >= a && x.l < Math.max(b, a + 1));
+      return { total: ss.length, lidas: ss.filter((x) => rlsEstado(marcas[x.k], x.h) === "lida").length };
+    };
+    out["*"] = { total: todas.length, lidas: todas.filter((x) => rlsEstado(marcas[x.k], x.h) === "lida").length };
+    const s2 = sc || matSecoesDeRamo(tudo, ramos);
+    out[""] = conta(s2.geral.ini, s2.geral.fim);
+    (s2.secoes || []).forEach((x) => { out[x.id] = conta(x.ini, x.fim); });
+  } catch (e) {}
+  return out;
 }
 /* o que a leitura mostra no escopo: tudo, o geral, ou a seção do ramo com o seu título */
 function matTextoDoEscopo() {

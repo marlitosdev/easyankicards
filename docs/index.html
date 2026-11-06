@@ -5468,6 +5468,72 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .hub-aviso-chip.aberto{background:color-mix(in srgb,var(--info) 14%,var(--campo));border-color:var(--info)}
 .hub-aviso-chip.novo{box-shadow:0 0 0 2px color-mix(in srgb,var(--atencao) 45%,transparent)}
 .hub-aviso-painel{margin:4px 0 8px}
+/* (19.86.0) os chips de seção do resumo dizem o que já foi lido */
+.mat-esc.mat-esc-lida{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--campo))}
+.mat-esc.mat-esc-parcial{border-color:var(--atencao);color:var(--atencao)}
+.rls-ir-topo{margin-left:auto;font-size:12px;padding:3px 10px}
+/* (19.86.0) Discursivas: abas de edital e de seção, fluxo da IA em passos, texto da prova, propostas com leitor */
+.ds-abas-ed{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.ds-aba-ed{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 12px;border-radius:10px;border:1px solid var(--borda);background:var(--campo);color:var(--texto);cursor:pointer;text-align:left;max-width:260px}
+.ds-aba-ed.sel{border-color:#f472b6;box-shadow:0 0 0 1px #f472b6;background:color-mix(in srgb,#f472b6 10%,var(--campo))}
+.ds-aba-n{font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:236px}
+.ds-aba-d{font-size:11px;color:var(--sutil)}
+.ds-aba-sem{justify-content:center;color:var(--sutil);font-size:12px}
+.ds-card{border-width:2px;border-color:color-mix(in srgb,#f472b6 45%,var(--borda))}
+.ds-abas-sec{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 8px;border-bottom:1px solid var(--borda);padding-bottom:6px}
+.ds-aba-sec{font-size:12.5px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid transparent;background:none;color:var(--sutil);cursor:pointer}
+.ds-aba-sec.sel{color:var(--texto);border-color:var(--borda);background:var(--campo)}
+.ds-sec{padding-top:2px}
+.ds-fluxo{border:1px dashed var(--info);border-radius:10px;padding:8px 10px;margin:10px 0;background:color-mix(in srgb,var(--info) 5%,transparent)}
+.ds-fluxo-tit{font-weight:800;margin-bottom:4px}
+.ds-passo{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 2px;font-size:13px}
+.ds-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--info);color:#fff;font-weight:800;font-size:11px}
+.ds-fluxo-copiado .ds-passo:first-of-type .ds-passo-n{background:var(--ok)}
+.ds-cortes-comum{margin:4px 0 8px;font-weight:700;font-size:13px}
+.ds-cortes-comum.ds-cortes-ruim{color:var(--erro)}.ds-cortes-comum.ds-cortes-apert{color:var(--atencao)}
+.ds-cortes-lin.ds-cortes-sem-b{grid-template-columns:minmax(0,1.6fr) 90px 80px 70px}
+.ds-cortes-lin{grid-template-columns:minmax(0,1.3fr) 80px 70px 64px minmax(0,1.3fr)}
+.ds-info{margin:2px 0 6px}
+.ds-info>summary{cursor:pointer;font-size:12px;color:var(--info);list-style:none}
+.ds-info>summary::-webkit-details-marker{display:none}
+.ds-fases{display:flex;gap:3px;margin:6px 0}
+.ds-fase{flex:1;display:flex;flex-direction:column;align-items:center;padding:4px 2px;border-radius:6px;background:var(--campo);border:1px solid var(--borda);opacity:.6;font-size:11px}
+.ds-fase.atual{opacity:1;border-color:var(--info);background:color-mix(in srgb,var(--info) 15%,var(--campo));font-weight:800}
+.ds-fase-d{font-size:10px;color:var(--sutil)}
+.ds-est-meta{display:flex;align-items:center;gap:8px;margin:6px 0}
+.ds-bolas{display:inline-flex;gap:2px;font-size:16px;letter-spacing:1px}
+.ds-bola{color:var(--sutil)}.ds-bola.feita{color:var(--ok)}
+.ds-est-foco{margin:4px 0;font-size:13px}
+.ds-tx-grade{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:8px 0;font-size:13px}
+.ds-tx-k{color:var(--sutil);font-weight:700}
+.ds-tx-v{font-weight:700}
+.ds-tx-est{margin:10px 0}
+.ds-tx-partes{margin:4px 0 6px 18px;padding:0;font-size:13px}
+.ds-tx-partes li{margin:3px 0}
+.ds-tx-barra{display:flex;height:26px;border-radius:6px;overflow:hidden;font-size:11px;font-weight:700;margin:4px 0}
+.ds-tx-seg{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;padding:0 4px}
+.ds-tx-seg-intro{background:color-mix(in srgb,var(--info) 35%,var(--campo))}
+.ds-tx-seg-desenv{background:color-mix(in srgb,var(--ok) 35%,var(--campo))}
+.ds-tx-seg-concl{background:color-mix(in srgb,#f472b6 35%,var(--campo))}
+.ds-tx-regras{margin:4px 0 8px 18px;padding:0;font-size:13px}
+.ds-tx-exemplo{border-top:1px solid var(--borda);margin-top:10px;padding-top:6px}
+.ds-modelo{white-space:pre-wrap;font-family:Georgia,"Times New Roman",serif;font-size:14px;line-height:1.7;padding:10px 14px;border-radius:8px;background:color-mix(in srgb,var(--texto) 4%,var(--campo));border-left:3px solid var(--ok);margin:6px 0}
+.ds-filtros{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.ds-pf-q{min-width:150px}
+.ds-prop-lista{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;border:1px solid var(--borda);border-radius:8px;padding:4px}
+.ds-prop-item{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:1px;padding:5px 8px;border-radius:6px;cursor:pointer}
+.ds-prop-item:hover{background:var(--campo)}
+.ds-prop-item.sel{background:color-mix(in srgb,var(--info) 15%,var(--campo));outline:1px solid var(--info)}
+.ds-prop-item.escrita .ds-prop-item-t{color:var(--ok)}
+.ds-prop-item-t{font-weight:700;font-size:13px}
+.ds-leitor{margin-top:10px;border:1px solid var(--borda);border-radius:10px;padding:10px 12px}
+.ds-leitor-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.ds-leitor-tit{font-weight:800;font-size:15px}
+.ds-pl-ia{margin-top:6px}
+.rls-filtro{display:flex;gap:6px;margin:0 10px 6px}
+.rls-filtro-b{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--borda);background:none;color:inherit;cursor:pointer}
+.rls-filtro-b.ativo{border-color:var(--info);background:color-mix(in srgb,var(--info) 14%,transparent)}
+.mat-esc.mat-esc-lida[aria-pressed="true"],.mat-esc.mat-esc-parcial[aria-pressed="true"]{color:#fff}
 .hub-ajustes{margin:4px 0 8px;border:1px solid var(--borda);border-radius:8px;padding:4px 10px}
 .hub-ajustes>summary{cursor:pointer;font-size:12.5px;color:var(--sutil);font-weight:700;padding:3px 0}
 .hub-ajustes[open]>summary{color:var(--texto)}

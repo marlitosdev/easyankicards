@@ -253,6 +253,56 @@ async function testes() {
     api.loja.removeItem("eac_ag_aviso_aberto");
     api.edApagar(er.id);
   }
+  /* ---- (19.86.0) DS: abas, fluxo da IA, texto da prova, propostas com leitor, tabela do peso ---- */
+  {
+    const ea = api.edCriar("Abas A", T);
+    const eb = api.edCriar("Abas B", ["# B | prova: " + prova + " | horas: 10", "# discursiva | pontos: 30 | objetiva: 70 | linhas: 20-30 | disciplinas: A", "@ A :: 5", "+ x :: 5"].join("\n"));
+    api.loja.removeItem("eac_ds_edital"); api.loja.setItem("eac_ds_secao", "geral");
+    api.dsRender();
+    const cA = api.$("dsCard_" + ea.id), cB = api.$("dsCard_" + eb.id);
+    ok(!!api.$("dsAbaEd_" + ea.id) && !!api.$("dsAbaEd_" + eb.id) && (cA.hidden !== cB.hidden), "DS1 um edital por vez, com uma aba para cada");
+    api.$("dsAbaEd_" + eb.id).onclick();
+    ok(api.$("dsCard_" + eb.id).hidden === false && api.$("dsCard_" + ea.id).hidden === true, "DS2 tocar na aba troca o edital à vista");
+    api.$("dsAbaSec_" + eb.id + "_texto").onclick();
+    ok(api.$("dsSec_" + eb.id + "_texto").hidden === false && api.$("dsSec_" + eb.id + "_geral").hidden === true && api.loja.getItem("eac_ds_secao") === "texto", "DS3 as seções em abas, a escolha guardada");
+    const tx = String(api.$("dsSec_" + eb.id + "_texto").textContent || "");
+    ok(/Como deve ser o seu texto no dia da prova/.test(tx) && /Introdução: 4 a 5 linhas/.test(tx) && /O que mais tira ponto/.test(tx) && /Peça um à IA/.test(tx), "DS4 o texto da prova: estrutura com as linhas, regras e o pedido do exemplo");
+    const m = api.dsModeloLer("ENUNCIADO: Explique x.\n\nO ato administrativo é... texto longo da resposta modelo com mais de quarenta caracteres.\n\nLINHAS: 27");
+    ok(m.enunciado === "Explique x." && /^O ato administrativo/.test(m.modelo) && m.linhas === 27 && !/LINHAS/.test(m.modelo), "DS5 a resposta modelo colada: enunciado, texto e linhas separados");
+    ok(api.dsNotaDaCorrecao("... análise ...\nNOTA: 28,5/40") && api.dsNotaDaCorrecao("NOTA: 28,5/40").nota === 28.5 && !api.dsNotaDaCorrecao("sem nota"), "DS6 a nota da correção é lida");
+    /* propostas: filtro, leitor, modelo e correção */
+    api.dsPropostaAdicionar(eb.id, { tema: "Tema 1", disc: "A", enunciado: "Disserte sobre 1.", espelho: "a 10" });
+    api.dsPropostaAdicionar(eb.id, { tema: "Tema 2", disc: "A", enunciado: "Disserte sobre 2." });
+    api.dsPropostaAdicionar(ea.id, { tema: "Tema do A", disc: "Tributário" });
+    api.$("dsAbaSec_" + eb.id + "_propostas").onclick();
+    const leitor = () => String(api.$("dsLeitor_" + eb.id).textContent || "");
+    ok(/1 de 2/.test(leitor()), "DS7 o leitor mostra a posição: " + leitor().slice(0, 80));
+    const navs = api.$("dsLeitor_" + eb.id).querySelectorAll("button");
+    navs[1].onclick();
+    ok(/2 de 2/.test(leitor()), "DS8 próxima ▶ avança");
+    api.$("dsPropFEd_" + eb.id).value = "todos"; api.$("dsPropFEd_" + eb.id).onchange();
+    ok(/Tema do A/.test(String(api.$("dsProps_" + eb.id).textContent || "")), "DS9 o filtro 'todos os editais' traz as propostas dos outros");
+    api.$("dsPropFEd_" + eb.id).value = "este"; api.$("dsPropFEd_" + eb.id).onchange();
+    const p1 = api.dsPropostas(eb.id).find((p) => p.tema === "Tema 2");
+    api.$("dsModeloTx_" + p1.id).value = "Resposta modelo do tema 2, escrita como na prova, com fundamento legal e tudo.\nLINHAS: 25";
+    api.$("btnDsModelo_" + p1.id).onclick();
+    const p1b = api.dsPropostas(eb.id).find((p) => p.tema === "Tema 2");
+    ok(/Resposta modelo do tema 2/.test(p1b.modelo) && p1b.modeloLinhas === 25, "DS10 a resposta modelo colada fica na proposta");
+    api.$("dsCorrTx_" + p1.id).value = "Comentários da correção...\nNOTA: 24/30";
+    api.$("btnDsCorr_" + p1.id).onclick();
+    ok(api.dsRedacoes(eb.id).some((r) => r.tema === "Tema 2" && r.nota === 24 && r.max === 30) && api.dsPropostas(eb.id).find((p) => p.tema === "Tema 2").escrita === true, "DS11 a correção colada registra a nota e marca a proposta como escrita");
+    api.$("dsAbaSec_" + eb.id + "_texto").onclick();
+    ok(/Tema: Tema 2/.test(String(api.$("dsSec_" + eb.id + "_texto").textContent || "")), "DS12 o texto da prova mostra o exemplo guardado");
+    /* a tabela do peso diz o que mede, e o corte igual em todas vira uma linha */
+    api.$("dsAbaEd_" + ea.id).onclick();
+    const crit = String(api.$("dsSec_" + ea.id + "_criterios").textContent || "");
+    ok(/Parte na discursiva/.test(crit) && /Na nota final/.test(crit) && /NÃO é a parte na nota final/.test(crit), "DS13 a tabela diz o que é 'parte na discursiva' e 'na nota final'");
+    ok(/Corte na objetiva \(vale para as 1\):/.test(crit), "DS14 o corte igual em todas as linhas aparece uma vez");
+    ok(api.$("dsColarTx_" + ea.id) && api.$("btnDsCriarIa_" + ea.id) && api.$("btnDsColar_" + ea.id), "DS15 em Temas, copiar e colar ficam no mesmo bloco de passos");
+    api.loja.removeItem("eac_ds_secao"); api.loja.removeItem("eac_ds_edital");
+    api.edApagar(ea.id); api.edApagar(eb.id);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

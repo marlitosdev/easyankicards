@@ -119,7 +119,8 @@ function rlsBotao(txt, cls, fn, tit) {
   b.className = "btn-min " + (cls || "");
   b.textContent = txt;
   if (tit) { b.title = tit; b.setAttribute("aria-label", tit); }
-  b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); fn(); };
+  /* dentro do <summary>, o toque no botão não abre/fecha o sumário */
+  b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (ev && ev.preventDefault && b.closest && b.closest("summary")) ev.preventDefault(); fn(); };
   return b;
 }
 function rlsIrPara(p, cx, sec) {
@@ -167,6 +168,8 @@ function rlsPintar(painel) {
       rlsMarcar(cx.chave, s, sim);
       try { reg("MATERIAL", sim ? "seção marcada como lida" : "seção desmarcada", s.titulo); } catch (x) {}
       repintar();
+      /* (19.86.0) os chips de seção do topo mostram o que já foi lido: repinta junto */
+      try { if (typeof matPintarEscopo === "function") matPintarEscopo(); } catch (x) {}
     };
     if (e === "nao") fim.append(rlsBotao(t("rls_fim_marcar"), "btn-min-ok rls-marcar", marcar(true), t("rls_fim_marcar_aj")));
     else if (e === "lida") {
@@ -197,18 +200,33 @@ function rlsPintar(painel) {
     if (ench.style) ench.style.width = Math.round((r.lidas / r.total) * 100) + "%";
     barra.append(ench);
     sm.append(tit, barra);
+    /* (19.86.0) a próxima que falta ler, À VISTA (antes ficava dentro do sumário recolhido) */
+    if (r.proxima) {
+      const vai = rlsBotao("→ " + t("rls_prox_curta"), "btn-min-ok rls-ir-topo", () => rlsIrPara(p, cx, r.proxima), t("rls_ir_proxima", { s: r.proxima.titulo }));
+      sm.append(vai);
+    }
     sum.append(sm);
     const exp = document.createElement("p");
     exp.className = "nota rls-sum-exp";
     exp.textContent = t("rls_sum_aj");
     sum.append(exp);
     if (r.proxima) sum.append(rlsBotao(t("rls_ir_proxima", { s: r.proxima.titulo.length > 48 ? r.proxima.titulo.slice(0, 47) + "…" : r.proxima.titulo }), "btn-min-ok rls-ir", () => rlsIrPara(p, cx, r.proxima), t("rls_proxima_tip")));
+    /* (19.86.0) "todas" ou "só as que faltam": navegar entre o que foi lido e o que falta, sem procurar na lista */
+    let soFaltam = false;
+    try { soFaltam = localStorage.getItem("eac_rls_so_faltam") === "1"; } catch (x) {}
+    const filtro = document.createElement("div");
+    filtro.className = "rls-filtro";
+    const fb = (rot, v) => { const b = rlsBotao(rot, "rls-filtro-b" + (soFaltam === v ? " ativo" : ""), () => { try { localStorage.setItem("eac_rls_so_faltam", v ? "1" : "0"); } catch (x) {} repintar(); const s2 = p.querySelector(".rls-sumario"); if (s2) s2.open = true; }); return b; };
+    filtro.append(fb(t("rls_f_todas", { n: r.total }), false), fb(t("rls_f_faltam", { n: r.total - r.lidas }), true));
+    sum.append(filtro);
     const lista = document.createElement("div");
     lista.className = "rls-sum-lista";
     naTela.forEach((s) => {
       const e = rlsEstado(marcas[s.k], s.h);
+      if (soFaltam && e === "lida") return;
       lista.append(rlsBotao((e === "lida" ? "✓ " : e === "mudou" ? "↻ " : "○ ") + s.titulo, "rls-sum-item " + e, () => rlsIrPara(p, cx, s), t("rls_sum_item_aj")));
     });
+    if (soFaltam && !lista.children.length) { const v = document.createElement("p"); v.className = "nota"; v.textContent = t("rls_f_nada"); lista.append(v); }
     sum.append(lista);
     p.insertBefore(sum, p.firstChild);
   }
