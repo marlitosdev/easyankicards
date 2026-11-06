@@ -6451,11 +6451,49 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-evo{margin:10px 0}
 .dom-evo h4{margin:0 0 4px}
 .dom-evo-resumo{font-size:13px;margin:2px 0 6px}
-.dom-evo-graf{display:flex;gap:4px;align-items:flex-end;overflow-x:auto;padding:4px 0}
-.dom-evo-col{flex:0 0 28px;display:flex;flex-direction:column;align-items:center;gap:2px}
-.dom-evo-pilha{width:100%;height:90px;display:flex;flex-direction:column-reverse;border-radius:4px;overflow:hidden;background:rgba(127,127,127,.15)}
-.dom-evo-seg{width:100%;flex:0 0 auto}
-.dom-evo-dia{font-size:9.5px;color:var(--sutil)}
+/* (19.90.0) a curva até a prova: os quatro números, a legenda, a curva (SVG) e o antes → agora por disciplina */
+.dom-evo-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:6px 0 8px}
+.dom-evo-kpi{background:var(--campo);border:1px solid var(--borda);border-radius:10px;padding:8px 10px}
+.dom-evo-kpi-r{font-size:12px;color:var(--sutil)}
+.dom-evo-kpi-v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25}
+.dom-evo-kpi-s{font-size:11.5px;color:var(--sutil)}
+.dom-evo-kpi-alerta{border-color:var(--erro)}.dom-evo-kpi-alerta .dom-evo-kpi-v,.dom-evo-kpi-alerta .dom-evo-kpi-s{color:var(--erro)}
+.dom-evo-kpi-ok{border-color:var(--ok)}.dom-evo-kpi-ok .dom-evo-kpi-v,.dom-evo-kpi-ok .dom-evo-kpi-s{color:var(--ok)}
+.dom-evo-leg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--sutil);margin:4px 0}
+.dom-evo-leg-i{display:inline-flex;align-items:center;gap:6px}
+.dom-evo-leg-l{display:inline-block;width:20px;height:0;border-top:2px solid}
+.dom-evo-leg-l.est{border-color:var(--info)}.dom-evo-leg-l.dom{border-color:#2e9e5b}.dom-evo-leg-l.risco{border-color:#d9534f}
+.dom-evo-leg-l.proj{border-color:var(--info);border-top-style:dashed}.dom-evo-leg-l.nec{border-color:var(--sutil);border-top-style:dotted}
+.dom-evo-graf{width:100%;margin:2px 0 6px}
+.dom-curva{display:block;width:100%;height:auto;max-height:340px}
+.dom-curva-grade{stroke:var(--borda);stroke-width:1;opacity:.6}
+.dom-curva-eixo{fill:var(--sutil);font-size:11px}
+.dom-curva-marca{stroke:var(--sutil);stroke-width:1;stroke-dasharray:3 3}
+.dom-curva-m-prova{stroke:var(--erro)}text.dom-curva-m-prova{fill:var(--erro)}
+.dom-curva-m-regua{stroke:var(--atencao)}text.dom-curva-m-regua{fill:var(--atencao)}
+.dom-curva-area{fill:var(--info);opacity:.12;stroke:none}
+.dom-curva-est{fill:none;stroke:var(--info);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.dom-curva-dom{fill:none;stroke:#2e9e5b;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.dom-curva-risco{fill:none;stroke:#d9534f;stroke-width:2;stroke-linejoin:round}
+.dom-curva-proj{fill:none;stroke:var(--info);stroke-width:2;stroke-dasharray:6 4}
+.dom-curva-nec{fill:none;stroke:var(--sutil);stroke-width:2;stroke-dasharray:2 3}
+.dom-curva-ponto{fill:var(--info);stroke:var(--panel);stroke-width:2}
+.dom-curva-ponto-proj{fill:var(--panel);stroke:var(--info);stroke-width:2}
+.dom-curva-val{fill:var(--texto);font-size:11.5px;font-weight:700}
+.dom-curva-alvo{fill:transparent;stroke:none;cursor:default}
+.dom-evo-discs{margin:8px 0 4px}
+.dom-evo-discs-tit{font-size:12.5px;color:var(--sutil);margin-bottom:4px}
+.dom-evo-dl{display:grid;grid-template-columns:minmax(0,210px) minmax(0,1fr) 70px;gap:10px;align-items:center;padding:4px 0;font-size:12.5px}
+.dom-evo-dl-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dom-evo-dl-tr{position:relative;height:14px}
+.dom-evo-dl-tr::before{content:"";position:absolute;left:0;right:0;top:6px;height:2px;background:var(--borda)}
+.dom-evo-dl-seg{position:absolute;top:6px;height:2px;background:var(--info)}
+.dom-evo-dl-p{position:absolute;top:2px;width:10px;height:10px;margin-left:-5px;border-radius:50%;box-sizing:border-box}
+.dom-evo-dl-p.antes{background:var(--panel);border:2px solid var(--info)}
+.dom-evo-dl-p.agora{background:var(--info)}
+.dom-evo-dl-v{text-align:right;font-variant-numeric:tabular-nums;color:var(--sutil)}
+.dom-evo-dl-v.sobe{color:var(--ok);font-weight:700}.dom-evo-dl-v.desce{color:var(--erro);font-weight:700}
+@media (max-width:560px){.dom-evo-dl{grid-template-columns:minmax(0,1fr) 60px}.dom-evo-dl-tr{grid-column:1 / -1;grid-row:2}}
 .dom-evo-disc{font-size:11px;font-weight:700;white-space:nowrap}
 .dom-evo-sobe{color:#39b56b}
 .dom-evo-desce{color:#ff6b66}

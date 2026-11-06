@@ -2893,20 +2893,22 @@ async function testes() {
       ok(a.domSnapGarantirTodos() === 0 && a.domSnapsLer().length === guardados.length, "R71o so' uma vez por dia: chamar de novo nao repete");
       /* a tela */
       const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
-      ok(["dom-evo", "dom-evo-resumo", "dom-evo-graf", "dom-evo-col", "dom-evo-pilha", "dom-evo-seg", "dom-evo-dia", "dom-evo-disc"].every((c) => html.indexOf("." + c) >= 0), "R71p as classes do grafico tem CSS");
+      ok(["dom-evo", "dom-evo-resumo", "dom-evo-graf", "dom-evo-kpis", "dom-evo-kpi", "dom-curva", "dom-curva-est", "dom-curva-dom", "dom-curva-proj", "dom-curva-nec", "dom-evo-dl", "dom-evo-disc"].every((c) => html.indexOf("." + c) >= 0), "R71p as classes do grafico tem CSS");
       a.gerAbrir();
       a.$("btnGerDominio").onclick();
       const evo = () => achar(a.$("domCorpo"), (e) => cls(e, "dom-evo"))[0];
-      ok(evo() && /guardado sozinho|Volte em alguns dias/.test(evo().textContent) && achar(evo(), (e) => cls(e, "dom-evo-col")).length === 0, "R71q com um retrato so', a tela explica que a curva comeca agora");
+      ok(evo() && /guardado sozinho|Volte em alguns dias/.test(evo().textContent) && achar(evo(), (e) => cls(e, "dom-curva")).length === 0, "R71q com um retrato so', a tela explica que a curva comeca agora");
       /* com historia: coloca retratos antigos do edital aberto e repinta */
       const edId = a.$("domEdital").value;
       const hist = [["2026-08-10", 5], ["2026-08-24", 10], ["2026-09-07", 20]].map(([d, v]) => a.domSnapDe(mapa(v, 2, 98 - v), edId, 1, d));
       a.domSnapsSalvar(a.domSnapsLer().concat(hist));
       a.$("btnDomX").onclick(); a.$("btnGerDominio").onclick();
-      const cols = achar(evo(), (e) => cls(e, "dom-evo-col"));
-      ok(cols.length === 4, "R71r a tela desenha uma coluna por semana (3 antigas + hoje): " + cols.length);
-      const segs = achar(cols[0], (e) => cls(e, "dom-evo-seg"));
-      ok(segs.length === 5 && segs.every((x) => /dom-n-/.test(x.className)) && Math.abs(segs.reduce((x, e) => x + parseFloat(e.style.height), 0) - 100) < 0.5, "R71s cada coluna e' uma pilha de 5 niveis que soma 100%");
+      /* (19.90.0) a curva até a prova no lugar das colunas: um ponto por retrato, os quatro números e o antes → agora */
+      const svg = achar(evo(), (e) => e.tag === "svg" || /dom-curva/.test(e.getAttribute ? (e.getAttribute("class") || "") : ""))[0];
+      const alvos = svg ? achar(svg, (e) => /dom-curva-alvo/.test(e.getAttribute ? (e.getAttribute("class") || "") : "")) : [];
+      ok(svg && alvos.length === 4, "R71r a curva tem um ponto por retrato (3 antigos + hoje): " + alvos.length);
+      ok(achar(evo(), (e) => cls(e, "dom-evo-kpi")).length >= 3 && /Peso estudado hoje/.test(evo().textContent) && achar(evo(), (e) => cls(e, "dom-evo-dl")).length >= 1,
+        "R71s os números (estudado, ritmo, projeção/prova) e o antes → agora por disciplina");
       ok(/Desde \d\d\/\d\d\/2026:/.test(evo().textContent) && /verde [+-]?[\d,]+ pt/.test(evo().textContent), "R71t o resumo diz a mudanca em pontos desde o retrato de referencia: " + evo().textContent.slice(0, 120));
       a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
     }
