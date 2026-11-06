@@ -103,6 +103,53 @@ async function testes() {
     a.bancAlvoSair();
   }
 
+  /* ---------------- CF: filtro, tela cheia e o ✖ (19.89.1) ---------------- */
+  {
+    const { a } = montar();
+    a.leiGuardar({ id: "lei_y", nome: "Lei 1/2000 Ação Popular", especie: "Lei", numero: "1", ano: "2000", texto: "Art. 1º Um.\nArt. 2º Dois.", topicos: [] });
+    a.trocarModo("cartoes");
+    a.clAbrir();
+    const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+    const dlgHtml = html.slice(html.indexOf('<dialog id="dlgLeiCartoes"'), html.indexOf("</dialog>", html.indexOf('<dialog id="dlgLeiCartoes"')));
+    ok(/id="btnClX"/.test(dlgHtml) && /id="btnClCheia"/.test(dlgHtml) && !/id="btnClFechar"/.test(dlgHtml) && dlgHtml.indexOf('id="btnClX"') < dlgHtml.indexOf('id="clCorpo"'),
+      "CF1 o ✖ e a tela cheia no cabeçalho; o 'Fechar' de baixo saiu");
+    const nomes = () => achar(a.$("clCorpo"), (x) => cls(x, "cl-lei")).map((b) => b.id.replace("clLei_", ""));
+    ok(nomes().join() === "lei_x,lei_y", "CF2 sem filtro, as duas leis (a sugerida primeiro): " + nomes().join());
+    const q = achar(a.$("clCorpo"), (x) => x.id === "clBusca")[0];
+    q.value = "9000"; q.oninput();
+    ok(nomes().join() === "lei_x" && achar(a.$("clCorpo"), (x) => x.id === "clBusca")[0] === q, "CF3 a busca acha '9000' em 'Lei 9.000/2020' e a caixa de busca continua a mesma (não perde o foco)");
+    q.value = "ação popular"; q.oninput();
+    ok(nomes().join() === "lei_y", "CF4 a busca pelo nome, com acento: " + nomes().join());
+    q.value = "tributo"; q.oninput();
+    ok(nomes().join() === "lei_x", "CF5 a busca pelo TÓPICO do edital ligado à lei");
+    q.value = "nada disso"; q.oninput();
+    ok(nomes().length === 0 && /Nenhuma lei com esse filtro/.test(a.$("clCorpo").textContent), "CF6 sem resultado, diz que não há");
+    q.value = ""; q.oninput();
+    const chip = (f) => achar(a.$("clCorpo"), (x) => x.id === "clF_" + f)[0];
+    ok(/todas \(2\)/.test(chip("todas").textContent) && /ligadas ao edital \(1\)/.test(chip("edital").textContent) && /sem cartão \(1\)/.test(chip("caem").textContent),
+      "CF7 os recortes dizem quantas leis têm: " + ["todas", "edital", "caem"].map((f) => chip(f).textContent).join(" | "));
+    chip("edital").onclick();
+    ok(nomes().join() === "lei_x" && chip("edital").getAttribute("aria-pressed") === "true", "CF8 'ligadas ao edital' deixa só a lei com tópico");
+    chip("todas").onclick();
+    /* tela cheia: liga, lembra e o ✖ fecha */
+    a.$("btnClCheia").onclick();
+    ok(cls(a.$("dlgLeiCartoes"), "cl-cheia") && a.$("btnClCheia").getAttribute("aria-pressed") === "true" && a.loja.getItem("eac_cl_cheia") === "1", "CF9 tela cheia liga e fica lembrada");
+    a.$("btnClCheia").onclick();
+    ok(!cls(a.$("dlgLeiCartoes"), "cl-cheia") && a.loja.getItem("eac_cl_cheia") === "0", "CF10 e desliga");
+    /* a busca de artigos esconde sem desmarcar */
+    achar(a.$("clCorpo"), (x) => x.id === "clLei_lei_x")[0].onclick();
+    const marcadosAntes = achar(a.$("clCorpo"), (x) => x.tagName === "INPUT" && /^clArt_/.test(x.id || "") && x.checked).length;
+    const qa = achar(a.$("clCorpo"), (x) => x.id === "clArtBusca")[0];
+    qa.value = "taxas"; qa.oninput();
+    const visiveis = achar(a.$("clCorpo"), (x) => cls(x, "cl-art") && !x.hidden);
+    ok(visiveis.length === 1 && /Art\. 4º/.test(visiveis[0].textContent) && achar(a.$("clCorpo"), (x) => x.tagName === "INPUT" && /^clArt_/.test(x.id || "") && x.checked).length === marcadosAntes,
+      "CF11 procurar artigo esconde o que não casa e mantém o que estava marcado: " + visiveis.map((v) => v.textContent.slice(0, 20)).join(" | "));
+    a.$("btnClX").onclick();
+    ok(a.$("dlgLeiCartoes").open === false, "CF12 o ✖ fecha");
+    ok(/dialog\.cl-modal\[open\]\{display:flex;flex-direction:column;[^}]*overflow:hidden\}/.test(html) && /\.cl-leis,dialog\.cl-modal #clCorpo>\.cl-arts\{flex:1 1 auto;[^}]*max-height:none;overflow:auto/.test(html),
+      "CF13 uma rolagem só: o diálogo não rola, a lista sim");
+  }
+
   /* ---------------- CB: a bancada em passos ---------------- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");

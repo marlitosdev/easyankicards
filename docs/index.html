@@ -5557,6 +5557,20 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 @media (max-width:520px){.banc-origens{grid-template-columns:1fr}}
 /* (19.89.0) cartões de uma lei */
 dialog.cl-modal{max-width:760px;width:95%}
+/* (19.89.1) UMA rolagem só: o diálogo em coluna, a lista (de leis ou de artigos) rola; a busca, os filtros e o
+   "Começar" ficam à vista. Antes eram duas barras, a do diálogo e a da lista, uma dentro da outra. */
+dialog.cl-modal[open]{display:flex;flex-direction:column;max-height:92vh;max-height:92dvh;overflow:hidden}
+dialog.cl-modal #clCorpo{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+dialog.cl-modal #clCorpo>*{flex:0 0 auto}
+dialog.cl-modal #clCorpo>.cl-leis,dialog.cl-modal #clCorpo>.cl-arts{flex:1 1 auto;min-height:120px;max-height:none;overflow:auto;color-scheme:light dark}
+dialog.cl-modal.cl-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
+.cl-cab-bts{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.cl-sub{margin:0 0 4px}
+.cl-busca-barra{display:flex;flex-direction:column;gap:6px;margin:4px 0 6px}
+.cl-busca{width:100%;box-sizing:border-box}
+.cl-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cl-calc{margin:2px 0}
+#clArtBusca{margin:4px 0 6px}
 .cl-passo-tit{font-weight:800;font-size:15px;margin:8px 0 6px}
 .cl-estrategia{margin:4px 0 6px 18px;padding:0}.cl-estrategia li{margin:3px 0;font-size:13px}
 .cl-leis{display:flex;flex-direction:column;gap:6px;max-height:56vh;overflow:auto}
@@ -7763,12 +7777,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
 <!-- (19.89.0) CARTÕES DE UMA LEI: escolher a lei (na ordem da estratégia), o tópico e os artigos; o resto é a bancada -->
 <dialog id="dlgLeiCartoes" class="ui-modal cl-modal">
-  <h3 data-i18n="cl_titulo"></h3>
-  <p class="nota" data-i18n="cl_sub"></p>
-  <div id="clCorpo"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnClFechar" data-i18n="help_close"></button>
+  <!-- (19.89.1) o ✖ no canto e a tela cheia, como nas bibliotecas; o "Fechar" de baixo saiu (dois iguais disputam) -->
+  <div class="vka-cab">
+    <h3 data-i18n="cl_titulo"></h3>
+    <span class="cl-cab-bts">
+      <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnClCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
+      <button type="button" class="dlg-x" id="btnClX" data-i18n-title="help_close" aria-label="Fechar">✖</button>
+    </span>
   </div>
+  <p class="nota cl-sub" data-i18n="cl_sub"></p>
+  <div id="clCorpo"></div>
 </dialog>
 
 <dialog id="dlgImportar" style="max-width:680px;width:94%">

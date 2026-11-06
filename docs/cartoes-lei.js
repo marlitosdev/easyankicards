@@ -131,7 +131,7 @@ function clPrompt(l, tp, nums) {
 }
 
 /* ---------------- o painel (dlgLeiCartoes) ---------------- */
-let clEst = { passo: 1, leiId: "", topico: "", sel: null, arts: null, resumo: null };
+let clEst = { passo: 1, leiId: "", topico: "", sel: null, arts: null, resumo: null, busca: "", filtro: "todas", buscaArt: "", ui: null };
 function clResumoLei(l) {
   const arts = leiArtigosEfetivos(l);
   const vig = arts.filter((a) => !leiArtigoRevogado(a));
@@ -150,10 +150,34 @@ function clResumoLei(l) {
   return { id: l.id, nome: l.nome || "", vig: vig.length, comCart, caem: caem.length, semCartCaem, tops, ativo, prioridade };
 }
 function clAbrir(leiId) {
-  clEst = { passo: leiId ? 2 : 1, leiId: leiId || "", topico: "", sel: null, arts: null, resumo: clEst.resumo };
+  clEst = { passo: leiId ? 2 : 1, leiId: leiId || "", topico: "", sel: null, arts: null, resumo: clEst.resumo,
+    busca: clEst.busca || "", filtro: clEst.filtro || "todas", buscaArt: "", ui: null };
   abrirModal("dlgLeiCartoes");
+  clCheiaTrocar(clCheiaPreferida(), false);
   clRender();
   if (!clEst.resumo) clCalcularResumos();
+}
+
+/* (19.89.1) TELA CHEIA E O ✖ NO CANTO — o mesmo par das bibliotecas de resumos e de julgados. A escolha fica lembrada;
+ * fechar (✖, Esc ou fora) sai da tela cheia do navegador junto. */
+const CL_CH_CHEIA = "eac_cl_cheia";
+function clCheiaPreferida() { try { return localStorage.getItem(CL_CH_CHEIA) === "1"; } catch (e) { return false; } }
+function clCheiaTrocar(sim, lembrar) {
+  const dlg = $("dlgLeiCartoes");
+  if (!dlg) return false;
+  const quer = sim === undefined ? !dlg.classList.contains("cl-cheia") : !!sim;
+  dlg.classList.toggle("cl-cheia", quer);
+  const b = $("btnClCheia");
+  if (b) { b.textContent = t(quer ? "dom_cheia_sair" : "dom_cheia"); if (b.setAttribute) b.setAttribute("aria-pressed", String(quer)); }
+  if (quer) { if (lembrar && typeof telaCheiaPedir === "function") telaCheiaPedir("leicart", () => { if (dlg.classList.contains("cl-cheia")) clCheiaTrocar(false, false); }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("leicart");
+  if (lembrar) { try { localStorage.setItem(CL_CH_CHEIA, quer ? "1" : "0"); } catch (e) {} }
+  return quer;
+}
+function clFechar() {
+  const dlg = $("dlgLeiCartoes");
+  if (dlg && dlg.open) dlg.close();
+  if (typeof telaCheiaSair === "function") telaCheiaSair("leicart");
 }
 /* a conta de todas as leis leva ~2 s com 16 leis e 1.000 cartões: vai lei por lei, repintando, sem travar a tela */
 function clCalcularResumos() {
@@ -162,10 +186,10 @@ function clCalcularResumos() {
   clEst.resumo = { pronto: false, porId: res };
   let i = 0;
   const um = () => {
-    if (i >= leis.length) { clEst.resumo.pronto = true; clRender(); return; }
+    if (i >= leis.length) { clEst.resumo.pronto = true; if (clEst.passo === 1) clPintarListaLeis(); return; }
     try { res[leis[i].id] = clResumoLei(leis[i]); } catch (e) {}
     i++;
-    if (clEst.passo === 1 && (i % 4 === 0)) clRender();
+    if (clEst.passo === 1 && (i % 4 === 0)) clPintarListaLeis();
     setTimeout(um, 0);
   };
   um();
@@ -189,17 +213,69 @@ function clPintarLeis(cx) {
   est.append(ol);
   cx.append(est);
   if (!leis.length) { cx.append(el("p", "nota", t("cl_sem_leis"))); return; }
+  /* (19.89.1) O FILTRO: a busca (nome, número com ou sem ponto, tópico) e três recortes */
+  const barra = el("div", "cl-busca-barra");
+  const q = document.createElement("input");
+  q.type = "search"; q.id = "clBusca"; q.className = "ds-sel cl-busca"; q.placeholder = t("cl_busca_ph"); q.value = clEst.busca || "";
+  q.setAttribute("aria-label", t("cl_busca_ph"));
+  q.oninput = () => { clEst.busca = q.value; clPintarListaLeis(); };
+  barra.append(q);
+  const chips = el("div", "cl-chips");
+  chips.setAttribute("role", "group");
+  barra.append(chips);
+  cx.append(barra);
+  const calc = el("p", "nota cl-calc");
+  const lista = el("div", "cl-leis");
+  lista.id = "clLeisLista";
+  cx.append(calc, lista);
+  clEst.ui = { chips, calc, lista };
+  clPintarListaLeis();
+}
+
+/* o que a busca e o recorte deixam (a busca casa todas as palavras; "4320" acha "4.320") */
+function clLeisFiltradas(leis, R) {
+  const dig = (x) => clNorm(String(x || "").replace(/(\d)[.\s](?=\d)/g, "$1"));
+  const q = dig(clEst.busca || "");
+  return leis.filter((l) => {
+    const r = R[l.id];
+    if (clEst.filtro === "edital" && !(r && r.tops.length)) return false;
+    if (clEst.filtro === "caem" && !(r && r.semCartCaem)) return false;
+    if (!q) return true;
+    const alvo = dig([l.nome, l.apelido, l.especie, l.numero, l.ano].concat(r ? r.tops.map((x) => x.disciplina + " " + x.topico) : []).join(" "));
+    return q.split(" ").every((w) => alvo.indexOf(w) >= 0);
+  });
+}
+function clPintarListaLeis() {
+  const ui = clEst.ui;
+  if (!ui || clEst.passo !== 1) return;
+  const el = clEl;
+  const leis = typeof leisLista === "function" ? leisLista() : [];
   const R = (clEst.resumo && clEst.resumo.porId) || {};
   const pronto = !!(clEst.resumo && clEst.resumo.pronto);
-  if (!pronto) cx.append(el("p", "nota", t("cl_calculando", { n: Object.keys(R).length, t: leis.length })));
+  ui.calc.textContent = pronto ? "" : t("cl_calculando", { n: Object.keys(R).length, t: leis.length });
+  ui.calc.hidden = pronto;
+  /* os recortes, com quantas leis cada um tem */
+  ui.chips.innerHTML = "";
+  const conta = (f) => leis.filter((l) => { const r = R[l.id]; return f === "todas" || (f === "edital" ? !!(r && r.tops.length) : !!(r && r.semCartCaem)); }).length;
+  [["todas", "cl_f_todas"], ["edital", "cl_f_edital"], ["caem", "cl_f_caem"]].forEach(([f, k]) => {
+    const b = el("button", "ds-pend cl-chip" + (clEst.filtro === f ? " ativo" : ""), t(k, { n: conta(f) }));
+    b.type = "button"; b.id = "clF_" + f;
+    b.setAttribute("aria-pressed", clEst.filtro === f ? "true" : "false");
+    b.onclick = () => { clEst.filtro = f; clPintarListaLeis(); };
+    ui.chips.append(b);
+  });
+  ui.lista.innerHTML = "";
   const ordem = leis.slice().sort((a, b) => ((R[b.id] || {}).prioridade || 0) - ((R[a.id] || {}).prioridade || 0) || String(a.nome).localeCompare(String(b.nome)));
-  const lista = el("div", "cl-leis");
-  ordem.forEach((l, k) => {
+  const topo = pronto ? ordem.find((l) => R[l.id] && R[l.id].prioridade > 0) : null;
+  const vis = clLeisFiltradas(ordem, R);
+  if (!vis.length) { ui.lista.append(el("p", "nota", t("cl_busca_nada"))); return; }
+  vis.forEach((l) => {
     const r = R[l.id];
-    const b = el("button", "cl-lei" + (pronto && k === 0 && r && r.prioridade > 0 ? " cl-lei-top" : ""));
+    const ehTopo = !!(topo && topo.id === l.id);
+    const b = el("button", "cl-lei" + (ehTopo ? " cl-lei-top" : ""));
     b.type = "button"; b.id = "clLei_" + l.id;
     const tit = el("span", "cl-lei-nome", l.nome || "?");
-    if (pronto && k === 0 && r && r.prioridade > 0) tit.append(el("span", "cl-lei-selo", t("cl_comece")));
+    if (ehTopo) tit.append(el("span", "cl-lei-selo", t("cl_comece")));
     b.append(tit);
     if (r) {
       const info = [];
@@ -212,10 +288,9 @@ function clPintarLeis(cx) {
       const barra = el("span", "cl-lei-barra"); const f = el("span", "cl-lei-fill"); f.style.width = pct + "%"; barra.append(f);
       b.append(barra);
     } else b.append(el("span", "cl-lei-info", "…"));
-    b.onclick = () => { clEst.passo = 2; clEst.leiId = l.id; clEst.topico = ""; clEst.sel = null; clEst.arts = null; clRender(); };
-    lista.append(b);
+    b.onclick = () => { clEst.passo = 2; clEst.leiId = l.id; clEst.topico = ""; clEst.sel = null; clEst.arts = null; clEst.buscaArt = ""; clEst.ui = null; clRender(); };
+    ui.lista.append(b);
   });
-  cx.append(lista);
 }
 
 /* todos os tópicos dos editais em andamento, para a lei que não está ligada a nenhum */
@@ -239,7 +314,7 @@ function clPintarArtigos(cx) {
   if (!l) { clEst.passo = 1; clPintarLeis(cx); return; }
   const volta = el("button", "btn-min", "◀ " + t("cl_outras"));
   volta.type = "button"; volta.id = "btnClVoltar";
-  volta.onclick = () => { clEst.passo = 1; clRender(); };
+  volta.onclick = () => { clEst.passo = 1; clEst.ui = null; clRender(); };
   cx.append(volta, el("div", "cl-passo-tit", t("cl_p2_tit", { l: l.nome || "?" })));
   /* o tópico do edital que recebe os cartões */
   const ligados = clTopicosDaLei(l);
@@ -275,12 +350,19 @@ function clPintarArtigos(cx) {
   const resumo = el("p", "cl-resumo", t("cl_resumo", { n: sel.size, l: lotes.length, v: vig.length, c: vig.filter((a) => a.nCart).length }) + (nRev ? " " + t("cl_rev_fora", { n: nRev }) : ""));
   resumo.id = "clResumo";
   cx.append(resumo);
+  /* (19.89.1) a busca de artigos: número ou palavra do texto; esconder não desmarca */
+  const qa = document.createElement("input");
+  qa.type = "search"; qa.id = "clArtBusca"; qa.className = "ds-sel cl-busca"; qa.placeholder = t("cl_busca_art_ph"); qa.value = clEst.buscaArt || "";
+  qa.setAttribute("aria-label", t("cl_busca_art_ph"));
+  cx.append(qa);
   /* a lista, por divisão da lei */
   const lista = el("div", "cl-arts");
-  let div = null;
+  const grupos = [];
+  let div = null, grupo = null;
   vig.forEach((a) => {
-    if (a.divisao !== div) { div = a.divisao; if (div) lista.append(el("div", "cl-div", div)); }
+    if (a.divisao !== div || !grupo) { div = a.divisao; grupo = { cab: div ? el("div", "cl-div", div) : null, itens: [] }; grupos.push(grupo); if (grupo.cab) lista.append(grupo.cab); }
     const lb = el("label", "cl-art" + (a.nCart ? " cl-art-tem" : ""));
+    grupo.itens.push({ lb, alvo: clNorm(a.rotulo + " " + String(a.numLei || a.num) + " " + a.ementa + " " + String(a.texto || "").slice(0, 600)) });
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "clArt_" + a.num; cb.checked = sel.has(a.num);
     cb.onchange = () => { if (cb.checked) sel.add(a.num); else sel.delete(a.num); const ls = clLotes(arts, sel); const r0 = $("clResumo"); if (r0) r0.textContent = t("cl_resumo", { n: sel.size, l: ls.length, v: vig.length, c: vig.filter((x) => x.nCart).length }); const b0 = $("btnClComecar"); if (b0) b0.disabled = !sel.size; };
     const tx = el("span", "cl-art-tx");
@@ -296,6 +378,17 @@ function clPintarArtigos(cx) {
     lista.append(lb);
   });
   cx.append(lista);
+  const filtrarArts = () => {
+    const q = clNorm(clEst.buscaArt || "");
+    const ws = q ? q.split(" ") : [];
+    grupos.forEach((g) => {
+      let algum = false;
+      g.itens.forEach((x) => { const v = !ws.length || ws.every((w) => x.alvo.indexOf(w) >= 0); x.lb.hidden = !v; if (v) algum = true; });
+      if (g.cab) g.cab.hidden = !algum;
+    });
+  };
+  qa.oninput = () => { clEst.buscaArt = qa.value; filtrarArts(); };
+  filtrarArts();
   const ir = el("button", "btn btn-azul", t("cl_comecar"));
   ir.type = "button"; ir.id = "btnClComecar"; ir.disabled = !sel.size;
   ir.onclick = () => clComecar(l, tp);
@@ -308,7 +401,7 @@ function clPintarArtigos(cx) {
 function clComecar(l, tp) {
   const lotes = clLotes(clEst.arts || [], clEst.sel || new Set());
   if (!lotes.length || !tp) return false;
-  if ($("dlgLeiCartoes") && $("dlgLeiCartoes").open) $("dlgLeiCartoes").close();
+  clFechar();
   bancAlvoDefinir(tp.disciplina, tp.topico);
   bancAlvo.lei = { id: l.id, nome: l.nome || "", lotes, k: 0, tp: { disciplina: tp.disciplina, topico: tp.topico, ramos: tp.ramos } };
   try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {}
@@ -366,5 +459,8 @@ function clIrLote(k) {
 
 if (typeof document !== "undefined" && $("btnLeiCartoes")) {
   $("btnLeiCartoes").onclick = () => clAbrir();
-  if ($("btnClFechar")) $("btnClFechar").onclick = () => $("dlgLeiCartoes").close();
+  if ($("btnClX")) $("btnClX").onclick = clFechar;
+  if ($("btnClCheia")) $("btnClCheia").onclick = () => clCheiaTrocar(undefined, true);
+  const dlg = $("dlgLeiCartoes");
+  if (dlg && dlg.addEventListener) dlg.addEventListener("close", () => { if (typeof telaCheiaSair === "function") telaCheiaSair("leicart"); });
 }
