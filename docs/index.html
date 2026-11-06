@@ -7181,6 +7181,54 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .mc-est-virar{width:100%;padding:13px;font-size:15px}
 .mc-est-ferramentas{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
   padding-top:9px;border-top:1px solid var(--borda)}
+/* =====================================================================
+ * (19.93.0) A ABA EDITAL LEGÍVEL — fase 1: a escala de letra e o tamanho dos botões
+ * Medido com o ISS: 62% do texto tinha 11,5 px ou menos, em 11 tamanhos diferentes (9 a 16 px), e 67 dos 149
+ * controles tinham menos de 24 px de altura (o "?" tinha 15). Agora, SÓ NESTA ABA, quatro tamanhos:
+ *   12 px — detalhes (selos, rótulos de coluna, legendas)     14 px — texto e botões
+ *   16 px — o título de cada tópico                            20 px — o título de cada seção
+ * Botões com pelo menos 32 px de altura (44 px no toque); selos clicáveis com 28 px. Nada muda de lugar: as
+ * repetições e a ordem da página são a fase 2. O contraste do texto claro foi medido (7,2:1) e fica.
+ * ===================================================================== */
+#secEdital{line-height:1.5}
+/* 20 px — seções */
+#secEdital .ed-caixa-tit,#secEdital .rt-tit,#secEdital .bancada-nome{font-size:20px;line-height:1.3}
+/* 16 px — o título do tópico */
+#secEdital .ed-item-titulo,#secEdital .ed-item-nome{font-size:16px;font-weight:600;line-height:1.35}
+/* 14 px — texto e botões */
+#secEdital .btn-min,#secEdital .ed-item-porque,#secEdital .ed-item-disc-link,#secEdital .ed-ramos-resumo,
+#secEdital .ed-min-num,#secEdital .ed-min-cel,#secEdital .ed-min-acerto,#secEdital .ed-min-nome,
+#secEdital .ac-num,#secEdital .ac-comp-nota,#secEdital .ac-proj2,#secEdital .ed-caixa-sub,#secEdital .ed-diario,
+#secEdital .lac-nome,#secEdital .edm-nome,#secEdital .edm-resumo,#secEdital .lac-num,#secEdital .dom-termo-txt,
+#secEdital summary,#secEdital .hub-aviso-chip,#secEdital .hub-vinc-txt,#secEdital .hub-vinc-ex,#secEdital .ed-item-min,
+#secEdital .di-sem-min,#secEdital .ag-med-rot,#secEdital .ed-ag-opt,#secEdital .plog-gatilho,#secEdital .banc-alternar,
+#secEdital .ed-reg,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
+#secEdital .ed-sim-txt,#secEdital .ed-banc-resumo{font-size:14px}
+/* 12 px — detalhes */
+#secEdital .ed-selo-cc,#secEdital .ed-selo-fase,#secEdital .ed-selo-andamento,#secEdital .ed-selo-volta,#secEdital .ed-item-trava,
+#secEdital .ac-c,#secEdital .ac-rot,#secEdital .ac-escopo,#secEdital .lac-cab-c,#secEdital .lac-linha i,
+#secEdital .di-sem-prev,#secEdital .di-sem-cod,#secEdital .ed-min-estado,#secEdital .ed-st-item,#secEdital .ed-ramo,
+#secEdital .ed-agenda-cfg-item,#secEdital .di-per,#secEdital .selo-ajuda,#secEdital .ed-rev,#secEdital .ed-faixa span{font-size:12px}
+/* os selos que não quebravam linha (nowrap) passaram da largura da coluna com a letra maior: agora quebram */
+#secEdital .ed-selo-andamento,#secEdital .ed-item-trava{white-space:normal;max-width:100%;box-sizing:border-box}
+/* botões: alvo de toque */
+#secEdital .btn-min,#secEdital .hub-aviso-chip,#secEdital .ed-ag-opt,#secEdital .di-per,#secEdital .plog-gatilho,
+#secEdital .banc-alternar{min-height:32px;box-sizing:border-box}
+#secEdital .ed-reg{width:32px;height:32px}
+#secEdital .ed-rev{width:28px;height:28px}
+#secEdital .selo-ajuda{width:24px;height:24px}
+#secEdital .ed-st-item,#secEdital .ed-selo-cc,#secEdital button.ed-ramo,#secEdital button.ac-c{min-height:28px;display:inline-flex;align-items:center;box-sizing:border-box}
+#secEdital summary{min-height:28px}
+/* um pouco mais de ar entre as linhas da agenda */
+/* o flex-wrap repete o da regra-base de propósito: a linha nunca pode deixar de quebrar (teste F10) */
+#secEdital .ed-item{padding-top:12px;padding-bottom:12px;flex-wrap:wrap}
+@media (pointer:coarse){
+  #secEdital .btn-min,#secEdital .hub-aviso-chip,#secEdital .ed-ag-opt,#secEdital .di-per,#secEdital .banc-alternar{min-height:44px}
+  #secEdital .ed-reg{width:44px;height:44px}
+  #secEdital .ed-rev,#secEdital .selo-ajuda{width:36px;height:36px}
+  #secEdital .ed-st-item,#secEdital .ed-selo-cc,#secEdital button.ed-ramo{min-height:36px}
+}
+
 </style>
 </head>
 <body>
