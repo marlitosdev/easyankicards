@@ -550,6 +550,17 @@ async function testes() {
     ok(atalhos[0] === "btnEpDiscSemN" && atalhos.indexOf("btnEpDiscGrupo_0") < 0, "TJ13 o grupo com todas as disciplinas não vira atalho repetido; as específicas vêm primeiro: " + atalhos.join());
     api.$("btnEpDiscSemN").onclick();
     ok(cj.disc.disciplinas.join() === "Direito Constitucional,Direito Administrativo,Direito Penal" && !api.epValidar(cj), "TJ14 um toque e a gravação passa");
+    /* (19.83.0) a confirmação em seções: por quê, o que muda (agrupado), o efeito na agenda e o que não muda */
+    api.setLanguage("pt");
+    const prC = api.epGravarConfirmando();
+    let msgC = "";
+    for (let i = 0; i < 4; i++) { await Promise.resolve(); msgC = msgC || String(api.$("uiModalMsg").textContent || ""); api.uiModalResponder(false); }
+    await prC;
+    ok(/Confira antes de gravar/.test(msgC) && /Esta tela aparece porque/.test(msgC) && /O que muda no edital/.test(msgC) && /Efeito na agenda/.test(msgC) && /O que não muda/.test(msgC), "TJ15 a confirmação explica por que aparece e vem em seções");
+    ok(/Novo corte para as 6 disciplinas: bloco Prova Objetiva \(60%\)/.test(msgC) && (msgC.match(/bloco Prova Objetiva/g) || []).length === 1, "TJ16 os 6 mínimos iguais viram uma linha: " + msgC.slice(0, 400));
+    ok(/Discursiva cadastrada/.test(msgC) && /até 30 linhas/.test(msgC) && /só os 300 primeiros da objetiva/.test(msgC) && /3 disciplina\(s\)/.test(msgC), "TJ17 a discursiva campo a campo, com linhas e 'corrigida'");
+    ok(/▲ \+|▼ /.test(msgC) && /antes/.test(msgC) && /depois/.test(msgC), "TJ18 o efeito na agenda com antes, depois e a diferença");
+    ok(/Na agenda, o que mais muda:|In the agenda, what changes most:/.test(String(api.$("epResumo").textContent || "")), "TJ19 o 'Como fica' resume as maiores mudanças na agenda");
     api.$("dlgEdPontua").close();
     api.edApagar(et.id || et);
   }

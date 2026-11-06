@@ -346,6 +346,19 @@ function epResumo() {
   };
   marcas.forEach((m) => item(m.f.txt, m.tipo, m.antes));
   saem.forEach((a) => item(a.txt, "sai"));
+  /* (19.83.0) o efeito na agenda, em uma linha: as 3 disciplinas que mais mudam de "vale X%" (o detalhe vem na confirmação) */
+  try {
+    if (n.novo || n.mudou || n.sai) {
+      const fa = epFatiasDe($("editalTexto").value), fb = epFatiasDe(epTextoPrevia());
+      const top = c.ds.map((d) => ({ n: hubDiscCurtaSeg(d.nome), a: fa.fatia[d.nome], b: fb.fatia[d.nome] }))
+        .filter((x) => x.a != null && x.b != null && x.a !== x.b).sort((x, y) => Math.abs(y.b - y.a) - Math.abs(x.b - x.a)).slice(0, 3);
+      if (top.length) {
+        const li = el("li", "ep-res-agenda");
+        li.append(el("span", "ep-res-simb", "⇅ "), el("span", "ep-res-txt", t("ep_res_agenda", { l: top.map((x) => x.n + " " + x.a + "% → " + x.b + "%").join(" · ") })));
+        cx.append(li);
+      }
+    }
+  } catch (e) {}
   epPintarFatias();
   epMarcarMudancas();
   return agora.map((f) => f.txt);
@@ -458,7 +471,10 @@ function epDiscTexto(foto) {
   if (foto.discursiva !== "sim" || !foto.disc || !(foto.disc.pontos > 0)) return t("ep_atual_disc_nao");
   const dd = foto.disc;
   return t("ep_atual_disc", { p: dd.pontos, o: dd.objetiva || "?", d: (dd.disciplinas || []).map(hubDiscCurtaSeg).join(", ") || "—" })
-    + (dd.minimo ? " · " + t("ep_atual_disc_min", { m: epMinTexto(dd.minimo) }) : "");
+    + (dd.minimo ? " · " + t("ep_atual_disc_min", { m: epMinTexto(dd.minimo) }) : "")
+    /* (19.83.0) linhas e "corrigida" também: mudar só um deles não aparecia e a gravação dizia "nada mudou" */
+    + (dd.linhas && dd.linhas.max ? " · " + edLinhasTxt(dd.linhas) : "")
+    + (dd.corrigida ? " · " + t("ep_conf_d_corr", { n: dd.corrigida }) : "");
 }
 
 /* "Cadastrado agora": o que está gravado no edital, antes de mexer em qualquer coisa */
@@ -573,6 +589,75 @@ function epMudancas(c) {
   return out;
 }
 
+/* (19.83.0) O CORPO DA CONFIRMAÇÃO. Agrupa as mudanças por assunto e diz o efeito delas na agenda. */
+function epConfirmacaoEl(c, mud, fa, fb) {
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; };
+  const box = el("div", "ep-conf");
+  box.append(el("p", "ep-conf-porque", t("ep_conf_porque")));
+  const sec = (tit) => { const s = el("div", "ep-conf-sec"); s.append(el("div", "ep-conf-sec-tit", tit)); box.append(s); return s; };
+  const o = c.orig || {};
+  /* 1. o que muda no edital */
+  const s1 = sec(t("ep_conf_s_muda"));
+  const ul = el("ul", "ep-conf-lista");
+  const li = (txt, det) => { const x = el("li", "", txt); if (det && det.length) { const d = el("details", "ep-conf-det"); d.append(el("summary", "", t("ep_conf_quais", { n: det.length })), el("div", "nota", det.join(", "))); x.append(d); } ul.append(x); return x; };
+  /* cortes: as disciplinas que vão para o mesmo destino viram uma linha */
+  const porMin = {};
+  c.ds.forEach((d) => { const a = (o.ds || []).find((x) => x.nome === d.nome); if (!a) return; const ma = epMinDe(a, o), mb = epMinDe(d, c); if (ma !== mb) (porMin[mb] = porMin[mb] || []).push(hubDiscCurtaSeg(d.nome)); });
+  Object.keys(porMin).forEach((mb) => {
+    const ds = porMin[mb];
+    if (ds.length === 1) li(t("ep_conf_min_uma", { d: ds[0], m: mb }));
+    else li(ds.length === c.ds.length ? t("ep_conf_min_todas", { m: mb, n: ds.length }) : t("ep_conf_min_algumas", { m: mb, n: ds.length }), ds);
+  });
+  /* pontuação: "Português 10 questões → 10 pontos" numa linha só, separadas por ponto */
+  const pesos = mud.filter((x) => x.tipo === "peso").map((x) => x.txt);
+  if (pesos.length) { const lp = li(t("ep_conf_pesos", { n: pesos.length })); pesos.forEach((p) => lp.append(el("div", "ep-conf-sub", p))); }
+  mud.filter((x) => x.tipo === "nova").forEach((x) => li(x.txt));
+  /* discursiva: campo a campo */
+  const da = epDiscTexto(o), db = epDiscTexto(c);
+  if (da !== db) {
+    const dd = c.disc || {};
+    const nova = !(o.discursiva === "sim" && o.disc && o.disc.pontos > 0);
+    const x = el("li", "ep-conf-disc");
+    x.append(el("strong", "", t(nova ? "ep_conf_d_nova" : "ep_conf_d_muda")));
+    if (c.discursiva !== "sim") x.append(el("div", "ep-conf-sub", t("ep_conf_d_sai")));
+    else {
+      const campos = [[t("ep_conf_d_pontos"), dd.pontos + (dd.objetiva ? " " + t("ep_conf_d_obj", { o: dd.objetiva }) : "")],
+        [t("ep_conf_d_min"), dd.minimo ? epMinTexto(dd.minimo) : t("ep_conf_d_sem")],
+        [t("ep_conf_d_linhas"), dd.linhas && dd.linhas.max ? edLinhasTxt(dd.linhas) : t("ep_conf_d_sem")],
+        [t("ep_conf_d_corrigida"), dd.corrigida ? t("ep_conf_d_corr", { n: dd.corrigida }) : t("ep_conf_d_todos")],
+        [t("ep_conf_d_onde"), t("ep_conf_d_disc_n", { n: (dd.disciplinas || []).length })]];
+      const tb = el("div", "ep-conf-campos");
+      campos.forEach(([k, v]) => { tb.append(el("span", "ep-conf-k", k), el("span", "ep-conf-v", String(v))); });
+      x.append(tb);
+      if ((dd.disciplinas || []).length) { const d = el("details", "ep-conf-det"); d.append(el("summary", "", t("ep_conf_quais", { n: dd.disciplinas.length })), el("div", "nota", dd.disciplinas.map(hubDiscCurtaSeg).join(", "))); x.append(d); }
+    }
+    ul.append(x);
+  }
+  if (!ul.children.length) ul.append(el("li", "", t("ep_conf_so_respostas").replace(/^·\s*/, "")));
+  s1.append(ul);
+  /* 2. o efeito na agenda: antes → depois, ordenado pela diferença; as 3 maiores em destaque */
+  const lin = c.ds.map((d) => ({ n: hubDiscCurtaSeg(d.nome), a: fa.fatia[d.nome], b: fb.fatia[d.nome] }))
+    .filter((x) => x.a !== x.b).map((x) => Object.assign(x, { dif: (x.b || 0) - (x.a || 0) }))
+    .sort((x, y) => Math.abs(y.dif) - Math.abs(x.dif));
+  if (lin.length) {
+    const s2 = sec(t("ep_conf_s_agenda"));
+    s2.append(el("p", "nota", t(c.discursiva === "sim" && c.disc && c.disc.pontos > 0 ? "ep_conf_agenda_aj_disc" : "ep_conf_agenda_aj")));
+    const g = el("div", "ep-conf-fat");
+    ["ep_conf_c_disc", "ep_conf_c_antes", "ep_conf_c_depois", "ep_conf_c_dif"].forEach((k) => g.append(el("span", "ep-conf-fat-cab", t(k))));
+    lin.forEach((x, i) => {
+      const forte = i < 3 && Math.abs(x.dif) >= 2 ? " ep-conf-forte" : "";
+      g.append(el("span", "ep-conf-fat-n" + forte, x.n), el("span", "ep-conf-num", x.a == null ? "—" : x.a + "%"), el("span", "ep-conf-num" + forte, x.b == null ? "—" : x.b + "%"),
+        el("span", "ep-conf-num ep-conf-dif " + (x.dif > 0 ? "sobe" : "desce") + forte, (x.dif > 0 ? "▲ +" : "▼ ") + x.dif));
+    });
+    s2.append(g);
+  }
+  /* 3. o que não muda e os botões */
+  const s3 = sec(t("ep_conf_s_nao"));
+  s3.append(el("p", "nota", t("ep_conf_nao_muda")));
+  box.append(el("p", "nota ep-conf-botoes", t("ep_conf_botoes2")));
+  return box;
+}
+
 /* Gravar COM confirmação: o que muda (de → para), as fatias antes e depois, e o que cada botão faz */
 async function epGravarConfirmando() {
   const c = epCtx;
@@ -597,10 +682,11 @@ async function epGravarConfirmando() {
   const fa = epFatiasDe($("editalTexto").value), fb = epFatiasDe(epTextoPrevia());
   const fat = c.ds.filter((d) => fa.fatia[d.nome] !== fb.fatia[d.nome])
     .map((d) => hubDiscCurtaSeg(d.nome) + " " + (fa.fatia[d.nome] == null ? "—" : fa.fatia[d.nome] + "%") + " → " + (fb.fatia[d.nome] == null ? "—" : fb.fatia[d.nome] + "%"));
-  const txt = t("ep_conf_tit") + "\n\n" + (mud.length ? mud.map((x) => "· " + x.txt).join("\n") : t("ep_conf_so_respostas"))
-    + (fat.length ? "\n\n" + t("ep_conf_fatias") + "\n· " + fat.join("\n· ") : "")
-    + "\n\n" + t("ep_conf_botoes");
-  if (!(await uiConfirm(txt, { ok: t("ep_conf_ok") }))) {
+  /* (19.83.0) A CONFIRMAÇÃO EM SEÇÕES: por que ela aparece, o que muda (agrupado — dez linhas iguais de "mínimo: sem
+   * mínimo → bloco Prova Objetiva" viram uma), o efeito na agenda (antes → depois, as maiores mudanças em destaque) e o
+   * que não muda. O texto corrido de antes continua como "fat" só para o registro. */
+  const corpo = epConfirmacaoEl(c, mud, fa, fb);
+  if (!(await uiConfirm(t("ep_conf_tit2"), { ok: t("ep_conf_ok"), cancelar: t("ep_conf_voltar"), corpo }))) {
     try { reg("EDITAL", "como a prova pontua: gravação desistida na confirmação", mud.length + " mudança(s)"); } catch (e) {}
     return false;
   }

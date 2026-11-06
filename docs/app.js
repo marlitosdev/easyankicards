@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.82.0";
+const VERSAO = "19.83.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -392,6 +392,11 @@ function uiDialog(texto, comCancelar, opc) {
     _uiResolve = resolve;
     const m = document.getElementById("uiModal");
     document.getElementById("uiModalMsg").textContent = texto;
+    /* (19.83.0) opc.corpo: um elemento montado (seções, tabela) depois do texto — para confirmações que precisam de
+     * estrutura, não de um bloco de linhas */
+    if (opc && opc.corpo && opc.corpo.nodeType) document.getElementById("uiModalMsg").append(opc.corpo);
+    /* com corpo, a janela fica mais larga (a tabela "antes / depois" não cabe em 420 px) e rola sozinha, sem rolagem dentro de rolagem */
+    try { document.getElementById("uiModal").classList.toggle("ui-modal-largo", !!(opc && opc.corpo)); } catch (e) {}
     /* religa SEMPRE ao abrir: qualquer coisa que tenha mexido nestes
      * botões antes não pode deixar um aviso sem saída. Ficar preso num
      * aviso é o pior defeito que este app pode ter — não dá nem para
@@ -408,7 +413,7 @@ function uiDialog(texto, comCancelar, opc) {
     okB.textContent = o.ok || "OK";
     const cancel = document.getElementById("uiModalCancel");
     cancel.className = "btn btn-cinza";
-    cancel.textContent = t("cancel_btn");
+    cancel.textContent = o.cancelar || t("cancel_btn");
     cancel.style.display = comCancelar ? "" : "none";
     // showModal() põe o aviso na camada de topo: ele aparece mesmo com
     // outro <dialog> aberto embaixo (bug do alerta invisível, v8.26)
