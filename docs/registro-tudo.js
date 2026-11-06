@@ -101,7 +101,12 @@ function rtInstante(x) {
 
 function rtDoRegistroGeral() {
   const L = (typeof registro !== "undefined" && registro) ? registro : [];
+  /* (19.85.0) a versão: a do próprio evento ("v") ou, nos antigos, a da sessão (eac_reg_sessoes / a abertura do app) */
+  let sv = {};
+  try { sv = JSON.parse(localStorage.getItem("eac_reg_sessoes") || "{}") || {}; } catch (e) { sv = {}; }
+  L.forEach((r) => { if (r && r.tipo === "INICIO" && r.s && /^v?\d+\.\d+/.test(String(r.extra || ""))) sv[r.s] = sv[r.s] || String(r.extra).replace(/^v/, ""); });
   return L.map((r) => ({
+    versao: r.v || sv[r.s] || "",
     /* O REGISTRO GERAL GRAVA EM UTC (reg() usa toISOString) — sem o "Z" o
      * navegador lia a hora como LOCAL, e o evento caía horas fora de
      * lugar na linha do tempo, ao lado dos outros registros (que já vêm
@@ -340,11 +345,65 @@ function rtTexto(opc) {
  * "modo") e o que se VIA (as abas da linha do tempo) eram dois filtros
  * diferentes: as abas nunca entravam no relatório, e quem escolhia
  * "erros" achava que estava escolhendo o que ia ser enviado. */
+/* (19.85.0) O REGISTRO ENXUTO. As trocas de tela ("[MODO] modo questoes", "[NAVEGAR]") viram uma contagem no
+ * cabeçalho; o mesmo evento repetido em seguida vira uma linha com "×N"; linha longa é cortada em 240 caracteres. A
+ * prévia e o texto copiado saem daqui, então os dois continuam iguais. */
+function rtEhNavegacao(x) {
+  return x && x.nivel !== "erro" && x.nivel !== "aviso" && /^(MODO|NAVEGAR)$/.test(String(x.tag || "").toUpperCase());
+}
+function rtLinhaCurta(x) {
+  const l = rtLinha(x);
+  return l.length > 240 ? l.slice(0, 238) + "… (+" + (l.length - 238) + ")" : l;
+}
 function rtRelatorio(opc) {
   const L = rtTudo(Object.assign({ semRepetidos: true }, opc || {}));
   const c = rtContarPorNivel(L);
-  const cab = L.length + " eventos · " + c.erro + " erro(s) · " + c.aviso + " aviso(s)";
-  return { n: L.length, lista: L, texto: L.length ? cab + "\n" + L.map(rtLinha).join("\n") : "" };
+  const nav = L.filter(rtEhNavegacao);
+  const grupos = [];
+  L.filter((x) => !rtEhNavegacao(x)).forEach((x) => {
+    const k = x.fonte + "|" + x.tag + "|" + x.msg + "|" + x.extra;
+    const g = grupos[grupos.length - 1];
+    if (g && g.k === k) { g.n++; g.antigo = x; } else grupos.push({ k, x, n: 1, antigo: x });
+  });
+  const hora = (q) => { const d = new Date(q); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+  const cab = L.length + " eventos · " + c.erro + " erro(s) · " + c.aviso + " aviso(s)"
+    + (nav.length ? " · " + nav.length + " troca(s) de tela não listadas" : "");
+  const linhas = grupos.map((g) => rtLinhaCurta(g.x) + (g.n > 1 ? "  (×" + g.n + " desde " + hora(g.antigo.quando) + ")" : ""));
+  return { n: L.length, lista: L, texto: L.length ? cab + (linhas.length ? "\n" + linhas.join("\n") : "") : "" };
+}
+
+/* (19.85.0) OS ERROS AGRUPADOS: um por mensagem, com quantas vezes, a primeira e a última, em quais versões e a pilha
+ * (do mais recente). Do mais recente para o mais antigo. */
+function rtErrosAgrupados(L) {
+  const g = {};
+  (L || []).filter((x) => x && x.nivel === "erro").forEach((x) => {
+    const k = String(x.msg || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    const o = g[k] || (g[k] = { msg: k, n: 0, primeira: x.quando, ultima: x.quando, versoes: [], pilha: "", fonte: x.fonte });
+    o.n++;
+    if (x.quando < o.primeira) o.primeira = x.quando;
+    if (x.quando >= o.ultima) { o.ultima = x.quando; if (/^pilha:/.test(String(x.extra || ""))) o.pilha = String(x.extra).slice(0, 300); }
+    if (!o.pilha && /^pilha:/.test(String(x.extra || ""))) o.pilha = String(x.extra).slice(0, 300);
+    const v = x.versao || "";
+    if (v && o.versoes.indexOf(v) < 0) o.versoes.push(v);
+  });
+  return Object.keys(g).map((k) => g[k]).map((o) => Object.assign(o, { versoes: o.versoes.sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) }))
+    .sort((a, b) => b.ultima - a.ultima);
+}
+
+/* (19.85.0) QUANTO CADA ORIGEM GUARDA: o relatório dizia "924 eventos" sem dizer que o registro do app só guardava os
+ * 200 últimos — e por isso começava em 24/10 enquanto o de geração ia até 04/09. */
+function rtCobertura() {
+  const ler = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+  const desde = (arr, f) => { const ts = arr.map(f).filter((x) => x > 0); if (!ts.length) return ""; const d = new Date(Math.min.apply(null, ts)); return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const reg0 = (typeof registro !== "undefined" && registro) ? registro : [];
+  const fontes = [
+    { nome: "app", arr: reg0, max: typeof REG_MAX !== "undefined" ? REG_MAX : 0, q: (r) => rtInstante(r.d + "T" + (r.h || "00:00:00") + "Z") },
+    { nome: "geração", arr: ler("eac_ger_log"), max: typeof GER_LOG_MAX !== "undefined" ? GER_LOG_MAX : 0, q: (x) => rtInstante(x.q) },
+    { nome: "lei", arr: ler("eac_lei_log"), max: typeof LEI_LOG_MAX !== "undefined" ? LEI_LOG_MAX : 0, q: (x) => rtInstante(x.q) },
+    { nome: "material", arr: ler("eac_mat_log"), max: typeof MAT_LOG_MAX !== "undefined" ? MAT_LOG_MAX : 0, q: (x) => rtInstante(x.q) },
+    { nome: "vínculos", arr: ler("eac_vinculo_log"), max: typeof VZ_LOG_MAX !== "undefined" ? VZ_LOG_MAX : 0, q: (x) => rtInstante(x.q) },
+  ];
+  return fontes.map((f) => ({ nome: f.nome, n: f.arr.length, max: f.max || "?", desde: desde(f.arr, f.q), cheio: !!(f.max && f.arr.length >= f.max) }));
 }
 
 /* =====================================================================

@@ -1196,7 +1196,7 @@ function rodar(opc) {
     edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
     edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
     get edProgresso() { return edProgresso; },
-    montarPainelDiag, abrirDiagnostico, podarRegistro, pintarDiagnostico,
+    montarPainelDiag, abrirDiagnostico, podarRegistro, pintarDiagnostico, rtErrosAgrupados, rtCobertura, diagPilha, diagTam, registroAtual: () => registro,
     swLinhaDiagnostico, swDiagnostico, swForcarAtualizacao,
     mostrarBarraUpdate, mostrarBarraOrigem,
     VERSAO,

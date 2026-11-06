@@ -352,7 +352,7 @@ async function testes() {
      * inteiro: "localStorage" aparece de qualquer jeito na linha
      * seguinte, e uma busca no todo passaria sem nada ter mudado */
     const pedaco = txt.split(/\s*\|\s*|\n/)
-      .filter((x) => /0 KB de 10240 MB/.test(x))[0] || "";
+      .filter((x) => /0 KB de 10 GB/.test(x))[0] || "";
     ok(/cache/i.test(pedaco) && /IndexedDB/i.test(pedaco),
        "R11 o 0 KB aparece sem dizer O QUE foi medido: " + pedaco);
     ok(/localStorage/.test(pedaco),
@@ -834,6 +834,49 @@ async function testes() {
     ok(!/VINCULAÇÃO ENTRE EDITAIS/.test(api.diagTextoAtual()),
        "A16c 'so erros e avisos' ainda traz o bloco de vinculacao (andamento normal)");
     api.definirPeriodo(0);
+  }
+
+  /* ---- (19.85.0) D: o diagnóstico em seções ---- */
+  {
+    const { api } = rodar();
+    api.reg("ERRO", "Uncaught TypeError: boom @ decisoes.js:185", "pilha: f (decisoes.js:185:3) ← g (app.js:10:1)");
+    api.reg("ERRO", "Uncaught TypeError: boom @ decisoes.js:185");
+    api.reg("ERRO", "outro erro");
+    const ev = api.registroAtual();
+    ok(ev[ev.length - 1].v === api.VERSAO_ATUAL || !!ev[ev.length - 1].v, "D1 cada evento guarda a versão do app");
+    const G = api.rtErrosAgrupados(api.rtTudo({}));
+    const gb = G.find((g) => /boom/.test(g.msg));
+    ok(gb && gb.n === 2 && gb.versoes.length >= 1 && /pilha: f \(decisoes\.js/.test(gb.pilha), "D2 erros iguais viram um grupo com ×2, a versão e a pilha: " + JSON.stringify(gb));
+    for (let i = 0; i < 5; i++) api.reg("MODO", "modo questoes");
+    for (let i = 0; i < 3; i++) api.reg("EDITAL", "mesma coisa", "x");
+    api.reg("EDITAL", "longo", "y".repeat(500));
+    const rel = api.rtRelatorio({ assunto: "tudo" });
+    ok(/5 troca\(s\) de tela não listadas/.test(rel.texto) && !/\[MODO\] modo questoes/.test(rel.texto), "D3 as trocas de tela viram uma contagem: " + rel.texto.split("\n")[0]);
+    ok(/mesma coisa  x  \(×3 desde/.test(rel.texto), "D4 o mesmo evento em seguida vira uma linha com ×3");
+    ok(rel.texto.split("\n").every((l) => l.length <= 270) && /… \(\+\d+\)/.test(rel.texto), "D5 linha longa é cortada");
+    const cob = api.rtCobertura();
+    ok(cob[0].nome === "app" && cob[0].max === 600 && cob.length === 5, "D6 a cobertura diz quanto cada origem guarda: " + JSON.stringify(cob[0]));
+    ok(api.diagTam(4626432) === "4,4 MB" && api.diagTam(10737418240) === "10 GB" && api.diagTam(819200) === "800 KB", "D7 tamanhos com a unidade que cabe");
+    api.rtIniciarTela({ assunto: "tudo" });
+    api.montarPainelDiag();
+    const txt = api.diagTextoAtual();
+    ok(["--- RESUMO ---", "--- AMBIENTE ---", "--- ARMAZENAMENTO ---", "--- BACKUP ---", "--- EDITAIS ---", "--- TELA ---", "--- ERROS", "--- REGISTRO"].every((x) => txt.indexOf(x) >= 0), "D8 o relatório vem em seções");
+    ok(/⚠ Erros NA VERSÃO ATUAL: 2 tipo\(s\)/.test(txt) && /×2  Uncaught TypeError: boom/.test(txt) && /na versão atual: SIM/.test(txt), "D9 o resumo e a seção de erros apontam os erros da versão de agora");
+    ok(/cobertura: app \d+\/600/.test(txt), "D10 o registro diz a cobertura");
+    api.$("chkDiagAparelho").checked = false;
+    api.montarPainelDiag();
+    const magro = api.diagTextoAtual();
+    ok(!/--- AMBIENTE ---/.test(magro) && /--- RESUMO ---/.test(magro) && /--- EDITAIS ---/.test(magro) && /--- ERROS/.test(magro), "D11 sem os dados do aparelho, saem só ambiente e armazenamento");
+    api.$("chkDiagAparelho").checked = true;
+    const p = api.diagPilha({ stack: "TypeError: x\n    at f (https://site/docs/decisoes.js:185:3)\n    at g (https://site/docs/app.js:10:1)\n    at h (x.js:1:1)\n    at i (y.js:1:1)" });
+    ok(p === "pilha: at f decisoes.js:185:3 ← at g app.js:10:1 ← at h (x.js:1:1)", "D12 a pilha leva 3 chamadas, sem o endereço do servidor: " + p);
+  }
+  {
+    const { api } = rodar();
+    await api.abrirDiagnostico({ assunto: "tudo" });
+    const semTexto = api.$("chkDiagTexto").checked === false;
+    await api.abrirDiagnostico({ assunto: "cartoes" });
+    ok(semTexto && api.$("chkDiagTexto").checked === true, "D13 o texto dos cartões só vem marcado no relatório de Cartões");
   }
 
   return Object.assign(falhas, { quantas: n });

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.84.0";
+const VERSAO = "19.85.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -140,7 +140,8 @@ function atualizarBarraRecortes() {
  * nada é enviado a lugar nenhum. Serve para responder "o que você fez
  * antes do problema aparecer?" sem depender da memória de ninguém.
  * =================================================================== */
-const REG_MAX = 200;
+/* (19.85.0) 600: com 200, o registro do app cobria só ~2 semanas e o relatório não dizia que tinha sido cortado */
+const REG_MAX = 600;
 let registro = [];
 try {
   const g = JSON.parse(localStorage.getItem("eac_registro") || "[]");
@@ -186,6 +187,8 @@ function reg(tipo, msg, extra) {
     h: agora.toISOString().slice(11, 19),
     d: agora.toISOString().slice(0, 10),
     s: SESSAO,
+    /* (19.85.0) A VERSÃO EM CADA EVENTO: sem ela, um erro de 17/10 não dizia se ainda acontece na versão de hoje */
+    v: typeof VERSAO !== "undefined" ? VERSAO : "",
     tipo, msg: String(msg).slice(0, 300),
     extra: extra === undefined ? undefined : extra,
   });
@@ -291,8 +294,17 @@ function avisarGravacaoFalhou() {
  * usuário não sabe descrever e que some no console sem ninguém ver. */
 window.addEventListener("error", (e) => {
   reg("ERRO", (e.message || "erro") + " @ "
-    + String(e.filename || "").split("/").pop() + ":" + (e.lineno || "?"));
+    + String(e.filename || "").split("/").pop() + ":" + (e.lineno || "?"),
+    /* (19.85.0) o caminho até o erro (as 3 primeiras chamadas), que "arquivo:linha" sozinho não dá */
+    diagPilha(e && e.error));
 });
+/* (19.85.0) as 3 primeiras linhas da pilha, sem o endereço do servidor — o suficiente para achar quem chamou */
+function diagPilha(err) {
+  const st = err && err.stack ? String(err.stack) : "";
+  if (!st) return undefined;
+  const L = st.split("\n").slice(1).map((l) => l.trim().replace(/\(?(?:https?|file):\/\/[^)\s]*\/([^/)\s]+)\)?/g, "$1")).filter(Boolean).slice(0, 3);
+  return L.length ? "pilha: " + L.join(" ← ") : undefined;
+}
 /* (v19.0.0) ARQUIVO DO APP QUE NÃO CARREGOU. Um .js recusado (404 no meio de uma publicação, HTML no lugar do
  * script) não dispara o erro acima — só o efeito dele aparecia depois ("qsCarregar is not defined"), e a causa
  * tinha de ser deduzida. Na fase de captura o <script> que falhou chega aqui com o nome do arquivo. */
@@ -304,8 +316,16 @@ window.addEventListener("error", (e) => {
   reg("ERRO", "arquivo do app não carregou: " + arq, "parte do app fica sem funcionar até recarregar a página");
 }, true);
 window.addEventListener("unhandledrejection", (e) => {
-  reg("ERRO", "promessa rejeitada: " + ((e.reason && e.reason.message) || e.reason));
+  reg("ERRO", "promessa rejeitada: " + ((e.reason && e.reason.message) || e.reason), diagPilha(e && e.reason));
 });
+/* (19.85.0) qual versão cada sessão rodou — para dar versão aos eventos antigos, gravados antes do campo "v" */
+try {
+  const sv = JSON.parse(localStorage.getItem("eac_reg_sessoes") || "{}") || {};
+  sv[SESSAO] = typeof VERSAO !== "undefined" ? VERSAO : "";
+  const ks = Object.keys(sv);
+  if (ks.length > 300) ks.slice(0, ks.length - 300).forEach((k) => { delete sv[k]; });
+  localStorage.setItem("eac_reg_sessoes", JSON.stringify(sv));
+} catch (e) {}
 
 // a abertura entra ANTES de qualquer análise, senão o registro começa
 // pelo meio da história
@@ -4453,6 +4473,14 @@ function diagEdital(L) {
  * grave que apareceu: quanto espaco esta em uso, se o navegador prometeu
  * NAO apagar, e quantas versoes do texto existem para recuperar. */
 let estadoArmazen = "(não consultado)";
+let diagLsPct = 0;
+/* (19.85.0) tamanho com a unidade que cabe: 812 KB, 4,4 MB, 10 GB */
+function diagTam(b) {
+  const n = Number(b) || 0;
+  if (n >= 1073741824) return (n / 1073741824).toFixed(n >= 10737418240 ? 0 : 1).replace(".", ",") + " GB";
+  if (n >= 1048576) return (n / 1048576).toFixed(1).replace(".", ",") + " MB";
+  return Math.max(0, Math.round(n / 1024)) + " KB";
+}
 async function medirArmazenamento() {
   const p = [];
   try {
@@ -4473,15 +4501,16 @@ async function medirArmazenamento() {
      * diz o que NÃO foi. Um número sem unidade de sentido é pior que
      * número nenhum: o primeiro assusta, o segundo só falta. */
     if (e) p.push("arquivos do app (cache+IndexedDB): "
-      + Math.round((e.usage || 0) / 1024) + " KB de "
-      + Math.round((e.quota || 0) / 1048576) + " MB"
+      + diagTam(e.usage || 0) + " de " + diagTam(e.quota || 0)
       + "  — não inclui o material, que está no localStorage abaixo");
   } catch (e) { p.push("arquivos do app: erro"); }
   try {
     let n = 0;
     for (let i = 0; i < localStorage.length; i++)
       n += (localStorage.getItem(localStorage.key(i)) || "").length;
-    p.push("localStorage: " + Math.round(n / 1024) + " KB em " + localStorage.length + " chaves");
+    /* o navegador costuma limitar o localStorage a ~5 MB: perto disso, gravar começa a falhar */
+    p.push("localStorage: " + diagTam(n) + " em " + localStorage.length + " chaves (≈" + Math.round(n / (5 * 1048576) * 100) + "% de ~5 MB)");
+    diagLsPct = Math.round(n / (5 * 1048576) * 100);
   } catch (e) { p.push("localStorage: sem acesso"); }
   p.push("histórico: " + (typeof historico !== "undefined" ? historico.length : "?") + " versões");
   try { if (typeof tnEspaco === "function") { const e = tnEspaco(); p.push("marcas do lápis (IndexedDB): " + e.n + " questões, " + e.kb + " KB" + (tnBackupLigado() ? " — no backup" : " — fora do backup")); } } catch (e) {}
@@ -4508,30 +4537,171 @@ function bloco(L, fn) {
   try { fn(); } catch (e) { L.push("  [falhou ao montar: " + (e && e.message) + "]"); }
 }
 
+/* =====================================================================
+ * (19.85.0) O RELATÓRIO EM SEÇÕES, COM O RESUMO NO TOPO.
+ * Era uma linha de cabeçalho com tudo separado por "|", a lista crua de ~900 eventos e o texto da bancada. Agora:
+ *  RESUMO     — o que está bem e o que não está (gravação, erros na versão atual, backup, atualização, espaço, cortes);
+ *  AMBIENTE   — versão, navegador, tela, online, fuso, sessão, atualização (sai com "dados do aparelho" desmarcado);
+ *  ARMAZENAMENTO — com unidades coerentes e as maiores chaves (idem);
+ *  BACKUP     — automático (ligado, último, erro) e o último manual;
+ *  EDITAIS    — todos, uma linha cada, e o que governa a agenda (ritmo/meta, modos, filtros);
+ *  TELA       — onde estava, o modo, a bancada (o que já existia);
+ *  ERROS      — agrupados, com ×N, primeira/última vez, versões e a pilha;
+ *  REGISTRO   — o mesmo da prévia, já enxuto (ver rtRelatorio), com a cobertura de cada origem;
+ *  TEXTO      — só quando marcado.
+ * ===================================================================== */
+function diagQuando(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getDate()) + "/" + p(d.getMonth() + 1) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function diagFuso() {
+  const m = -new Date().getTimezoneOffset();
+  const a = Math.abs(m);
+  return "UTC" + (m >= 0 ? "+" : "-") + String(Math.floor(a / 60)).padStart(2, "0") + ":" + String(a % 60).padStart(2, "0");
+}
+function diagIdade(iso) {
+  const t0 = new Date(iso).getTime();
+  if (!t0) return null;
+  const min = Math.round((Date.now() - t0) / 60000);
+  return min < 60 ? min + " min" : min < 2880 ? Math.round(min / 60) + " h" : Math.round(min / 1440) + " dias";
+}
+function diagResumo(L) {
+  const ok = (x) => L.push("✓ " + x), av = (x) => L.push("⚠ " + x);
+  /* gravação */
+  if (typeof falhasGravacao !== "undefined" && falhasGravacao.length) av("Gravação: " + falhasGravacao.length + " recusada(s) nesta sessão (" + [...new Set(falhasGravacao.map((f) => f.chave))].join(", ") + ")");
+  else ok("Gravação: nenhuma recusada nesta sessão");
+  /* erros: os da versão de agora são o que importa */
+  try {
+    const G = rtErrosAgrupados(rtTudo({}));
+    const atual = G.filter((g) => g.versoes.indexOf(VERSAO) >= 0);
+    if (!G.length) ok("Erros: nenhum no registro");
+    else if (atual.length) av("Erros NA VERSÃO ATUAL: " + atual.length + " tipo(s), " + atual.reduce((a, g) => a + g.n, 0) + " ocorrência(s) — ver ERROS");
+    else ok("Erros: nenhum na versão atual (" + G.length + " tipo(s) de versões anteriores; o último em " + diagQuando(G[0].ultima) + (G[0].versoes[0] ? ", v" + G[0].versoes[0] : ", versão não registrada") + ")");
+  } catch (e) { L.push("? Erros: não foi possível agrupar (" + (e && e.message) + ")"); }
+  /* backup */
+  try {
+    const est = typeof bkaEstado === "function" ? bkaEstado() : {};
+    const em = localStorage.getItem("eac_backup_em");
+    const idade = em ? diagIdade(em) : null;
+    if (est.erro) av("Backup automático com erro: " + est.erro.msg + " (" + diagQuando(new Date(est.erro.quando).getTime()) + ")");
+    else if (!em) av("Backup: nenhum feito neste aparelho");
+    else {
+      const dias = (Date.now() - new Date(em).getTime()) / 86400000;
+      (dias > 3 ? av : ok)("Backup: o último há " + idade + " (" + (localStorage.getItem("eac_backup_onde") || "?") + ")" + (est.ligado ? " · automático ligado" : " · automático desligado"));
+    }
+  } catch (e) {}
+  /* atualização */
+  try {
+    if (swDiagUltimo) (swDiagUltimo.estado === "em-dia" || swDiagUltimo.estado === "em_dia" ? ok : av)(swLinhaDiagnostico(swDiagUltimo).replace(/^atualização automática: /, "Atualização: "));
+  } catch (e) {}
+  /* espaço */
+  if (diagLsPct >= 80) av("Espaço: o localStorage está em ≈" + diagLsPct + "% do limite — gravar pode começar a falhar");
+  else if (diagLsPct) ok("Espaço: localStorage em ≈" + diagLsPct + "% do limite");
+  /* registro cortado */
+  try {
+    const cheias = rtCobertura().filter((c) => c.cheio);
+    if (cheias.length) L.push("ℹ Registro cortado em " + cheias.map((c) => c.nome + " (guarda " + c.max + ", desde " + c.desde + ")").join(", ") + " — o que é mais antigo saiu");
+  } catch (e) {}
+}
+function diagMaioresChaves(L) {
+  const ks = [];
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ks.push([k, (localStorage.getItem(k) || "").length]); }
+  ks.sort((a, b) => b[1] - a[1]);
+  L.push("  maiores: " + ks.slice(0, 6).map((x) => x[0] + " " + diagTam(x[1])).join(" · "));
+}
+function diagBackup(L) {
+  const est = typeof bkaEstado === "function" ? bkaEstado() : {};
+  const pode = typeof bkaPodeAutomatico === "function" ? bkaPodeAutomatico() : false;
+  L.push("automático: " + (!pode ? "não disponível neste navegador" : est.ligado ? "ligado" : "desligado") + (est.pausado ? " (pausado)" : "")
+    + (est.erro ? " · ERRO: " + est.erro.msg : ""));
+  const em = localStorage.getItem("eac_backup_em");
+  L.push("base de hoje: " + (em ? diagQuando(new Date(em).getTime()) + " (há " + diagIdade(em) + ", " + (localStorage.getItem("eac_backup_onde") || "?") + ")" : "nenhuma"));
+  try {
+    const H = typeof bkHistorico === "function" ? bkHistorico() : [];
+    const man = H.find((x) => x && x.onde !== "auto");
+    L.push("último manual: " + (man ? diagQuando(new Date(man.quando).getTime()) + " (" + man.onde + ")" : "nenhum registrado"));
+  } catch (e) {}
+}
+function diagEditais(L) {
+  const lista = (typeof editais !== "undefined" && editais) || [];
+  if (!lista.length) { L.push("nenhum edital"); return; }
+  lista.forEach((e) => {
+    try {
+      const r = lerEdital(e.texto || "");
+      const cfg = r.cfg || {};
+      const s = typeof edSituacao === "function" ? edSituacao(e) : {};
+      const tops = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
+      const feitos = Object.keys(e.progresso || {}).length;
+      const cortes = (r.blocos || []).filter((b) => b.minimo).length + r.disciplinas.filter((d) => d.minimo).length;
+      const dc = typeof dsDiscursivaDe === "function" ? dsDiscursivaDe(e).dc : null;
+      const disc = !dc ? "não" : dc.fase2 ? "em data própria " + dc.fase2.prova.split("-").reverse().join("/") + (dc.pontos ? ", " + dc.pontos + " pts" : ", formato a cadastrar")
+        : dc.pontos + " pts" + (dc.linhas && dc.linhas.max ? ", " + edLinhasTxt(dc.linhas, true) + " linhas" : "");
+      const vis = typeof hubEdVisivel === "function" ? hubEdVisivel(e.id) : true;
+      L.push("· " + (e.nome || "?") + " | prova " + (s.prova ? s.prova.split("-").reverse().join("/") : "sem data")
+        + (s.grupo === "encerrado" ? " (já passou)" : s.dias != null ? " (faltam " + s.dias + ")" : "")
+        + " | " + (cfg.horas || "?") + "h/sem | " + r.disciplinas.length + " disc., " + tops + " tópicos, " + feitos + " estudados"
+        + " | cortes: " + (cortes || "nenhum") + " | discursiva: " + disc + " | na agenda: " + (vis ? "sim" : "não"));
+    } catch (err) { L.push("· " + (e.nome || "?") + " | erro ao ler: " + (err && err.message)); }
+  });
+  /* o que governa a agenda */
+  try {
+    const meta = typeof hubMetaMin === "function" ? hubMetaMin() : 0;
+    const rr = typeof hubRitmoReal === "function" ? hubRitmoReal() : null;
+    const real = typeof hubRitmoRealLigado === "function" && hubRitmoRealLigado() && rr && rr.ref ? rr.ref : 0;
+    const mv = typeof hubModosLer === "function" ? hubModosLer() : { geral: "auto", disc: {} };
+    L.push("agenda: horas em uso: " + (meta ? horasTexto(meta) + "/sem (meta própria)" : real ? horasTexto(real) + "/sem (ritmo real)" : "as do edital")
+      + " · ritmo real medido: " + (rr && rr.min ? horasTexto(rr.min) + "/sem (" + rr.semanas + " sem.)" : "—")
+      + " · modo: " + (mv.geral || "auto") + " · com modo próprio: " + Object.keys(mv.disc || {}).length
+      + " · dias/sem: " + (typeof hubPref === "function" ? hubPref("dias", 5) : "?"));
+  } catch (e) {}
+}
+function diagErros(L) {
+  const G = rtErrosAgrupados(rtTudo({}));
+  if (!G.length) { L.push("nenhum erro no registro"); return; }
+  G.slice(0, 15).forEach((g) => {
+    L.push("×" + g.n + "  " + g.msg);
+    L.push("    " + diagQuando(g.primeira) + (g.n > 1 ? " → " + diagQuando(g.ultima) : "") + " · versões: " + (g.versoes.join(", ") || "não registrada")
+      + " · na versão atual: " + (g.versoes.indexOf(VERSAO) >= 0 ? "SIM" : g.versoes.length ? "não" : "? (versão não registrada)") + (g.fonte !== "app" ? " · origem: " + g.fonte : ""));
+    if (g.pilha) L.push("    " + g.pilha);
+  });
+  if (G.length > 15) L.push("… e mais " + (G.length - 15) + " tipo(s)");
+}
+
 function montarDiagnostico() {
   const L = [];
   let raw = "", r = null;
+  const sec = (tit) => { L.push(""); L.push("--- " + tit + " ---"); };
   bloco(L, () => {
     const foco = textoEmFoco();
     raw = foco.txt || "";
+    const hj = diagQuando(Date.now());
+    L.push("EasyAnkiCards " + VERSAO + " — diagnóstico de " + hj.slice(0, 5) + "/" + new Date().getFullYear() + hj.slice(5) + " (" + diagFuso() + ")");
+  });
+  sec("RESUMO");
+  bloco(L, () => diagResumo(L));
+  sec("AMBIENTE");
+  bloco(L, () => {
     const nav = navigator.userAgent.match(/(Chrome|Firefox|Safari|Edg|SamsungBrowser)\/[\d.]+/);
     const pwa = matchMedia("(display-mode: standalone)").matches ? "PWA instalado" : "navegador";
-    L.push("EasyAnkiCards " + VERSAO + " | " + (LANG || "pt")
-      + " | " + (nav ? nav[0] : navigator.platform) + " | " + pwa
-      + " | sessão " + SESSAO);
-    /* "Onde" fala da bancada (cartões/edital): num relatório de Questões,
-     * Leis ou Material ela só confunde — o assunto já está no cabeçalho
-     * do registro */
-    if (DIAG_ASSUNTOS_COM_TEXTO.indexOf(diagAssunto) >= 0) L.push("Onde: " + foco.onde);
-    /* DE QUAL VERSÃO O SERVICE WORKER ESTÁ SERVINDO.
-     *
-     * É a informação que faltava nas duas vezes em que "subi os
-     * arquivos e continua a versão antiga": sem ela, não dá para
-     * distinguir "o servidor não atualizou" de "o worker antigo ainda
-     * está no controle" — e os dois pedem coisas diferentes. */
+    L.push("app: " + VERSAO + " · idioma " + (LANG || "pt") + " · " + (nav ? nav[0] : navigator.platform) + " · " + pwa + " · código da sessão: " + SESSAO);
+    L.push("tela: " + (window.innerWidth || "?") + "×" + (window.innerHeight || "?") + " · " + (navigator.onLine === false ? "OFFLINE" : "online") + " · fuso " + diagFuso());
+    /* DE QUAL VERSÃO O SERVICE WORKER ESTÁ SERVINDO — distingue "o servidor não atualizou" de "o worker antigo ainda
+     * está no controle" */
     if (swDiagUltimo) L.push(swLinhaDiagnostico(swDiagUltimo));
   });
+  sec("ARMAZENAMENTO");
   L.push("Armazenamento: " + estadoArmazen);
+  bloco(L, () => diagMaioresChaves(L));
+  sec("BACKUP");
+  bloco(L, () => diagBackup(L));
+  sec("EDITAIS");
+  bloco(L, () => diagEditais(L));
+  sec("TELA");
+  bloco(L, () => {
+    /* "Onde" fala da bancada (cartões/edital): num relatório de Questões, Leis ou Material ela só confunde */
+    if (DIAG_ASSUNTOS_COM_TEXTO.indexOf(diagAssunto) >= 0) L.push("Onde: " + textoEmFoco().onde);
+  });
   bloco(L, () => {
     if (ultimoAjuste) {
       const f = (s) => s.cartoes + " cartões, " + s.avisos + " avisos, "
@@ -4549,7 +4719,7 @@ function montarDiagnostico() {
   bloco(L, () => {
     if (textoEmFoco().edital) return;   /* já contado acima */
     r = resumoTexto(raw);
-    L.push("Agora: " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
+    L.push("Agora (bancada de cartões): " + r.cartoes + " cartões, " + r.avisos + " avisos, " + r.suspeitos
       + " a verificar, " + r.saibaMais + " linhas de Saiba mais, " + r.titulos
       + " títulos, " + r.tags + " tags");
   });
@@ -4569,33 +4739,20 @@ function montarDiagnostico() {
     if (presos.length) L.push("  presos à prova de origem: " + presos.length
       + " (primeiro na L" + presos[0].line + ")");
   });
+  sec("ERROS (agrupados, de todo o registro)");
+  bloco(L, () => diagErros(L));
   L.push("");
-  /* O REGISTRO SAI DO MESMO FILTRO QUE A PRÉVIA E A LINHA DO TEMPO
-   * USAM (assunto × período × gravidade, ver registro-tudo.js). Antes só
-   * o registro geral entrava aqui, filtrado por um "modo" que só
-   * conhecia edital e cartões: em Questões e Leis o relatório saía
-   * vazio ou sem os erros, e o log da lei nunca entrava. */
+  /* O REGISTRO SAI DO MESMO FILTRO QUE A PRÉVIA E A LINHA DO TEMPO USAM (assunto × período × gravidade) */
   const rel = rtRelatorio(rtOpcoesAtuais());
   const nomeAss = t("diag_ass_" + diagAssunto);
   L.push("--- REGISTRO (assunto: " + nomeAss
     + " · período: " + t("diag_per_" + regPeriodo)
     + (diagGravidade === "problemas" ? " · só erros e avisos" : "")
     + " · " + rel.n + " eventos) ---");
+  bloco(L, () => L.push("cobertura: " + rtCobertura().map((c) => c.nome + " " + c.n + "/" + c.max + (c.n ? " desde " + c.desde : "") + (c.cheio ? " (cheio)" : "")).join(" · ")));
   bloco(L, () => L.push(rel.n ? rel.texto : t("log_empty_assunto", { a: nomeAss })));
   L.push("");
-  /* O REGISTRO DA VINCULAÇÃO ENTRA NO DIAGNÓSTICO.
-   *
-   * Ele responde perguntas que o registro geral não responde — "250
-   * linhas coladas viraram 213 pares, por quê?" precisa do número de
-   * entrada e do de saída de cada etapa, lado a lado. E o diagnóstico é
-   * o que se cola num relato de problema: deixá-lo de fora obrigava a
-   * abrir duas telas e juntar dois textos à mão. */
-  /* O BLOCO OBEDECE AOS MESMOS FILTROS DO REGISTRO. Ele nasceu antes deles
-   * e imprimia SEMPRE tudo: um relatório "só de hoje" trazia etapas de dias
-   * atrás, e o que se vê passava a não ser o que se copia. Período filtra
-   * pelo instante de cada etapa; "só erros e avisos" o tira, porque uma
-   * etapa de vinculação é andamento, não problema (se falhou, o erro
-   * aparece no registro acima). */
+  /* O REGISTRO DA VINCULAÇÃO, com os mesmos filtros */
   try {
     if ((diagAssunto === "tudo" || diagAssunto === "edital")
         && diagGravidade !== "problemas"
@@ -4678,10 +4835,8 @@ function montarPainelDiag() {
    * e sessão) fica sempre — sem ela ninguém sabe de que versão é o relato —
    * e o resto do cabeçalho (navegador, armazenamento, estado) vai embora. */
   if ($("chkDiagAparelho") && !$("chkDiagAparelho").checked) {
-    const ini = txt.indexOf("\n--- REGISTRO");
-    if (ini > 0) {
-      txt = txt.split("\n")[0] + "\n(dados do aparelho não incluídos a pedido)\n" + txt.slice(ini);
-    }
+    const ini = txt.indexOf("\n--- AMBIENTE"), fimA = txt.indexOf("\n--- BACKUP");
+    if (ini > 0 && fimA > ini) txt = txt.slice(0, ini) + "\n\n(dados do aparelho não incluídos a pedido)" + txt.slice(fimA);
   }
   /* MASCARAR ANTES DE QUALQUER COISA.
    *
@@ -4745,6 +4900,8 @@ async function abrirDiagnostico(opc) {
     assunto: pedido.assunto || diagAssuntoPadrao(),
     gravidade: pedido.gravidade,
   });
+  /* (19.85.0) o texto dos cartões só vai marcado num relatório de Cartões: nos outros é ruído e conteúdo pessoal à toa */
+  if ($("chkDiagTexto")) $("chkDiagTexto").checked = diagAssunto === "cartoes";
   /* "Compartilhar" só aparece onde o aparelho tem folha de compartilhamento */
   if ($("btnDiagCompartilhar")) $("btnDiagCompartilhar").hidden = !diagPodeCompartilhar();
   const g = $("diagTempo");
