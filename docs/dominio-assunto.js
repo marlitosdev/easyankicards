@@ -122,6 +122,58 @@ function domNivel(s, opc) {
   return { nivel: "verde", motivos: solidos, semMarcaEstudo: est.estado === "nunca" };
 }
 
+/* =====================================================================
+ * (19.87.0) O PAR: o que o MESMO ASSUNTO, noutro edital, já mostrou.
+ *
+ * "Receita pública" do ISS e "Receita pública" da SEFAZ estão ligadas na comparação de editais, mas o Domínio lia cada
+ * edital como se o outro não existisse: 44 folhas da SEFAZ ficavam cinza ("nunca estudado") com o gêmeo estudado e
+ * medido no ISS. A regra é ASSIMÉTRICA, porque os dois erros não custam o mesmo:
+ *  · o sinal RUIM de lá (acerto baixo, retenção baixa, "difícil") vale por inteiro quando AQUI não há medida do mesmo
+ *    sinal — um alarme falso custa uma revisão; um silêncio falso custa a questão na prova;
+ *  · o sinal BOM de lá sobe no máximo até AZUL ("estudado, falta medir aqui"), e só com vínculo ALTA: verde se ganha
+ *    com questões e cartões do próprio edital;
+ *  · vínculo MEDIA ("provavelmente o mesmo") não muda a cor: vira só a nota "provável", com o nome do edital;
+ *  · o que for medido AQUI manda: o sinal de lá só entra onde o daqui não vale.
+ * O motivo diz de onde veio ("herdado de ISS"): cor emprestada nunca fica sem explicação.
+ *   fontes: [{ ed, conf: "ALTA"|"MEDIA", acerto, retencao, auto, estudo: {estado} }] (domParFontes)
+ * ===================================================================== */
+function domAplicarPar(r, s, fontes, opc) {
+  if (!r || r.pulado || !fontes || !fontes.length) return r;
+  const o = Object.assign({}, DOM, opc || {});
+  const sn = s || {};
+  const temAc = !!(sn.acerto && sn.acerto.valido), temRt = !!(sn.retencao && sn.retencao.valido);
+  const temAu = !!(sn.auto && sn.auto.nivel && !sn.auto.vencida);
+  const ruins = [], bons = [], provaveis = [], eds = [];
+  fontes.forEach((f) => {
+    const ac = f.acerto && f.acerto.valido ? f.acerto : null;
+    const rt = f.retencao && f.retencao.valido ? f.retencao : null;
+    const au = f.auto && f.auto.nivel && !f.auto.vencida ? f.auto.nivel : null;
+    const ruim = [];
+    if (ac && !temAc && ac.pct < o.acertoRisco) ruim.push({ cod: "par_acerto_baixo", pct: Math.round(ac.pct), n: ac.n, ed: f.ed });
+    if (rt && !temRt && rt.pct < o.retencaoRisco) ruim.push({ cod: "par_retencao_baixa", pct: Math.round(rt.pct), n: rt.respostas, ed: f.ed });
+    if (au === "alta" && !temAu) ruim.push({ cod: "par_inseguro", ed: f.ed });
+    const estudouLa = !!(f.estudo && f.estudo.estado && f.estudo.estado !== "nunca");
+    const bom = !ruim.length && (estudouLa || (ac && ac.pct >= o.acertoRisco) || (rt && rt.pct >= o.retencaoRisco));
+    if (f.conf === "MEDIA") {
+      if ((ruim.length || bom) && !provaveis.some((m) => m.ed === f.ed)) provaveis.push({ cod: "par_provavel", ed: f.ed });
+      return;
+    }
+    if (ruim.length) { ruins.push(...ruim); if (eds.indexOf(f.ed) < 0) eds.push(f.ed); }
+    else if (bom && !bons.some((m) => m.ed === f.ed)) bons.push({ cod: "par_estudado", ed: f.ed });
+  });
+  const base = { motivos: (r.motivos || []).slice() };
+  if (ruins.length) {
+    const motivos = r.nivel === "vermelho" ? base.motivos.concat(ruins) : ruins.concat(base.motivos.filter((m) => m.cod !== "nunca_estudado" && m.cod !== "nao_medido"));
+    return Object.assign({}, r, { nivel: "vermelho", motivos: motivos.concat(provaveis), herdadoPar: eds });
+  }
+  if (bons.length && r.nivel === "cinza") {
+    const nota = base.motivos.filter((m) => m.cod === "declarou_domino");
+    return Object.assign({}, r, { nivel: "azul", motivos: bons.concat(nota, provaveis), herdadoPar: bons.map((m) => m.ed) });
+  }
+  if (provaveis.length) return Object.assign({}, r, { motivos: base.motivos.concat(provaveis) });
+  return r;
+}
+
 /* O mapa de domínio: usa a estrutura e o PESO da cobertura (covMapa) e pendura em cada folha os sinais e o nível.
  *   cob:      resultado de covMapa(...) (disciplinas › tópicos › ramos, com pesoPct)
  *   entradas: { estudo: {chave|chave›#ramo → {estado, dias, venceu, quando, pulado, herdado}},
@@ -129,7 +181,7 @@ function domNivel(s, opc) {
 function domMapa(cob, entradas, opc) {
   const o = Object.assign({}, DOM, opc || {});
   const E = entradas || {};
-  const est = E.estudo || {}, tent = E.tentativas || {}, car = E.cartoes || {}, aut = E.auto || {};
+  const est = E.estudo || {}, tent = E.tentativas || {}, car = E.cartoes || {}, aut = E.auto || {}, par = E.par || {};
   const distrib = () => ({ vermelho: 0, amarelo: 0, cinza: 0, azul: 0, verde: 0 });
   const geral = distrib();
   const folhas = [];
@@ -146,7 +198,9 @@ function domMapa(cob, entradas, opc) {
     const autoRamo = ramoId ? aut[chave + "›#" + ramoId] : null;
     const auto = autoRamo || aut[chave] || null;
     const autoHerdada = !!ramoId && !autoRamo && !!aut[chave];
-    const r = domNivel({ estudo, acerto, retencao, auto }, o);
+    const r0 = domNivel({ estudo, acerto, retencao, auto }, o);
+    /* (19.87.0) o que o mesmo assunto mostrou noutro edital (vínculo), pela regra assimétrica */
+    const r = par[chave] ? domAplicarPar(r0, { acerto, retencao, auto }, par[chave], o) : r0;
     return Object.assign({ sinais: { estudo, acerto, retencao, auto }, herdadoAcerto: !!ramoId, autoHerdada }, r);
   };
   const disciplinas = cob.disciplinas.map((d) => {
@@ -177,7 +231,8 @@ function domMapa(cob, entradas, opc) {
     .map((f) => Object.assign({}, f, { urgencia: (f.pesoPct || 0) * o.fatores[f.nivel] }))
     .sort((a, b) => (b.urgencia - a.urgencia) || (b.pesoPct - a.pesoPct));
   const soma = DOM_NIVEIS.reduce((a, k) => a + geral[k], 0) || 1;
-  const resumo = { distribuicao: geral, semEstudoPct: geral.cinza, vermelhoPct: geral.vermelho, folhas: folhas.length, total: soma };
+  const resumo = { distribuicao: geral, semEstudoPct: geral.cinza, vermelhoPct: geral.vermelho, folhas: folhas.length, total: soma,
+    parN: folhas.filter((f) => f.herdadoPar && f.herdadoPar.length).length };
   return { disciplinas, folhas, reforcar, resumo, base: cob.base, fase: cob.fase };
 }
 
@@ -218,6 +273,60 @@ function domEntradas(ed, plano, notas, banco, regs) {
   return { estudo, tentativas, cartoes, auto };
 }
 
+/* (19.87.0) REÚNE o que o gêmeo de cada tópico (vínculo) mostrou nos OUTROS editais: a marca de estudo de lá, as
+ * questões e os cartões guardados com o nome de lá e a autoavaliação de lá. As chaves passam pela tradução única
+ * (vkChave / vkDaChaveMat). O gêmeo num edital apagado não tem de onde ler: fica de fora.
+ *   devolve { chaveDoDominio → [{ ed, edId, conf, acerto, retencao, auto, estudo }] } */
+function domParFontes(ed, cob, banco, notas, regs, listaEditais, opc) {
+  const out = {};
+  if (typeof vkParesDe !== "function" || typeof vkChave !== "function") return out;
+  const pedidos = {};
+  (cob.disciplinas || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+    /* a mesma chave noutro edital é o mesmo assunto (as questões e os cartões já são os mesmos; o estudo de lá, não) */
+    vkParesDe(d.nome, tp.nome).concat([{ chave: vkChave(d.nome, tp.nome), conf: "ALTA" }])
+      .forEach((p) => { (pedidos[p.chave] = pedidos[p.chave] || []).push({ chave: tp.chave, conf: p.conf }); });
+  }));
+  if (!Object.keys(pedidos).length) return out;
+  const onde = {};
+  (listaEditais || []).forEach((E) => {
+    if (!E || (ed && String(E.id) === String(ed.id))) return;
+    let r = null;
+    try { r = lerEdital(E.texto || ""); } catch (e) { return; }
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => {
+      const k = vkChave(d.nome, tp.nome);
+      if (!pedidos[k]) return;
+      const marca = (E.progresso || {})[(d.nome + "›" + tp.nome).toLowerCase()];
+      const estado = marca && marca.e === "revisado" ? "revisado" : (marca && marca.e === "feito" ? "estudado" : "nunca");
+      (onde[k] = onde[k] || []).push({ edId: E.id, ed: E.nome || ((r.cfg || {}).concurso) || "", disciplina: d.nome, topico: tp.nome, estado });
+    }));
+  });
+  const tent = {}, cart = {};
+  (banco || []).forEach((q) => {
+    if (!q || !q.disciplina || !q.topico) return;
+    const k = vkChave(q.disciplina, q.topico);
+    if (!pedidos[k] || !onde[k]) return;
+    (tent[k] = tent[k] || []).push(...(q.tentativas || []).map((x) => ({ q: x.q, acertou: !!x.acertou, chute: !!x.chute })));
+  });
+  (notas || []).forEach((n) => {
+    if (!n || !n.chave) return;
+    const k = vkDaChaveMat(n.chave);
+    if (!pedidos[k] || !onde[k]) return;
+    estcUnidades([{ nota: n, pos: 0 }]).forEach((u) => { const rg = (regs || {})[u.id]; if (rg) (cart[k] = cart[k] || []).push(rg); });
+  });
+  Object.keys(pedidos).forEach((k) => {
+    const locais = onde[k];
+    if (!locais || !locais.length) return;
+    const L = locais.find((x) => x.estado !== "nunca") || locais[0];
+    const acerto = domAcerto(tent[k], opc), retencao = domRetencao(cart[k] || [], opc);
+    let auto = null;
+    try { const dd = difDe(L.disciplina, L.topico); if (dd && dd.nivel) auto = { nivel: dd.nivel, vencida: !!dd.vencida }; } catch (e) {}
+    pedidos[k].forEach((p) => {
+      (out[p.chave] = out[p.chave] || []).push({ ed: L.ed, edId: L.edId, conf: p.conf, acerto, retencao, auto, estudo: { estado: L.estado } });
+    });
+  });
+  return out;
+}
+
 /* O mapa de UM edital, com os dados de agora. */
 function domDoEdital(ed, opc) {
   const r = lerEdital((ed && ed.texto) || "");
@@ -226,5 +335,8 @@ function domDoEdital(ed, opc) {
   const plano = montarPlano(r, { horas: (r.cfg || {}).horas || 10, prova: (r.cfg || {}).prova, feitos: (ed && ed.progresso) || {} });
   const regs = estcLerJSON(ESTC_CH_REGS, {});
   const banco = typeof qsTodas === "function" ? qsTodas() : [];
-  return domMapa(cob, domEntradas(ed, plano, notas, banco, regs), Object.assign(domLimitesLer(), opc || {}));
+  const lim = Object.assign(domLimitesLer(), opc || {});
+  const entradas = domEntradas(ed, plano, notas, banco, regs);
+  try { entradas.par = domParFontes(ed, cob, banco, notas, regs, typeof editais !== "undefined" ? editais : [], lim); } catch (e) { entradas.par = {}; }
+  return domMapa(cob, entradas, lim);
 }

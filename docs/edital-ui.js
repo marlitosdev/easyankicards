@@ -729,7 +729,9 @@ function edLinhaTopico(i, semDisciplina) {
    * ou revisar é quem estudou. */
   const jaEst = (typeof vkAcervoDoTopico === "function")
     ? vkAcervoDoTopico(i.disciplina, i.nome) : null;
-  if (jaEst && jaEst.temVinculo) {
+  /* (19.87.0) na linha da agenda que já junta os dois editais, o selo "+ outro edital" diz o mesmo que "também cai em" */
+  const soCoincideJunto = !!(jaEst && !jaEst.temAlgo && !jaEst.temEstudo && i.tambem && i.tambem.length);
+  if (jaEst && jaEst.temVinculo && !soCoincideJunto) {
     const b = document.createElement("button");
     b.type = "button";
     /* O NOME DO CONCURSO VEM DE ONDE A FRASE VAI FALAR.

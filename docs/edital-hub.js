@@ -321,6 +321,8 @@ function hubPintarAgenda() {
   const tirados = antesDeTirar - visiveis.length;
   linhas.length = 0;
   visiveis.forEach((i) => linhas.push(i));
+  /* (19.87.0) um assunto ligado entre dois editais é UMA linha só */
+  const fundidos = hubFundirVinculados(linhas);
 
   /* FILTRO DE DISCIPLINA — em cima das linhas que sobraram.
    * A ordem de prioridade não muda: filtrar é esconder, não reordenar.
@@ -346,12 +348,13 @@ function hubPintarAgenda() {
     vz.textContent = t("hub_ag_disc_vazio", { n: disciplinas.length });
     cx.append(vz);
   }
-  if (tirados || escondidas) {
+  if (tirados || escondidas || fundidos) {
     const av = document.createElement("div");
     av.className = "ed-caixa-sub ed-ag-aviso";
     av.textContent = [
       tirados ? t("hub_ag_tirados", { n: tirados }) : "",
       escondidas ? t("hub_ag_escondidas", { n: escondidas }) : "",
+      fundidos ? t("hub_ag_fundidos", { n: fundidos }) : "",
     ].filter(Boolean).join(" · ");
     cx.append(av);
   }
@@ -457,6 +460,12 @@ function hubPintarAgenda() {
     equilAtras += atras.length;
   });
 
+  /* (19.87.0) os vínculos que o próprio app achou (mesmo nome, mesma lei) entre os editais em andamento */
+  const pVinc = painel("vinc");
+  let sugs = [];
+  try { sugs = hubVinculosSugeridos(todosAtivos); } catch (err) { sugs = []; }
+  if (sugs.length) hubVincPainel(pVinc, sugs);
+
   /* a faixa: um chip por assunto que tem o que dizer */
   const avisos = [];
   if (discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc", { f: discF, m: discM }), cls: discF >= discM ? "ok" : "", p: pDisc });
@@ -470,6 +479,7 @@ function hubPintarAgenda() {
     avisos.push({ id: "conf", txt: t("hub_av_conf", { n: nP }), cls: "alerta", p: pConf, sig: String(nP) });
   }
   if (equilAtras) avisos.push({ id: "equil", txt: t("hub_av_equil", { n: equilAtras }), cls: "", p: pEquil });
+  if (sugs.length) avisos.push({ id: "vinc", txt: t("hub_av_vinc", { n: sugs.length }), cls: "", p: pVinc, sig: String(sugs.length) });
   if (avisos.length) {
     const fx = document.createElement("div");
     fx.className = "hub-avisos"; fx.id = "hubAvisos";
@@ -482,7 +492,7 @@ function hubPintarAgenda() {
     avisos.forEach((a) => {
       if (!a.sig) return;
       const velho = sigs[a.id];
-      const pior = a.id === "conf" ? !velho || Number(a.sig) > Number(velho) : velho !== a.sig;
+      const pior = a.id === "conf" || a.id === "vinc" ? !velho || Number(a.sig) > Number(velho) : velho !== a.sig;
       if (pior && !aberto) { aberto = a.id; a.novo = true; }
       sigs[a.id] = a.sig;
     });
@@ -599,6 +609,17 @@ function hubPintarAgenda() {
     selo.onclick = (ev) => { ev.stopPropagation(); hubAbrirEdital(i.edital); };
     const alvo = li.querySelector(".ed-lin-disc") || li;
     alvo.append(selo);
+    /* (19.87.0) o mesmo assunto no outro edital: estudar aqui vale lá — mas marcar lá continua sendo escolha sua,
+     * no registro (o vínculo nunca marca nada sozinho) */
+    (i.tambem || []).forEach((o) => {
+      const tb = document.createElement("button");
+      tb.type = "button";
+      tb.className = "ed-selo-cc ed-selo-tambem";
+      tb.textContent = t("hub_tambem_selo", { n: typeof edNomeCurtoConcurso === "function" ? edNomeCurtoConcurso(o.editalNome) : o.editalNome });
+      tb.title = t("hub_tambem_tip", { n: o.editalNome, d: o.disciplina, t: o.nome });
+      tb.onclick = (ev) => { ev.stopPropagation(); hubAbrirEdital(o.edital); };
+      alvo.append(tb);
+    });
 
     /* O SELO DE FASE. Estudar com o calendário errado na cabeça é o erro
      * mais caro possível num concurso de duas datas: em dezembro você
@@ -1388,6 +1409,124 @@ function hubIaAplicar() {
 
 /* "Noções de Direito Administrativo" → "Direito Administrativo" (o nome inteiro fica na dica) */
 function hubDiscCurta(d) { return String(d || "").replace(/^no[çc][õo]es\s+(?:b[áa]sicas\s+)?de\s+/i, "").replace(/^no[çc][õo]es\s+/i, ""); }
+
+/* (19.87.0) as sugestões de vínculo entre os editais em andamento (ver vkSugeridos) */
+function hubVinculosSugeridos(lista) {
+  if (typeof vkSugeridos !== "function" || !lista || lista.length < 2) return [];
+  const L = lista.map((e) => {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (err) { r = null; }
+    const tps = [];
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => tps.push({ disciplina: d.nome, nome: tp.nome })));
+    return { id: e.id, nome: e.nome || ((r && r.cfg) || {}).concurso || "", topicos: tps };
+  });
+  let leis = [];
+  try { leis = typeof leisLista === "function" ? leisLista().map((l) => ({ id: l.id, nome: l.nome || "", topicos: l.topicos || [] })) : []; } catch (err) { leis = []; }
+  return vkSugeridos(L, leis);
+}
+
+/* o painel do chip: o que é, os primeiros exemplos e o botão que abre a lista para conferir */
+function hubVincPainel(p, sugs) {
+  const tx = document.createElement("p");
+  tx.className = "hub-vinc-txt";
+  const nNome = sugs.filter((s) => s.motivo === "nome").length;
+  tx.textContent = t("hub_vinc_explica", { n: sugs.length, a: nNome, b: sugs.length - nNome });
+  const ex = document.createElement("ul");
+  ex.className = "hub-vinc-ex";
+  sugs.slice(0, 3).forEach((s) => {
+    const li = document.createElement("li");
+    li.textContent = t("hub_vinc_par", { t: s.de.topico, a: s.de.edNome, b: s.para.edNome });
+    ex.append(li);
+  });
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "btn-min hub-vinc-rev";
+  b.textContent = t("hub_vinc_revisar", { n: sugs.length });
+  b.onclick = () => hubVincRevisar(sugs);
+  p.append(tx, ex, b);
+}
+
+/* a lista para conferir: um quadrinho por par, marcado; o motivo (mesmo nome / a lei) ao lado. Desmarcar = "não é o
+ * mesmo assunto", e o par não volta. Cancelar não muda nada. */
+async function hubVincRevisar(sugs) {
+  const corpo = document.createElement("div");
+  corpo.className = "hub-vinc-lista";
+  const caixas = [];
+  const grupos = {};
+  sugs.forEach((s) => { const g = s.de.edNome + " ↔ " + s.para.edNome; (grupos[g] = grupos[g] || []).push(s); });
+  Object.keys(grupos).forEach((g) => {
+    const h = document.createElement("div");
+    h.className = "hub-vinc-grupo";
+    h.textContent = g + " (" + grupos[g].length + ")";
+    corpo.append(h);
+    grupos[g].forEach((s) => {
+      const lb = document.createElement("label");
+      lb.className = "hub-vinc-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = true;
+      caixas.push({ cb, s });
+      const nm = document.createElement("span");
+      nm.className = "hub-vinc-nome";
+      nm.textContent = s.de.topico === s.para.topico ? s.de.topico : s.de.topico + " ↔ " + s.para.topico;
+      nm.title = s.de.disciplina + " › " + s.de.topico + "\n" + s.para.disciplina + " › " + s.para.topico;
+      const mt = document.createElement("span");
+      mt.className = "hub-vinc-motivo";
+      mt.textContent = s.motivo === "lei" ? t("hub_vinc_m_lei", { l: s.lei || "?" }) : t("hub_vinc_m_nome");
+      lb.append(cb, nm, mt);
+      corpo.append(lb);
+    });
+  });
+  const ok = await uiConfirm(t("hub_vinc_conf"), { corpo, ok: t("hub_vinc_ok") });
+  if (!ok) return;
+  const marcados = caixas.filter((c) => c.cb.checked).map((c) => c.s);
+  const desmarcados = caixas.filter((c) => !c.cb.checked).map((c) => c.s);
+  const n = vkSugConfirmar(marcados, desmarcados);
+  try { reg("VINC", "sugeridos confirmados", n + " ligados · " + desmarcados.length + " recusados"); } catch (e) {}
+  try { toastMsg(t("hub_vinc_feito", { n, r: desmarcados.length }), 2600); } catch (e) {}
+  hubPintarAgenda();
+}
+
+/* =====================================================================
+ * (19.87.0) UM ASSUNTO, UMA LINHA.
+ *
+ * Com ISS e SEFAZ ativos, a semana 1 trazia 18 pares de linhas que eram o mesmo assunto, já ligados na comparação de
+ * editais ("Receita pública" lá e cá) — e as horas dos dois entravam na meta. Agora, se duas linhas de editais
+ * diferentes estão ligadas por um vínculo ALTA (não arquivado) e são do mesmo tipo (estudo com estudo, revisão com
+ * revisão), fica a primeira na ordem da agenda, com o selo "+ outro edital"; a segunda sai, e o tempo conta uma vez.
+ * MEDIA não funde: "provavelmente o mesmo" não basta para tirar uma linha da semana. A MESMA disciplina com o MESMO
+ * tópico nos dois editais ("Português › Crase") funde sem vínculo: é a mesma chave.
+ * Fundir não marca nada: estudou, registra; o registro oferece marcar o gêmeo, desmarcado (regEspelhoPintar).
+ * Devolve quantas linhas saíram.
+ * ===================================================================== */
+function hubFundirVinculados(linhas) {
+  if (typeof vkDaChaveMat !== "function" || !linhas || linhas.length < 2) return 0;
+  const par = new Set();
+  (typeof vinculos !== "undefined" && Array.isArray(vinculos) ? vinculos : []).forEach((v) => {
+    if (vkArquivado(v) || (v.conf || "ALTA") !== "ALTA" || !v.a || !v.b) return;
+    par.add(v.a + "|" + v.b);
+    par.add(v.b + "|" + v.a);
+  });
+  const vk = linhas.map((i) => vkDaChaveMat(i.chave || ((i.disciplina || "") + "›" + (i.nome || ""))));
+  const fora = new Set();
+  for (let x = 0; x < linhas.length; x++) {
+    if (fora.has(x)) continue;
+    const A = linhas[x];
+    for (let y = x + 1; y < linhas.length; y++) {
+      if (fora.has(y)) continue;
+      const B = linhas[y];
+      if (B.edital === A.edital || !!B.ehRevisao !== !!A.ehRevisao) continue;
+      /* a MESMA chave (mesma disciplina, mesmo tópico) é o mesmo assunto sem precisar de vínculo */
+      if (vk[x] !== vk[y] && !par.has(vk[x] + "|" + vk[y])) continue;
+      if ((A.tambem || []).some((o) => o.edital === B.edital)) continue;
+      A.tambem = (A.tambem || []).concat([{ edital: B.edital, editalNome: B.editalNome, chave: B.chave, disciplina: B.disciplina, nome: B.nome }]);
+      fora.add(y);
+    }
+  }
+  if (!fora.size) return 0;
+  const ficam = linhas.filter((_, k) => !fora.has(k));
+  linhas.length = 0;
+  ficam.forEach((i) => linhas.push(i));
+  return fora.size;
+}
 
 /* a ordem das linhas da agenda: em andamento → posição no rodízio (dividida pela urgência) → peso. (19.47.0) A revisão
  * já vem na frente DENTRO da disciplina dela (montarPlano); passá-la à frente de tudo aqui desfazia o rodízio. */

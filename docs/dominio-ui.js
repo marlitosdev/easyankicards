@@ -125,7 +125,7 @@ function domBotaoRegistrar(pai, disciplina, topico, ramoId) {
 }
 
 function domMotivoTxt(m) {
-  return t("dom_m_" + m.cod, { pct: m.pct, n: m.n, dias: m.dias === null || m.dias === undefined ? "?" : m.dias });
+  return t("dom_m_" + m.cod, { pct: m.pct, n: m.n, dias: m.dias === null || m.dias === undefined ? "?" : m.dias, ed: m.ed || "?" });
 }
 function domPorque(motivos) {
   const ms = (motivos || []).filter((m) => m.cod !== "solido");

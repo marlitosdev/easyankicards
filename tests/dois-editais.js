@@ -330,7 +330,7 @@ async function testes() {
   /* ---- D7: o selo na agenda diz a frase do momento certo ---- */
   {
     const { api } = rodar();
-    const { b } = montar(api);
+    const { a, b } = montar(api);
     const D = "Direito Financeiro", T = "Restos a pagar";
     const D2 = "Finanças Públicas", T2 = "Inscrição de despesas não pagas";
     api.vkAplicar([{
@@ -339,25 +339,21 @@ async function testes() {
       conf: "ALTA", sugestao: "SERVE" }], b.id, "ambos");
     api.edRender(); api.hubRender();
 
-    const achar = (el, out) => {
+    const achar = (el, out, re) => {
       Array.from(el.children || []).forEach((f) => {
-        if (/(^| )ed-item-jaestudei( |$)/.test(f.className || "")) out.push(f);
-        achar(f, out);
+        if ((re || /(^| )ed-item-jaestudei( |$)/).test(f.className || "")) out.push(f);
+        achar(f, out, re);
       });
       return out;
     };
-    const selos = achar(api.$("edAgendaTopo"), []);
-    ok(selos.length > 0,
-       "D7 o vinculo sem material nao pos selo nenhum na tela — era "
-       + "exatamente o buraco: avisar DEPOIS de estudar nao serve");
-    ok(selos.every((s) => /so-coincide/.test(s.className || "")),
-       "D7b algum selo de coincidencia veio com a cara do selo de "
-       + "material: " + JSON.stringify(selos.map((s) => s.className)));
-    /* nome curto no selo; o inteiro no balão e no leitor de tela */
-    const s0 = selos[0], inteiro = s0.getAttribute("aria-label") || "";
-    const outroC = inteiro.replace(api.t("vka_selo_coincide", { c: "" }), "");
-    ok(inteiro && s0.textContent === api.t("vka_selo_coincide", { c: api.edNomeCurtoConcurso(outroC) }) && s0.title.indexOf(inteiro) === 0,
-       "D7b2 o selo usa o nome curto do concurso; o nome inteiro vai no balao e no rotulo acessivel: " + s0.textContent + " / " + inteiro);
+    /* (19.87.0) COM AS DUAS PROVAS NA AGENDA, O PAR LIGADO É UMA LINHA SÓ: o selo "+ outro concurso" substitui o
+     * "também cai em" (dizer os dois na mesma linha seria repetir) e nomeia o OUTRO edital */
+    const juntos = achar(api.$("edAgendaTopo"), [], /(^| )ed-selo-tambem( |$)/);
+    const restos = achar(api.$("edAgendaTopo"), [], /(^| )ed-item( |$)/).filter((li) => /Restos a pagar|Inscrição de despesas/.test(li.textContent || ""));
+    ok(restos.length === 1 && juntos.some((j) => /SEFAZ|TCE/.test(j.textContent || "") && /Restos a pagar|Inscrição de despesas/.test(j.title || "")),
+       "D7 com as duas provas na agenda, o par ligado vira uma linha com o selo do outro edital: " + restos.length + " / " + JSON.stringify(juntos.map((j) => j.textContent)));
+    ok(restos.length === 1 && !achar(restos[0], []).some((s) => /so-coincide/.test(s.className || "")),
+       "D7a a linha juntada não repete 'também cai em' ao lado do selo do outro edital");
     /* a linha do medidor da agenda leva a frase curta do que falta; a longa, com os dias, vai no balão */
     const rotM = (function acha(el) { for (const f of Array.from(el.children || [])) { if (/(^| )ag-med-rot( |$)/.test(f.className || "")) return f; const r = acha(f); if (r) return r; } return null; })(api.$("edAgendaTopo"));
     const SSm = api.hubSemanaDeEstudo();
@@ -370,17 +366,38 @@ async function testes() {
     /* O SELO NOMEIA O OUTRO CONCURSO, E O VÍNCULO É SIMÉTRICO.
      *
      * "Também cai em outro lugar" não ajuda a decidir nada; "também cai
-     * no TCE-PE" ajuda. E a agenda atravessa editais de propósito: as
-     * duas provas estão sendo estudadas ao mesmo tempo, então as duas
-     * linhas precisam do aviso — cada uma apontando para a OUTRA. Um
-     * selo que aponta para o próprio concurso seria o app avisando que
-     * o assunto cai onde a pessoa já está olhando. */
-    const textos = selos.map((s) => s.textContent || "");
+     * no TCE-PE" ajuda. Vendo UMA prova só na agenda (o filtro por edital),
+     * a linha não tem com quem se juntar e o selo "também cai em" volta —
+     * de cada lado apontando para a OUTRA. Um selo que aponta para o
+     * próprio concurso seria o app avisando que o assunto cai onde a
+     * pessoa já está olhando. */
+    const textos = [];
+    const vistos = [];
+    [a, b].forEach((so) => {
+      const outro = so === a ? b : a;
+      api.hubEdAlternar(outro.id);
+      api.hubRender();
+      const selos = achar(api.$("edAgendaTopo"), []);
+      vistos.push(selos.length);
+      selos.forEach((s) => textos.push(s.textContent || ""));
+      if (so === a && selos.length) {
+        ok(selos.every((s) => /so-coincide/.test(s.className || "")),
+           "D7b algum selo de coincidencia veio com a cara do selo de material: " + JSON.stringify(selos.map((s) => s.className)));
+        /* nome curto no selo; o inteiro no balão e no leitor de tela */
+        const s0 = selos[0], inteiro = s0.getAttribute("aria-label") || "";
+        const outroC = inteiro.replace(api.t("vka_selo_coincide", { c: "" }), "");
+        ok(inteiro && s0.textContent === api.t("vka_selo_coincide", { c: api.edNomeCurtoConcurso(outroC) }) && s0.title.indexOf(inteiro) === 0,
+           "D7b2 o selo usa o nome curto do concurso; o nome inteiro vai no balao e no rotulo acessivel: " + s0.textContent + " / " + inteiro);
+      }
+      api.hubEdAlternar(outro.id);
+    });
+    ok(vistos.every((x) => x > 0),
+       "D7e o vinculo sem material nao pos selo nenhum com uma prova so' na agenda — era exatamente o buraco: avisar DEPOIS de estudar nao serve: " + JSON.stringify(vistos));
     ok(textos.some((x) => /TCE-PE/.test(x)),
-       "D7c nenhum selo avisa que o assunto tambem cai no TCE-PE: "
+       "D7f nenhum selo avisa que o assunto tambem cai no TCE-PE: "
        + JSON.stringify(textos));
     ok(textos.some((x) => /SEFAZ-AL/.test(x)),
-       "D7d o aviso so apareceu de um lado — o vinculo e simetrico: "
+       "D7g o aviso so apareceu de um lado — o vinculo e simetrico: "
        + JSON.stringify(textos));
   }
 

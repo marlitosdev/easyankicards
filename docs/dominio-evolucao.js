@@ -26,6 +26,8 @@ function domSnapDe(m, edId, fase, hoje) {
   return {
     d: hoje, ed: String(edId), f: fase === 2 ? 2 : 1,
     dist,
+    /* (19.87.0) quantas folhas tiveram a cor tirada do par (vínculo): marca a descontinuidade no gráfico */
+    par: (m.resumo && m.resumo.parN) || 0,
     discs: m.disciplinas.map((d) => {
       const dd = d.distribuicao, ds = DOM_NIVEIS_ORDEM.reduce((x, k) => x + dd[k], 0) || 1;
       const o = { n: d.nome, p: domPct(d.pesoPct) };
@@ -156,8 +158,23 @@ function domEvolucaoPintar(cx, m, edId, fase) {
     graf.append(col);
   });
   sec.append(graf);
+  /* (19.87.0) A MUDANÇA DE RÉGUA. Os retratos anteriores à 19.87.0 não liam os editais ligados; o primeiro que lê muda
+   * de cor sem que nada tenha sido estudado. Dizer isso evita ler o salto como progresso (ou como queda). */
+  const virada = domParVirada(snaps, edId, fase);
+  if (virada) sec.append(gerEl("p", "nota dom-evo-par", t("dom_evo_par", { d: virada.split("-").reverse().join("/") })));
   cx.append(sec);
   return dl;
+}
+
+/* o dia do primeiro retrato que leu o par, se antes dele houver retrato sem essa leitura (senão, nada a avisar) */
+function domParVirada(snaps, edId, fase) {
+  const doEd = (snaps || []).filter((x) => String(x.ed) === String(edId) && (x.f || 1) === (fase === 2 ? 2 : 1));
+  let viuSem = false;
+  for (const x of doEd) {
+    if (x.par === undefined) { viuSem = true; continue; }
+    if (x.par > 0) return viuSem ? x.d : null;
+  }
+  return null;
 }
 
 if (typeof document !== "undefined" && typeof setTimeout === "function") {

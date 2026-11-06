@@ -280,7 +280,9 @@ async function testes() {
     api.matIniciar(); api.edIniciar(); api.edCarregarLista();
     const base = "| prova: 2027-06-01 | horas: 10\n@ D :: 5\n+ A :: 5\n+ B :: 4";
     const e1 = api.edCriar("TCE-PE", "# TCE-PE " + base);
-    const e2 = api.edCriar("SEFAZ-AL", "# SEFAZ-AL " + base);
+    /* (19.87.0) tópicos DIFERENTES: o mesmo "D › A" nos dois editais vira uma linha só na agenda, e o filtro não teria
+     * linha própria da SEFAZ para tirar */
+    const e2 = api.edCriar("SEFAZ-AL", "# SEFAZ-AL " + base.replace("+ A :: 5\n+ B :: 4", "+ C :: 5\n+ E :: 4"));
     api.hubPintarAgenda();
 
     const box = api.$("edAgendaTopo");

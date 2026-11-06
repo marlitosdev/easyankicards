@@ -558,7 +558,11 @@ function vkDesfazer(a, b) {
  * ===================================================================== */
 function vkEspelhosDe(disciplina, topico, origemId, listaEditais, opc) {
   const propria = vkChave(disciplina, topico);
-  const outros = new Set();
+  /* (19.87.0) a mesma disciplina com o mesmo tópico noutro edital é o mesmo assunto: entra sem vínculo (a agenda já
+   * mostra os dois numa linha só; sem isto, o de lá nunca seria marcado). Só com a ORIGEM conhecida: sem ela, o próprio
+   * edital do tópico pareceria "outro" e o registro ofereceria marcar o tópico nele mesmo. */
+  const origemConhecida = !!origemId && (listaEditais || []).some((E) => E && String(E.id) === String(origemId));
+  const outros = new Set(origemConhecida ? [propria] : []);
   vinculos.forEach((v) => {
     if (vkArquivado(v) || (v.conf || "ALTA") !== "ALTA") return;
     if (v.a === propria && v.b !== propria) outros.add(v.b);
@@ -892,6 +896,127 @@ function vkHistorico(disciplina, topico, estado, diario, hoje) {
     : dias <= VK_FAIXAS.morno ? "vale_revisar" : "visto_ha_muito";
   return { marca, dias, data: melhor.d, concurso: melhor.cc || "",
            topico: melhor.n, acao: melhor.a || "feito" };
+}
+
+/* =====================================================================
+ * (19.87.0) A TRADUÇÃO ÚNICA DE CHAVES
+ *
+ * O vínculo guarda "disciplina›tópico" sem acento e sem pontuação ("lei federal n 4 320 1964"); o material, as
+ * questões, os cartões e o Domínio guardam quase o nome como está ("lei federal nº 4.320/1964"). Duas formas da mesma
+ * coisa, e quem as compara à mão erra. Daqui em diante, toda comparação passa por esta função: qualquer chave do
+ * material ("disc›tópico") vira a chave do vínculo.
+ * ===================================================================== */
+function vkDaChaveMat(ch) {
+  const s = String(ch || "");
+  const i = s.indexOf("›");
+  return i < 0 ? vkNormal(s) : vkChave(s.slice(0, i), s.slice(i + 1));
+}
+/* os ligados de um tópico, com a confiança — só os vínculos AFIRMADOS (um salto), não arquivados */
+function vkParesDe(disciplina, topico) {
+  const ch = vkChave(disciplina, topico);
+  const out = [];
+  vinculos.forEach((v) => {
+    if (vkArquivado(v)) return;
+    if (v.a === ch && v.b !== ch) out.push({ chave: v.b, conf: v.conf || "ALTA" });
+    else if (v.b === ch && v.a !== ch) out.push({ chave: v.a, conf: v.conf || "ALTA" });
+  });
+  return out;
+}
+
+/* =====================================================================
+ * (19.87.0) VÍNCULOS SUGERIDOS AO CADASTRAR UM EDITAL
+ *
+ * O TJ PB entrou com 125 tópicos e ZERO vínculos, embora 14 tivessem o mesmo nome de tópicos dos outros editais: a
+ * comparação era uma tela à parte, que só existe para quem lembra de abri-la. Agora o próprio app acha os casos fáceis
+ * e pergunta — sem IA, sem copiar e colar:
+ *  · MESMO NOME de tópico em disciplinas COMPATÍVEIS ("Noções de Direito Administrativo" × "Direito Administrativo");
+ *    o mesmo nome em disciplinas diferentes é outro assunto e fica de fora;
+ *  · MESMA LEI ligada aos dois tópicos (a lei seca já diz que eles leem o mesmo texto).
+ * Nada é aplicado sozinho: a lista vai para a confirmação, e o que for desmarcado não volta a ser sugerido.
+ * Tópico de nome curto demais ("Conceito", "Noções") não entra: não identifica assunto nenhum.
+ * ===================================================================== */
+const VK_SUG_RECUSADOS = "eac_vk_sug_recusados";
+function vkSugRecusados() {
+  try { const v = JSON.parse(localStorage.getItem(VK_SUG_RECUSADOS) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function vkSugRecusar(pares) {
+  const L = vkSugRecusados();
+  (pares || []).forEach((p) => { const k = [p.a, p.b].sort().join("|"); if (L.indexOf(k) < 0) L.push(k); });
+  try { localStorage.setItem(VK_SUG_RECUSADOS, JSON.stringify(L.slice(-3000))); } catch (e) {}
+}
+/* disciplinas COMPATÍVEIS para a sugestão por nome: tiradas as palavras genéricas ("Direito", "Noções", "Legislação"),
+ * o núcleo de uma está contido no da outra, comparando o começo das palavras ("Português" × "Língua Portuguesa",
+ * "Direito Tributário" × "Legislação Tributária"). vkParDisciplina é mais frouxa de propósito (escolhe a disciplina do
+ * outro lado na tela de comparar) e aqui aceitaria "Direito Constitucional" × "Direito Administrativo" pelo "Direito". */
+const VK_DISC_GENERICAS = new Set(["direito", "direitos", "nocoes", "nocao", "basicas", "basicos", "basica", "basico", "legislacao",
+  "conhecimentos", "conhecimento", "gerais", "geral", "especificos", "especificas", "lingua", "aplicada", "aplicado", "aplicadas",
+  "de", "da", "do", "das", "dos", "e", "em", "a", "o", "ao", "aos", "as", "os"]);
+function vkDiscNucleo(s) {
+  return vkNormal(s).split(" ").filter((w) => w && !VK_DISC_GENERICAS.has(w)).map((w) => (w.length > 6 ? w.slice(0, 6) : w));
+}
+function vkDiscCompativeis(a, b) {
+  if (vkNormal(a) === vkNormal(b)) return true;
+  const A = vkDiscNucleo(a), B = vkDiscNucleo(b);
+  if (!A.length || !B.length) return false;
+  const [menor, maior] = A.length <= B.length ? [A, B] : [B, A];
+  return menor.every((w) => maior.indexOf(w) >= 0);
+}
+/* lista: [{ id, nome, topicos: [{disciplina, nome}] }] (um por edital); leis: [{ id, nome, topicos: ["disc›top", …] }]
+ * opc.so: id do edital que tem de estar em todo par (o recém-cadastrado). Devolve [{a, b, de, para, motivo, lei}] */
+function vkSugeridos(lista, leis, opc) {
+  const o = opc || {};
+  const recus = vkSugRecusados();
+  const porNome = {}, porChave = {};
+  (lista || []).forEach((E) => (E.topicos || []).forEach((tp) => {
+    const nm = vkNormal(tp.nome);
+    const x = { ed: E.id, edNome: E.nome, disciplina: tp.disciplina, topico: tp.nome, chave: vkChave(tp.disciplina, tp.nome) };
+    porChave[x.chave] = porChave[x.chave] || [];
+    porChave[x.chave].push(x);
+    if (nm.length < 8) return;
+    (porNome[nm] = porNome[nm] || []).push(x);
+  }));
+  const out = [], vistos = {};
+  const add = (x, y, motivo, lei) => {
+    if (x.ed === y.ed || x.chave === y.chave) return;
+    if (o.so && x.ed !== o.so && y.ed !== o.so) return;
+    const k = [x.chave, y.chave].sort().join("|");
+    if (vistos[k] || vkJaTem(x.chave, y.chave) || recus.indexOf(k) >= 0) return;
+    vistos[k] = true;
+    out.push({ a: x.chave, b: y.chave, de: x, para: y, motivo, lei: lei || "" });
+  };
+  Object.keys(porNome).forEach((nm) => {
+    const g = porNome[nm];
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      if (vkDiscCompativeis(g[i].disciplina, g[j].disciplina)) add(g[i], g[j], "nome");
+    }
+  });
+  /* a lei ligada a VÁRIOS tópicos do mesmo edital (a CF em 30 deles) não diz qual liga com qual: entram só os editais
+   * em que ela está ligada a UM tópico */
+  (leis || []).forEach((l) => {
+    const porEd = {};
+    (l.topicos || []).forEach((c) => {
+      (porChave[vkDaChaveMat(c)] || []).forEach((x) => {
+        const L = (porEd[x.ed] = porEd[x.ed] || []);
+        if (!L.some((y) => y.chave === x.chave)) L.push(x);
+      });
+    });
+    const ts = Object.keys(porEd).filter((k) => porEd[k].length === 1).map((k) => porEd[k][0]);
+    for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) add(ts[i], ts[j], "lei", l.nome || "");
+  });
+  return out;
+}
+
+/* confirma a lista: os marcados viram vínculos ALTA "ambos" (o mesmo assunto nos dois editais, nada marcado como
+ * estudado); os desmarcados não voltam a ser sugeridos */
+function vkSugConfirmar(marcados, desmarcados) {
+  let novos = 0;
+  (marcados || []).forEach((p) => {
+    const r = vkAplicar([{ de: p.de, para: p.para, conf: "ALTA", origem: p.motivo === "lei" ? "auto_lei" : "auto_nome",
+      por: p.motivo === "lei" ? (p.lei || "lei") : "" }], p.para.ed, "ambos");
+    novos += r.novos;
+  });
+  vkSugRecusar(desmarcados || []);
+  return novos;
 }
 
 /* limpeza: vínculo apontando para edital que não existe mais continua
