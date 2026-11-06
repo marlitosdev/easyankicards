@@ -20,6 +20,8 @@ function bancAlvoLer() {
 
 /* o prompt do tópico: o mesmo do painel antigo, com o resumo, os cartões que já existem e as etiquetas */
 function bancAlvoTextoPrompt(a) {
+  /* (19.89.0) o alvo veio de "Cartões de uma lei": o pedido é o do lote atual (cartoes-lei.js) */
+  if (a && a.lei && typeof clPromptDoAlvo === "function") return clPromptDoAlvo(a);
   const r = matResumos[a.chave] || {};
   const esc = typeof pcEscolhaLer === "function" ? pcEscolhaLer() : { tipo: "rico", qtd: "auto" };
   return t("mc_prompt", {
@@ -41,6 +43,7 @@ function bancAlvoPintar() {
   $("bancAlvoSub").textContent = t("banc_alvo_sub", { n });
   $("btnBancAlvoDesfazer").hidden = !(typeof cmUltimoRecibo !== "undefined" && cmUltimoRecibo && cmUltimoRecibo.recibo && cmUltimoRecibo.recibo.length);
   if ($("btnBancAlvoVoltar")) $("btnBancAlvoVoltar").hidden = bancAlvo.volta !== "biblioteca";
+  if (typeof clPintarNoAlvo === "function") clPintarNoAlvo();
 }
 
 function bancAlvoDefinir(disciplina, topico) {
@@ -101,9 +104,15 @@ async function bancAlvoSalvar() {
   bancAlvoPintar();
   if (!rec.novos) { await uiAlert(t("banc_alvo_nada_novo", { r: rec.repetidos })); return; }
   /* (v18.37.0) quem veio da Biblioteca volta para a mesma pasta, onde os novos cartões já estão */
-  const opcoes = (bancAlvo.volta === "biblioteca" ? [{ valor: "biblioteca", rot: t("banc_alvo_voltar"), classe: "btn-verde" }] : [])
-    .concat([{ valor: "estudar", rot: t("cm_estudar_agora"), classe: bancAlvo.volta === "biblioteca" ? "" : "btn-verde" }, { valor: "ok", rot: t("help_close") }]);
-  const ir = await uiEscolha(t("cm_gravados_estudar", { n: rec.novos, t: bancAlvo.topico, r: rec.repetidos }), opcoes);
+  /* (19.89.0) cartões de uma lei: o caminho natural é o próximo lote */
+  const L = bancAlvo.lei;
+  const temLote = !!(L && L.k < L.lotes.length - 1);
+  const opcoes = (temLote ? [{ valor: "lote", rot: t("cl_prox_lote", { k: L.k + 2, n: L.lotes.length }), classe: "btn-verde" }] : [])
+    .concat(bancAlvo.volta === "biblioteca" ? [{ valor: "biblioteca", rot: t("banc_alvo_voltar"), classe: temLote ? "" : "btn-verde" }] : [])
+    .concat([{ valor: "estudar", rot: t("cm_estudar_agora"), classe: bancAlvo.volta === "biblioteca" || temLote ? "" : "btn-verde" }, { valor: "ok", rot: t("help_close") }]);
+  const ir = await uiEscolha(t("cm_gravados_estudar", { n: rec.novos, t: bancAlvo.topico, r: rec.repetidos })
+    + (L && !temLote ? "\n\n" + t("cl_lei_fim", { l: L.nome }) : ""), opcoes);
+  if (ir === "lote" && typeof clIrLote === "function") { clIrLote(L.k + 1); return; }
   if (ir === "biblioteca") bancAlvoVoltar();
   if (ir === "estudar") estcEstudarTopico(bancAlvo.disciplina, bancAlvo.topico);
 }

@@ -219,7 +219,7 @@ textarea{width:100%;min-height:260px;border:1px solid var(--borda);border-radius
    servem para relatar problema, não fazem parte do uso normal. */
 /* Sem style embutido: "display:flex" inline vence até o !important da
    regra global de [hidden]. Inline continua sendo caso à parte. */
-.rodape-exportar{display:flex;gap:8px;justify-content:center}
+.rodape-exportar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
 /* AGORA VIVE DENTRO DE dlgConfig, não mais no rodapé fixo — a janela é
    mais estreita que a barra que ocupava a largura toda, então os cinco
    itens (chave da IA, base, ?, dois links) podem precisar de segunda
@@ -5513,6 +5513,79 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .ds-passo-disc .ds-sel{max-width:100%}
 .ds-passo-card .ds-fluxo{background:var(--panel)}
 .ds-passo-card textarea.ds-colar{min-height:0;height:84px;resize:vertical}
+/* (19.89.0) primeiro uso: a explicação que se fecha, a trilha das etapas e o passo da vez no bloco ① ② ③ */
+.ds-intro{border:1px solid var(--info);border-radius:12px;padding:10px 14px;margin:6px 0 10px;background:color-mix(in srgb,var(--info) 7%,transparent)}
+.ds-intro-tit{font-weight:800;font-size:15px;margin-bottom:4px}
+.ds-intro-passos{margin:4px 0 6px 18px;padding:0}.ds-intro-passos li{margin:4px 0;font-size:13.5px}
+.ds-intro-abrir{margin:0 0 6px}
+.ds-trilha{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px;counter-reset:none}
+.ds-tr-passo{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--sutil);font-size:12.5px;font-weight:700;cursor:pointer}
+.ds-tr-passo+.ds-tr-passo::before{content:"→";margin:0 4px 0 -2px;color:var(--sutil);font-weight:400}
+.ds-tr-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--borda);font-size:11px;font-weight:800}
+.ds-tr-passo.feito{color:var(--ok)}.ds-tr-passo.feito .ds-tr-n{background:var(--ok);border-color:var(--ok);color:#fff}
+.ds-tr-passo.parcial .ds-tr-n{border-color:var(--atencao);color:var(--atencao)}
+.ds-tr-passo.atual{color:var(--texto);border-color:var(--info);box-shadow:0 0 0 1px var(--info);background:color-mix(in srgb,var(--info) 10%,var(--campo))}
+.ds-tr-passo.atual .ds-tr-n{background:var(--info);border-color:var(--info);color:#fff}
+.ds-tr-passo.opcional .ds-tr-t::after{content:" (opcional)";font-weight:400}
+.ds-tr-dica{font-size:12.5px;color:var(--sutil);margin:4px 0 6px}
+.ds-passo.agora .ds-passo-n{box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 35%,transparent)}
+.ds-passo.agora .ds-passo-tx{font-weight:800;color:var(--texto)}
+.ds-fluxo button:disabled{opacity:.45;cursor:not-allowed}
+.ds-result{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--ok);border-radius:10px;padding:7px 10px;margin:6px 0 8px;background:color-mix(in srgb,var(--ok) 8%,transparent);font-weight:700;font-size:13px}
+.ds-result-tx{flex:1;min-width:0}
+.ds-glossario{margin:4px 0}
+/* (19.89.0) a bancada em passos */
+.banc-seus{margin:0 0 10px}
+.banc-seus .rev-topo{margin:0}
+.banc-seus .rev-topo .btn.btn-biblioteca{flex:2 1 280px}
+.banc-passo{margin:4px 0 12px}
+.banc-passo-tit{display:flex;align-items:center;gap:8px;margin:10px 0 6px;font-weight:800}
+.banc-passo-tit label{margin:0}
+.banc-passo-n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--info);color:#fff;font-size:12px;font-weight:800;flex:none}
+.banc-origens{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.banc-origem{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:10px 12px}
+.bo-tit{font-weight:800;font-size:14px}
+.bo-sub{font-weight:400;font-size:11.5px;opacity:.92;line-height:1.3}
+.banc-origens-sec{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.banc-ou{font-size:12px;color:var(--sutil)}
+.banc-ferr,.banc-aparencia{margin:8px 0}
+.banc-ferr>summary,.banc-aparencia>summary{cursor:pointer;font-size:12.5px;color:var(--sutil);font-weight:700}
+.banc-ferr .linha-editor{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.banc-apagar{color:var(--erro);border-color:color-mix(in srgb,var(--erro) 50%,var(--borda));margin-left:auto}
+.banc-aparencia .grupo-titulo-geral{margin-top:6px}
+.banc-passo-rod{margin:0 4px 0 0}
+@media (max-width:520px){.banc-origens{grid-template-columns:1fr}}
+/* (19.89.0) cartões de uma lei */
+dialog.cl-modal{max-width:760px;width:95%}
+.cl-passo-tit{font-weight:800;font-size:15px;margin:8px 0 6px}
+.cl-estrategia{margin:4px 0 6px 18px;padding:0}.cl-estrategia li{margin:3px 0;font-size:13px}
+.cl-leis{display:flex;flex-direction:column;gap:6px;max-height:56vh;overflow:auto}
+.cl-lei{display:flex;flex-direction:column;align-items:stretch;gap:3px;text-align:left;padding:8px 10px;border-radius:10px;border:1px solid var(--borda);background:var(--campo);color:var(--texto);cursor:pointer}
+.cl-lei:hover{border-color:var(--info)}
+.cl-lei-top{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+.cl-lei-nome{font-weight:800;font-size:13.5px}
+.cl-lei-selo{margin-left:8px;font-size:11px;font-weight:800;color:var(--ok)}
+.cl-lei-info{font-size:12px;color:var(--sutil)}
+.cl-lei-barra{display:block;height:5px;border-radius:3px;background:var(--borda);overflow:hidden}
+.cl-lei-fill{display:block;height:100%;background:var(--ok)}
+.cl-campo{display:flex;flex-direction:column;gap:3px;font-size:12.5px;font-weight:700;margin:6px 0}
+.cl-campo .ds-sel{max-width:100%}
+.cl-foco{margin:4px 0}
+.cl-filtros{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.cl-resumo{font-weight:700;font-size:13px;margin:6px 0}
+.cl-arts{max-height:42vh;overflow:auto;border:1px solid var(--borda);border-radius:8px;padding:2px 8px}
+.cl-div{font-size:11.5px;font-weight:800;color:var(--sutil);text-transform:uppercase;letter-spacing:.03em;margin:10px 0 2px}
+.cl-art{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--borda);cursor:pointer;font-size:13px}
+.cl-art input{margin-top:3px;flex:none}
+.cl-art-tx{display:flex;flex-direction:column;min-width:0}
+.cl-art-em{color:var(--sutil);font-size:12px}
+.cl-art-sin{font-size:11.5px;font-weight:700;color:var(--atencao)}
+.cl-art-tem{opacity:.7}
+.cl-rodape{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.cl-alvo{border:1px dashed var(--info);border-radius:8px;padding:6px 8px;margin:6px 0;font-size:12.5px}
+.cl-alvo-tit{font-weight:800}
+.cl-alvo-arts{color:var(--sutil);margin:2px 0 4px}
+.cl-alvo-nav{display:flex;gap:6px}
 .ds-modos{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
 .ds-modo{font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--sutil);cursor:pointer}
 .ds-modo.sel{color:var(--texto);border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
@@ -7067,6 +7140,15 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </div>
 <div class="modo-area">
 <section id="secCartoes" data-modo="cartoes">
+  <!-- (19.89.0) OS CARTÕES JÁ SALVOS, separados do caminho de criar: a Biblioteca e as duas ferramentas sobre o que já
+       existe (repetidos, melhorar) ficavam no topo da PRÉVIA, disputando atenção com os cartões que se acabou de colar. -->
+  <div class="banc-seus">
+    <div class="rev-topo">
+      <button class="btn btn-azul btn-biblioteca" id="btnBancaGer"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
+      <button class="btn btn-cinza" id="btnBancaRep" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
+      <button class="btn btn-cinza" id="btnBancaElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
+    </div>
+  </div>
   <div class="duas-colunas">
     <div class="grupo" id="painelEsquerdo">
       <div class="barra-recuperar" id="barraRecuperar" hidden role="alert">
@@ -7090,6 +7172,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div class="banc-alvo" id="bancAlvoBox" hidden>
         <div class="banc-alvo-tit"><span data-i18n="banc_alvo_tit"></span> <b id="bancAlvoNome"></b></div>
         <div class="banc-alvo-sub" id="bancAlvoSub"></div>
+        <div class="cl-alvo" id="bancAlvoLei" hidden></div>
         <div class="banc-alvo-passos">
           <button type="button" class="btn btn-azul" id="btnBancAlvoPrompt" data-i18n="banc_alvo_p1" data-i18n-title="banc_alvo_tip_prompt"></button>
           <span class="banc-alvo-p" data-i18n="banc_alvo_p2"></span>
@@ -7105,14 +7188,26 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
           <button type="button" class="btn-min" id="btnBancAlvoSair" data-i18n="banc_alvo_sair" data-i18n-title="banc_alvo_tip_sair"></button>
         </div>
       </div>
-      <label class="bancada-sub" data-i18n="editor_label"></label>
-      <div class="linha-editor">
-        <button class="btn btn-cinza" id="btnSelecionarTudo" data-i18n="select_all"></button>
-        <button class="btn btn-cinza" id="btnCopiarTudo" data-i18n="copy_all"></button>
-        <button class="btn" id="btnApagarTudo" style="background:#b91c1c" data-i18n="clear_all"></button>
-        <label class="chk-hl"><input type="checkbox" id="chkDestaque" checked>
-          <span data-i18n="highlight_toggle"></span></label>
+      <!-- (19.89.0) A BANCADA EM PASSOS. "1. Cole aqui o resultado do prompt" vinha no topo e o botão que GERA o pedido
+           ficava no pé da coluna: quem chegava tentava colar antes de pedir. Agora a ordem da tela é a do trabalho:
+           ① de onde vêm os cartões (IA, uma lei da biblioteca; à mão e Anki como alternativas) → ② cole e ajuste →
+           ③ confira (ao lado) → ④ guarde (no rodapé). As ferramentas do texto ficam numa gaveta DEBAIXO da caixa, e
+           "Apagar tudo" no fim dela, sem cor de ação. -->
+      <div class="banc-passo" id="bancPasso1">
+        <div class="banc-passo-tit"><span class="banc-passo-n">1</span><span data-i18n="banc_p1_tit"></span></div>
+        <div class="banc-origens">
+          <button class="btn btn-azul banc-origem" id="btnPromptIA"><span class="bo-tit" data-i18n="prompt_main_btn"></span><span class="bo-sub" data-i18n="banc_o_ia_sub"></span></button>
+          <button class="btn btn-azul banc-origem" id="btnLeiCartoes"><span class="bo-tit" data-i18n="banc_o_lei"></span><span class="bo-sub" data-i18n="banc_o_lei_sub"></span></button>
+        </div>
+        <div class="banc-origens-sec">
+          <span class="banc-ou" data-i18n="banc_o_ou"></span>
+          <button class="btn-min" id="btnNovoCartao" data-i18n="add_card_btn"></button>
+          <button class="btn-min" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
+          <button class="btn-min" id="btnApkgImport" data-i18n="apkg_import"></button>
+          <input type="file" id="apkgFile" accept=".apkg" style="display:none">
+        </div>
       </div>
+      <div class="banc-passo-tit"><span class="banc-passo-n">2</span><label class="bancada-sub" data-i18n="editor_label"></label></div>
       <div class="editor-wrap">
         <div id="editorNums" aria-hidden="true"></div>
         <pre id="editorHl" aria-hidden="true"></pre>
@@ -7141,36 +7236,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button class="btn btn-cinza" id="btnNormalizar" data-i18n="normalize_btn"></button>
         <button class="btn btn-roxo" id="btnPromptCorrigir" data-i18n="fixprompt_btn"></button>
       </div>
-      <!-- A IA VEM PRIMEIRO DE PROPÓSITO. Colar/gerar com IA é o caminho
-           de 90% das sessões — "+ Novo cartão" é para quem já sabe
-           exatamente o que quer digitar à mão, o caso mais raro. A ordem
-           da tela ensina o caminho sem precisar de nenhuma frase dizendo
-           "comece por aqui". -->
-      <div class="toolbar-sec"><div class="cap" data-i18n="group_ai"></div>
-        <div class="toolbar">
-          <button class="btn btn-azul" id="btnPromptIA" data-i18n="prompt_main_btn"></button>
+      <details class="banc-ferr" id="bancFerramentas">
+        <summary data-i18n="banc_ferr"></summary>
+        <div class="linha-editor">
+          <button class="btn-min" id="btnSelecionarTudo" data-i18n="select_all"></button>
+          <button class="btn-min" id="btnCopiarTudo" data-i18n="copy_all"></button>
+          <label class="chk-hl"><input type="checkbox" id="chkDestaque" checked>
+            <span data-i18n="highlight_toggle"></span></label>
+          <button class="btn-min banc-apagar" id="btnApagarTudo" data-i18n="clear_all"></button>
         </div>
-      </div>
-      <div class="toolbar-sec"><div class="cap" data-i18n="group_create"></div>
-        <div class="toolbar">
-          <button class="btn btn-verde" id="btnNovoCartao" data-i18n="add_card_btn"></button>
-          <button class="btn btn-roxo" id="btnMCRapido" data-i18n="mc_quick_btn"></button>
-        </div>
-      </div>
-      <div class="toolbar-sec"><div class="cap" data-i18n="group_import"></div>
-        <div class="toolbar">
-          <button class="btn btn-ciano" id="btnApkgImport" data-i18n="apkg_import"></button>
-          <input type="file" id="apkgFile" accept=".apkg" style="display:none">
-        </div>
-      </div>
+      </details>
     </div>
     <div class="grupo">
-      <label data-i18n="preview_label"></label>
-      <div class="rev-topo">
-        <button class="btn btn-azul btn-biblioteca" id="btnBancaGer"><span class="bib-tit" data-i18n="ger_btn"></span><span class="bib-sub" data-i18n="ger_btn_sub"></span></button>
-        <button class="btn btn-cinza" id="btnBancaRep" data-i18n="cq_btn" data-i18n-title="cq_btn_aj"></button>
-        <button class="btn btn-cinza" id="btnBancaElevar" data-i18n="ce_btn" data-i18n-title="ce_btn_aj"></button>
-      </div>
+      <div class="banc-passo-tit"><span class="banc-passo-n">3</span><label data-i18n="preview_label"></label></div>
+      <details class="banc-aparencia" id="bancAparencia">
+      <summary data-i18n="banc_aparencia"></summary>
       <div class="grupo-titulo-geral">
         <label for="tituloGeral"><span data-i18n="gen_title_label"></span></label>
         <input type="text" id="tituloGeral">
@@ -7191,6 +7271,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <label class="chk-2col"><input type="checkbox" id="chk2col">
           <span data-i18n="two_cols"></span></label>
       </div>
+      </details>
       <div id="resumo">—</div>
       <!-- gaveta: só aparece quando há cartão recortado esperando destino -->
       <div class="barra-recortes" id="barraRecortes" style="display:none">
@@ -7625,12 +7706,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <div class="rodape" id="rodape">
   <div style="width:100%;max-width:600px">
     <div class="rodape-exportar" id="rodapeExportar">
-      <button class="btn btn-azul" id="btnTxt" data-i18n="export_txt_btn"></button>
-      <button class="btn btn-verde" id="btnApkg" data-i18n="export_apkg_btn"></button>
-      <!-- O cartão saía do app e não voltava: virava .apkg e sumia dentro
-           do Anki. Na hora de revisar um tópico, o material tinha o resumo
-           e não tinha as perguntas que aquele resumo gerou. -->
-      <button class="btn btn-roxo" id="btnSalvarMaterial" data-i18n="cm_botao"></button>
+      <!-- (19.89.0) ④ GUARDE: salvar no material é o caminho de quem estuda no app (vem primeiro); .apkg e .txt são para
+           levar para fora. O cartão saía do app e não voltava: virava .apkg e sumia dentro do Anki. -->
+      <span class="banc-passo-tit banc-passo-rod"><span class="banc-passo-n">4</span><span data-i18n="banc_p4_tit"></span></span>
+      <button class="btn btn-verde" id="btnSalvarMaterial" data-i18n="cm_botao"></button>
+      <button class="btn btn-cinza" id="btnApkg" data-i18n="export_apkg_btn"></button>
+      <button class="btn btn-cinza" id="btnTxt" data-i18n="export_txt_btn"></button>
     </div>
   </div>
 </div>
@@ -7677,6 +7758,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnGenCopiar" data-i18n="gen_copy"></button>
     <button class="btn btn-cinza" id="btnGenFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
+<!-- (19.89.0) CARTÕES DE UMA LEI: escolher a lei (na ordem da estratégia), o tópico e os artigos; o resto é a bancada -->
+<dialog id="dlgLeiCartoes" class="ui-modal cl-modal">
+  <h3 data-i18n="cl_titulo"></h3>
+  <p class="nota" data-i18n="cl_sub"></p>
+  <div id="clCorpo"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnClFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 
@@ -12143,6 +12234,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital-vert-ui.js"></script>
 <script src="dominio-evolucao.js"></script>
 <script src="banca-alvo.js"></script>
+<script src="cartoes-lei.js"></script>
 <script src="horas-assunto.js"></script>
 <script src="ramos.js"></script>
 <script src="resumo-ia.js"></script>

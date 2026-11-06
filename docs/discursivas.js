@@ -702,8 +702,9 @@ function dsFluxoIA(o) {
   const bc = dsEl("button", "btn-min btn-min-ok", o.copiarRot || t("ds_f_copiar"));
   bc.type = "button"; if (o.idCopiar) bc.id = o.idCopiar;
   p1.append(bc);
-  passo("2", t("ds_f_p2"));
+  const p2 = passo("2", t("ds_f_p2"));
   const p3 = passo("3", o.colarRot || t("ds_f_p3"));
+  p1.classList.add("agora");
   const ta = document.createElement("textarea");
   ta.className = "ds-colar"; ta.rows = o.linhas || 5; if (o.idTa) ta.id = o.idTa;
   ta.placeholder = o.ph || t("ds_f_ph");
@@ -711,7 +712,20 @@ function dsFluxoIA(o) {
   bl.type = "button"; if (o.idLer) bl.id = o.idLer;
   const msg = dsEl("p", "nota ds-red-msg");
   box._copiar = bc;
-  bc.onclick = () => { dsCopiar(o.prompt(), o.aviso || t("ds_f_copiado")); box.classList.add("ds-fluxo-copiado"); try { ta.focus(); } catch (e) {} };
+  /* (19.89.0) O PASSO DA VEZ À VISTA: o "agora" anda de ① para ② depois de copiar e para ③ quando algo é colado; o botão
+   * de guardar só fica ativo com a resposta na caixa (antes, dava para "guardar" a caixa vazia e receber um erro) */
+  const agora = (p) => { [p1, p2, p3].forEach((x) => x.classList.toggle("agora", x === p)); };
+  const conferir = () => { const tem = String(ta.value || "").trim().length >= 20; bl.disabled = !tem; if (tem) agora(p3); };
+  bl.disabled = true;
+  ta.oninput = conferir;
+  ta.onpaste = () => setTimeout(conferir, 0);
+  bc.onclick = () => {
+    dsCopiar(o.prompt(), o.aviso || t("ds_f_copiado"));
+    box.classList.add("ds-fluxo-copiado");
+    bc.textContent = "✓ " + t("ds_f_copiado_curto");
+    agora(p2);
+    try { ta.focus(); } catch (e) {}
+  };
   bl.onclick = () => { const r = o.aoLer(String(ta.value || "")); if (r && r.erro) msg.textContent = r.erro; };
   box.append(ta, bl, msg);
   return box;
@@ -914,7 +928,7 @@ function dsPintarSugestoes(card, e, plano, dc, sit) {
     n: () => (modo === "ideias" ? 6 : Math.max(1, Math.min(5, marcados().length || 3))),
     temas: () => marcados().map((s0) => s0.topico + " (" + s0.disc + ")"),
     idBase: "dsSug", idFluxo: "dsColar_" + e.id, idCopiar: "btnDsCriarIa_" + e.id, idTa: "dsColarTx_" + e.id, idLer: "btnDsColar_" + e.id,
-    depois: () => dsSecaoIr("propostas", true) });
+    depois: () => dsLerNovos(e) });
   card.append(box);
 }
 /* compatibilidade: a caixa de colar agora mora dentro de "Temas" */
@@ -1145,13 +1159,39 @@ function dsLerPacote(e, dc, txt) {
   const lidas = dsPropostasLer(txt, (dc && dc.disciplinas) || []);
   if (!lidas.length) return { erro: t("ds_colar_nada") };
   let ok = 0, comModelo = 0;
-  const rep = [];
+  const rep = [], ids = [];
   lidas.forEach((p) => {
     const r = dsPropostaAdicionar(e.id, Object.assign({ fonte: "ia" }, p));
-    if (r.erro) rep.push(r.erro); else { ok++; if (r.modelo) comModelo++; }
+    if (r.erro) rep.push(r.erro); else { ok++; ids.push(r.id); if (r.modelo) comModelo++; }
   });
   try { reg("DISCURSIVAS", "temas da IA guardados", ok + " · " + comModelo + " com modelo"); } catch (x) {}
-  return { ok, comModelo, rep };
+  if (ok) dsUltimoResultado[e.id] = { n: ok, k: comModelo, ids };
+  return { ok, comModelo, rep, ids };
+}
+/* (19.89.0) o que acabou de ser guardado: um aviso com "ler agora", até a pessoa ler ou fechar */
+const dsUltimoResultado = {};
+function dsLerNovos(e) {
+  const u = dsUltimoResultado[e.id];
+  Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "", q: "" });
+  if (u && u.ids && u.ids[0]) dsPropSel[e.id] = u.ids[0];
+  delete dsUltimoResultado[e.id];
+  dsSecaoIr("propostas", true);
+}
+function dsPintarResultado(box, e) {
+  const u = dsUltimoResultado[e.id];
+  if (!u) return;
+  const el = dsEl;
+  const r = el("div", "ds-result");
+  r.id = "dsResult_" + e.id;
+  r.append(el("span", "ds-result-tx", t("ds_result", { n: u.n, k: u.k })));
+  const b = el("button", "btn-min btn-min-ok", t("ds_result_ler"));
+  b.type = "button"; b.id = "btnDsResultLer_" + e.id;
+  b.onclick = () => dsLerNovos(e);
+  const x = el("button", "btn-min", "✕");
+  x.type = "button"; x.title = t("ds_result_fechar");
+  x.onclick = () => { delete dsUltimoResultado[e.id]; dsRender(); };
+  r.append(b, x);
+  box.append(r);
 }
 
 /* ---------------- o que pinta ---------------- */
@@ -1253,6 +1293,9 @@ function dsPintarPasso(e, plano, dc, sit, P, passo) {
     ld.append(s);
     card.append(ld);
   }
+  const glo = el("details", "ds-info ds-glossario");
+  glo.append(el("summary", "", "ⓘ " + t("ds_glo_tit")), el("p", "nota", t("ds_glo_tx")));
+  card.append(glo);
   dsPintarGerador(card, e, plano, dc, { disc: d.nome, modo, n, idBase: "dsPasso", idFluxo: "dsPassoFluxo_" + e.id, idCopiar: "btnDsPassoCopiar_" + e.id,
     idTa: "dsPassoTx_" + e.id, idLer: "btnDsPassoLer_" + e.id, linhas: 3,
     temas: () => dsSugerirTemas(e, plano, dc, d.nome, modo === "ideias" ? 8 : Math.max(n, 3)).map((s0) => s0.topico) });
@@ -1266,6 +1309,7 @@ function dsPintarPainel(g, e, plano, dc, sit, P0) {
   box.id = "dsPainel_" + e.id;
   g.append(box);
   if (P.passou) { box.append(el("p", "nota", t("ds_pn_passou"))); return P; }
+  dsPintarResultado(box, e);
   const passo = dsProximoPasso(e, plano, dc, sit, P);
   if (passo) box.append(dsPintarPasso(e, plano, dc, sit, P, passo));
   /* o ritmo, em bolinhas */
@@ -1314,8 +1358,76 @@ function dsPintarPainel(g, e, plano, dc, sit, P0) {
   return P;
 }
 
+/* =====================================================================
+ * (19.89.0) PARA QUEM ABRE PELA PRIMEIRA VEZ: A TRILHA E O "COMO FUNCIONA"
+ *
+ * O Painel dizia o passo de agora, mas não o CAMINHO: quem chega não sabe que existem quatro etapas, em que ordem, nem em
+ * que aba cada uma mora. Boas práticas de primeiro uso: mostrar o mapa antes de pedir a ação (modelo mental), uma
+ * explicação curta que se fecha e não volta, o passo atual destacado e os feitos marcados (sensação de progresso), e
+ * cada etapa levando à aba dela. As abas seguem a mesma ordem da trilha e têm nomes de ação.
+ * ===================================================================== */
+const DS_TRILHA = [["formato", "editar"], ["gerar", "geral"], ["ler", "propostas"], ["escrever", "redacoes"]];
+function dsTrilhaEstado(dc, P, nRed) {
+  const gerou = !!(P && P.guardadas > 0);
+  const gerarOk = !!(P && P.discs.length && P.cont.vermelho === 0);
+  const lerOk = gerou && !!P && (P.modo === "ideias" || P.semModelo.length === 0);
+  const passos = DS_TRILHA.map(([k, sec]) => ({ k, sec, feito: false, parcial: false, opcional: k === "escrever" }));
+  passos[0].feito = !(dc && dc.semFormato);
+  passos[1].feito = gerarOk; passos[1].parcial = gerou && !gerarOk;
+  passos[2].feito = lerOk; passos[2].parcial = gerou && !lerOk;
+  passos[3].feito = nRed > 0;
+  const atual = passos.find((p) => !p.feito && !p.opcional) || passos[3];
+  passos.forEach((p) => { p.atual = p === atual; });
+  return passos;
+}
+function dsPintarTrilha(card, e, dc, P, nRed) {
+  const el = dsEl;
+  const passos = dsTrilhaEstado(dc, P, nRed);
+  const tr = el("div", "ds-trilha");
+  tr.id = "dsTrilha_" + e.id;
+  tr.setAttribute("aria-label", t("ds_tr_aria"));
+  passos.forEach((p, k) => {
+    const b = el("button", "ds-tr-passo" + (p.feito ? " feito" : "") + (p.atual ? " atual" : "") + (p.parcial ? " parcial" : "") + (p.opcional ? " opcional" : ""));
+    b.type = "button"; b.id = "dsTr_" + e.id + "_" + p.k;
+    if (p.atual) b.setAttribute("aria-current", "step");
+    b.append(el("span", "ds-tr-n", p.feito ? "✓" : String(k + 1)), el("span", "ds-tr-t", t("ds_tr_" + p.k)));
+    b.title = t("ds_tr_tip_" + p.k);
+    b.onclick = () => dsSecaoIr(p.sec);
+    tr.append(b);
+  });
+  card.append(tr);
+  const at = passos.find((p) => p.atual);
+  if (at) card.append(el("p", "ds-tr-dica", t("ds_tr_dica_" + at.k)));
+  return passos;
+}
+const DS_INTRO_CHAVE = "eac_ds_intro_ok";
+function dsIntroVista() { try { return localStorage.getItem(DS_INTRO_CHAVE) === "1"; } catch (e) { return false; } }
+function dsIntroMarcar(v) { try { if (v) localStorage.setItem(DS_INTRO_CHAVE, "1"); else localStorage.removeItem(DS_INTRO_CHAVE); } catch (e) {} dsRender(); }
+function dsPintarIntro(cx) {
+  const el = dsEl;
+  if (dsIntroVista()) {
+    const b = el("button", "btn-min ds-intro-abrir", "ⓘ " + t("ds_intro_rever"));
+    b.type = "button"; b.id = "btnDsIntroRever";
+    b.onclick = () => dsIntroMarcar(false);
+    cx.append(b);
+    return;
+  }
+  const box = el("div", "ds-intro");
+  box.id = "dsIntro";
+  box.append(el("div", "ds-intro-tit", t("ds_intro_tit")));
+  const ol = el("ol", "ds-intro-passos");
+  [1, 2, 3, 4].forEach((k) => ol.append(el("li", "", t("ds_intro_" + k))));
+  box.append(ol, el("p", "nota", t("ds_intro_ia")));
+  const ok = el("button", "btn-min btn-min-ok", t("ds_intro_ok"));
+  ok.type = "button"; ok.id = "btnDsIntroOk";
+  ok.onclick = () => dsIntroMarcar(true);
+  box.append(ok);
+  cx.append(box);
+}
+
 /* ---------------- as abas ---------------- */
-const DS_SECOES = ["geral", "texto", "temas", "propostas", "redacoes", "criterios", "editar"];
+/* (19.89.0) na ordem da trilha: painel → gerar → ler (meus temas) → como escrever → escrever e corrigir → critérios → formato */
+const DS_SECOES = ["geral", "temas", "propostas", "texto", "redacoes", "criterios", "editar"];
 function dsSecaoAtual() { try { const v = localStorage.getItem("eac_ds_secao"); return DS_SECOES.indexOf(v) >= 0 ? v : "geral"; } catch (e) { return "geral"; } }
 function dsSecaoIr(s, rolar) {
   try { localStorage.setItem("eac_ds_secao", s); } catch (e) {}
@@ -1341,6 +1453,7 @@ function dsRender() {
   /* a prova mais próxima primeiro; sem data depois; as que já passaram por último */
   const chave = (s) => (s.dias == null ? 1e6 : s.dias < 0 ? 2e6 : s.dias);
   com.sort((a, b) => chave(a.sit) - chave(b.sit) || String(a.e.nome).localeCompare(String(b.e.nome)));
+  dsPintarIntro(cx);
   const prox = com.find((x) => x.sit.dias != null && x.sit.dias >= 0);
   if (prox) cx.append(el("p", "ds-prox", t("ds_prox", { e: prox.e.nome || "?", n: prox.sit.dias, d: dsDataBr(prox.sit.prova) })));
   else if (!com.length) cx.append(el("p", "nota", t("ds_nenhum_com")));
@@ -1408,6 +1521,7 @@ function dsRender() {
 
     /* as abas das seções */
     const nProps = dsPropostas(e.id).length, nRed = dsRedacoes(e.id).length;
+    dsPintarTrilha(card, e, dc, P, nRed);
     const sabas = el("div", "ds-abas-sec");
     sabas.setAttribute("role", "tablist");
     DS_SECOES.forEach((s) => {

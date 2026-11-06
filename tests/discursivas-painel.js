@@ -178,6 +178,44 @@ async function testes() {
     api.edApagar(e.id);
   }
 
+  /* ---------------- PU: primeiro uso (19.89.0) ---------------- */
+  {
+    const e = api.edCriar("Guia", texto(40));
+    api.loja.removeItem("eac_ds_intro_ok"); api.loja.setItem("eac_ds_edital", e.id); api.loja.setItem("eac_ds_secao", "geral");
+    api.dsRender();
+    const intro = achar(api.$("dsLista"), (x) => x.id === "dsIntro")[0];
+    ok(intro && /Primeira vez aqui/.test(intro.textContent) && achar(intro, (x) => x.tagName === "LI").length === 4, "PU1 na primeira visita, o 'como funciona' em 4 passos");
+    achar(intro, (x) => x.id === "btnDsIntroOk")[0].onclick();
+    ok(api.loja.getItem("eac_ds_intro_ok") === "1" && !achar(api.$("dsLista"), (x) => x.id === "dsIntro").length && achar(api.$("dsLista"), (x) => x.id === "btnDsIntroRever").length === 1,
+      "PU2 'Entendi' fecha e não volta; fica o 'como funciona' para rever");
+    const tr = achar(api.$("dsLista"), (x) => x.id === "dsTrilha_" + e.id)[0];
+    const passos = achar(tr, (x) => cls(x, "ds-tr-passo"));
+    ok(passos.length === 4 && cls(passos[0], "feito") && cls(passos[1], "atual") && passos[1].getAttribute("aria-current") === "step" && cls(passos[3], "opcional") && /Você está em: 2/.test(api.$("dsCard_" + e.id).textContent),
+      "PU3 a trilha: formato feito, gerar é o passo atual, escrever é opcional, e a frase diz onde se está");
+    const abas = achar(api.$("dsCard_" + e.id), (x) => cls(x, "ds-aba-sec")).map((b) => b.id.split("_").pop());
+    ok(abas.join() === "geral,temas,propostas,texto,redacoes,criterios,editar" && api.$("dsAbaSec_" + e.id + "_propostas").textContent.indexOf("Meus temas") === 0,
+      "PU4 as abas na ordem da trilha, com nomes de ação: " + abas.join());
+    const passo = achar(api.$("dsSec_" + e.id + "_geral"), (x) => cls(x, "ds-passo-card"))[0];
+    const bl = achar(passo, (x) => x.id === "btnDsPassoLer_" + e.id)[0];
+    const ta = achar(passo, (x) => x.id === "dsPassoTx_" + e.id)[0];
+    const bc = achar(passo, (x) => x.id === "btnDsPassoCopiar_" + e.id)[0];
+    const ps = achar(passo, (x) => cls(x, "ds-passo"));
+    ok(bl.disabled === true && cls(ps[0], "agora"), "PU5 com a caixa vazia, 'guardar' fica desligado e o passo da vez é o 1");
+    bc.onclick();
+    ok(/copiado/.test(bc.textContent) && cls(ps[1], "agora") && !cls(ps[0], "agora"), "PU6 depois de copiar, o botão confirma e o passo 2 vira o da vez");
+    ta.value = "TEMA: Tema X\nDISCIPLINA: Tributário\nENUNCIADO: Disserte sobre X.\nESPELHO: a 40";
+    ta.oninput();
+    ok(bl.disabled === false && cls(ps[2], "agora"), "PU7 colar liga o 'guardar' e o passo 3 vira o da vez");
+    bl.onclick();
+    const res = achar(api.$("dsSec_" + e.id + "_geral"), (x) => x.id === "dsResult_" + e.id)[0];
+    ok(res && /1 tema\(s\) guardado\(s\) agora/.test(res.textContent), "PU8 o tema guardado vira um aviso com 'ler agora' (não some dentro de outra aba)");
+    achar(res, (x) => x.id === "btnDsResultLer_" + e.id)[0].onclick();
+    ok(api.loja.getItem("eac_ds_secao") === "propostas" && /Tema X/.test(String(api.$("dsLeitor_" + e.id).textContent || "")),
+      "PU9 'ler agora' abre Meus temas já no tema novo");
+    api.loja.removeItem("eac_ds_secao"); api.loja.removeItem("eac_ds_edital");
+    api.edApagar(e.id);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
