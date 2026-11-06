@@ -132,6 +132,8 @@ function lixJogarLote(lista, onde) {
   lixCarregar();
   const agora = new Date().toISOString();
   const ids = [];
+  /* (19.92.0) a marca do lote: a tela mostra junto e oferece "restaurar o lote" */
+  const lote = "L" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   (lista || []).forEach((o) => {
     const dados = (o && o.dados) || {};
     const item = {
@@ -139,6 +141,7 @@ function lixJogarLote(lista, onde) {
       q: agora, v: typeof VERSAO !== "undefined" ? VERSAO : "",
       tipo: o.tipo, via: o.via || "", rotulo: lixCortar(o.rotulo, 90), onde: lixCortar(o.onde, 120),
       risco: o.risco || lixRisco(o.tipo, dados), motivo: o.motivo || "pedido", dados,
+      lote, loteOnde: lixCortar(onde || "", 60),
     };
     lixLista.push(item); ids.push(item.id);
   });
@@ -320,7 +323,7 @@ function lixRestaurar(id) {
 function lixRestaurarUi(id) {
   const item = lixLer().filter((x) => x.id === id)[0];
   const r = lixRestaurar(id);
-  if (!r.ok) { try { uiAlert(t(r.msg || "lix_falha_generica")); } catch (e) {} return r; }
+  if (!r.ok) { try { lixPlanoB(item, r); } catch (e) { try { uiAlert(t(r.msg || "lix_falha_generica")); } catch (e2) {} } return r; }
   lixMostrar(t(r.msg || "lix_restaurado", { o: item ? lixNomeCurto(item) : "" }), false);
   try { lixPintar(); } catch (e) {}
   return r;
@@ -436,87 +439,328 @@ function lixAtualizarBotao() {
 
 /* ---------------------------------------------------------------------
  * A TELA
+ *
+ * (19.92.0) O QUE MUDOU, pelo relato e pelas práticas das lixeiras (Gmail, Drive, Notion):
+ *  · o cartão aparece COMO CARTÃO (frente, verso com a lacuna em destaque, etiquetas, caminho), não em texto cru com
+ *    "{{c1::…}}" e "::"; o texto original fica numa gaveta;
+ *  · a data diz "hoje / ontem / há N dias", e a lista vem agrupada por dia;
+ *  · "restaurar em …" diz PARA ONDE volta; quando o lugar não existe mais, há plano B (cartão: na bancada; qualquer
+ *    um: copiar o texto) — nada se perde por falta de destino;
+ *  · busca, seleção de vários (restaurar ou apagar de vez juntos) e o LOTE: o que saiu de uma vez ("Cartões
+ *    repetidos") aparece junto, com "restaurar o lote";
+ *  · o resumo só conta o que existe (sem "0 questão(ões)"), os filtros vazios somem, o selo "risco baixo" saiu (só
+ *    médio e alto) e o resumo diz quantos cabem antes de o mais antigo sair;
+ *  · um só fechar (o ✖ no canto); "esvaziar" sozinho no rodapé, longe dele.
  * ------------------------------------------------------------------ */
 function lixDataCurta(iso) { return String(iso || "").slice(0, 16).replace("T", " "); }
+let lixBusca = "";
+const lixSel = new Set();
+function lixEl(tag, cls, txt) { const x = document.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; }
+function lixNorm(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+
+/* os dias de calendário entre o apagamento e hoje (no fuso de quem usa) */
+function lixDiasAtras(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const h = new Date(); h.setHours(0, 0, 0, 0);
+  const d0 = new Date(d); d0.setHours(0, 0, 0, 0);
+  return Math.round((h - d0) / 86400000);
+}
+function lixQuando(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return lixDataCurta(iso);
+  const n = lixDiasAtras(iso);
+  const p2 = (x) => String(x).padStart(2, "0");
+  const rel = n <= 0 ? t("lix_hoje") : n === 1 ? t("lix_ontem") : t("lix_ha_dias", { n });
+  return rel + " · " + p2(d.getDate()) + "/" + p2(d.getMonth() + 1) + " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+}
+function lixGrupoDia(iso) {
+  const n = lixDiasAtras(iso);
+  if (n == null) return "antes";
+  return n <= 0 ? "hoje" : n === 1 ? "ontem" : n <= 7 ? "semana" : n <= 31 ? "mes" : "antes";
+}
+
+/* o cartão em partes: "@ caminho", "frente :: verso :: etiquetas", "+ extra" (o "::" dentro de {{c1::…}} não divide) */
+function lixDividir(txt) {
+  const partes = [];
+  let cur = "", prof = 0;
+  for (let i = 0; i < txt.length; i++) {
+    const a = txt[i], b = txt[i + 1];
+    if (a === "{" && b === "{") { prof++; cur += "{{"; i++; continue; }
+    if (a === "}" && b === "}") { prof = Math.max(0, prof - 1); cur += "}}"; i++; continue; }
+    if (!prof && a === ":" && b === ":") { partes.push(cur); cur = ""; i++; continue; }
+    cur += a;
+  }
+  partes.push(cur);
+  return partes.map((s) => s.trim());
+}
+function lixCartaoPartes(bloco) {
+  let caminho = "";
+  const corpo = [], extra = [];
+  String(bloco || "").split("\n").forEach((l) => {
+    const s = l.trim();
+    if (!s) return;
+    if (s[0] === "@" && !caminho && !corpo.length) caminho = s.slice(1).trim();
+    else if (s[0] === "+" && corpo.length) extra.push(s.slice(1).trim());
+    else corpo.push(s);
+  });
+  const p = lixDividir(corpo.join("\n"));
+  /* etiquetas separadas por espaço OU vírgula ("imunidade, obrigacao_acessoria" aparece nos cartões guardados) */
+  return { caminho, frente: p[0] || "", verso: p[1] || "", tags: String(p[2] || "").split(/[\s,;]+/).filter(Boolean), extra: extra.join("\n") };
+}
+/* o texto com as lacunas {{cN::termo(::dica)}} em destaque */
+function lixComLacunas(el, txt) {
+  const re = /\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}/g;
+  let i = 0, m;
+  const s = String(txt || "");
+  while ((m = re.exec(s))) {
+    if (m.index > i) el.append(document.createTextNode(s.slice(i, m.index)));
+    el.append(lixEl("span", "lix-lac", m[1]));
+    i = re.lastIndex;
+  }
+  if (i < s.length) el.append(document.createTextNode(s.slice(i)));
+  return el;
+}
+/* texto longo: o começo e "ver tudo" */
+function lixTextoEl(txt, cls) {
+  const s = String(txt || "");
+  if (s.length <= 320) return lixEl("div", cls || "dec-trecho", s);
+  const box = lixEl("div", cls || "dec-trecho");
+  box.append(document.createTextNode(s.slice(0, 320) + "… "));
+  const d = lixEl("details", "lix-mais");
+  d.append(lixEl("summary", "", t("lix_ver_tudo")), lixEl("div", "lix-tudo", s));
+  box.append(d);
+  return box;
+}
+function lixConteudoEl(it) {
+  const d = it.dados || {};
+  if (it.tipo === "cartao") {
+    const p = lixCartaoPartes(d.bloco);
+    if (!p.frente) return lixTextoEl(lixTexto(it));
+    const box = lixEl("div", "lix-cartao");
+    if (p.caminho) box.append(lixEl("div", "lix-caminho", p.caminho));
+    const fr = lixEl("div", "lix-lado"); fr.append(lixEl("b", "", t("lix_frente"))); lixComLacunas(fr, p.frente); box.append(fr);
+    if (p.verso) { const vs = lixEl("div", "lix-lado"); vs.append(lixEl("b", "", t("lix_verso"))); lixComLacunas(vs, p.verso.length > 400 ? p.verso.slice(0, 400) + "…" : p.verso); box.append(vs); }
+    if (p.tags.length) { const tg = lixEl("div", "lix-tags"); p.tags.slice(0, 8).forEach((x) => tg.append(lixEl("span", "lix-tag", x))); box.append(tg); }
+    /* o original, como estava (o "+ esquema", o "@", tudo) */
+    const og = lixEl("details", "lix-orig");
+    og.append(lixEl("summary", "", t("lix_original")), lixEl("pre", "", String(d.bloco || "")));
+    box.append(og);
+    return box;
+  }
+  if (it.tipo === "questao") {
+    const q = d.q || {};
+    const box = lixEl("div", "");
+    box.append(lixTextoEl(String(q.enunciado || "")));
+    const inf = [];
+    if (q.gabarito) inf.push(t("lix_gabarito", { g: q.gabarito }));
+    const n = (q.tentativas || []).length;
+    if (n) inf.push(t("lix_tentativas", { n }));
+    if (inf.length) box.append(lixEl("div", "nota", inf.join(" · ")));
+    return box;
+  }
+  return lixTextoEl(lixTexto(it));
+}
+/* para onde volta (o último pedaço do "onde", que é o tópico, a questão ou a lei) */
+function lixDestino(it) {
+  const v = it.tipo + "/" + it.via;
+  if (v === "cartao/editor") return t("lix_dest_bancada");
+  if (v === "questao/banco") return t("lix_dest_banco");
+  if (v === "dica/questao") return t("lix_dest_questao");
+  const partes = String(it.onde || "").split("·").map((s) => s.trim()).filter(Boolean);
+  return partes.length ? t("lix_dest_em", { o: partes[partes.length - 1] }) : t("lix_dest_lugar");
+}
 
 function lixItemEl(it) {
-  const el = document.createElement("div");
-  el.className = "duv-item dec-item lix-item";
-  const cab = document.createElement("div");
-  cab.className = "duv-titulo";
-  cab.textContent = lixDataCurta(it.q) + " · " + t("lix_tipo1_" + it.tipo) + (it.rotulo ? " · " + it.rotulo : "");
-  const rk = document.createElement("span");
-  rk.className = "dec-risco dec-risco-" + it.risco;
-  rk.textContent = t("dec_risco_" + it.risco);
-  cab.append(" ", rk);
+  const el = lixEl("div", "duv-item dec-item lix-item" + (lixSel.has(it.id) ? " sel" : ""));
+  const cab = lixEl("div", "duv-titulo lix-cab");
+  const ck = document.createElement("input");
+  ck.type = "checkbox"; ck.className = "lix-ck"; ck.checked = lixSel.has(it.id);
+  ck.setAttribute("aria-label", t("lix_sel_um", { o: lixNomeCurto(it) }));
+  ck.onchange = () => { if (ck.checked) lixSel.add(it.id); else lixSel.delete(it.id); el.classList.toggle("sel", ck.checked); lixPintarSel(); };
+  cab.append(ck, lixEl("span", "lix-tipo", t("lix_tipo1_" + it.tipo)), lixEl("span", "lix-quando", lixQuando(it.q)));
+  /* o selo de risco só quando conta: "risco baixo" em todo item era ruído */
+  if (it.risco === "alto" || it.risco === "medio") cab.append(lixEl("span", "dec-risco dec-risco-" + it.risco, t("dec_risco_" + it.risco)));
   el.append(cab);
-  const onde = document.createElement("div");
-  onde.className = "nota";
-  onde.textContent = [it.onde, it.motivo === "vazio" ? t("lix_veio_vazio") : ""].filter(Boolean).join(" · ");
-  el.append(onde);
-  const txt = lixTexto(it);
-  if (txt) {
-    const tr = document.createElement("div");
-    tr.className = "dec-trecho";
-    tr.textContent = txt.length > 400 ? txt.slice(0, 400) + "…" : txt;
-    el.append(tr);
-  }
-  const acoes = document.createElement("div");
-  acoes.className = "dec-acoes";
-  const br = document.createElement("button");
-  br.type = "button";
-  br.className = "btn-min btn-min-ok lix-restaurar";
-  br.textContent = t("lix_restaurar");
+  const onde = [it.onde ? t("lix_de", { o: it.onde }) : "", it.motivo === "vazio" ? t("lix_veio_vazio") : ""].filter(Boolean).join(" · ");
+  if (onde) el.append(lixEl("div", "nota lix-onde", onde));
+  el.append(lixConteudoEl(it));
+  const acoes = lixEl("div", "dec-acoes");
+  const dest = lixDestino(it);
+  const br = lixEl("button", "btn-min btn-min-ok lix-restaurar", t("lix_restaurar_em", { o: dest.length > 42 ? dest.slice(0, 40) + "…" : dest }));
+  br.type = "button"; br.title = t("lix_restaurar_em", { o: dest });
   br.onclick = () => lixRestaurarUi(it.id);
-  const bv = document.createElement("button");
+  const bv = lixEl("button", "btn-min btn-min-perigo lix-vez", t("lix_apagar_vez"));
   bv.type = "button";
-  bv.className = "btn-min btn-min-perigo lix-vez";
-  bv.textContent = t("lix_apagar_vez");
   bv.onclick = () => lixApagarDeVez(it.id);
   acoes.append(br, bv);
   el.append(acoes);
   return el;
 }
 
+/* o lote: o que saiu de uma vez fica junto, com "restaurar o lote" */
+function lixLoteEl(lote, membros) {
+  const box = lixEl("div", "lix-lote");
+  const cab = lixEl("div", "lix-lote-cab");
+  const um = membros[0];
+  const origem = um.loteOnde === "repetidos" ? t("lix_lote_repetidos") : (um.loteOnde || um.onde || "");
+  cab.append(lixEl("span", "", t("lix_lote_tit", { n: membros.length, o: origem, q: lixQuando(um.q) })));
+  const br = lixEl("button", "btn-min btn-min-ok lix-lote-rest", t("lix_lote_rest", { n: membros.length }));
+  br.type = "button"; br.onclick = () => lixRestaurarVarios(membros.map((x) => x.id));
+  const sel = lixEl("button", "btn-min", t("lix_lote_sel"));
+  sel.type = "button"; sel.onclick = () => { membros.forEach((x) => lixSel.add(x.id)); lixPintar(); };
+  cab.append(br, sel);
+  box.append(cab);
+  const d = lixEl("details", "lix-lote-itens");
+  d.append(lixEl("summary", "", t("lix_lote_ver", { n: membros.length })));
+  membros.slice(0, 60).forEach((x) => d.append(lixItemEl(x)));
+  box.append(d);
+  return box;
+}
+
+function lixVisiveis() {
+  const q = lixNorm(lixBusca).trim();
+  return lixLer().slice().reverse().filter((x) => !lixFiltro || x.tipo === lixFiltro)
+    .filter((x) => !q || q.split(/\s+/).every((w) => lixNorm([lixTexto(x), x.rotulo, x.onde].join(" ")).indexOf(w) >= 0));
+}
+
+/* a barra da seleção: quantos, restaurar, apagar de vez, limpar; sem nada marcado, "marcar todos os visíveis" */
+function lixPintarSel() {
+  const bar = $("lixSelBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const vivos = new Set(lixLer().map((x) => x.id));
+  Array.from(lixSel).forEach((id) => { if (!vivos.has(id)) lixSel.delete(id); });
+  const bt = (cls, txt, fn, id) => { const b = lixEl("button", "btn-min" + (cls ? " " + cls : ""), txt); b.type = "button"; if (id) b.id = id; b.onclick = fn; bar.append(b); return b; };
+  if (lixSel.size) {
+    bar.append(lixEl("span", "lix-sel-n", t("lix_sel_n", { n: lixSel.size })));
+    bt("btn-min-ok", t("lix_sel_rest"), () => lixRestaurarVarios(Array.from(lixSel)), "btnLixSelRest");
+    bt("btn-min-perigo", t("lix_sel_vez"), () => lixApagarVariosDeVez(Array.from(lixSel)), "btnLixSelVez");
+    bt("", t("lix_sel_limpar"), () => { lixSel.clear(); lixPintar(); }, "btnLixSelLimpar");
+  } else {
+    const vis = lixVisiveis();
+    if (vis.length > 1) bt("", t("lix_sel_todos", { n: Math.min(vis.length, 150) }), () => { vis.slice(0, 150).forEach((x) => lixSel.add(x.id)); lixPintar(); }, "btnLixSelTodos");
+  }
+}
+
 function lixPintar() {
   const cx = $("lixLista");
   if (!cx) return;
   const c = lixContar();
-  $("lixResumo").textContent = c.total
-    ? t("lix_resumo", { n: c.total, c: c.cartao, q: c.questao, d: c.dica, nt: c.nota, a: c.alto })
-    : "";
+  /* o resumo: só o que existe, e quantos cabem antes de o mais antigo sair */
+  if (c.total) {
+    const partes = [t("lix_r_total", { n: c.total })];
+    LIX_TIPOS.forEach((k) => { if (c[k]) partes.push(t("lix_r_" + k, { n: c[k] })); });
+    if (c.alto) partes.push(t("lix_r_alto", { n: c.alto }));
+    $("lixResumo").textContent = partes.join(" · ") + ". " + t("lix_r_cabem", { n: Math.max(0, lixMax - c.total), m: lixMax });
+  } else $("lixResumo").textContent = "";
   const fx = $("lixFiltros");
   fx.innerHTML = "";
+  if (lixFiltro && !c[lixFiltro]) lixFiltro = "";
   [""].concat(LIX_TIPOS).forEach((v) => {
-    const b = document.createElement("button");
+    if (v && !c[v]) return;      /* filtro vazio é botão que não leva a nada */
+    const b = lixEl("button", "btn-min" + (lixFiltro === v ? " mat-ligado" : ""), v ? t("lix_t_" + v) + " (" + c[v] + ")" : t("lix_f_todos"));
     b.type = "button";
-    b.className = "btn-min" + (lixFiltro === v ? " mat-ligado" : "");
     b.id = "btnLixF_" + (v || "todos");
-    b.textContent = v ? t("lix_t_" + v) + " (" + c[v] + ")" : t("lix_f_todos");
     b.onclick = () => { lixFiltro = v; lixPintar(); };
     fx.append(b);
   });
+  if ($("lixBusca")) $("lixBusca").hidden = c.total < 2;
+  lixPintarLista();
+}
+
+function lixPintarLista() {
+  const cx = $("lixLista");
+  if (!cx) return;
   cx.innerHTML = "";
-  const todas = lixLer().slice().reverse().filter((x) => !lixFiltro || x.tipo === lixFiltro);
+  const c = lixContar();
+  const todas = lixVisiveis();
+  lixPintarSel();
   if (!todas.length) {
-    const p = document.createElement("p");
-    p.className = "nota";
-    p.textContent = t(c.total ? "lix_vazio_filtro" : "lix_vazio");
-    cx.append(p);
+    cx.append(lixEl("p", "nota", t(!c.total ? "lix_vazio" : lixBusca.trim() ? "lix_busca_nada" : "lix_vazio_filtro")));
     return;
   }
-  todas.slice(0, 100).forEach((x) => cx.append(lixItemEl(x)));
-  if (todas.length > 100) {
-    const m = document.createElement("p");
-    m.className = "nota";
-    m.textContent = t("lix_mais", { n: todas.length - 100 });
-    cx.append(m);
-  }
+  let dia = null;
+  const lotesVistos = new Set();
+  todas.slice(0, 150).forEach((x) => {
+    const g = lixGrupoDia(x.q);
+    if (g !== dia) { dia = g; cx.append(lixEl("div", "lix-dia", t("lix_dia_" + g))); }
+    if (x.lote) {
+      if (lotesVistos.has(x.lote)) return;
+      lotesVistos.add(x.lote);
+      const membros = todas.filter((y) => y.lote === x.lote);
+      if (membros.length > 1) { cx.append(lixLoteEl(x.lote, membros)); return; }
+    }
+    cx.append(lixItemEl(x));
+  });
+  if (todas.length > 150) cx.append(lixEl("p", "nota", t("lix_mais", { n: todas.length - 150 })));
+}
+
+/* VÁRIOS DE UMA VEZ (a seleção ou um lote): cada um pelo caminho de sempre; o que não tem para onde voltar fica */
+function lixRestaurarVarios(ids) {
+  let ok = 0, falha = 0;
+  (ids || []).forEach((id) => { const r = lixRestaurar(id); if (r.ok) ok++; else falha++; });
+  lixSel.clear();
+  try { reg("LIXEIRA", "restaurados de uma vez", ok + " ok · " + falha + " sem destino"); } catch (e) {}
+  lixMostrar(t(falha ? "lix_rest_varios_falha" : "lix_rest_varios", { n: ok, f: falha }), false);
+  lixPintar();
+  return { ok, falha };
+}
+async function lixApagarVariosDeVez(ids) {
+  const itens = lixLer().filter((x) => (ids || []).indexOf(x.id) >= 0);
+  if (!itens.length) return false;
+  const altos = itens.filter((x) => x.risco === "alto").length;
+  if (!(await uiConfirm(t("lix_vez_varios_conf", { n: itens.length, a: altos })))) return false;
+  const fora = new Set(itens.map((x) => x.id));
+  lixLista = lixLista.filter((x) => !fora.has(x.id));
+  lixGravar();
+  if (lixUltimo && fora.has(lixUltimo)) lixUltimo = null;
+  try {
+    if (typeof decRegistrar === "function") {
+      decRegistrar({ area: "apagar", regra: "apagar.definitivo", origem: "pessoa", lei: "", ref: t("lix_sel_vez"),
+        motivo: t("lix_motivo_definitivo"), risco: altos ? "alto" : "medio", decisao: "aceitou", via: "lixeira",
+        proposta: { acao: t("lix_sel_vez"), amostra: itens.slice(0, 5).map((x) => lixNomeCurto(x)).join(" | "), n: itens.length, linhas: [] } });
+    }
+  } catch (e) {}
+  lixSel.clear();
+  lixAtualizarBotao();
+  lixPintar();
+  return true;
+}
+
+/* PLANO B: o lugar de onde o item saiu não existe mais (o tópico, a questão, a lei). O cartão pode voltar para a
+ * bancada; qualquer item pode ter o texto copiado. O item continua na lixeira até a pessoa escolher. */
+function lixPlanoB(item, r) {
+  const opcoes = [];
+  const podeBancada = item && item.tipo === "cartao" && item.dados && typeof item.dados.bloco === "string" && item.via !== "editor";
+  if (podeBancada) opcoes.push({ valor: "bancada", rot: t("lix_pb_bancada"), classe: "btn-verde" });
+  if (item) opcoes.push({ valor: "copiar", rot: t("lix_pb_copiar"), classe: podeBancada ? "" : "btn-verde" });
+  opcoes.push({ valor: "ok", rot: t("help_close") });
+  return uiEscolha(t(r.msg || "lix_falha_generica") + (item ? "\n\n" + t("lix_pb_tx") : ""), opcoes).then((v) => {
+    if (v === "bancada") {
+      const rr = LIX_REST["cartao/editor"](item.dados);
+      if (rr.ok) {
+        lixLista = lixLista.filter((x) => x.id !== item.id);
+        lixGravar();
+        if (lixUltimo === item.id) lixUltimo = null;
+        lixAtualizarBotao();
+        lixMostrar(t("lix_pb_bancada_ok", { o: lixNomeCurto(item) }), false);
+        try { lixPintar(); } catch (e) {}
+      }
+    } else if (v === "copiar") {
+      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(lixTexto(item)).catch(() => {}); } catch (e) {}
+      try { toastMsg(t("lix_pb_copiado"), 3000); } catch (e) {}
+    }
+    return v;
+  });
 }
 
 function lixAbrir() {
   if (!$("dlgLixeira")) return false;
   lixFiltro = "";
+  lixBusca = "";
+  lixSel.clear();
+  if ($("lixBusca")) $("lixBusca").value = "";
   lixEsconder();
   lixPintar();
   abrirModal("dlgLixeira");
@@ -531,6 +775,7 @@ function lixLigar() {
   liga("btnLixX", () => $("dlgLixeira").close());
   liga("btnLixDesfazer", () => lixDesfazer());
   liga("btnLixVer", () => { lixEsconder(); lixAbrir(); });
+  if ($("lixBusca")) $("lixBusca").oninput = () => { lixBusca = $("lixBusca").value || ""; lixPintarLista(); };
   lixAtualizarBotao();
 }
 lixLigar();

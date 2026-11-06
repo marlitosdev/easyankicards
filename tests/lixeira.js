@@ -425,12 +425,14 @@ async function testes() {
     const cx = api.$("lixLista");
     const itens = achar(cx, (c) => cls(c, "lix-item"));
     ok(itens.length === 3 && /Cartão/.test(itens[0].textContent) && /Nota/.test(itens[2].textContent), "H2 os tres itens, do mais novo para o mais velho: " + itens.map((x) => x.children[0].textContent.slice(17, 30)));
-    ok(/3 item\(ns\) · 1 cartão\(ões\) · 0 questão\(ões\) · 0 dica\(s\) · 2 nota\(s\) · 1 de risco alto/.test(api.$("lixResumo").textContent), "H3 o resumo conta por tipo e o risco alto: " + api.$("lixResumo").textContent);
-    ok(api.$("btnLixF_nota").textContent === "notas (2)" && api.$("btnLixF_cartao").textContent === "cartões (1)" && api.$("btnLixF_questao").textContent === "questões (0)", "H4 filtros por tipo com contagem");
+    /* (19.92.0) o resumo conta só o que existe (sem "0 questão(ões)") e diz quantos cabem; filtro vazio não aparece */
+    ok(/^3 item\(ns\) · 1 cartão\(ões\) · 2 nota\(s\) · 1 de risco alto\. Cabem mais 297/.test(api.$("lixResumo").textContent) && !/0 questão/.test(api.$("lixResumo").textContent), "H3 o resumo conta por tipo (só o que existe), o risco alto e quantos ainda cabem: " + api.$("lixResumo").textContent);
+    ok(api.$("btnLixF_nota").textContent === "notas (2)" && api.$("btnLixF_cartao").textContent === "cartões (1)" && !api.$("btnLixF_questao"), "H4 filtros por tipo com contagem; o tipo sem itens não vira botão");
     api.$("btnLixF_nota").onclick();
     ok(achar(api.$("lixLista"), (c) => cls(c, "lix-item")).length === 2, "H5 o filtro mostra so' as notas");
-    api.$("btnLixF_questao").onclick();
-    ok(/Nada deste tipo/.test(api.$("lixLista").textContent), "H6 filtro sem itens: diz que nao ha");
+    api.$("lixBusca").value = "nada parecido"; api.$("lixBusca").oninput();
+    ok(/Nada encontrado/.test(api.$("lixLista").textContent), "H6 busca sem resultado: diz que nao ha");
+    api.$("lixBusca").value = ""; api.$("lixBusca").oninput();
     api.$("btnLixF_todos").onclick();
     ok(itens[0].textContent.indexOf("X :: Y") >= 0 && achar(api.$("lixLista"), (c) => cls(c, "dec-risco-alto")).length === 1
       && achar(api.$("lixLista"), (c) => cls(c, "dec-risco-alto"))[0].textContent === "risco alto", "H7 mostra o texto apagado e o risco (por escrito)");

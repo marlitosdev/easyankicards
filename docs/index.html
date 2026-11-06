@@ -6390,6 +6390,35 @@ dialog.ev-dlg[open] #evPrevia:not([hidden]){flex:1 1 auto;min-height:0;max-heigh
 dialog.ev-dlg[open] #evViva:not([hidden]){flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 dialog.ev-dlg.ev-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
 #evViva>*{flex:0 0 auto}
+/* (19.92.0) a lixeira: uma rolagem (a lista), o cartão como cartão, os dias, o lote e a seleção */
+dialog.lix-dlg[open]{display:flex;flex-direction:column;max-height:92vh;max-height:92dvh;overflow:hidden}
+dialog.lix-dlg[open]>*{flex:0 0 auto}
+dialog.lix-dlg #lixLista{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;color-scheme:light dark}
+.lix-resumo{margin:2px 0 6px}
+.lix-busca{width:100%;box-sizing:border-box;margin:2px 0 6px;background:var(--campo);color:var(--texto);border:1px solid var(--borda);border-radius:8px;padding:6px 8px}
+.lix-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 4px;font-size:12.5px;min-height:4px}
+.lix-sel-n{font-weight:800}
+.lix-dia{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin:12px 0 2px}
+.lix-item.sel{outline:2px solid var(--info);outline-offset:-2px;border-radius:8px}
+.lix-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lix-ck{width:16px;height:16px;flex:none}
+.lix-tipo{font-weight:800}
+.lix-quando{color:var(--sutil);font-size:12.5px;font-weight:400}
+.lix-onde{margin:2px 0}
+.lix-cartao{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:4px 0;background:var(--campo)}
+.lix-caminho{font-size:11.5px;color:var(--sutil);margin-bottom:2px}
+.lix-lado{font-size:13.5px;margin:3px 0;white-space:pre-wrap}
+.lix-lado b{font-size:10.5px;color:var(--sutil);text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
+.lix-lac{background:color-mix(in srgb,var(--info) 20%,transparent);border-radius:4px;padding:0 4px;font-weight:700}
+.lix-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.lix-tag{font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--borda);color:var(--sutil)}
+.lix-orig{margin-top:4px}.lix-orig>summary,.lix-mais>summary{cursor:pointer;font-size:11.5px;color:var(--sutil)}
+.lix-orig pre{white-space:pre-wrap;font-size:11.5px;margin:4px 0;max-height:180px;overflow:auto}
+.lix-mais{display:inline}.lix-tudo{white-space:pre-wrap;margin-top:4px}
+.lix-lote{border:1px dashed var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0}
+.lix-lote-cab{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-weight:700;font-size:13px}
+.lix-lote-itens>summary{cursor:pointer;font-size:12px;color:var(--sutil);margin-top:4px}
+.lix-rodape{justify-content:flex-start}
 /* a lista é a ÚNICA que cresce e rola (a regra de cima, por ser de id, venceria o .evv-rol sozinho) */
 #evViva>.evv-rol{flex:1 1 auto;min-height:0;overflow:auto}
 .ev-modos{display:flex;gap:6px;margin:4px 0 2px}
@@ -10614,18 +10643,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <!-- LIXEIRA (lixeira.js): o que você apaga vem para cá antes de sumir de vez. -->
-<dialog id="dlgLixeira" class="ui-modal diag-modal">
+<!-- (19.92.0) um só fechar (o ✖); busca; a seleção de vários; "esvaziar" sozinho no rodapé, longe do fechar -->
+<dialog id="dlgLixeira" class="ui-modal diag-modal lix-dlg">
   <div class="vka-cab">
     <h3 data-i18n="lix_titulo"></h3>
-    <button type="button" class="dlg-x" id="btnLixX" data-i18n-title="help_close">✖</button>
+    <button type="button" class="dlg-x" id="btnLixX" data-i18n-title="help_close" aria-label="Fechar">✖</button>
   </div>
   <p class="nota" data-i18n="lix_ajuda"></p>
-  <p class="nota" id="lixResumo"></p>
+  <p class="nota lix-resumo" id="lixResumo"></p>
+  <input type="search" id="lixBusca" class="lix-busca" data-i18n-ph="lix_busca_ph" placeholder="procurar">
   <div class="lei-ir-filtros" id="lixFiltros"></div>
+  <div class="lix-sel" id="lixSelBar"></div>
   <div id="lixLista" class="lei-dup-lista"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-cinza btn-min-perigo" id="btnLixEsvaziar" data-i18n="lix_esvaziar"></button>
-    <button class="btn btn-cinza" id="btnLixFechar" data-i18n="help_close"></button>
+  <div class="dlg-rodape lix-rodape">
+    <button class="btn-min btn-min-perigo" id="btnLixEsvaziar" data-i18n="lix_esvaziar"></button>
   </div>
 </dialog>
 
