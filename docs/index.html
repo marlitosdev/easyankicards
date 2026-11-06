@@ -5460,6 +5460,19 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .ds-mp-ruim{background:color-mix(in srgb,var(--erro) 55%,var(--panel))}
 .hub-ritmo-mapa{margin:6px 0}
 .ed-agenda-horas-usando{color:var(--ok);font-weight:700}
+/* (19.84.0) a faixa de avisos e a gaveta de ajustes da agenda */
+.hub-avisos{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+.hub-aviso-chip{font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--borda);background:var(--campo);color:var(--texto);cursor:pointer}
+.hub-aviso-chip.ok{border-color:var(--ok);color:var(--ok)}
+.hub-aviso-chip.alerta{border-color:var(--atencao);color:var(--atencao)}
+.hub-aviso-chip.aberto{background:color-mix(in srgb,var(--info) 14%,var(--campo));border-color:var(--info)}
+.hub-aviso-chip.novo{box-shadow:0 0 0 2px color-mix(in srgb,var(--atencao) 45%,transparent)}
+.hub-aviso-painel{margin:4px 0 8px}
+.hub-ajustes{margin:4px 0 8px;border:1px solid var(--borda);border-radius:8px;padding:4px 10px}
+.hub-ajustes>summary{cursor:pointer;font-size:12.5px;color:var(--sutil);font-weight:700;padding:3px 0}
+.hub-ajustes[open]>summary{color:var(--texto)}
+.hub-modo-resto{margin:4px 0 0}
+.hub-modo-resto>summary{cursor:pointer;font-size:12px;color:var(--sutil)}
 /* (19.80.0) a pergunta 3 quando faltam as disciplinas da discursiva */
 .ep-disc-atalhos{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
 /* (19.83.0) a confirmação de "Pontuação e cortes" em seções */

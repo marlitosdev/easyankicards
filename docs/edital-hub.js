@@ -356,6 +356,16 @@ function hubPintarAgenda() {
     cx.append(av);
   }
 
+  /* =====================================================================
+   * (19.84.0) A AGENDA PRIMEIRO. Antes da primeira tarefa havia ~1.500 px: um cartão de discursiva por edital, o aviso
+   * de ritmo aberto, o modo de estudo com as 25 disciplinas abertas (abria sozinho com uma só em modo próprio) e o
+   * "onde foi o seu tempo". Agora: UMA faixa de avisos em chips — tocar abre o detalhe logo abaixo, um por vez — e os
+   * ajustes (modo de estudo, por disciplina, IA) numa gaveta fechada. O que estava aberto fica lembrado neste aparelho;
+   * um aviso novo ou que piorou (ritmo da semana, conferência a mais) abre sozinho UMA vez.
+   * ===================================================================== */
+  const painel = (id) => { const x = document.createElement("div"); x.className = "hub-aviso-painel"; x.id = "hubAvisoPainel_" + id; return x; };
+  const pDisc = painel("disc"), pConf = painel("conf"), pRitmo = painel("ritmo"), pEquil = painel("equil");
+  let discF = 0, discM = 0, equilAtras = 0;
   /* (19.56.0) O TREINO DA DISCURSIVA. Discursiva se treina escrevendo, não só estudando o conteúdo: com a discursiva
    * cadastrada, a semana pede uma dissertação no formato do edital. "feito esta semana" é guardado por semana. */
   /* (19.75.0) a meta da semana vem da estratégia da tela Discursivas (fase pela distância da prova, ajustada pelas
@@ -394,7 +404,8 @@ function hubPintarAgenda() {
     b.textContent = t(marcado ? "hub_disc_treino_desfazer" : "hub_disc_treino_feito");
     b.onclick = () => { hubDiscTreinoMarcar(q.id, !marcado); hubPintarAgenda(); };
     ln.append(tx, ir, b);
-    cx.append(ln);
+    pDisc.append(ln);
+    discF += Math.min(feitas, meta); discM += meta;
   });
   /* (19.54.0) a conferência do edital, em uma linha por edital que ainda tem pendência (o detalhe fica no edital) */
   confs.forEach((q) => {
@@ -407,14 +418,12 @@ function hubPintarAgenda() {
     b.id = "btnHubConf_" + q.id;
     b.onclick = () => hubConferir(q.id);
     ln.append(tx, b);
-    cx.append(ln);
+    pConf.append(ln);
   });
   /* (19.51.0) O AVISO DE RITMO DIZ O QUE MUDA, e oferece quatro saídas: planejar com o ritmo real, manter as horas do
    * edital (o aviso some por 14 dias, ou até o ritmo cair mais), outra meta (com a conta antes de aplicar) e pedir
    * a opinião de uma IA, com o contexto todo. O que se decide fica no registro. */
-  if (hubRitmoAvisar || minUsado) cx.append(hubRitmoCaixa(ritmo, minUsado, meta));
-  /* (19.79.0) com o aviso de ritmo na tela, os botões de IA ficam só nele (eram os mesmos dois, repetidos logo abaixo) */
-  cx.append(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }));
+  if (hubRitmoAvisar || minUsado) pRitmo.append(hubRitmoCaixa(ritmo, minUsado, meta));
   /* (19.47.0) A FAIXA DO EQUILÍBRIO — (19.51.0) com o que ela quer dizer, e mais enxuta: as 3 mais atrasadas e a mais
    * adiantada, nomes sem "Noções de", "vale X% · teve Y%", e o porquê num "?" que abre */
   equilibrios.forEach((q) => {
@@ -444,8 +453,60 @@ function hubPintarAgenda() {
     tx.textContent = t("hub_equil_explica");
     det.append(sm, tx);
     fx.append(det);
-    cx.append(fx);
+    pEquil.append(fx);
+    equilAtras += atras.length;
   });
+
+  /* a faixa: um chip por assunto que tem o que dizer */
+  const avisos = [];
+  if (discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc", { f: discF, m: discM }), cls: discF >= discM ? "ok" : "", p: pDisc });
+  if (hubRitmoAvisar || minUsado) {
+    const usando = !!minUsado;
+    avisos.push({ id: "ritmo", txt: usando ? t("hub_av_ritmo_usando", { r: horasTexto(minUsado) }) : t("hub_av_ritmo", { r: horasTexto(hubRitmoAvisar.real), p: horasTexto(hubRitmoAvisar.plano) }),
+      cls: usando ? "" : "alerta", p: pRitmo, sig: usando ? "" : edSemanaCalendario(hubHoje()).ini });
+  }
+  if (confs.length) {
+    const nP = confs.reduce((a, q) => a + q.pend.length, 0);
+    avisos.push({ id: "conf", txt: t("hub_av_conf", { n: nP }), cls: "alerta", p: pConf, sig: String(nP) });
+  }
+  if (equilAtras) avisos.push({ id: "equil", txt: t("hub_av_equil", { n: equilAtras }), cls: "", p: pEquil });
+  if (avisos.length) {
+    const fx = document.createElement("div");
+    fx.className = "hub-avisos"; fx.id = "hubAvisos";
+    fx.setAttribute("role", "group"); fx.setAttribute("aria-label", t("hub_av_aria"));
+    let aberto = "";
+    try { aberto = localStorage.getItem("eac_ag_aviso_aberto") || ""; } catch (e) {}
+    /* novo ou pior: abre uma vez (a assinatura muda a cada semana no ritmo, e quando a conferência ganha pendência) */
+    let sigs = {};
+    try { sigs = JSON.parse(localStorage.getItem("eac_ag_avisos_sig") || "{}") || {}; } catch (e) { sigs = {}; }
+    avisos.forEach((a) => {
+      if (!a.sig) return;
+      const velho = sigs[a.id];
+      const pior = a.id === "conf" ? !velho || Number(a.sig) > Number(velho) : velho !== a.sig;
+      if (pior && !aberto) { aberto = a.id; a.novo = true; }
+      sigs[a.id] = a.sig;
+    });
+    try { localStorage.setItem("eac_ag_avisos_sig", JSON.stringify(sigs)); } catch (e) {}
+    if (!avisos.some((a) => a.id === aberto)) aberto = "";
+    avisos.forEach((a) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.id = "hubAviso_" + a.id;
+      b.className = "hub-aviso-chip" + (a.cls ? " " + a.cls : "") + (aberto === a.id ? " aberto" : "") + (a.novo ? " novo" : "");
+      b.textContent = a.txt + (aberto === a.id ? " ▴" : " ▾");
+      b.setAttribute("aria-expanded", aberto === a.id ? "true" : "false");
+      b.setAttribute("aria-controls", "hubAvisoPainel_" + a.id);
+      b.onclick = () => {
+        const v = aberto === a.id ? "" : a.id;
+        try { localStorage.setItem("eac_ag_aviso_aberto", v); } catch (e) {}
+        hubPintarAgenda();
+      };
+      fx.append(b);
+    });
+    cx.append(fx);
+    avisos.forEach((a) => { a.p.hidden = aberto !== a.id; cx.append(a.p); });
+  }
+  /* os ajustes da agenda: fechados, com uma linha de resumo; o modo por disciplina mostra primeiro as que têm modo próprio */
+  cx.append(hubAjustesGaveta(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }), modosVistos, modoSugerido, diasProx));
 
   const sub = document.createElement("div");
   sub.className = "ed-caixa-sub";
@@ -657,7 +718,13 @@ function hubModoControles(modosVistos, sugerido, dias, opc) {
     const sm = document.createElement("summary");
     sm.textContent = t("hub_modo_por_disc") + (nOver ? " (" + nOver + ")" : "");
     det.append(sm);
-    if (nOver) det.open = true;
+    /* (19.84.0) não abre sozinho (abria com UMA disciplina em modo próprio e listava as 25); dentro, as de modo próprio
+     * primeiro e as outras num "ver todas" */
+    const resto = document.createElement("details");
+    resto.className = "hub-modo-resto";
+    const smR = document.createElement("summary");
+    smR.textContent = t("hub_modo_ver_todas", { n: discs.length - nOver });
+    resto.append(smR);
     discs.forEach((d, k) => {
       const lin = document.createElement("div");
       lin.className = "hub-modo-lin";
@@ -671,11 +738,31 @@ function hubModoControles(modosVistos, sugerido, dias, opc) {
       s2.value = v.disc[d] || "geral";
       s2.onchange = () => { hubModoDefinir(d, s2.value); hubPintarAgenda(); };
       lin.append(nm, s2);
-      det.append(lin);
+      (v.disc[d] ? det : resto).append(lin);
     });
+    if (nOver < discs.length) { if (!nOver) resto.open = true; det.append(resto); }
     cx.append(det);
   }
   return cx;
+}
+
+/* (19.84.0) A GAVETA "⚙ Ajustes da agenda": o modo de estudo (geral e por disciplina) e a IA, fechada por padrão. A linha
+ * de resumo diz o que está valendo sem abrir: "Modo: Automático · Consolidar (prova em 24 dias) · 1 com modo próprio". */
+function hubAjustesGaveta(conteudo, modosVistos, sugerido, dias) {
+  const det = document.createElement("details");
+  det.className = "hub-ajustes"; det.id = "hubAjustes";
+  let aberto = false;
+  try { aberto = localStorage.getItem("eac_ag_ajustes_aberto") === "1"; } catch (e) {}
+  det.open = aberto;
+  det.ontoggle = () => { try { localStorage.setItem("eac_ag_ajustes_aberto", det.open ? "1" : "0"); } catch (e) {} };
+  const v = hubModosLer();
+  const nOver = Object.keys(modosVistos || {}).filter((d) => v.disc[d]).length;
+  const geral = v.geral && v.geral !== "auto" ? hubModoRotulo(v.geral)
+    : t("hub_aj_auto", { m: t("hub_modo_" + (sugerido || "equilibrado")) }) + (dias != null ? " " + t("hub_aj_dias", { d: dias }) : "");
+  const sm = document.createElement("summary");
+  sm.textContent = t("hub_aj_tit") + " · " + t("hub_aj_modo", { m: geral }) + (nOver ? " · " + t("hub_aj_proprio", { n: nOver }) : "");
+  det.append(sm, conteudo);
+  return det;
 }
 
 /* (19.52.0) os botões da janela "colar a resposta da IA" */
