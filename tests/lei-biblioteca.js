@@ -210,7 +210,9 @@ async function testes() {
     ok(cards.length === 3, "B4 a tela devia ter 3 cartoes: " + cards.length);
     const txt = (el) => [el].concat(achar(el, () => true)).map((c) => c.textContent || "").join(" ");
     const c4320 = cards.filter((c) => /4\.320/.test(txt(c)))[0];
-    ok(/10 artigo/.test(txt(c4320)) && /ligada a 2 tópico/.test(txt(c4320)) && /parei no art\. 4/.test(txt(c4320)) && /sigla: LORC/.test(txt(c4320)),
+    /* (19.98.0) "onde parei" virou o selo "lida 40%" ao lado do nome (com "parei no art. 4" no balão) */
+    const lida = achar(c4320, (c) => /lb-lida/.test(c.className || ""))[0];
+    ok(/10 artigo/.test(txt(c4320)) && /ligada a 2 tópico/.test(txt(c4320)) && lida && /parei no art\. 4/.test(lida.title) && /sigla: LORC/.test(txt(c4320)),
        "B4a o cartao nao diz artigos, onde e' usada, onde parei e a sigla: " + txt(c4320).slice(0, 300));
     const cctm = cards.filter((c) => /015/.test(txt(c)))[0];
     ok(/1 anexo/.test(txt(cctm)) && /cidade\/órgão: Caruaru/.test(txt(cctm)), "B4b anexo e cidade no cartao");

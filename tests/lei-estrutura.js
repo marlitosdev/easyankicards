@@ -249,6 +249,8 @@ async function testes() {
     ok(api.leiDe(l.id).texto === CTN, "G14 o texto guardado nao foi tocado");
     /* pela Biblioteca */
     api.leiBibAbrir();
+    /* (19.98.0) "mapa e conferência" mora no "⋯" da linha da lei */
+    achar(api.$("leiBibLista"), (c) => c.id === "btnLeiBibMais_lei_ctn")[0].onclick({ stopPropagation() {} });
     const bt = achar(api.$("leiBibLista"), (c) => c.id === "btnLeiBibMapa_lei_ctn");
     ok(bt.length === 1, "G15 o cartao da biblioteca tem 'mapa e conferência'");
     bt[0].onclick();

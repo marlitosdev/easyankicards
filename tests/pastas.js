@@ -58,7 +58,8 @@ async function testes() {
     const cf = api.leiGuardar({ nome: "Constituição Federal", texto: "Art. 1º Texto.", topicos: [] });
     api.leiBibAbrir();
     const chips = () => api.$("leiBibPastas").querySelectorAll("button").map((b) => b.textContent);
-    ok(chips().join(" | ") === "📂 Todas as pastas | 📋 ISS Caruaru · 1 | ＋ pasta", "B1 a fileira: todas, o edital (com 1 lei) e criar: " + chips().join(" | "));
+    /* (19.98.0) e, no fim, o filtro "🔗 sem tópico" */
+    ok(chips().join(" | ") === "📂 Todas as pastas | 📋 ISS Caruaru · 1 | ＋ pasta | 🔗 sem tópico · 2", "B1 a fileira: todas, o edital (com 1 lei), criar e sem tópico: " + chips().join(" | "));
     const fiscal = api.pasCriar("Área fiscal");
     api.pasAlternar(fiscal.id, "lei", lc.id); api.pasAlternar(fiscal.id, "lei", cf.id);
     api.leiBibPintar();
