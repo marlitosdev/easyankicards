@@ -1707,6 +1707,12 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .pas-li{display:flex;align-items:center;gap:6px}
 .pas-marca{flex:1;display:flex;align-items:center;gap:6px;cursor:pointer}
 .pas-ren{flex:1}
+.pas-sec-tit{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--sutil);margin:10px 0 2px}
+.pas-sec-tit[hidden]{display:none}
+.pas-porque{font-size:12px;color:var(--sutil);white-space:nowrap}
+.pas-li input:disabled{opacity:.7}
+.pas-encerrado{opacity:.75}
+.pas-chip.pas-enc-alt{border-style:dotted;color:var(--sutil)}
 /* (v19.17.0) backup automático numa pasta */
 /* (19.40.0) o balão do backup automático: círculo arrastável, por cima de tudo */
 .bka-bolha{position:fixed;z-index:9000;width:46px;height:46px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;
@@ -10824,6 +10830,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 <dialog id="dlgPastas" class="ui-modal">
   <h3 id="pasTit"></h3>
   <p class="nota" data-i18n="pas_dlg_exp"></p>
+  <!-- (19.97.0) as pastas de edital também se marcam aqui: automáticas (travadas, com o porquê) ou postas à mão -->
+  <div class="pas-sec-tit" id="pasEdTit" data-i18n="pas_sec_editais"></div>
+  <div id="pasEdLista" class="pas-lista"></div>
+  <div class="pas-sec-tit" data-i18n="pas_sec_livres"></div>
   <div id="pasLista" class="pas-lista"></div>
   <div class="pas-nova">
     <input type="text" id="pasNovaNome" maxlength="60" data-i18n-ph="pas_nova_ph">

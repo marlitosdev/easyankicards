@@ -80,7 +80,9 @@ const BK_CHAVES = {
              /* (v19.11.0) as seções do resumo já lidas: o trabalho de saber o que falta ler */
              "eac_mat_lidas",
              /* (v19.12.0) as pastas livres de leis e julgados (só nomes e atalhos) */
-             "eac_pastas"],
+             "eac_pastas",
+             /* (v19.97.0) o que foi posto à mão na pasta de um edital */
+             "eac_pastas_ed"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de

@@ -10,6 +10,15 @@
  *  · PASTA LIVRE (📁): o nome que a pessoa quiser; guarda ATALHOS ({t: "lei"|"jur", id}). Pôr numa pasta não tira de
  *    outra, não liga a tópico nenhum, e apagar a pasta não apaga lei nem julgado.
  * Mora em "eac_pastas" (pequeno: nomes e ids) e vai no backup.
+ *
+ * (19.97.0) A PASTA DO EDITAL FICOU COMPLETA. Ela só via as leis ligadas a tópicos do edital — e, no backup de 07/11, o
+ * 📋 ISS não tinha a Lei 9.784, a 4.717 nem a 4.320, todas usadas em vínculos de tópicos do ISS; a 4.320 só aparecia no
+ * 📋 TCE-PE, edital de prova já passada. Agora a pasta do edital tem três fontes:
+ *  · as leis e julgados LIGADOS a tópicos do edital (como antes);
+ *  · os USADOS em vínculos de tópicos do edital (o "art. 105" ligado à Lei 4.320 no PCASP);
+ *  · os que a pessoa PÔS À MÃO (a lei que vale para o concurso inteiro, não para um tópico) — em "eac_pastas_ed".
+ * E a pasta é do EDITAL (id), não do nome do concurso: renomear o cabeçalho não muda mais a pasta. O id antigo
+ * ("ed:<nome do concurso>") continua sendo entendido. Os editais de prova já passada vão para o fim, recolhidos.
  * ===================================================================== */
 const PAS_CHAVE = "eac_pastas";
 
@@ -48,6 +57,8 @@ function pasApagar(id) {
 function pasTem(p, t, id) { return !!(p && (p.itens || []).some((x) => x.t === t && x.id === id)); }
 /* põe ou tira o atalho; devolve se ficou dentro */
 function pasAlternar(pastaId, t, id, sim) {
+  /* (19.97.0) a pasta de um edital também aceita o que se põe à mão */
+  if (String(pastaId || "").indexOf("ed:") === 0) return pasEdAlternar(pastaId, t, id, sim);
   const lista = pasLer();
   const p = lista.find((x) => x.id === pastaId);
   if (!p || !id) return false;
@@ -60,6 +71,79 @@ function pasAlternar(pastaId, t, id, sim) {
 }
 function pasDoItem(t, id) { return pasLer().filter((p) => pasTem(p, t, id)); }
 
+/* ---------------- (19.97.0) a pasta do edital ---------------- */
+const PAS_ED_CHAVE = "eac_pastas_ed";          /* {editalId: [{t, id}]} — o que foi posto à mão na pasta de um edital */
+function pasEdManualLer() {
+  try { const v = JSON.parse(localStorage.getItem(PAS_ED_CHAVE) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
+}
+function pasEdManualGravar(o) { try { localStorage.setItem(PAS_ED_CHAVE, JSON.stringify(o || {})); return true; } catch (e) { return false; } }
+function pasNormChave(c) { return typeof matChaveNormal === "function" ? matChaveNormal(c) : String(c || "").toLowerCase().trim(); }
+/* os editais, os tópicos de cada um e onde cada lei/julgado é usado em vínculos — memorizado por uma assinatura barata */
+let pasEdCache = null;
+function pasEdIndice() {
+  const eds = typeof editais !== "undefined" && Array.isArray(editais) ? editais : [];
+  let vs = [];
+  try { vs = typeof citVinculosLer === "function" ? citVinculosLer() : []; } catch (e) { vs = []; }
+  const sig = eds.map((e) => e.id + ":" + String(e.texto || "").length + ":" + (e.nome || "")).join("|") + "#"
+    + vs.map((v) => (v.k || "") + (v.leiId || "") + (v.jurId || "") + (v.nenhum ? "0" : "")).join("|");
+  if (pasEdCache && pasEdCache.sig === sig) return pasEdCache;
+  const lista = [];
+  eds.forEach((e) => {
+    let r = null;
+    try { r = typeof lerEdital === "function" ? lerEdital(e.texto || "") : null; } catch (x) { r = null; }
+    const cfg = (r && r.cfg) || {};
+    const chaves = new Set();
+    ((r && r.disciplinas) || []).forEach((d) => (d.topicos || []).forEach((tp) => chaves.add(pasNormChave(typeof matChave === "function" ? matChave(d.nome, tp.nome) : d.nome + "›" + tp.nome))));
+    let enc = false;
+    try { enc = typeof edSituacao === "function" && edSituacao(e).grupo === "encerrado"; } catch (x) { enc = false; }
+    lista.push({ id: String(e.id), nome: e.nome || cfg.concurso || "?", concurso: String(cfg.concurso || "").trim(), chaves, encerrado: enc });
+  });
+  const usos = new Map();
+  vs.forEach((v) => {
+    if (!v || v.nenhum || !v.chave) return;
+    const k = v.tipo === "jur" ? (v.jurId ? "jur:" + v.jurId : "") : (v.leiId ? "lei:" + v.leiId : "");
+    if (!k) return;
+    const u = usos.get(k) || new Set();
+    u.add(pasNormChave(v.chave));
+    usos.set(k, u);
+  });
+  pasEdCache = { sig, lista, usos };
+  return pasEdCache;
+}
+/* o edital de uma pasta "ed:…": pelo id; o id antigo ("ed:<nome do concurso>") também serve */
+function pasEdAchar(pastaId, ix) {
+  const r = String(pastaId || "").slice(3);
+  const l = (ix || pasEdIndice()).lista;
+  return l.find((e) => e.id === r) || l.find((e) => e.concurso === r || e.nome === r) || null;
+}
+/* POR QUE o item está na pasta do edital: "topico" (ligado a tópico), "vinculo" (usado em vínculo), "mao" ou "" */
+function pasEdMotivo(ed, item, ix) {
+  if (!ed || !item) return "";
+  if ((item.topicos || []).some((c) => ed.chaves.has(pasNormChave(c)))) return "topico";
+  const u = (ix || pasEdIndice()).usos.get(item.t + ":" + item.id);
+  if (u && [...u].some((c) => ed.chaves.has(c))) return "vinculo";
+  if ((pasEdManualLer()[ed.id] || []).some((x) => x.t === item.t && x.id === item.id)) return "mao";
+  return "";
+}
+function pasEdAlternar(pastaId, t, id, sim) {
+  const ed = pasEdAchar(pastaId);
+  if (!ed || !id) return false;
+  const o = pasEdManualLer();
+  const l = Array.isArray(o[ed.id]) ? o[ed.id] : [];
+  const tem = l.some((x) => x.t === t && x.id === id);
+  const quer = sim === undefined ? !tem : !!sim;
+  if (quer && !tem) o[ed.id] = l.concat([{ t, id }]);
+  if (!quer && tem) o[ed.id] = l.filter((x) => !(x.t === t && x.id === id));
+  if (o[ed.id] && !o[ed.id].length) delete o[ed.id];
+  pasEdManualGravar(o);
+  return quer;
+}
+/* as pastas de edital em que o item está (com o porquê) */
+function pasEditaisDoItem(item) {
+  const ix = pasEdIndice();
+  return ix.lista.map((ed) => ({ ed, motivo: pasEdMotivo(ed, item, ix) })).filter((x) => x.motivo);
+}
+
 /* os editais (concursos) de uma lista de tópicos (as chaves "disciplina›tópico"), pelo índice do material */
 function pasEditaisDe(chaves, idx) {
   const out = [];
@@ -71,23 +155,38 @@ function pasEditaisDe(chaves, idx) {
   return out;
 }
 function pasIndice() { try { return typeof matIndiceConcursos === "function" ? matIndiceConcursos() : new Map(); } catch (e) { return new Map(); } }
-/* as pastas para mostrar: as de edital (dos editais cadastrados) e as livres */
+/* as pastas para mostrar: as de edital (por id; as de prova já passada no fim) e as livres. Sem editais cadastrados,
+ * as de edital saem do índice de concursos que a pessoa passar (o modo antigo). */
 function pasTodas(idx) {
-  const eds = [];
-  (idx || new Map()).forEach((ccs) => (ccs || []).forEach((cc) => { if (eds.indexOf(cc) < 0) eds.push(cc); }));
-  return eds.sort((a, b) => a.localeCompare(b)).map((cc) => ({ id: "ed:" + cc, nome: cc, edital: true }))
-    .concat(pasLer().map((p) => Object.assign({ edital: false }, p)));
+  const ix = pasEdIndice();
+  let eds;
+  if (ix.lista.length) {
+    const ord = (a, b) => a.nome.localeCompare(b.nome);
+    eds = ix.lista.filter((e) => !e.encerrado).sort(ord).concat(ix.lista.filter((e) => e.encerrado).sort(ord))
+      .map((e) => ({ id: "ed:" + e.id, nome: e.nome, edital: true, encerrado: e.encerrado }));
+  } else {
+    const nomes = [];
+    (idx || new Map()).forEach((ccs) => (ccs || []).forEach((cc) => { if (nomes.indexOf(cc) < 0) nomes.push(cc); }));
+    eds = nomes.sort((a, b) => a.localeCompare(b)).map((cc) => ({ id: "ed:" + cc, nome: cc, edital: true, encerrado: false }));
+  }
+  return eds.concat(pasLer().map((p) => Object.assign({ edital: false }, p)));
 }
 /* o item está na pasta? (item = {t, id, topicos}) */
 function pasContem(pastaId, item, idx) {
   if (!pastaId) return true;
   if (!item) return false;
-  if (pastaId.indexOf("ed:") === 0) return pasEditaisDe(item.topicos || [], idx).indexOf(pastaId.slice(3)) >= 0;
+  if (pastaId.indexOf("ed:") === 0) {
+    const ix = pasEdIndice();
+    const ed = pasEdAchar(pastaId, ix);
+    if (ed) return !!pasEdMotivo(ed, item, ix);
+    return pasEditaisDe(item.topicos || [], idx).indexOf(pastaId.slice(3)) >= 0;
+  }
   return pasTem(pasLer().find((p) => p.id === pastaId), item.t, item.id);
 }
 
 /* ---------------- a fileira de pastas (nas duas bibliotecas) ---------------- */
 /* o = { cx, t: "lei"|"jur", itens: [{t, id, topicos}], sel, escolher(id) } */
+let pasVerEncerrados = false;
 function pasFileira(o) {
   const cx = o && o.cx;
   if (!cx) return 0;
@@ -108,13 +207,18 @@ function pasFileira(o) {
   };
   bt(t("pas_todas"), t("pas_todas_aj"), !o.sel, () => o.escolher(""));
   let n = 0;
+  const chip = (p, k) => {
+    bt((p.edital ? "📋 " : "📁 ") + p.nome + " · " + k, t(p.edital ? (p.encerrado ? "pas_edital_enc_aj" : "pas_edital_aj") : "pas_livre_aj", { p: p.nome }), o.sel === p.id,
+      () => o.escolher(o.sel === p.id ? "" : p.id), p.edital ? "pas-edital" + (p.encerrado ? " pas-encerrado" : "") : "pas-livre");
+    n++;
+  };
+  /* pasta de edital sem nada deste tipo não ocupa lugar; a livre aparece sempre (é onde se põe) */
+  const encerradas = [];
   todas.forEach((p) => {
     const k = conta(p.id);
-    /* pasta de edital sem nada deste tipo não ocupa lugar; a livre aparece sempre (é onde se põe) */
     if (p.edital && !k) return;
-    bt((p.edital ? "📋 " : "📁 ") + p.nome + " · " + k, t(p.edital ? "pas_edital_aj" : "pas_livre_aj", { p: p.nome }), o.sel === p.id,
-      () => o.escolher(o.sel === p.id ? "" : p.id), p.edital ? "pas-edital" : "pas-livre");
-    n++;
+    if (p.edital && p.encerrado) { encerradas.push([p, k]); return; }
+    chip(p, k);
   });
   bt(t("pas_nova"), t("pas_nova_aj"), false, async () => {
     const nome = await uiTexto(t("pas_nova_pergunta"), "");
@@ -123,6 +227,13 @@ function pasFileira(o) {
     try { reg("MATERIAL", "pasta criada", p.nome); } catch (e) {}
     o.escolher(o.sel);
   }, "pas-nova");
+  /* (19.97.0) as de prova já passada no fim, atrás de um toque (aberto se uma delas é a escolhida) */
+  if (encerradas.length) {
+    const ver = pasVerEncerrados || encerradas.some(([p]) => p.id === o.sel);
+    if (ver) encerradas.forEach(([p, k]) => chip(p, k));
+    bt(ver ? t("pas_enc_menos") : t("pas_enc_mais", { n: encerradas.length }), t("pas_enc_aj"), false,
+      () => { pasVerEncerrados = !ver; o.escolher(ver && encerradas.some(([p]) => p.id === o.sel) ? "" : o.sel); }, "pas-enc-alt");
+  }
   return n;
 }
 
@@ -134,7 +245,13 @@ function pasBotaoItem(tipo, id, rotulo, aoMudar) {
   b.type = "button";
   b.className = "btn-min pas-item";
   b.id = "btnPas_" + tipo + "_" + id;
-  const n = pasDoItem(tipo, id).length;
+  /* (19.97.0) conta as pastas livres e as de edital em que o item está */
+  let nEd = 0;
+  try {
+    const it = tipo === "lei" ? ((typeof leiDe === "function" && leiDe(id)) || {}) : ((typeof jurDe === "function" && jurDe(id)) || {});
+    nEd = pasEditaisDoItem({ t: tipo, id, topicos: it.topicos || [] }).length;
+  } catch (e) { nEd = 0; }
+  const n = pasDoItem(tipo, id).length + nEd;
   b.textContent = n ? "📁 " + n : t("pas_item_0");
   b.title = t("pas_item_aj", { n });
   b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); pasAbrir(tipo, id, rotulo, aoMudar); };
@@ -199,13 +316,48 @@ function pasPintar() {
     }
     cx.append(li);
   });
-  /* as de edital deste item: automáticas, só para saber */
-  let eds = [];
-  try {
-    const topicos = c.t === "lei" ? ((typeof leiDe === "function" && leiDe(c.id)) || {}).topicos : ((typeof jurDe === "function" && jurDe(c.id)) || {}).topicos;
-    eds = pasEditaisDe(topicos || [], pasIndice());
-  } catch (e) { eds = []; }
-  $("pasEditais").textContent = eds.length ? t("pas_editais_do_item", { l: eds.join(", ") }) : t("pas_editais_nenhum");
+  /* (19.97.0) AS PASTAS DE EDITAL, NA MESMA JANELA. Marcadas sozinhas (e travadas) quando a lei é ligada a um tópico do
+   * edital ou usada em vínculo dele — o porquê vem ao lado; nas outras, marcar põe à mão (a lei do concurso inteiro). */
+  let topicos = [];
+  try { topicos = (c.t === "lei" ? ((typeof leiDe === "function" && leiDe(c.id)) || {}) : ((typeof jurDe === "function" && jurDe(c.id)) || {})).topicos || []; } catch (e) { topicos = []; }
+  const item = { t: c.t, id: c.id, topicos };
+  const ix = pasEdIndice();
+  const cxE = $("pasEdLista");
+  const nomesEd = [];
+  if (cxE) {
+    cxE.innerHTML = "";
+    const ord = (a, b) => a.nome.localeCompare(b.nome);
+    ix.lista.filter((e) => !e.encerrado).sort(ord).concat(ix.lista.filter((e) => e.encerrado).sort(ord)).forEach((ed) => {
+      const mot = pasEdMotivo(ed, item, ix);
+      if (mot) nomesEd.push(ed.nome);
+      const li = document.createElement("div");
+      li.className = "pas-li" + (ed.encerrado ? " pas-encerrado" : "");
+      const lb = document.createElement("label");
+      lb.className = "pas-marca";
+      const ck = document.createElement("input");
+      ck.type = "checkbox"; ck.id = "pasEdCk_" + ed.id; ck.checked = !!mot;
+      ck.disabled = mot === "topico" || mot === "vinculo";
+      ck.onchange = () => {
+        const dentro = pasEdAlternar("ed:" + ed.id, c.t, c.id, ck.checked);
+        try { reg("MATERIAL", dentro ? "posto à mão na pasta do edital" : "tirado da pasta do edital", c.rotulo + " · " + ed.nome); } catch (e) {}
+        pasPintar(); pasAvisar();
+      };
+      const nm = document.createElement("span");
+      nm.textContent = "📋 " + ed.nome + (ed.encerrado ? " " + t("ed_sel_encerrado") : "");
+      lb.append(ck, " ", nm);
+      li.append(lb);
+      if (mot) {
+        const pq = document.createElement("span");
+        pq.className = "pas-porque";
+        pq.textContent = t("pas_mot_" + mot);
+        li.append(pq);
+      }
+      cxE.append(li);
+    });
+    cxE.hidden = !ix.lista.length;
+    if ($("pasEdTit")) $("pasEdTit").hidden = !ix.lista.length;
+  }
+  $("pasEditais").textContent = nomesEd.length ? t("pas_editais_do_item", { l: nomesEd.join(", ") }) : t("pas_editais_nenhum");
   $("pasNovaNome").value = "";
 }
 /* "＋ criar e pôr aqui" */
