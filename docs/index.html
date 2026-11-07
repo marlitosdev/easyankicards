@@ -7187,16 +7187,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
  * "⋯", a bancada com uma fileira só de ações. Regras sem #secEdital porque a mesma linha aparece na janela da
  * disciplina.
  * ===================================================================== */
-.ed-barra{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;padding:10px 12px;
+.edsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;padding:10px 12px;
   border:1px solid var(--borda);border-radius:12px;background:var(--panel)}
-.ed-barra-sel{display:flex;align-items:center;gap:8px;font-weight:700;flex:1 1 260px;min-width:0}
-.ed-barra-sel[hidden]{display:none}
-.ed-barra-sel select{flex:1 1 auto;min-width:0;max-width:440px;min-height:36px;padding:4px 8px;border-radius:8px;
+.edsel-sel{display:flex;align-items:center;gap:8px;font-weight:700;flex:1 1 260px;min-width:0}
+.edsel-sel[hidden]{display:none}
+.edsel-sel select{flex:1 1 auto;min-width:0;max-width:440px;min-height:36px;padding:4px 8px;border-radius:8px;
   background:var(--campo);color:var(--texto);border:1px solid var(--borda);font:inherit;font-weight:600}
-.ed-barra-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ed-barra-ferr[hidden]{display:none}
-.ed-barra-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
-.ed-barra-mais{position:relative}
+.edsel-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.edsel-ferr[hidden]{display:none}
+.edsel-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
+.edsel-mais{position:relative}
 /* o "⋯" (da linha e do topo): o mesmo desenho do menu da janela da disciplina */
 .ed-mais-bt{font-size:18px;line-height:1;padding:2px 12px;min-width:40px}
 .ed-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:240px;max-width:min(320px,86vw);padding:6px;
@@ -7218,7 +7218,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-estudar{white-space:nowrap}
 .ed-item-tem{font-size:12px;color:var(--sutil);margin-top:4px}
 .ed-item-tem.vazio{font-style:italic}
-.ed-item-disc{color:var(--texto);font-weight:600}
+.ed-item-dnome{color:var(--texto);font-weight:600}
 .ed-selo-feito{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:12px;
   font-weight:700;background:rgba(34,197,94,.16);color:var(--ok);border:1px solid rgba(34,197,94,.45)}
 .ed-selo-feito.rev{background:#15803d;color:#fff;border-color:transparent}
@@ -7238,7 +7238,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-banc-texto-acoes{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin:0 0 8px}
 @media (max-width:640px){
   .ed-item-acoes{width:100%;justify-content:flex-start;margin-left:0}
-  .ed-barra-fim{margin-left:0}
+  .edsel-fim{margin-left:0}
 }
 /* =====================================================================
  * (19.95.0) AS ABAS DO EDITAL — fase 3: Agenda · Plano · Diagnóstico
@@ -7285,7 +7285,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 #secEdital .lac-nome,#secEdital .edm-nome,#secEdital .edm-resumo,#secEdital .lac-num,#secEdital .dom-termo-txt,
 #secEdital summary,#secEdital .hub-aviso-chip,#secEdital .hub-vinc-txt,#secEdital .hub-vinc-ex,#secEdital .ed-item-min,
 #secEdital .di-sem-min,#secEdital .ag-med-rot,#secEdital .ed-ag-opt,#secEdital .plog-gatilho,#secEdital .banc-alternar,
-#secEdital .ed-menu-item,#secEdital .ed-barra-sel,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
+#secEdital .ed-menu-item,#secEdital .edsel-sel,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
 #secEdital .ed-sim-txt,#secEdital .ed-banc-resumo{font-size:14px}
 /* 12 px — detalhes */
 #secEdital .ed-selo-cc,#secEdital .ed-selo-fase,#secEdital .ed-selo-andamento,#secEdital .ed-selo-volta,#secEdital .ed-item-trava,
@@ -7679,21 +7679,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <!-- (19.94.0) O TOPO DA ABA: um seletor de edital só (era escolhido em quatro lugares) e as ferramentas do edital
        escolhido, que antes ficavam depois da agenda inteira. "Renomear" e "novo edital" moram no ⋯. -->
-  <div class="ed-barra" id="edTopo">
-    <label class="ed-barra-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
+  <div class="edsel" id="edTopo">
+    <label class="edsel-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
       <select id="edSel"></select></label>
-    <div class="ed-barra-ferr" id="edTopoFerr" hidden>
+    <div class="edsel-ferr" id="edTopoFerr" hidden>
       <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
       <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
       <span class="ed-dom-termo" id="edDomTermo" role="button" tabindex="0" hidden></span>
       <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
       <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
     </div>
-    <div class="ed-barra-fim">
+    <div class="edsel-fim">
       <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
       <!-- só aparece quando o edital em uso é um previsto -->
       <button type="button" class="btn-min btn-min-ok" id="btnVirada" data-i18n="vr_botao" hidden></button>
-      <span class="ed-barra-mais">
+      <span class="edsel-mais">
         <button type="button" class="btn-min ed-mais-bt" id="btnEdTopoMais" aria-haspopup="menu" aria-expanded="false"
           data-i18n-title="ed_sel_mais_tip">⋯</button>
         <div class="ed-menu" id="edTopoMenu" role="menu" hidden></div>

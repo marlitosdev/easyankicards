@@ -804,7 +804,7 @@ function edLinhaTopico(i, semDisciplina) {
     /* (19.94.0) a disciplina é texto: "ver a disciplina" está no menu "⋯" da linha (era um link sublinhado no meio da
      * frase, um alvo a mais em cada linha) */
     const bd = document.createElement("span");
-    bd.className = "ed-item-disc";
+    bd.className = "ed-item-dnome";
     bd.textContent = i.disciplina;
     porq.append(bd, document.createTextNode(" · " + edPorque(i, true, { curto: true })));
   } else porq.textContent = edPorque(i, true, { curto: true });

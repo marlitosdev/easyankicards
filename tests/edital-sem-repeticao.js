@@ -34,7 +34,7 @@ async function testes() {
     ok(fora.length === 2 && /Estudar/.test(tx(fora[0])) && tx(fora[1]) === "⋯", "SR1 a linha tem só '▶ Estudar' e '⋯': " + fora.map(tx).join(" | "));
     ok(!de(li, "ed-reg").length && !de(li, "ed-fora").length && !de(li, "ed-materiais").length && !de(li, "ed-st-item").length && !de(li, "ed-rev").length,
       "SR1b saíram da linha: '+', '⤳', '📚 materiais', as etiquetas de material e o '↺'");
-    ok(/^tem: resumo$/.test(tx(de(li, "ed-item-tem")[0])) && cls(de(li, "ed-item-disc")[0], "ed-item-disc") && de(li, "ed-item-disc")[0].tag !== "button",
+    ok(/^tem: resumo$/.test(tx(de(li, "ed-item-tem")[0])) && cls(de(li, "ed-item-dnome")[0], "ed-item-dnome") && de(li, "ed-item-dnome")[0].tag !== "button",
       "SR2 o material é texto ('tem: resumo') e a disciplina também: " + tx(de(li, "ed-item-tem")[0]));
     const liF = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Tópico A", chave: ch, minutos: 60, feito: true });
     ok(/✓ estudado/.test(tx(de(liF, "ed-selo-feito")[0])) && !de(li, "ed-selo-feito").length, "SR3 o estado vira selo: '✓ estudado' só no que foi registrado");

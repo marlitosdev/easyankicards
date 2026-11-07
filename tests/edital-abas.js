@@ -85,7 +85,11 @@ async function testes() {
   ok(/#secEdital\[data-aba="agenda"\] #edHub,#secEdital\[data-aba="agenda"\] #edBancada,/.test(html) && /#secEdital\[data-aba="diag"\] #edPlano\{display:none !important\}/.test(html)
     && /\.ed-plano\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(min\(100%,360px\),1fr\)\)/.test(html) && !/<div class="duas-colunas">\s*<div class="grupo" id="painelEdital">/.test(html),
     "AB9 o CSS esconde por data-aba e o Plano só divide quando cabem duas colunas de 360 px");
-  ok(/<div class="ed-barra" id="edTopo">/.test(html) && !/class="ed-topo-(sel|ferr|fim|mais)"/.test(html), "AB10 a barra do topo tem classe própria (ed-topo é do cabeçalho do painel)");
+  /* (19.95.1) "ed-barra" também já existia (a barrinha de progresso, 6 px com overflow:hidden) e cortava a barra do topo */
+  const css = html.slice(html.indexOf("<style"), html.indexOf("</style>"));
+  ok(/<div class="edsel" id="edTopo">/.test(html) && !/class="ed-(topo|barra)-(sel|ferr|fim|mais)"/.test(html)
+    && (css.match(/(^|[\s,}])\.edsel\{/g) || []).length === 1 && !/\.edsel\{[^}]*(height|overflow)/.test(css),
+    "AB10 a barra do topo tem classe que nenhuma outra regra usa (ed-topo e ed-barra já eram de outros elementos)");
 
   api.edApagar(e1.id); api.edApagar(e2.id);
   return Object.assign(falhas, { quantas: n });
