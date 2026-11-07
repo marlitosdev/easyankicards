@@ -637,7 +637,7 @@ function hubPintarAgenda() {
       selo.title = i.editalNome;
       alvo.append(selo);
     }
-    li._menuMais = [{ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: i.editalNome }), dica: t("hub_ir_para", { n: i.editalNome }), faz: () => hubAbrirEdital(i.edital) }];
+    li._menuMais = [{ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: i.editalNome }), dica: t("hub_ir_para", { n: i.editalNome }), faz: () => { edAbaAtual = "plano"; hubAbrirEdital(i.edital); } }];
     /* (19.87.0) o mesmo assunto no outro edital: estudar aqui vale lá — mas marcar lá continua sendo escolha sua,
      * no registro (o vínculo nunca marca nada sozinho) */
     (i.tambem || []).forEach((o) => {
@@ -646,7 +646,7 @@ function hubPintarAgenda() {
       tb.textContent = t("hub_tambem_selo", { n: typeof edNomeCurtoConcurso === "function" ? edNomeCurtoConcurso(o.editalNome) : o.editalNome });
       tb.title = t("hub_tambem_tip", { n: o.editalNome, d: o.disciplina, t: o.nome });
       alvo.append(tb);
-      li._menuMais.push({ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: o.editalNome }), dica: t("hub_ir_para", { n: o.editalNome }), faz: () => hubAbrirEdital(o.edital) });
+      li._menuMais.push({ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: o.editalNome }), dica: t("hub_ir_para", { n: o.editalNome }), faz: () => { edAbaAtual = "plano"; hubAbrirEdital(o.edital); } });
     });
 
     /* O SELO DE FASE. Estudar com o calendário errado na cabeça é o erro
@@ -2126,7 +2126,10 @@ function hubAbrirEdital(id) {
  * acontecer: a caixa ficava mais abaixo, fora da tela. Agora abre (se preciso), rola até a caixa e a destaca; sem a
  * caixa à vista, abre direto a janela "Como a prova pontua". */
 function hubConferir(id) {
+  /* (19.95.0) a conferência mora na aba Diagnóstico */
+  edAbaAtual = "diag";
   try { const a0 = edAberto(); if (!a0 || a0.id !== id) hubAbrirEdital(id); } catch (e) {}
+  try { edAbaAplicar(); } catch (e) {}
   const ir = () => {
     const cx = document.getElementById("edConferencia");
     if (cx && !cx.hidden) {
@@ -2749,6 +2752,7 @@ function hubRender() {
   hubTopoPintar();
   if (!aberto) hubPintarLista();
   hubPintarAgenda();
+  edAbaAplicar();
 }
 
 /* =====================================================================
@@ -2774,6 +2778,8 @@ function hubTopoPintar() {
     sel.onchange = () => {
       const v = sel.value;
       reg("EDITAL", "seletor do topo", v || "todos");
+      /* (19.95.0) escolher um edital na Agenda não mudaria nada à vista (a agenda é de todos): vai para o Plano dele */
+      if (edAbaAtual === "agenda" || (!v && edAbaAtual === "diag")) edAbaAtual = "plano";
       if (v) hubAbrirEdital(v); else hubVoltar();
     };
     const cx = document.getElementById("edTopoSel");
@@ -2783,6 +2789,83 @@ function hubTopoPintar() {
   if (ferr) ferr.hidden = !aberto;
   const tm = document.getElementById("btnEdTopoMais");
   if (tm) tm.setAttribute("aria-label", t("ed_sel_mais_tip"));
+}
+
+/* =====================================================================
+ * (19.95.0) AS ABAS DO EDITAL: Agenda · Plano · Diagnóstico
+ *
+ * Uma tela por vez. A aba abre na Agenda (a pergunta das 7h: o que estudo agora). "Plano" é a bancada e as horas do
+ * edital escolhido — sem edital, a lista dos editais ("Seus editais"). "Diagnóstico" junta o que estava espalhado no fim
+ * da página: riscos de corte, a conferência, onde estão os buracos e o acompanhamento do ritmo, com o atalho para o
+ * Domínio. A rota hub/bancada (o "hidden") não muda: a aba só esconde o resto por CSS (data-aba na seção).
+ * ===================================================================== */
+const ED_ABAS = ["agenda", "plano", "diag"];
+let edAbaAtual = "agenda";
+let edDiagRiscos = 0;          /* blocos com corte em risco no edital aberto (o número na aba Diagnóstico) */
+function edAbaAplicar() {
+  const aberto = edAberto();
+  if (edAbaAtual === "diag" && !aberto) edAbaAtual = "plano";
+  const sec = document.getElementById("secEdital");
+  if (sec && sec.setAttribute) sec.setAttribute("data-aba", edAbaAtual);
+  const ids = { agenda: "btnEdAbaAgenda", plano: "btnEdAbaPlano", diag: "btnEdAbaDiag" };
+  ED_ABAS.forEach((a) => {
+    const b = document.getElementById(ids[a]);
+    if (!b) return;
+    const sim = a === edAbaAtual;
+    b.setAttribute("aria-selected", sim ? "true" : "false");
+    b.tabIndex = sim ? 0 : -1;
+  });
+  const bp = document.getElementById("btnEdAbaPlano");
+  if (bp) {
+    bp.textContent = t(aberto ? "ed_aba_plano" : "ed_aba_editais");
+    bp.setAttribute("aria-controls", aberto ? "edPlano" : "edHub");
+    bp.title = t(aberto ? "ed_aba_plano_tip" : "ed_aba_editais_tip");
+  }
+  const bd = document.getElementById("btnEdAbaDiag");
+  if (bd) {
+    bd.hidden = !aberto;
+    bd.textContent = t("ed_aba_diag");
+    bd.title = t("ed_aba_diag_tip");
+    if (aberto && edDiagRiscos > 0) {
+      const n = document.createElement("span");
+      n.className = "ed-aba-n";
+      n.textContent = String(edDiagRiscos);
+      n.title = t("ed_aba_diag_riscos", { n: edDiagRiscos });
+      bd.append(n);
+      bd.setAttribute("aria-label", t("ed_aba_diag") + " — " + t("ed_aba_diag_riscos", { n: edDiagRiscos }));
+    } else if (bd.removeAttribute) bd.removeAttribute("aria-label");
+  }
+  const ba = document.getElementById("btnEdAbaAgenda");
+  if (ba) ba.title = t("ed_aba_agenda_tip");
+}
+function edAbaDefinir(aba, opc) {
+  edAbaAtual = ED_ABAS.indexOf(aba) >= 0 ? aba : "agenda";
+  edAbaAplicar();
+  try { reg("EDITAL", "aba", edAbaAtual); } catch (e) {}
+  /* trocar de aba lá embaixo da página deixaria a pessoa olhando o vazio: volta para o alto das abas */
+  if (!(opc && opc.semRolar)) {
+    try {
+      const ab = document.getElementById("edAbas");
+      const r = ab && ab.getBoundingClientRect ? ab.getBoundingClientRect() : null;
+      if (r && r.top < 0 && ab.scrollIntoView) ab.scrollIntoView({ block: "start" });
+    } catch (e) {}
+  }
+  if (opc && opc.foco) { try { const b = document.getElementById({ agenda: "btnEdAbaAgenda", plano: "btnEdAbaPlano", diag: "btnEdAbaDiag" }[edAbaAtual]); if (b && b.focus) b.focus(); } catch (e) {} }
+  return edAbaAtual;
+}
+/* setas ← → (e Home/End) andam entre as abas, como pede o padrão de abas */
+function edAbasTecla(ev) {
+  if (!ev) return;
+  const vis = ED_ABAS.filter((a) => a !== "diag" || !!edAberto());
+  const i = vis.indexOf(edAbaAtual);
+  let alvo = null;
+  if (ev.key === "ArrowRight") alvo = vis[(i + 1) % vis.length];
+  else if (ev.key === "ArrowLeft") alvo = vis[(i - 1 + vis.length) % vis.length];
+  else if (ev.key === "Home") alvo = vis[0];
+  else if (ev.key === "End") alvo = vis[vis.length - 1];
+  if (!alvo) return;
+  if (ev.preventDefault) ev.preventDefault();
+  edAbaDefinir(alvo, { foco: true, semRolar: true });
 }
 
 function hubTopoMenuItens() {
@@ -2812,6 +2895,14 @@ function hubIniciar() {
   if (tm) tm.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (typeof edMenuAbrir === "function") edMenuAbrir(tm, document.getElementById("edTopoMenu"), hubTopoMenuItens); };
   const bp = document.getElementById("btnBancPontua");
   if (bp) bp.onclick = () => { if (typeof epAbrir === "function") epAbrir(); };
+  [["btnEdAbaAgenda", "agenda"], ["btnEdAbaPlano", "plano"], ["btnEdAbaDiag", "diag"]].forEach(([id, a]) => {
+    const b = document.getElementById(id);
+    if (b) { b.onclick = () => edAbaDefinir(a); b.onkeydown = edAbasTecla; }
+  });
+  const abas = document.getElementById("edAbas");
+  if (abas && abas.setAttribute) abas.setAttribute("aria-label", t("ed_abas_aria"));
+  const dd = document.getElementById("btnEdDiagDominio");
+  if (dd) dd.onclick = () => { if (typeof domAbrir === "function") domAbrir(typeof editalAtual !== "undefined" ? editalAtual : ""); };
   const nc = document.getElementById("btnEdNovoCriar");
   if (nc) nc.onclick = () => hubNovoCriarConfirmado();
   ["edNovoNome", "edNovoProva", "edNovoHoras", "edNovoF2Nome", "edNovoF2Prova", "edNovoPreDeM", "edNovoPreDeA", "edNovoPreAteM", "edNovoPreAteA"].forEach((id) => {

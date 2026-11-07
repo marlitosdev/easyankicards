@@ -943,7 +943,7 @@ function rodar(opc) {
     matSalvarDicasPendentes,
     matLogAlternarHoje, matLogDoDia, matLogFiltrado,
     matLerColagemFormatada, matHtmlParaMarcas, qsUiCaixaDica,
-    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false), edLinhaPainelTeste: (i) => edLinhaTopico(i, true), edUltimaVez, edUltimaVezTexto, edRamosNaLinhaTeste: (i) => edRamosNaLinha(i), edMenuAbrir, edMenuFechar, edMenuAtualTeste: () => edMenuAtual, edItensDaLinha, edTemTexto, edPorQueAgora, hubTopoPintar, hubTopoMenuItens,
+    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false), edLinhaPainelTeste: (i) => edLinhaTopico(i, true), edUltimaVez, edUltimaVezTexto, edRamosNaLinhaTeste: (i) => edRamosNaLinha(i), edMenuAbrir, edMenuFechar, edMenuAtualTeste: () => edMenuAtual, edItensDaLinha, edTemTexto, edPorQueAgora, hubTopoPintar, hubTopoMenuItens, edAbaDefinir, edAbaAplicar, edAbasTecla, edAbaAtualTeste: () => edAbaAtual, edAbaForcar: (v) => { edAbaAtual = v; }, edDiagRiscosAtual: () => edDiagRiscos,
     edFatorReal, minutosDoTopico, minutosDeRevisao, edHistoricoDoTopico, edHistoricoTexto,
     matAlternarProva, matProvaBlocos, matProvaEstaLigada, matProvaResponder,
     matPintarProvaBotao, qsNoTexto, qsDeBlocos,

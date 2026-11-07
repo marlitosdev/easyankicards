@@ -7187,16 +7187,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
  * "⋯", a bancada com uma fileira só de ações. Regras sem #secEdital porque a mesma linha aparece na janela da
  * disciplina.
  * ===================================================================== */
-.ed-topo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;padding:10px 12px;
+.ed-barra{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;padding:10px 12px;
   border:1px solid var(--borda);border-radius:12px;background:var(--panel)}
-.ed-topo-sel{display:flex;align-items:center;gap:8px;font-weight:700;flex:1 1 260px;min-width:0}
-.ed-topo-sel[hidden]{display:none}
-.ed-topo-sel select{flex:1 1 auto;min-width:0;max-width:440px;min-height:36px;padding:4px 8px;border-radius:8px;
+.ed-barra-sel{display:flex;align-items:center;gap:8px;font-weight:700;flex:1 1 260px;min-width:0}
+.ed-barra-sel[hidden]{display:none}
+.ed-barra-sel select{flex:1 1 auto;min-width:0;max-width:440px;min-height:36px;padding:4px 8px;border-radius:8px;
   background:var(--campo);color:var(--texto);border:1px solid var(--borda);font:inherit;font-weight:600}
-.ed-topo-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ed-topo-ferr[hidden]{display:none}
-.ed-topo-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
-.ed-topo-mais{position:relative}
+.ed-barra-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ed-barra-ferr[hidden]{display:none}
+.ed-barra-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
+.ed-barra-mais{position:relative}
 /* o "⋯" (da linha e do topo): o mesmo desenho do menu da janela da disciplina */
 .ed-mais-bt{font-size:18px;line-height:1;padding:2px 12px;min-width:40px}
 .ed-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:240px;max-width:min(320px,86vw);padding:6px;
@@ -7238,8 +7238,32 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-banc-texto-acoes{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin:0 0 8px}
 @media (max-width:640px){
   .ed-item-acoes{width:100%;justify-content:flex-start;margin-left:0}
-  .ed-topo-fim{margin-left:0}
+  .ed-barra-fim{margin-left:0}
 }
+/* =====================================================================
+ * (19.95.0) AS ABAS DO EDITAL — fase 3: Agenda · Plano · Diagnóstico
+ * O "hidden" continua sendo a rota (hub ou bancada); a aba esconde o resto por CSS, com data-aba na seção.
+ * ===================================================================== */
+.ed-abas{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--borda)}
+.ed-aba{appearance:none;background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;padding:9px 14px 8px;
+  min-height:44px;font:inherit;font-size:16px;font-weight:700;color:var(--sutil);cursor:pointer;border-radius:8px 8px 0 0}
+.ed-aba:hover{color:var(--texto);background:var(--campo)}
+.ed-aba:focus-visible{outline:2px solid var(--info);outline-offset:-2px}
+.ed-aba[aria-selected="true"]{color:var(--texto);border-bottom-color:var(--info)}
+.ed-aba[hidden]{display:none}
+.ed-aba-n{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;font-size:12px;line-height:20px;
+  background:var(--erro);color:#fff;vertical-align:2px}
+#secEdital[data-aba="agenda"] #edHub,#secEdital[data-aba="agenda"] #edBancada,
+#secEdital[data-aba="plano"] #edAgendaTopo,#secEdital[data-aba="plano"] #edDiag,
+#secEdital[data-aba="diag"] #edAgendaTopo,#secEdital[data-aba="diag"] #edHub,#secEdital[data-aba="diag"] #edPlano{display:none !important}
+/* o Plano: lado a lado só quando cabem as duas colunas */
+.ed-plano{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:12px;align-items:start}
+.ed-plano>*{min-width:0}
+/* o Diagnóstico: o título, o atalho para o Domínio e o que ele mostra */
+.ed-diag{max-width:900px}
+.ed-diag-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.ed-diag-sub{margin:4px 0 12px}
+.ed-diag #edRitmo{margin-top:12px}
 /* =====================================================================
  * (19.93.0) A ABA EDITAL LEGÍVEL — fase 1: a escala de letra e o tamanho dos botões
  * Medido com o ISS: 62% do texto tinha 11,5 px ou menos, em 11 tamanhos diferentes (9 a 16 px), e 67 dos 149
@@ -7261,7 +7285,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 #secEdital .lac-nome,#secEdital .edm-nome,#secEdital .edm-resumo,#secEdital .lac-num,#secEdital .dom-termo-txt,
 #secEdital summary,#secEdital .hub-aviso-chip,#secEdital .hub-vinc-txt,#secEdital .hub-vinc-ex,#secEdital .ed-item-min,
 #secEdital .di-sem-min,#secEdital .ag-med-rot,#secEdital .ed-ag-opt,#secEdital .plog-gatilho,#secEdital .banc-alternar,
-#secEdital .ed-menu-item,#secEdital .ed-topo-sel,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
+#secEdital .ed-menu-item,#secEdital .ed-barra-sel,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
 #secEdital .ed-sim-txt,#secEdital .ed-banc-resumo{font-size:14px}
 /* 12 px — detalhes */
 #secEdital .ed-selo-cc,#secEdital .ed-selo-fase,#secEdital .ed-selo-andamento,#secEdital .ed-selo-volta,#secEdital .ed-item-trava,
@@ -7632,7 +7656,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </section>
 
-<section id="secEdital" data-modo="edital" hidden>
+<section id="secEdital" data-modo="edital" data-aba="agenda" hidden>
 
   <!-- A AGENDA VEM ANTES DE TUDO.
        Quem estuda não estuda "um edital": estuda a semana. Com vários
@@ -7655,26 +7679,36 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
   <!-- (19.94.0) O TOPO DA ABA: um seletor de edital só (era escolhido em quatro lugares) e as ferramentas do edital
        escolhido, que antes ficavam depois da agenda inteira. "Renomear" e "novo edital" moram no ⋯. -->
-  <div class="ed-topo" id="edTopo">
-    <label class="ed-topo-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
+  <div class="ed-barra" id="edTopo">
+    <label class="ed-barra-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
       <select id="edSel"></select></label>
-    <div class="ed-topo-ferr" id="edTopoFerr" hidden>
+    <div class="ed-barra-ferr" id="edTopoFerr" hidden>
       <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
       <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
       <span class="ed-dom-termo" id="edDomTermo" role="button" tabindex="0" hidden></span>
       <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
       <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
     </div>
-    <div class="ed-topo-fim">
+    <div class="ed-barra-fim">
       <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
       <!-- só aparece quando o edital em uso é um previsto -->
       <button type="button" class="btn-min btn-min-ok" id="btnVirada" data-i18n="vr_botao" hidden></button>
-      <span class="ed-topo-mais">
+      <span class="ed-barra-mais">
         <button type="button" class="btn-min ed-mais-bt" id="btnEdTopoMais" aria-haspopup="menu" aria-expanded="false"
           data-i18n-title="ed_sel_mais_tip">⋯</button>
         <div class="ed-menu" id="edTopoMenu" role="menu" hidden></div>
       </span>
     </div>
+  </div>
+  <!-- (19.95.0) AS ABAS DO EDITAL: uma tela por vez. A aba Edital tinha ~8.000 px numa página só — a agenda, a lista ou
+       a bancada, o plano de estudo, o acompanhamento, os riscos de corte e os buracos, um embaixo do outro. Agora:
+       Agenda (a que abre) · Plano (a bancada e as horas; sem edital escolhido, a lista dos editais) · Diagnóstico
+       (riscos de corte, buracos e ritmo, com o atalho para o Domínio). Quem esconde é o CSS, por data-aba na seção:
+       a rota hub/bancada (o "hidden") continua a mesma. -->
+  <div class="ed-abas" id="edAbas" role="tablist" data-i18n-title="ed_abas_aria">
+    <button type="button" class="ed-aba" id="btnEdAbaAgenda" role="tab" aria-selected="true" aria-controls="edAgendaTopo" data-aba="agenda" data-i18n="ed_aba_agenda"></button>
+    <button type="button" class="ed-aba" id="btnEdAbaPlano" role="tab" aria-selected="false" data-aba="plano" data-i18n="ed_aba_plano"></button>
+    <button type="button" class="ed-aba" id="btnEdAbaDiag" role="tab" aria-selected="false" aria-controls="edDiag" data-aba="diag" data-i18n="ed_aba_diag"></button>
   </div>
   <div id="edAgendaTopo" class="ed-agenda-topo"></div>
 
@@ -7728,7 +7762,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- BANCADA: só aparece ao incluir, consultar ou editar um edital. -->
   <div id="edBancada" hidden>
-  <div class="duas-colunas">
+  <!-- (19.95.0) PLANO: a bancada e o plano de estudo. Lado a lado só quando cabem os dois (uma coluna de 89 px era o que
+       sobrava ao "Plano de estudo" numa janela de 800 px, com a página rolando para o lado). -->
+  <div class="ed-plano" id="edPlano" role="tabpanel" aria-labelledby="btnEdAbaPlano">
     <div class="grupo" id="painelEdital">
       <div class="bancada-cab">
         <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
@@ -7791,10 +7827,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div class="ed-faixa"><span id="edRestam"></span><span id="edResumo"></span></div>
       <!-- DISCIPLINAS DE ESCOLHA ("escolha 1 de N"): onde se diz qual delas vale para o plano -->
       <div class="ed-optativas" id="edOptativas" hidden></div>
-      <div class="ed-ritmo" id="edRitmo" hidden></div>
-      <div id="edPainel"></div>
     </div>
-  </div>
+  </div><!-- /edPlano -->
+  <!-- (19.95.0) DIAGNÓSTICO: o que está em risco e onde estão os buracos deste edital, num lugar só, com o atalho para o
+       Domínio (tópico a tópico). -->
+  <div class="ed-diag" id="edDiag" role="tabpanel" aria-labelledby="btnEdAbaDiag">
+    <div class="ed-diag-cab">
+      <h2 class="bancada-nome" data-i18n="ed_diag_tit"></h2>
+      <button type="button" class="btn-min" id="btnEdDiagDominio" data-i18n="ed_diag_dominio" data-i18n-title="dom_tip_abrir"></button>
+    </div>
+    <p class="nota ed-diag-sub" data-i18n="ed_diag_sub"></p>
+    <div id="edPainel"></div>
+    <div class="ed-ritmo" id="edRitmo" hidden></div>
+  </div><!-- /edDiag -->
   </div><!-- /edBancada -->
 </section>
 

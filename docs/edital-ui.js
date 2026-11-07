@@ -4518,6 +4518,7 @@ function edConferenciaEdital(r, plano, id) {
 }
 
 function edPintarBlocos(plano) {
+  if (typeof edDiagRiscos !== "undefined") edDiagRiscos = 0;
   const blocos = (plano && plano.blocos) || [];
   const comMin = blocos.filter((b) => b.minPct !== null);
   /* (19.71.0) a discursiva também tem corte: entra no painel (e sozinha já justifica o painel) */
@@ -4535,6 +4536,8 @@ function edPintarBlocos(plano) {
   nome.textContent = t("ed_min_painel_tit");
   cx.append(nome);
   const emRisco = comMin.filter((b) => b.abaixo).length + (rd && rd.abaixo ? 1 : 0);
+  /* (19.95.0) o número na aba Diagnóstico */
+  if (typeof edDiagRiscos !== "undefined") edDiagRiscos = emRisco;
   const totalCortes = comMin.length + (rd ? 1 : 0);
   const tit = document.createElement("div");
   tit.className = "ed-min-estado-painel" + (emRisco ? " ed-min-alerta" : " ed-min-tudo-ok");
@@ -5607,6 +5610,7 @@ function edRender() {
   edPintarOptativas(r);
   edPintarPainel(r, plano);
   edSalvar();
+  if (typeof edAbaAplicar === "function") { try { edAbaAplicar(); } catch (e) {} }
 }
 
 /* --------- ligações da tela --------- */
