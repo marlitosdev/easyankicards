@@ -909,12 +909,19 @@ function novo() {
    * "responder a questão" — duas listas com o mesmo conteudo. Agora o
    * que EXISTE vira etiqueta clicavel na linha, e o "⋮" fica so com o
    * que falta criar. */
-  const marca = achar("ed-st-qst");
-  ok("a linha mostra que o tópico tem questões", !!marca);
+  /* (19.94.0) a linha diz o que existe em texto ("tem: 1 questão"), e o caminho até as questões é "▶ Estudar" → a ficha
+   * do tópico → "responder" */
+  const marca = achar("ed-item-tem");
+  ok("a linha mostra que o tópico tem questões", !!(marca && /quest/.test(marca.textContent || "")));
   ok("e a etiqueta diz quantas são", /1 quest/.test((marca && marca.textContent) || ""));
-  ok("e a etiqueta leva até elas", !!(marca && typeof marca.onclick === "function"));
-  if (marca) {
-    marca.onclick({ stopPropagation() {} });
+  const est = achar("ed-estudar");
+  ok("e o '▶ Estudar' leva até elas", !!(est && typeof est.onclick === "function"));
+  if (est) {
+    est.onclick({ stopPropagation() {} });
+    const slot = [];
+    const anda = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )slot-questoes( |$)/.test(f.className || "") && f.tag === "button") slot.push(f); anda(f); });
+    anda(api.$("matFichaLista"));
+    if (slot[0]) slot[0].onclick();
     ok("o atalho abre a sessão de questões do tópico",
       api.$("dlgQsResponder").open === true);
   }

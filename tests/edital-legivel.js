@@ -2,7 +2,7 @@
  *
  *   EL1  o bloco existe e só usa os quatro tamanhos: 12, 14, 16 e 20 px (nada abaixo de 12)
  *   EL2  cada classe que estava pequena (medida com o ISS) entra na escala, no tamanho do papel dela
- *   EL3  os botões têm alvo de toque: 32 px (44 px no toque); os redondos crescem de verdade (width/height)
+ *   EL3  os botões têm alvo de toque: 32 px (44 px no toque); o "?" cresce de verdade; os itens do menu "⋯" têm 44 px no toque
  *   EL4  os selos que não quebravam linha agora quebram (com a letra maior, passavam da coluna)
  *   EL5  tudo preso a #secEdital: nada muda nas outras abas
  */
@@ -29,8 +29,10 @@ function testes() {
   };
   const errados = Object.keys(esperado).filter((c) => tamDe(c) !== esperado[c]).map((c) => c + "=" + tamDe(c));
   ok(errados.length === 0, "EL2 cada classe no tamanho do papel dela (título 16, seção 20, texto 14, detalhe 12): " + errados.join(" "));
-  ok(/#secEdital \.btn-min,[^{]*\{min-height:32px/.test(bloco) && /#secEdital \.ed-reg\{width:32px;height:32px\}/.test(bloco) && /#secEdital \.selo-ajuda\{width:24px;height:24px\}/.test(bloco)
-    && /@media \(pointer:coarse\)\{[\s\S]*#secEdital \.btn-min[^{]*\{min-height:44px\}/.test(bloco), "EL3 alvo de toque: 32 px (44 no toque); o '?' e o '+' crescem de verdade");
+  /* (19.94.0) o "+" de registrar saiu da linha (foi para o menu "⋯"): no toque, cada item do menu tem 44 px */
+  ok(/#secEdital \.btn-min,[^{]*\{min-height:32px/.test(bloco) && /#secEdital \.selo-ajuda\{width:24px;height:24px\}/.test(bloco)
+    && /@media \(pointer:coarse\)\{[\s\S]*#secEdital \.btn-min[^{]*\{min-height:44px\}/.test(bloco)
+    && /@media \(pointer:coarse\)\{[\s\S]*#secEdital \.ed-menu-item\{min-height:44px\}/.test(bloco), "EL3 alvo de toque: 32 px (44 no toque); o '?' cresce de verdade e o menu '⋯' tem itens de 44 px no toque");
   ok(/#secEdital \.ed-selo-andamento,#secEdital \.ed-item-trava\{white-space:normal;max-width:100%/.test(bloco), "EL4 os selos que não quebravam linha agora quebram");
   ok(regras.every((r) => !r.sel || r.sel.startsWith("@media") || r.sel.split(",").every((s) => s.trim().startsWith("#secEdital"))), "EL5 toda regra presa a #secEdital (as outras abas não mudam)");
   return Object.assign(falhas, { quantas: n });

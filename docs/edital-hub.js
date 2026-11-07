@@ -219,8 +219,11 @@ function hubPintarAgenda() {
   tit.textContent = t("hub_agenda_tit");
   cab.append(tit, hubControlesAgenda());
   cx.append(cab);
+  /* (19.94.0) "quais editais entram nesta agenda" é um ajuste, não uma navegação: os chips ✓ ISS / ✓ SEFAZ moravam no
+   * alto da agenda, ao lado de outros três jeitos de escolher edital. Foram para "⚙ Ajustes da agenda"; o seletor do
+   * topo da aba é o que escolhe o edital que se olha. */
   const filtroEd = hubFiltroEdital(todosAtivos);
-  if (filtroEd) cx.append(filtroEd);
+  const edFora = todosAtivos.length - ativos.length;
   hubRitmoAvisar = null;
 
   /* (19.47.0) O RITMO DE VERDADE. O plano contava as horas do edital (25h/semana) e o diário mostrava ~10h30: a lista
@@ -348,10 +351,11 @@ function hubPintarAgenda() {
     vz.textContent = t("hub_ag_disc_vazio", { n: disciplinas.length });
     cx.append(vz);
   }
-  if (tirados || escondidas || fundidos) {
+  if (tirados || escondidas || fundidos || edFora) {
     const av = document.createElement("div");
     av.className = "ed-caixa-sub ed-ag-aviso";
     av.textContent = [
+      edFora ? t("hub_ag_ed_fora", { n: edFora }) : "",
       tirados ? t("hub_ag_tirados", { n: tirados }) : "",
       escondidas ? t("hub_ag_escondidas", { n: escondidas }) : "",
       fundidos ? t("hub_ag_fundidos", { n: fundidos }) : "",
@@ -535,7 +539,8 @@ function hubPintarAgenda() {
     avisos.forEach((a) => { a.p.hidden = aberto !== a.id; cx.append(a.p); });
   }
   /* os ajustes da agenda: fechados, com uma linha de resumo; o modo por disciplina mostra primeiro as que têm modo próprio */
-  cx.append(hubAjustesGaveta(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }), modosVistos, modoSugerido, diasProx));
+  cx.append(hubAjustesGaveta(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }), modosVistos, modoSugerido, diasProx,
+    filtroEd ? { el: filtroEd, vis: ativos.length, total: todosAtivos.length } : null));
 
   const sub = document.createElement("div");
   sub.className = "ed-caixa-sub";
@@ -620,24 +625,28 @@ function hubPintarAgenda() {
     const li = edLinhaTopico(i);
     /* o selo do concurso: a linha precisa dizer de qual prova ela é, senão
      * com dois editais abertos a agenda não informa nada */
-    const selo = document.createElement("button");
-    selo.type = "button";
-    selo.className = "ed-selo-cc";
-    selo.textContent = i.editalNome;
-    selo.title = t("hub_ir_para", { n: i.editalNome });
-    selo.onclick = (ev) => { ev.stopPropagation(); hubAbrirEdital(i.edital); };
-    const alvo = li.querySelector(".ed-lin-disc") || li;
-    alvo.append(selo);
+    /* (19.94.0) O SELO É TEXTO, e mora na fileira de selos, embaixo do motivo. Era um botão que abria o edital — um dos
+     * quatro jeitos de escolher edital na mesma tela. Abrir o edital da linha está no "⋯" dela; com um edital só na
+     * agenda, o selo não diz nada e não aparece. */
+    const alvo = hubSelosDe(li, li);
+    const comNome = todosAtivos.length > 1 || (i.tambem || []).length;
+    if (comNome) {
+      const selo = document.createElement("span");
+      selo.className = "ed-selo-cc";
+      selo.textContent = i.editalNome;
+      selo.title = i.editalNome;
+      alvo.append(selo);
+    }
+    li._menuMais = [{ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: i.editalNome }), dica: t("hub_ir_para", { n: i.editalNome }), faz: () => hubAbrirEdital(i.edital) }];
     /* (19.87.0) o mesmo assunto no outro edital: estudar aqui vale lá — mas marcar lá continua sendo escolha sua,
      * no registro (o vínculo nunca marca nada sozinho) */
     (i.tambem || []).forEach((o) => {
-      const tb = document.createElement("button");
-      tb.type = "button";
+      const tb = document.createElement("span");
       tb.className = "ed-selo-cc ed-selo-tambem";
       tb.textContent = t("hub_tambem_selo", { n: typeof edNomeCurtoConcurso === "function" ? edNomeCurtoConcurso(o.editalNome) : o.editalNome });
       tb.title = t("hub_tambem_tip", { n: o.editalNome, d: o.disciplina, t: o.nome });
-      tb.onclick = (ev) => { ev.stopPropagation(); hubAbrirEdital(o.edital); };
       alvo.append(tb);
+      li._menuMais.push({ cls: "ed-menu-edital", rot: t("hub_menu_abrir_ed", { n: o.editalNome }), dica: t("hub_ir_para", { n: o.editalNome }), faz: () => hubAbrirEdital(o.edital) });
     });
 
     /* O SELO DE FASE. Estudar com o calendário errado na cabeça é o erro
@@ -680,7 +689,7 @@ function hubPintarAgenda() {
       /* na linha do motivo ("Português · peso 5 · …"): é a resposta a "por que este agora" */
       hubSelosDe(li, alvo).append(q);
     }
-    li.append();
+    try { if (!alvo.children.length && alvo.parentNode) alvo.parentNode.removeChild(alvo); } catch (e) {}
     cx.append(li);
   });
 
@@ -719,6 +728,8 @@ function hubModoDefinir(disc, modo) {
 /* a linha "Modo de estudo": o geral (com o que a data sugere) e, recolhido, o de cada disciplina */
 /* (19.49.0) cada modo diz o PRAZO em que o automático o escolhe; o automático diz quantos dias faltam */
 function hubModoRotulo(m) { return t("hub_modo_" + m) + " · " + t("hub_modo_faixa_" + m); }
+/* (19.94.0) a disciplina recém-trazida para a lista do modo próprio: aparece com "como o geral" até a pessoa escolher */
+let hubModoNovaDisc = "";
 function hubModoControles(modosVistos, sugerido, dias, opc) {
   const v = hubModosLer();
   const cx = document.createElement("div");
@@ -751,21 +762,18 @@ function hubModoControles(modosVistos, sugerido, dias, opc) {
   if (!(opc && opc.semIA)) cx.append(bIa, bCol);
   const discs = Object.keys(modosVistos || {});
   if (discs.length) {
-    const det = document.createElement("details");
+    /* (19.94.0) SÓ AS QUE TÊM MODO PRÓPRIO. A lista trazia todas as disciplinas — 31 seletores, quase todos dizendo "como o
+     * geral". Agora aparecem as que fogem do geral, e um seletor só ("dar modo próprio a…") traz mais uma para a lista. */
+    const det = document.createElement("div");
     det.className = "hub-modo-disc";
     det.id = "hubModoDisc";
-    const nOver = discs.filter((d) => v.disc[d]).length;
-    const sm = document.createElement("summary");
-    sm.textContent = t("hub_modo_por_disc") + (nOver ? " (" + nOver + ")" : "");
-    det.append(sm);
-    /* (19.84.0) não abre sozinho (abria com UMA disciplina em modo próprio e listava as 25); dentro, as de modo próprio
-     * primeiro e as outras num "ver todas" */
-    const resto = document.createElement("details");
-    resto.className = "hub-modo-resto";
-    const smR = document.createElement("summary");
-    smR.textContent = t("hub_modo_ver_todas", { n: discs.length - nOver });
-    resto.append(smR);
-    discs.forEach((d, k) => {
+    const proprias = discs.filter((d) => v.disc[d] || d === hubModoNovaDisc);
+    const tit = document.createElement("div");
+    tit.className = "hub-modo-disc-tit";
+    tit.textContent = t("hub_modo_por_disc") + (proprias.length ? " (" + proprias.length + ")" : "");
+    det.append(tit);
+    proprias.forEach((d) => {
+      const k = discs.indexOf(d);
       const lin = document.createElement("div");
       lin.className = "hub-modo-lin";
       const nm = document.createElement("label");
@@ -776,11 +784,24 @@ function hubModoControles(modosVistos, sugerido, dias, opc) {
       opt(s2, "geral", t("hub_modo_como_geral"));
       ["avancar", "equilibrado", "consolidar"].forEach((m) => opt(s2, m, hubModoRotulo(m)));
       s2.value = v.disc[d] || "geral";
-      s2.onchange = () => { hubModoDefinir(d, s2.value); hubPintarAgenda(); };
+      s2.onchange = () => { if (d === hubModoNovaDisc) hubModoNovaDisc = ""; hubModoDefinir(d, s2.value); hubPintarAgenda(); };
       lin.append(nm, s2);
-      (v.disc[d] ? det : resto).append(lin);
+      det.append(lin);
     });
-    if (nOver < discs.length) { if (!nOver) resto.open = true; det.append(resto); }
+    const resto = discs.filter((d) => proprias.indexOf(d) < 0);
+    if (resto.length) {
+      const lin = document.createElement("div");
+      lin.className = "hub-modo-lin hub-modo-mais";
+      const s3 = document.createElement("select");
+      s3.id = "hubModoDiscMais";
+      s3.setAttribute("aria-label", t("hub_modo_dar"));
+      opt(s3, "", t("hub_modo_dar"));
+      resto.forEach((d) => opt(s3, d, d));
+      s3.value = "";
+      s3.onchange = () => { if (!s3.value) return; hubModoNovaDisc = s3.value; hubPintarAgenda(); };
+      lin.append(s3);
+      det.append(lin);
+    }
     cx.append(det);
   }
   return cx;
@@ -788,7 +809,7 @@ function hubModoControles(modosVistos, sugerido, dias, opc) {
 
 /* (19.84.0) A GAVETA "⚙ Ajustes da agenda": o modo de estudo (geral e por disciplina) e a IA, fechada por padrão. A linha
  * de resumo diz o que está valendo sem abrir: "Modo: Automático · Consolidar (prova em 24 dias) · 1 com modo próprio". */
-function hubAjustesGaveta(conteudo, modosVistos, sugerido, dias) {
+function hubAjustesGaveta(conteudo, modosVistos, sugerido, dias, eds) {
   const det = document.createElement("details");
   det.className = "hub-ajustes"; det.id = "hubAjustes";
   let aberto = false;
@@ -800,8 +821,19 @@ function hubAjustesGaveta(conteudo, modosVistos, sugerido, dias) {
   const geral = v.geral && v.geral !== "auto" ? hubModoRotulo(v.geral)
     : t("hub_aj_auto", { m: t("hub_modo_" + (sugerido || "equilibrado")) }) + (dias != null ? " " + t("hub_aj_dias", { d: dias }) : "");
   const sm = document.createElement("summary");
-  sm.textContent = t("hub_aj_tit") + " · " + t("hub_aj_modo", { m: geral }) + (nOver ? " · " + t("hub_aj_proprio", { n: nOver }) : "");
-  det.append(sm, conteudo);
+  sm.textContent = t("hub_aj_tit") + " · " + t("hub_aj_modo", { m: geral }) + (nOver ? " · " + t("hub_aj_proprio", { n: nOver }) : "")
+    + (eds && eds.vis < eds.total ? " · " + t("hub_aj_editais", { n: eds.vis, t: eds.total }) : "");
+  det.append(sm);
+  if (eds && eds.el) {
+    const sec = document.createElement("div");
+    sec.className = "hub-aj-editais";
+    const rot = document.createElement("div");
+    rot.className = "hub-modo-disc-tit";
+    rot.textContent = t("hub_aj_editais_tit");
+    sec.append(rot, eds.el);
+    det.append(sec);
+  }
+  det.append(conteudo);
   return det;
 }
 
@@ -2714,8 +2746,52 @@ function hubRender() {
   const nm = document.getElementById("edNomeAberto");
   if (nm) nm.textContent = aberto ? aberto.nome : "";
   try { if (typeof domTermoPintar === "function") domTermoPintar(aberto ? aberto.id : ""); } catch (e) {}
+  hubTopoPintar();
   if (!aberto) hubPintarLista();
   hubPintarAgenda();
+}
+
+/* =====================================================================
+ * (19.94.0) O TOPO DA ABA: UM SELETOR DE EDITAL E AS FERRAMENTAS
+ *
+ * O edital era escolhido em quatro lugares — os chips da agenda, a lista dos editais, o selo de cada linha e
+ * "← todos os editais" — e as ferramentas (Domínio, Horas por assunto, Verticalizado) ficavam a ~2.600 px do topo,
+ * depois da agenda inteira. Agora: um seletor só ("Todos os editais" mostra a lista; um edital abre o plano dele) e as
+ * ferramentas do edital escolhido ao lado. "Renomear" e "novo edital" moram no "⋯".
+ * ===================================================================== */
+function hubTopoPintar() {
+  const sel = document.getElementById("edSel");
+  const aberto = edAberto();
+  if (sel) {
+    sel.innerHTML = "";
+    const opt = (v, txt) => { const o = document.createElement("option"); o.value = v; o.textContent = txt; sel.append(o); };
+    opt("", t("ed_sel_todos", { n: editais.length }));
+    const sit = (e) => { try { return edSituacao(e).grupo; } catch (x) { return ""; } };
+    editais.filter((e) => sit(e) !== "encerrado").concat(editais.filter((e) => sit(e) === "encerrado")).forEach((e) => {
+      opt(e.id, (e.nome || t("ed_sem_nome")) + (sit(e) === "encerrado" ? " " + t("ed_sel_encerrado") : ""));
+    });
+    sel.value = aberto ? aberto.id : "";
+    sel.onchange = () => {
+      const v = sel.value;
+      reg("EDITAL", "seletor do topo", v || "todos");
+      if (v) hubAbrirEdital(v); else hubVoltar();
+    };
+    const cx = document.getElementById("edTopoSel");
+    if (cx) cx.hidden = !editais.length;
+  }
+  const ferr = document.getElementById("edTopoFerr");
+  if (ferr) ferr.hidden = !aberto;
+  const tm = document.getElementById("btnEdTopoMais");
+  if (tm) tm.setAttribute("aria-label", t("ed_sel_mais_tip"));
+}
+
+function hubTopoMenuItens() {
+  const aberto = edAberto();
+  const itens = [];
+  if (aberto) itens.push({ id: "btnEdRenomear", rot: t("hub_renomear"), faz: () => hubRenomear() });
+  itens.push({ id: "btnEdTopoNovo", rot: t("hub_novo"), faz: () => hubNovo() });
+  if (aberto) itens.push({ id: "btnEdTopoTodos", rot: t("ed_sel_ver_todos"), faz: () => hubVoltar() });
+  return itens;
 }
 
 function hubIniciar() {
@@ -2732,6 +2808,10 @@ function hubIniciar() {
   if (v) v.onclick = hubVoltar;
   const r = document.getElementById("btnEdRenomear");
   if (r) r.onclick = hubRenomear;
+  const tm = document.getElementById("btnEdTopoMais");
+  if (tm) tm.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (typeof edMenuAbrir === "function") edMenuAbrir(tm, document.getElementById("edTopoMenu"), hubTopoMenuItens); };
+  const bp = document.getElementById("btnBancPontua");
+  if (bp) bp.onclick = () => { if (typeof epAbrir === "function") epAbrir(); };
   const nc = document.getElementById("btnEdNovoCriar");
   if (nc) nc.onclick = () => hubNovoCriarConfirmado();
   ["edNovoNome", "edNovoProva", "edNovoHoras", "edNovoF2Nome", "edNovoF2Prova", "edNovoPreDeM", "edNovoPreDeA", "edNovoPreAteM", "edNovoPreAteA"].forEach((id) => {
@@ -2824,36 +2904,24 @@ function bancAplicar() {
   const resumo = document.getElementById("edBancResumo");
   const bt = document.getElementById("btnEdBancRecolher");
   if (!corpo || !resumo || !bt) return;
+  /* (19.94.0) O RESUMO E AS AÇÕES FICAM SEMPRE À VISTA, e o que abre e fecha é só o texto cru. Recolhida, a bancada
+   * mostrava "⚖ Pontuação e cortes", "Revisar com a IA" e "✏ texto do plano"; aberta, mostrava outro "Revisar com a IA" e
+   * um "expandir/recolher" que fazia o mesmo que "✏ texto do plano". Agora é uma fileira só, nos dois estados, e o
+   * mesmo botão ("✏ texto do plano (avançado)") abre e fecha o texto. */
   corpo.hidden = bancRecolhida;
-  resumo.hidden = !bancRecolhida;
-  bt.textContent = t(bancRecolhida ? "ed_expandir" : "ed_recolher");
-  /* RECOLHIDO, ELE É A ÚNICA SAÍDA — e por isso fica em cor viva.
-   * Expandido é só mais um botão de canto e não precisa disputar
-   * atenção com o edital. O estado tem nome próprio e a regra dele só
-   * pinta: a geometria mora na classe de identidade, que é o que evita
-   * o defeito da faixa de navegação encolhida (E15). */
-  if (bt.classList) bt.classList.toggle("banc-aberta", bancRecolhida);
-  bt.title = t(bancRecolhida ? "ed_expandir_aj" : "ed_recolher_aj");
-  if (bancRecolhida) {
-    const ta = document.getElementById("editalTexto");
-    const r = lerEdital((ta && ta.value) || "");
-    const tops = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
-    resumo.innerHTML = "";
-    const b = document.createElement("b");
-    b.textContent = t("ed_banc_resumo", { d: r.disciplinas.length, t: tops });
-    resumo.append(b);
-    /* (19.55.0) o que se faz com o edital depois de criado, sem abrir o texto */
-    const acoes = document.createElement("div");
-    acoes.className = "ed-acao-mini";
-    const bt2 = (id, txt, tip, fn, cls) => { const x = document.createElement("button"); x.type = "button"; x.id = id; x.className = "btn-min" + (cls ? " " + cls : ""); x.textContent = txt; x.title = tip; x.onclick = fn; return x; };
-    acoes.append(
-      bt2("btnBancPontua", t("ep_btn"), t("ep_btn_tip"), () => { if (typeof epAbrir === "function") epAbrir(); }, "btn-min-ok"),
-      bt2("btnBancRevisar", t("ed_rev_btn"), t("ed_rev_exp"), () => { const x = document.getElementById("btnEditalColar"); if (x) x.click(); }),
-      bt2("btnBancTexto", t("ed_banc_texto"), t("ed_banc_texto_tip"), () => bancAlternar()));
-    resumo.append(acoes);
-  }
-  /* copiar tudo e limpar são gestos do texto cru: só com o texto à vista */
-  ["btnEditalCopiar", "btnEditalLimpar"].forEach((id) => { const x = document.getElementById(id); if (x) x.hidden = bancRecolhida; });
+  resumo.hidden = false;
+  bt.textContent = t(bancRecolhida ? "ed_banc_texto" : "ed_banc_texto_fechar");
+  bt.setAttribute("aria-expanded", bancRecolhida ? "false" : "true");
+  /* a cor viva de "única saída" (banc-aberta) deixou de fazer sentido: a fileira de ações nunca some */
+  if (bt.classList) bt.classList.remove("banc-aberta");
+  bt.title = t(bancRecolhida ? "ed_banc_texto_tip" : "ed_recolher_aj");
+  const ta = document.getElementById("editalTexto");
+  const r = lerEdital((ta && ta.value) || "");
+  const tops = r.disciplinas.reduce((a, d) => a + d.topicos.length, 0);
+  resumo.innerHTML = "";
+  const b = document.createElement("b");
+  b.textContent = r.disciplinas.length ? t("ed_banc_resumo", { d: r.disciplinas.length, t: tops }) : t("ed_banc_vazia");
+  resumo.append(b);
   try { localStorage.setItem("eac_banc_recolhida", bancRecolhida ? "1" : "0"); } catch (e) {}
 }
 

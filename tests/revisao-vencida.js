@@ -98,7 +98,8 @@ async function testes() {
     ok(/text-decoration:none/.test(regra) && /opacity:1/.test(regra),
        "V2d a excecao nao desfaz o risco nem o desbotado: " + regra);
 
-    /* e o sinal do botão diz o que FALTA, não o que passou */
+    /* e o sinal diz o que FALTA, não o que passou — (19.94.0) no selo da revisão ("↻ 2ª revisão"), já que o botão de
+     * registrar foi para o "⋯" */
     const txt = (li || {}).textContent || "";
     ok(txt.indexOf("↻") >= 0,
        "V2e o botao da revisao vencida nao mostra o sinal de rever: "
@@ -205,9 +206,12 @@ async function testes() {
     const li = itens(api.$("edAgendaTopo"), [])
       .filter((x) => /(^| )ehrev( |$)/.test(x.className || ""))[0];
     ok(!!li, "V6-pre a revisao vencida de B nao apareceu na agenda");
-    const btn = Array.from((li || {}).children || [])
-      .filter((c) => /ed-reg/.test(c.className || ""))[0];
-    ok(!!btn, "V6-pre2 a linha nao tem botao de registrar");
+    const itensDe = (el, cls) => { const out = []; const anda = (x) => Array.from((x && x.children) || []).forEach((f) => { if (new RegExp("(^| )" + cls + "( |$)").test(f.className || "")) out.push(f); anda(f); }); anda(el); return out; };
+    /* (19.94.0) registrar mora no "⋯" da linha */
+    const bm = itensDe(li, "ed-mais-bt")[0];
+    if (bm) bm.onclick({ stopPropagation: () => {} });
+    const btn = itensDe(li, "ed-menu-reg")[0];
+    ok(!!btn, "V6-pre2 a linha nao tem como registrar (o '⋯' com 'Registrar a revisão')");
     if (btn) {
       btn.onclick({ stopPropagation: () => {} });
       api.$("regMinutos").value = 30;

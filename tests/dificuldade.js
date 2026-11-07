@@ -457,9 +457,15 @@ async function testes() {
     ok(de(p16).venceu === true && de(p16).nRev === 1 && naFila(p16), "S3i revisado ha' 16 dias (1 revisao): a 2a revisao (15 dias) venceu e volta a' fila");
     {
       const li = api.edLinhaAgendaTeste(de(p16));
-      const chk = Array.from(li.children).find((f) => /(^| )ed-reg( |$)/.test(f.className || ""));
-      ok(chk && chk.textContent === "↻" && /arev/.test(chk.className) && !/(^| )revisado( |$)/.test(li.className) && /ehrev/.test(li.className),
-         "S3i2 revisado que voltou a semana: o botao mostra o simbolo de revisao, nao o de concluido, e a linha nao fica apagada: " + (chk && chk.textContent) + " | " + li.className);
+      /* (19.94.0) o registro mora no "⋯" da linha: aberto, o primeiro item diz "↻ Registrar a revisão" */
+      const todosS = (x, acc) => { Array.from((x && x.children) || []).forEach((f) => { acc.push(f); todosS(f, acc); }); return acc; };
+      const bm = todosS(li, []).find((f) => /(^| )ed-mais-bt( |$)/.test(f.className || ""));
+      if (bm) bm.onclick({ stopPropagation() {} });
+      const chk = todosS(li, []).find((f) => /(^| )ed-menu-reg( |$)/.test(f.className || ""));
+      const selosFeito = todosS(li, []).filter((f) => /(^| )ed-selo-feito( |$)/.test(f.className || ""));
+      ok(chk && /^↻/.test(chk.textContent) && !selosFeito.length && !/(^| )revisado( |$)/.test(li.className) && /ehrev/.test(li.className),
+         "S3i2 revisado que voltou a semana: o registro oferece a revisao (↻), nao mostra 'revisado', e a linha nao fica apagada: " + (chk && chk.textContent) + " | " + li.className);
+      try { api.edMenuFechar(); } catch (e) {}
     }
     ok(/2ª revisão: última sessão há 16 dias/.test(api.edPorque(de(p16))), "S3j o porque diz qual revisao e': " + api.edPorque(de(p16)));
     const p14 = pl({ [RC]: { e: "revisado", d: daqui(-14) } });

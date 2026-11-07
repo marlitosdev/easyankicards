@@ -45,23 +45,18 @@ async function testes() {
    * B1: CADA AÇÃO DIZ O QUE FAZ
    * ============================================================== */
   {
-    /* A explicação mora ao lado do botão, no HTML, e não numa dica que
-     * só aparece com o mouse parado em cima — num aplicativo que se usa
-     * no celular, "title" é uma explicação que ninguém lê. */
-    const bloco = (html.match(/<div class="ed-acoes">([\s\S]*?)<\/div>\s*<label class="bancada-sub"/) || [])[1] || "";
+    /* (19.94.0) UMA FILEIRA, CADA AÇÃO UMA VEZ. A bancada tinha "Revisar com a IA" duas vezes (no resumo recolhido e no
+     * corpo aberto) e "texto do plano" duas vezes (o botão e o "expandir"). Agora as quatro ações moram numa fileira só,
+     * sempre à vista; a explicação longa vai no title/aria-label de cada uma, e a janela que cada uma abre se explica. */
+    const bloco = (html.match(/<div class="ed-banc-acoes" id="edBancAcoes">([\s\S]*?)<\/div>/) || [])[1] || "";
     ok(bloco, "B1-pre a faixa de acoes da bancada nao foi encontrada");
     const botoes = [...bloco.matchAll(/<button[^>]*id="(\w+)"/g)].map((m) => m[1]);
-    const exps = [...bloco.matchAll(/class="ed-acao-exp"/g)].length;
-
-    /* DUAS, e não três: "comparar e vincular editais" saiu daqui.
-     * A pergunta que ele responde tem dois sujeitos — "onde estes DOIS
-     * concursos se encontram?" —, e quem a faz está olhando para a
-     * lista de editais, não para um deles aberto. */
-    ok(botoes.length === 1,
-       "B1 a bancada nao tem UMA acao so (o diagnostico foi fundido na revisao): " + JSON.stringify(botoes));
-    ok(exps === botoes.length,
-       "B1b ha acao sem explicacao ao lado: " + exps + " para "
-       + botoes.length + " botoes");
+    ok(JSON.stringify(botoes) === JSON.stringify(["btnBancPontua", "btnEditalColar", "btnEdNovaDisc", "btnEdBancRecolher"]),
+       "B1 a fileira da bancada tem as quatro acoes, nesta ordem: " + JSON.stringify(botoes));
+    const vezes = (id) => (html.match(new RegExp('id="' + id + '"', "g")) || []).length;
+    ok(["btnBancPontua", "btnEditalColar", "btnEdNovaDisc", "btnEdBancRecolher"].every((id) => vezes(id) === 1)
+       && !/id="btnBancRevisar"|id="btnBancTexto"|id="btnEdMinEditar"/.test(html),
+       "B1b cada acao existe uma vez so na pagina (sem o 'Revisar' e o 'texto do plano' repetidos)");
     /* O BOTÃO SOLTO DO PROMPT NÃO EXISTE MAIS em lugar nenhum: se ele
      * sobrasse, haveria dois caminhos para a mesma coisa e um deles não
      * levaria à caixa que recebe a resposta. */
@@ -155,9 +150,10 @@ async function testes() {
     const antes = bt.textContent;
 
     api.bancAlternar();
-    /* recolhido: cor viva, porque agora ele é a única saída */
-    ok(/banc-aberta/.test(bt.className || ""),
-       "B5b recolhido, o botao de volta continua igual aos outros: "
+    /* (19.94.0) recolhido, ele já não é a única saída: a fileira de ações (pontuação, revisar, incluir disciplina e
+     * este) fica sempre à vista. A cor viva de alerta pintaria de amarelo a ação menos usada da fileira. */
+    ok(!/banc-aberta/.test(bt.className || "") && api.$("edBancAcoes").hidden !== true,
+       "B5b recolhido, a fileira de acoes continua a vista e o botao nao vira alerta: "
        + bt.className);
     ok(bt.textContent !== antes,
        "B5c o rotulo nao mudou ao recolher: " + bt.textContent);

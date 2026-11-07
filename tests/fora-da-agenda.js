@@ -267,22 +267,29 @@ async function testes() {
       nome: "Restos a pagar", chave: api.matChave("Direito Financeiro", "Restos a pagar"),
       faixa: "alta", disciplinaPeso: 5, peso: 5, minutos: 60 });
 
-    const ordem = [];
-    let ponto = null;
+    /* (19.94.0) as duas respostas para o mesmo item — "fiz" e "agora não" — continuam juntas, agora no "⋯" da linha:
+     * registrar é o primeiro item e "tirar da agenda" vem logo depois */
+    let ponto = null, bm = null;
     const anda = (x) => Array.from(x.children || []).forEach((f) => {
       const c = (f.className || "").split(/\s+/);
-      ["ed-reg", "ed-fora", "ed-ponto"].forEach((k) => {
-        if (c.includes(k)) ordem.push(k);
-      });
       if (c.includes("ed-ponto")) ponto = f;
+      if (c.includes("ed-mais-bt")) bm = f;
       anda(f);
     });
     anda(li);
-    ok(ordem.indexOf("ed-reg") === 0,
-       "F6 o botao de registrar estudo saiu do comeco da linha: " + ordem.join(","));
-    ok(ordem.indexOf("ed-fora") === 1,
-       "F6b 'tirar da agenda' devia vir logo depois do registrar — as duas "
+    ok(!!bm, "F6 a linha nao tem o menu '⋯'");
+    if (bm) bm.onclick({ stopPropagation() {} });
+    const ordem = [];
+    const anda0 = (x) => Array.from(x.children || []).forEach((f) => {
+      const c = (f.className || "").split(/\s+/);
+      if (c.includes("ed-menu-item")) ordem.push(c.filter((k) => /^ed-menu-/.test(k) && k !== "ed-menu-item")[0] || "?");
+      anda0(f);
+    });
+    anda0(li);
+    ok(ordem[0] === "ed-menu-reg" && ordem[1] === "ed-menu-fora",
+       "F6b no '⋯', registrar vem primeiro e 'tirar da agenda' logo depois — as duas "
        + "respostas para o mesmo item ficam juntas. Ordem: " + ordem.join(","));
+    try { api.edMenuFechar(); } catch (e) {}
 
     ok(!!ponto, "F6c sumiu o marcador colorido da linha");
     const dica = (ponto && ponto.title) || "";
@@ -384,11 +391,10 @@ async function testes() {
       anda(f, noTexto);
     });
     anda(li, false);
-    ok(botoes.length <= 5,
-       `F8 a linha voltou a ter ${botoes.length} alvos: ${JSON.stringify(botoes)}`);
-    /* com material na linha, o "estudar" some: ele dizia o mesmo que o
-     * primeiro chip. Ele volta para o topico VAZIO, onde nao ha chip
-     * nenhum e e preciso um convite. */
+    /* (19.94.0) DOIS ALVOS: "▶ Estudar" e "⋯". O registro, o "tirar", os chips de material, "📚 materiais" e "começar"
+     * saíram da linha — o material virou texto e tudo abre pela ficha do tópico */
+    ok(botoes.length === 2 && /Estudar/.test(botoes[0]) && botoes[1] === "\u22ef",
+       `F8 a linha tem so '▶ Estudar' e '⋯': ${JSON.stringify(botoes)}`);
     const liVazio = api.edLinhaAgendaTeste({ disciplina: "D", nome: "Nada",
       chave: api.matChave("D", "Nada"), minutos: 30 });
     const btsVazio = [];
@@ -397,48 +403,36 @@ async function testes() {
       andaV(f);
     });
     andaV(liVazio);
-    ok(btsVazio.some((b) => /come\u00e7ar|estudar/i.test(b)),
+    ok(btsVazio.some((b) => /estudar/i.test(b)),
        "F8b topico vazio ficou sem convite para comecar: " + JSON.stringify(btsVazio));
-    ok(botoes.some((b) => /materiais/.test(b)) && botoes.indexOf("\u22ee") < 0, "F8c a linha tem '📚 materiais' (no lugar do ⋮): " + JSON.stringify(botoes));
+    ok(!botoes.some((b) => /materiais|come\u00e7ar/.test(b)) && botoes.indexOf("\u22ee") < 0, "F8c sem '📚 materiais', 'começar' nem '⋮' na linha: " + JSON.stringify(botoes));
     ok(!botoes.some((b) => b === "\ud83d\udcc4" || b === "\ud83c\udccf" || b === "\u2696"),
        "F8d os icones enigmaticos voltaram para a linha: " + JSON.stringify(botoes));
 
     /* mas o STATUS continua na linha, em palavras: varrer a semana e ver
      * o que ja tem resumo era util e nao podia ir para dentro do menu */
-    const etiquetas = [];
+    let tem = "";
     const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-st-item/.test(f.className || "")) etiquetas.push(f.textContent);
+      if (/(^| )ed-item-tem( |$)/.test(f.className || "")) tem = f.textContent;
       anda2(f);
     });
     anda2(li);
-    ok(etiquetas.some((e) => /resumo/i.test(e)),
-       "F8e a linha nao diz mais que o topico tem resumo: " + JSON.stringify(etiquetas));
-    ok(etiquetas.some((e) => /cart/i.test(e)),
-       "F8f a linha nao diz que o topico tem cartoes");
-    ok(!etiquetas.some((e) => /quest/i.test(e)),
-       "F8g apareceu etiqueta de questoes num topico que nao tem nenhuma");
+    ok(/resumo/i.test(tem), "F8e a linha nao diz mais que o topico tem resumo: " + tem);
+    ok(/cart/i.test(tem), "F8f a linha nao diz que o topico tem cartoes: " + tem);
+    ok(!/quest/i.test(tem), "F8g a linha diz que ha questoes num topico que nao tem nenhuma: " + tem);
+    let temV = "";
+    const anda2v = (x) => Array.from(x.children || []).forEach((f) => { if (/(^| )ed-item-tem( |$)/.test(f.className || "")) temV = f.textContent; anda2v(f); });
+    anda2v(liVazio);
+    ok(/sem material/.test(temV), "F8e2 o topico vazio diz que ainda nao tem material: " + temV);
 
-    /* A ETIQUETA E O CAMINHO. Antes ela so informava, e o menu logo
-     * abaixo repetia tudo em forma de acao: "3 cartoes" na linha e
-     * "ver os 3 cartoes" no menu, duas listas do mesmo conteudo. */
-    let chipCart = null;
-    const anda2b = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-st-crt/.test(f.className || "") && !chipCart) chipCart = f;
-      anda2b(f);
-    });
-    anda2b(li);
-    ok(chipCart && typeof chipCart.onclick === "function",
-       "F8e2 a etiqueta de cartoes nao leva a lugar nenhum");
-
-    /* T1: "📚 materiais" abre a FICHA do tópico — tudo num lugar só: o que existe abre, o que falta oferece criar */
+    /* T1: "▶ Estudar" abre a FICHA do tópico — tudo num lugar só: o que existe abre, o que falta oferece criar */
     let mat = null;
     const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-materiais/.test(f.className || "") && !mat) mat = f;
+      if (/(^| )ed-estudar( |$)/.test(f.className || "") && !mat) mat = f;
       anda3(f);
     });
     anda3(li);
-    ok(mat && /materiais/.test(mat.textContent) && !Array.from(li.children).some((f) => /(^| )ed-mais( |$)/.test(f.className || "")),
-       "F8h a linha tem '📚 materiais' (e nao mais o '⋮' que escondia o que falta)");
+    ok(mat && /Estudar/.test(mat.textContent), "F8h a linha tem '▶ Estudar'");
     api.$("dlgMatFicha").open = false;
     if (mat) mat.onclick({ stopPropagation() {} });
     const itensF = [];
@@ -450,6 +444,8 @@ async function testes() {
     ok(faltam.length === 3 && faltam.every((x) => /questoes|lei|juris/.test(x.className)),
        "F8h3 o que falta aparece marcado (questoes, lei, julgados): " + faltam.map((x) => x.className).join(" | "));
     ok(faltam.every((x) => /criar|carregar|guardar|escrever/i.test(x.textContent)), "F8i o que falta oferece a acao de criar, por extenso");
+    /* e o registro do estudo está no rodapé da ficha: estudar e registrar no mesmo lugar */
+    ok(!api.$("matFichaRodape").hidden && /registr/i.test(api.$("matFichaRodape").textContent || ""), "F8j a ficha aberta pela linha traz o registro do estudo no rodape");
     api.$("dlgMatFicha").close();
   }
 
@@ -520,7 +516,7 @@ async function testes() {
     const matDe = (li) => {
       let r = null;
       const anda = (x) => Array.from(x.children || []).forEach((f) => {
-        if (/ed-materiais/.test(f.className || "") && !r) r = f;
+        if (/(^| )ed-estudar( |$)/.test(f.className || "") && !r) r = f;
         anda(f);
       });
       anda(li); return r;
@@ -528,7 +524,7 @@ async function testes() {
     matDe(linhas[0]).onclick({ stopPropagation() {} });
     ok(api.$("dlgMatFicha").open === true && api.$("matFichaTit").textContent === "Um", "F11 a primeira linha abre a ficha de 'Um'");
     matDe(linhas[1]).onclick({ stopPropagation() {} });
-    ok(api.$("matFichaTit").textContent === "Dois" && !linhas.some((li) => li.querySelector(".ed-menu")),
+    ok(api.$("matFichaTit").textContent === "Dois" && !linhas.some((li) => { const m = li.querySelector(".ed-menu"); return m && !m.hidden; }),
        "F11b a segunda abre a de 'Dois' na mesma janela, e nenhum menu fica pendurado na linha");
     api.$("dlgMatFicha").close();
   }

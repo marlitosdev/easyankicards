@@ -90,18 +90,33 @@ function edTrilhaDoRamoUI(i, r, mat) {
 }
 
 const ED_RAMOS_LIM = 6;
+const edRamosAbertos = new Set();
 function edRamosNaLinha(i) {
   const rs = i.ramos || [];
   const cx = document.createElement("div");
   cx.className = "ed-ramos";
-  const resumo = document.createElement("span");
-  resumo.className = "ed-ramos-resumo";
+  /* (19.94.0) O RESUMO ABRE OS CHIPS. Fechados por padrão: o resumo já diz quantos foram e qual é o da vez, e seis a
+   * onze chips por linha eram o que mais alongava a agenda. Aberto fica lembrado por tópico até recarregar. */
+  const resumo = document.createElement("button");
+  resumo.type = "button";
+  resumo.className = "ed-ramos-resumo ed-ramos-alt";
   const pend = rs.filter((r) => !r.feito && !r.pulado);
-  resumo.textContent = pend.length
+  const txtRes = pend.length
     ? t("ed_ramos_resumo", { f: i.ramosFeitos, n: i.ramosTotal, p: (i.sessaoNomes || []).join(", "), m: horasTexto(i.minutosSessao || i.minutos) })
     : t("ed_ramos_revisar", { f: i.ramosFeitos, n: i.ramosTotal, v: i.ramosVencidos });
-  resumo.title = t("ed_ramos_tip");
+  resumo.title = t("ed_ramos_tip") + " " + t("ed_ramos_abrir_tip");
   cx.append(resumo);
+  const det = document.createElement("div");
+  det.className = "ed-ramos-det";
+  cx.append(det);
+  const chaveAb = String(i.chave || i.nome || "");
+  const abrirDet = (sim) => {
+    det.hidden = !sim;
+    resumo.textContent = txtRes + (sim ? " ▴" : " ▾");
+    resumo.setAttribute("aria-expanded", sim ? "true" : "false");
+    if (sim) edRamosAbertos.add(chaveAb); else edRamosAbertos.delete(chaveAb);
+  };
+  resumo.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); abrirDet(det.hidden); };
   /* a LEGENDA das marcas e cores fica no balão do (?): ocupa um ícone, não uma linha */
   const leg = document.createElement("button");
   leg.type = "button";
@@ -110,10 +125,9 @@ function edRamosNaLinha(i) {
   leg.title = t("ed_ramos_leg_tip");
   leg.setAttribute("aria-label", leg.title);
   leg.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); dicaMostrar(leg, t("ed_ramos_legenda")); };
-  cx.append(leg);
   const chips = document.createElement("span");
   chips.className = "ed-ramos-chips";
-  cx.append(chips);
+  det.append(chips, leg);
   let aberto = false;
   const matRamos = edMaterialDosRamos(i);
   const estadoDe = (r) => (r.pulado ? "pulado" : r.venceu ? "venceu" : r.revisado ? "revisado" : r.feito ? "feito" : "pend");
@@ -150,6 +164,7 @@ function edRamosNaLinha(i) {
     }
   };
   pintar();
+  abrirDet(edRamosAbertos.has(chaveAb));
   return cx;
 }
 
@@ -638,22 +653,10 @@ function edLinhaTopico(i, semDisciplina) {
    * uma repintura, para piscar exatamente a que mudou */
   if (i.chave) li.dataset.chave = i.chave;
 
-  /* Botão, não caixa. Marcar é rápido demais para o que significa: o registro
-   * passa a perguntar QUANTO e COMO, porque é isso que permite, meses depois,
-   * dizer "você lê muito e resolve pouca questão". Uma caixa nunca saberia. */
-  const chk = document.createElement("button");
-  chk.type = "button";
-  /* O SINAL DIZ O QUE FALTA, não o que passou.
-   * Um "✓" verde numa revisão vencida é a mesma mentira do texto
-   * riscado: o tópico foi estudado, sim, e é exatamente por isso que ele
-   * está de volta na semana. O "↻" diz o que o botão vai fazer. */
-  /* revisão espaçada: um tópico já revisado que voltou à semana mostra "↻" (o que falta), não "✓✓" */
-  chk.className = "ed-reg" + (i.ehRevisao ? " arev"
-    : (i.revisado ? " rev" : (i.feito ? " ok" : "")));
-  chk.textContent = i.ehRevisao ? "↻" : (i.revisado ? "✓✓" : (i.feito ? "✓" : "+"));
-  chk.title = t(i.feito ? "ed_reg_mais" : "ed_reg_novo");
-  chk.onclick = (ev) => { ev.stopPropagation(); abrirRegistro(i); };
-
+  /* (19.94.0) O REGISTRO SAIU DA FRENTE DA LINHA. O "+", o "⤳" e o "↺" eram três alvos de 22 px antes do nome, em
+   * todas as linhas; agora "registrar", "tirar da agenda" e "desfazer" moram no menu "⋯" da linha (edItensDaLinha) e no
+   * rodapé da ficha do tópico, que é para onde "▶ Estudar" leva. O que o botão dizia com o sinal (+, ✓, ✓✓, ↻) virou
+   * selo, ao lado do título. */
   /* O PONTO COLORIDO TEM DE SE EXPLICAR.
    * Ele carrega a decisão inteira do plano — por que este tópico está
    * na frente dos outros — e era a única coisa da linha sem nada ao
@@ -680,6 +683,15 @@ function edLinhaTopico(i, semDisciplina) {
   tit.className = "ed-item-titulo";
   tit.textContent = i.titulo || i.nome;
   nome.append(tit);
+  /* (19.94.0) o estado que o botão de registro dizia com o sinal: estudado (✓) ou revisado (✓✓). A revisão da vez já
+   * tem o selo dela logo abaixo ("2ª revisão"). */
+  if (i.feito && !i.ehRevisao) {
+    const sf = document.createElement("span");
+    sf.className = "ed-selo-feito" + (i.revisado ? " rev" : "");
+    sf.textContent = t(i.revisado ? "ed_selo_revisado" : "ed_selo_estudado");
+    sf.title = t("ed_selo_feito_tip");
+    nome.append(sf);
+  }
   /* Selo além da cor: quem imprime em preto e branco, ou não distingue
    * azul de cinza, continua sabendo o que é revisão. */
   if (i.ehRevisao) {
@@ -789,25 +801,14 @@ function edLinhaTopico(i, semDisciplina) {
   const porq = document.createElement("div");
   porq.className = "ed-item-porque";
   if (!semDisciplina) {
-    /* O nome da disciplina na agenda era texto morto: clicar nele é o gesto
-     * óbvio de quem quer ver o resto da matéria, e não acontecia nada. */
-    const bd = document.createElement("button");
-    bd.type = "button";
-    bd.className = "ed-item-disc-link";
+    /* (19.94.0) a disciplina é texto: "ver a disciplina" está no menu "⋯" da linha (era um link sublinhado no meio da
+     * frase, um alvo a mais em cada linha) */
+    const bd = document.createElement("span");
+    bd.className = "ed-item-disc";
     bd.textContent = i.disciplina;
-    bd.title = t("ed_abrir_disc", { d: i.disciplina });
-    bd.onclick = (ev) => { ev.stopPropagation(); edAbrirDisciplinaDaLinha(i); };
     porq.append(bd, document.createTextNode(" · " + edPorque(i, true, { curto: true })));
   } else porq.textContent = edPorque(i, true, { curto: true });
   meio.append(nome, porq);
-
-  const rev = document.createElement("button");
-  rev.type = "button";
-  rev.className = "ed-rev";
-  rev.textContent = "↺";
-  rev.title = t("ed_desmarcar");
-  rev.style.visibility = i.feito ? "visible" : "hidden";
-  rev.onclick = (ev) => { ev.stopPropagation(); edMarcar(i, null, null); };
 
   const min = document.createElement("b");
   min.className = "ed-item-min";
@@ -893,54 +894,133 @@ function edLinhaTopico(i, semDisciplina) {
     meio.append(ul);
   }
 
+  /* Os cinco materiais (resumo, cartões, lei seca, jurisprudência, questões) vêm de edRecursosDoTopico, o mesmo lugar
+   * que a sanfona de "Horas por assunto" usa — as duas telas nunca divergem sobre o que "existe". */
+  const r = edRecursosDoTopico(i.disciplina, i.nome);
+  if (i.ramos && i.ramos.length) meio.append(edRamosNaLinha(i));
+  /* (19.94.0) O MATERIAL EM TEXTO. Eram até cinco etiquetas clicáveis ("resumo", "lei seca", "+ resumo", "🤖 resumo pela
+   * IA"…) e mais "📚 materiais" e "começar" — três caminhos para a mesma ficha. A linha diz o que existe; abrir é com
+   * "▶ Estudar". */
+  meio.append(edTemTexto(r));
+
   /* a despedida precisa reencontrar esta linha depois; sem a chave aqui ela
    * teria de comparar por texto, que quebra com nomes parecidos */
-  /* Os cinco materiais (resumo, cartões, lei seca, jurisprudência, questões) e o "⋮" do que falta são os mesmos da
-   * sanfona de "Horas por assunto" — ver edRecursosDoTopico/edMontarStatusEMenu. */
-  const r = edRecursosDoTopico(i.disciplina, i.nome);
-  const ch = r.ch;
-
-  /* TIRAR DA AGENDA — ao lado do registro de estudo.
-   * Registrar diz "fiz"; este diz "agora não" ou "não preciso". Sem ele,
-   * a única saída para um item fora de hora era marcá-lo como feito,
-   * que é mentira que vira número no diário. */
-  const fora = document.createElement("button");
-  fora.type = "button";
-  fora.className = "btn-min ed-fora";
-  fora.textContent = "⤳";
-  fora.title = t("fa_btn_ajuda");
-  fora.onclick = (ev) => {
-    ev.stopPropagation();
-    faAbrir(i);
-  };
-
   li._itemChave = i.chave;
-  /* "tirar da agenda" ao lado de "registrar": as duas respostas possíveis
-   * para o mesmo item ficam juntas — "fiz" e "agora não". Lá no fim da
-   * linha, entre os atalhos de material, ele parecia mais um documento. */
-  /* UM BOTÃO DE ESTUDAR E UM MENU.
-   *
-   * A linha tinha seis alvos: registrar, tirar, 📄, 🃏, ⚖, ❓, desmarcar.
-   * Com dez linhas na semana, sessenta alvos na mesma tela — e os quatro
-   * do meio são ícones que só quem já usa reconhece. Trocar por rótulos
-   * de texto pioraria: cada linha ficaria três vezes mais alta.
-   *
-   * A saída é reduzir, não renomear. "Estudar" leva ao que o tópico TEM
-   * (resumo, ou cartões se não houver resumo, ou a criação se não houver
-   * nada) e o "⋮" guarda o resto — lá dentro há espaço para escrever por
-   * extenso, que é onde o rótulo de texto de fato ajuda. */
-  /* "Estudar" existia para dar um alvo óbvio à linha. Com as etiquetas
-   * clicáveis ele virou um quarto botão dizendo o que o primeiro chip já
-   * diz — some quando há material, e fica só para o tópico vazio, onde
-   * de fato não há chip nenhum e é preciso um convite. */
-  const { status, estudar, mais } = edMontarStatusEMenu(
-    li, i.disciplina, i.nome, i.ramos,
-    i.edital || (typeof editalAtual !== "undefined" ? editalAtual : ""), r, i);
-  if (i.ramos && i.ramos.length) meio.append(edRamosNaLinha(i));
-  if (status.children.length) meio.append(status);
 
-  li.append(chk, fora, pt, meio, estudar, mais, rev, min);
+  /* (19.94.0) UM BOTÃO E UM MENU. A linha tinha cerca de dez alvos (registrar, tirar, o link da disciplina, o "?" dos
+   * ramos, "ver os N ramos", as etiquetas de material, "começar", "📚 materiais", "↺" e os selos de edital). Agora:
+   * "▶ Estudar" abre a ficha do tópico — já no ramo da vez —, onde estão o material, o próximo passo do Domínio e o
+   * registro; o "⋯" guarda o resto, por extenso. */
+  const acoes = document.createElement("div");
+  acoes.className = "ed-item-acoes";
+  const est = document.createElement("button");
+  est.type = "button";
+  est.className = "btn-min btn-min-ok ed-estudar";
+  est.textContent = t("ed_estudar_bt");
+  const vez = (i.ramos || []).find((x) => (i.sessao || []).indexOf(x.id) >= 0 && !x.feito && !x.revisado && !x.pulado);
+  est.title = vez ? t("ed_estudar_bt_ramo_tip", { r: vez.nome }) : t("ed_estudar_bt_tip");
+  est.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    edAbrirFicha(i.disciplina, i.nome, { ramo: vez ? vez.id : "", ramos: i.ramos || [], item: i,
+      editalId: i.edital || (typeof editalAtual !== "undefined" ? editalAtual : "") || "" });
+  };
+  const bm = document.createElement("button");
+  bm.type = "button";
+  bm.className = "btn-min ed-mais-bt";
+  bm.textContent = "⋯";
+  bm.title = t("ed_mais_tip");
+  bm.setAttribute("aria-label", t("ed_mais_aria", { n: i.titulo || i.nome }));
+  bm.setAttribute("aria-haspopup", "menu");
+  bm.setAttribute("aria-expanded", "false");
+  const menu = document.createElement("div");
+  menu.className = "ed-menu";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+  bm.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    edMenuAbrir(bm, menu, () => edItensDaLinha(li, i, semDisciplina, jaEst, bm));
+  };
+  acoes.append(min, est, bm, menu);
+
+  li.append(pt, meio, acoes);
   return li;
+}
+
+/* (19.94.0) o material do tópico em uma linha de texto: "tem: resumo · lei seca · 12 cartões" ou "ainda sem material" */
+function edTemTexto(r) {
+  const p = [];
+  if (r.temTxt) p.push(t("ed_st_resumo"));
+  if (r.temLei) p.push(t("ed_st_lei"));
+  if (r.nCards) p.push(r.nCards === 1 ? t("ed_st_cartao") : t("ed_st_cartoes", { n: r.nCards }));
+  if (r.nQ) p.push(r.nQ === 1 ? t("ed_st_questao") : t("ed_st_questoes", { n: r.nQ }));
+  if (r.nJur) p.push(r.nJur === 1 ? t("ed_st_juris_1") : t("ed_st_juris", { n: r.nJur }));
+  const d = document.createElement("div");
+  d.className = "ed-item-tem" + (p.length ? "" : " vazio");
+  d.textContent = p.length ? t("ed_tem", { l: p.join(" · ") }) : t("ed_tem_nada");
+  return d;
+}
+
+/* (19.94.0) O "⋯" DA LINHA, por extenso. A ordem é a do uso: registrar (o que se faz depois de estudar), desfazer,
+ * tirar da agenda, o porquê e, por fim, ir a outro lugar (a disciplina, o outro edital, o edital da linha). */
+function edItensDaLinha(li, i, semDisciplina, jaEst, ancora) {
+  const itens = [];
+  itens.push({ cls: "ed-menu-reg", rot: t(i.ehRevisao ? "ed_menu_reg_rev" : i.feito ? "ed_menu_reg_mais" : "ed_menu_reg"),
+    dica: t(i.feito ? "ed_reg_mais" : "ed_reg_novo"), faz: () => abrirRegistro(i) });
+  if (i.feito) itens.push({ cls: "ed-menu-desfazer", rot: t("ed_menu_desfazer"), dica: t("ed_desmarcar"), faz: () => edMarcar(i, null, null) });
+  itens.push({ cls: "ed-menu-fora", rot: t("ed_menu_fora"), dica: t("fa_btn_ajuda"), faz: () => faAbrir(i) });
+  itens.push({ cls: "ed-menu-porque", rot: t("ed_menu_porque"), faz: () => { if (typeof dicaMostrar === "function") dicaMostrar(ancora || li, edPorQueAgora(i)); } });
+  if (!semDisciplina && i.disciplina) itens.push({ cls: "ed-menu-disc", rot: t("ed_menu_disc", { d: i.disciplina }), dica: t("ed_abrir_disc", { d: i.disciplina }), faz: () => edAbrirDisciplinaDaLinha(i) });
+  if (jaEst && jaEst.temVinculo && typeof vkaAbrir === "function") itens.push({ cls: "ed-menu-vinc", rot: t("ed_menu_vinc"), faz: () => vkaAbrir(i.disciplina, i.nome, i.edital || "") });
+  (li && li._menuMais || []).forEach((o) => itens.push(o));
+  return itens;
+}
+
+/* a cor do ponto e o motivo, por extenso — o que antes só aparecia ao passar o mouse no ponto */
+function edPorQueAgora(i) {
+  return [edPorque(i, true), edExplicarCor(i)].filter(Boolean).join("\n\n");
+}
+
+/* (19.94.0) UM MENU ABERTO POR VEZ, que fecha com um clique fora ou com Esc e devolve o foco ao botão. `itens` é uma lista
+ * (ou uma função que a devolve, para o menu nascer com o estado da hora) de {rot, faz, dica, cls, id}. */
+let edMenuAtual = null;
+function edMenuFechar() {
+  const m = edMenuAtual;
+  edMenuAtual = null;
+  if (!m) return;
+  m.menu.hidden = true;
+  try { m.bt.setAttribute("aria-expanded", "false"); } catch (e) {}
+  try { document.removeEventListener("click", m.fora, true); document.removeEventListener("keydown", m.tecla); } catch (e) {}
+}
+function edMenuAbrir(bt, menu, itens) {
+  const jaAberto = !!(edMenuAtual && edMenuAtual.menu === menu);
+  edMenuFechar();
+  if (jaAberto || !bt || !menu) return null;
+  menu.innerHTML = "";
+  (typeof itens === "function" ? itens() : (itens || [])).filter(Boolean).forEach((o) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ed-menu-item" + (o.cls ? " " + o.cls : "");
+    b.setAttribute("role", "menuitem");
+    if (o.id) b.id = o.id;
+    b.textContent = o.rot;
+    if (o.dica) b.title = o.dica;
+    b.onclick = (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      /* FECHA ANTES DE AGIR: a ação costuma abrir outra janela, e um menu aberto atrás dela reaparece sem contexto */
+      edMenuFechar();
+      try { o.faz(); } catch (e) { try { reg("ERRO", "menu ⋯", String(e && e.message)); } catch (e2) {} }
+    };
+    menu.append(b);
+  });
+  menu.hidden = false;
+  try { bt.setAttribute("aria-expanded", "true"); } catch (e) {}
+  const dentro = (n) => { for (let x = n; x; x = x.parentNode) { if (x === menu || x === bt) return true; } return false; };
+  const fora = (ev) => { if (ev && dentro(ev.target)) return; edMenuFechar(); };
+  const tecla = (ev) => { if (ev && ev.key === "Escape") { edMenuFechar(); try { bt.focus(); } catch (e) {} } };
+  edMenuAtual = { menu, bt, fora, tecla };
+  try { document.addEventListener("click", fora, true); document.addEventListener("keydown", tecla); } catch (e) {}
+  try { const p = menu.querySelector(".ed-menu-item"); if (p && p.focus) p.focus(); } catch (e) {}
+  return menu;
 }
 
 /* A AGENDA PERGUNTA "ESTE SAIU?" NUM LUGAR SÓ.
@@ -4463,12 +4543,8 @@ function edPintarBlocos(plano) {
     : t("ed_min_tit_ok", { n: totalCortes });
   cx.append(tit);
 
-  /* (19.55.0) mudar os cortes sem tocar no texto */
-  const be = document.createElement("button");
-  be.type = "button"; be.className = "btn-min ed-min-editar"; be.id = "btnEdMinEditar";
-  be.textContent = t("ep_editar_cortes");
-  be.onclick = () => { if (typeof epAbrir === "function") epAbrir(); };
-  cx.append(be);
+  /* (19.94.0) o botão "ajustar pontuação e cortes" daqui saiu: era o mesmo "⚖ Pontuação e cortes" da bancada, que fica
+   * sempre à vista logo acima */
 
   const sub = document.createElement("p");
   sub.className = "nota";

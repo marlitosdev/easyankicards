@@ -777,10 +777,12 @@ async function testes() {
      * agendas com o mesmo nome e números diferentes). O link da disciplina
      * continua tendo de existir e abrir o panorama — só que agora ele mora
      * nas linhas da agenda de cima. */
+    /* (19.94.0) "ver a disciplina" mora no "⋯" de cada linha da agenda (era o nome sublinhado no meio do motivo) */
     api.hubRender();
-    const links = acha(api.$("edAgendaTopo"), "ed-item-disc-link")
-      .concat(acha(api.$("edPainel"), "ed-item-disc-link"));
-    ok(links.length > 0, "T1 o nome da disciplina na agenda não é clicável");
+    const bmDisc = acha(api.$("edAgendaTopo"), "ed-mais-bt")[0];
+    if (bmDisc) bmDisc.onclick({ stopPropagation() {} });
+    const links = acha(api.$("edAgendaTopo"), "ed-menu-disc");
+    ok(links.length > 0, "T1 o '⋯' da linha da agenda não leva à disciplina");
     /* T2 mudou de pergunta: não existe mais um cartão para "já estar
      * aberto" — o que precisa continuar recolhido por padrão é o mapa
      * das disciplinas inteiro (v16.15). "edMapaAberto" é module-level e
@@ -868,23 +870,24 @@ async function testes() {
       return out;
     };
     api.hubRender();
-    const docs = achaW(api.$("edAgendaTopo"), "ed-st-doc")
-      .concat(achaW(api.$("edPainel"), "ed-st-doc"));
+    /* (19.94.0) o material da linha é uma frase ("tem: resumo · 2 cartões" ou "ainda sem material"), uma por linha */
+    const docs = achaW(api.$("edAgendaTopo"), "ed-item-tem")
+      .concat(achaW(api.$("edPainel"), "ed-item-tem"));
     /* O INDICADOR VIROU ETIQUETA DE STATUS, EM PALAVRAS.
      * Antes era um ícone sempre presente, aceso ou apagado. Agora a
      * etiqueta só existe quando há material — a AUSÊNCIA é a informação,
      * e ícone apagado em toda linha era parte do ruído. Por isso a
      * segunda verificação mudou de "existe um apagado" para "a linha sem
      * material não tem etiqueta nenhuma". */
-    ok(docs.length >= 1, "W2 nenhum tópico mostra que tem resumo");
+    ok(docs.some((d) => /resumo/.test(d.textContent || "")), "W2 nenhum tópico mostra que tem resumo");
     /* T1: o RESUMO aparece em TODA linha — "resumo" quando existe, "+ resumo" (tracejado) quando falta: criar não pode
      * morar escondido no fim da linha */
-    ok(docs.every((d) => /(^| )tem( |$)/.test(d.className || "") ? !/ed-st-falta/.test(d.className) : (/ed-st-falta/.test(d.className) && /\+ resumo/.test(d.textContent))),
-       "W3 a etiqueta do resumo diz se tem (resumo) ou se falta (+ resumo)");
+    ok(docs.every((d) => /(^| )vazio( |$)/.test(d.className || "") ? /sem material/.test(d.textContent) : /^tem: /.test(d.textContent)),
+       "W3 a frase do material diz o que tem, ou que ainda nao ha material");
     const linhasW = achaW(api.$("edAgendaTopo"), "ed-item")
       .concat(achaW(api.$("edPainel"), "ed-item"));
-    ok(linhasW.length === docs.length && docs.some((d) => /ed-st-falta/.test(d.className)),
-       "W3b toda linha tem a etiqueta do resumo, inclusive quem ainda não tem (como '+ resumo')");
+    ok(linhasW.length === docs.length && docs.some((d) => /(^| )vazio( |$)/.test(d.className)),
+       "W3b toda linha diz o material, inclusive quem ainda não tem ('ainda sem material')");
     /* W5 — PARA QUAL CONCURSO. Sem esta marca, o dia em que existirem dois
      * planos os históricos se misturam, e informação que não foi gravada na
      * hora não se recupera depois. */
@@ -1078,10 +1081,11 @@ async function testes() {
     api.hubRender();
     const achaAg = (cls) => achaAA(api.$("edAgendaTopo"), cls)
       .concat(achaAA(api.$("edPainel"), cls));
-    const docsAA = achaAg("ed-st-doc");
-    ok(docsAA.length >= 1, "AA1 o indicador de material não apareceu na agenda");
-    ok(docsAA.every((d) => /\btem\b/.test(d.className || "") || (/ed-st-falta/.test(d.className) && /\+ resumo/.test(d.textContent))),
-       "AA1b a etiqueta do resumo de quem não tem material diz '+ resumo' (e não finge que tem)");
+    /* (19.94.0) o material da linha é uma frase: "tem: resumo" ou "ainda sem material" */
+    const docsAA = achaAg("ed-item-tem");
+    ok(docsAA.some((d) => /resumo/.test(d.textContent || "")), "AA1 o indicador de material não apareceu na agenda");
+    ok(docsAA.every((d) => /^tem: /.test(d.textContent || "") || (/(^| )vazio( |$)/.test(d.className) && /sem material/.test(d.textContent))),
+       "AA1b quem não tem material diz isso (e não finge que tem)");
 
     /* AA2 — e distingue "tem resumo" de "tem cartões guardados" */
     api.matGravarCartoes(api.matChave("Orcamentario", "Vedacao AA"),
@@ -1089,7 +1093,7 @@ async function testes() {
       { disciplina: "Orcamentario", topico: "Vedacao AA" });
     api.edRender(); api.hubRender();
     api.hubRender();
-    const comCards = achaAg("ed-st-crt");
+    const comCards = achaAg("ed-item-tem").filter((d) => /cart/.test(d.textContent || ""));
     ok(comCards.length === 1,
        `AA2 esperava 1 indicador de cartões, veio ${comCards.length}`);
     /* a contagem vive DENTRO do rotulo agora ("3 cartões"), em vez de
@@ -1370,8 +1374,11 @@ async function testes() {
 
       api.hubAbrirEdital(e1.id);
       ok(!hub() && banc(), "AC3 abrir um edital devia trocar o hub pela bancada");
-      ok(api.$("edNomeAberto").textContent === "Prova A",
-         "AC4 a bancada nao diz qual edital esta aberto");
+      /* (19.94.0) quem diz qual edital está aberto é o seletor do topo da aba (o nome na bancada saiu) */
+      const selAC = api.$("edSel");
+      const optAC = selAC && Array.from(selAC.children || []).find((o) => o.value === selAC.value);
+      ok(selAC && selAC.value === e1.id && optAC && optAC.textContent === "Prova A" && api.$("edTopoFerr").hidden === false,
+         "AC4 o seletor do topo nao diz qual edital esta aberto (ou as ferramentas dele nao apareceram)");
       ok(/Prova A/.test(api.$("editalTexto").value),
          "AC5 o texto do edital aberto nao chegou na bancada");
 
@@ -1410,12 +1417,19 @@ async function testes() {
       ok(!api.$("edBancResumo").hidden && (api.$("edBancResumo").textContent || "").length > 0,
          "AC8c recolhida e sem resumo: a informação sumiu de vez");
       api.bancAlternar();
-      ok(!api.$("edBancCorpo").hidden && api.$("edBancResumo").hidden,
+      /* (19.94.0) o resumo fica à vista nos dois estados (junto da fileira de ações) */
+      ok(!api.$("edBancCorpo").hidden && !api.$("edBancResumo").hidden,
          "AC8d expandir não trouxe o corpo da bancada de volta");
       api.bancAlternar();
 
+      /* (19.94.0) "← todos os editais" virou a opção "Todos os editais" do seletor do topo */
+      api.$("edSel").value = "";
+      api.$("edSel").onchange();
+      ok(hub() && !banc() && api.$("edTopoFerr").hidden === true, "AC8 'Todos os editais' no seletor devia mostrar o hub de novo (e esconder as ferramentas do edital)");
+      api.$("edSel").value = e2.id;
+      api.$("edSel").onchange();
+      ok(!hub() && banc() && /Prova B/.test(api.$("editalTexto").value), "AC8a escolher um edital no seletor abre o plano dele");
       api.hubVoltar();
-      ok(hub() && !banc(), "AC8 voltar devia mostrar o hub de novo");
 
       /* a agenda vive fora das duas telas: e a pergunta das 7h da manha, e
        * some justamente na hora errada se depender da bancada estar aberta */
@@ -2114,19 +2128,18 @@ async function testes() {
           });
           anda(el); return n;
         };
-        ok(conta(api.$("edAgendaTopo"), "ed-st-crt") >= 1,
-           "AI1 nenhuma linha mostra que tem cartões");
-        ok(conta(api.$("edAgendaTopo"), "ed-item")
-           > conta(api.$("edAgendaTopo"), "ed-st-crt"),
-           "AI1-pre o cenário precisa de linhas com e sem cartões");
-        /* o indicador acende só onde há cartão */
+        /* (19.94.0) o material da linha é uma frase ("tem: 1 cartão") */
         let acesos = 0;
         const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
           const c = (f.className || "").split(/\s+/);
-          if (c.includes("ed-st-crt") && c.includes("tem")) acesos++;
+          if (c.includes("ed-item-tem") && /cart/.test(f.textContent || "")) acesos++;
           anda2(f);
         });
         anda2(api.$("edAgendaTopo"));
+        ok(acesos >= 1,
+           "AI1 nenhuma linha mostra que tem cartões");
+        ok(conta(api.$("edAgendaTopo"), "ed-item") > acesos,
+           "AI1-pre o cenário precisa de linhas com e sem cartões");
         ok(acesos === 1,
            `AI2 o indicador de cartões devia acender em 1 linha, acendeu em ${acesos}`);
 
@@ -2144,19 +2157,23 @@ async function testes() {
           anda(raiz);
           return achado;
         };
-        /* o que o tópico TEM virou etiqueta clicável na própria linha;
-         * o "⋮" ficou só com o que falta criar */
+        const acharTodasCls = (raiz, cls) => {
+          const out = [];
+          const anda = (x) => Array.from(x.children || []).forEach((f) => {
+            if ((f.className || "").split(/\s+/).includes(cls)) out.push(f);
+            anda(f);
+          });
+          anda(raiz);
+          return out;
+        };
+        /* (19.94.0) o caminho até os cartões: "▶ Estudar" da linha que os tem → a ficha do tópico → "estudar" dos cartões */
         let alvoBtn = null;
-        const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
-          const txt = f.textContent || "";
-          if (/cart/i.test(txt) && /ed-st-crt/.test(f.className || "") && !alvoBtn) {
-            alvoBtn = f;
-          }
-          anda3(f);
-        });
-        anda3(api.$("edAgendaTopo"));
+        const linhaCart = Array.from(acharTodasCls(api.$("edAgendaTopo"), "ed-item")).find((li) => /cart/.test(li.textContent || ""));
+        const estCart = linhaCart && acharNa(linhaCart, "ed-estudar");
+        if (estCart) estCart.onclick({ stopPropagation() {} });
+        if (api.$("dlgMatFicha").open) alvoBtn = acharTodasCls(api.$("matFichaLista"), "slot-cartoes").find((f) => typeof f.onclick === "function") || null;
         ok(alvoBtn && typeof alvoBtn.onclick === "function",
-           "AI3b a etiqueta de cartões não leva aos cartões");
+           "AI3b o '▶ Estudar' da linha não leva aos cartões (pela ficha)");
         if (!alvoBtn) return falhas;
         /* AI5 mede a MUDANÇA, não o valor absoluto: blocos anteriores
          * deixam o app noutro modo, e comparar com "edital" fazia o teste

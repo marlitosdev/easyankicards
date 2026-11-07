@@ -7182,6 +7182,65 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .mc-est-ferramentas{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
   padding-top:9px;border-top:1px solid var(--borda)}
 /* =====================================================================
+ * (19.94.0) A ABA EDITAL SEM REPETIÇÕES — fase 2
+ * Um seletor de edital no topo (com as ferramentas do edital escolhido), a linha da agenda com "▶ Estudar" e um menu
+ * "⋯", a bancada com uma fileira só de ações. Regras sem #secEdital porque a mesma linha aparece na janela da
+ * disciplina.
+ * ===================================================================== */
+.ed-topo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;padding:10px 12px;
+  border:1px solid var(--borda);border-radius:12px;background:var(--panel)}
+.ed-topo-sel{display:flex;align-items:center;gap:8px;font-weight:700;flex:1 1 260px;min-width:0}
+.ed-topo-sel[hidden]{display:none}
+.ed-topo-sel select{flex:1 1 auto;min-width:0;max-width:440px;min-height:36px;padding:4px 8px;border-radius:8px;
+  background:var(--campo);color:var(--texto);border:1px solid var(--borda);font:inherit;font-weight:600}
+.ed-topo-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ed-topo-ferr[hidden]{display:none}
+.ed-topo-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
+.ed-topo-mais{position:relative}
+/* o "⋯" (da linha e do topo): o mesmo desenho do menu da janela da disciplina */
+.ed-mais-bt{font-size:18px;line-height:1;padding:2px 12px;min-width:40px}
+.ed-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:240px;max-width:min(320px,86vw);padding:6px;
+  border-radius:10px;border:1px solid var(--borda);background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.35);
+  display:flex;flex-direction:column;gap:2px;text-align:left}
+.ed-menu[hidden]{display:none}
+.ed-menu-item{all:unset;box-sizing:border-box;cursor:pointer;padding:9px 10px;border-radius:7px;font-size:14px;
+  line-height:1.35;color:var(--texto)}
+.ed-menu-item:hover,.ed-menu-item:focus-visible{background:var(--campo);outline:none}
+.ed-menu-reg{font-weight:700;color:var(--ok)}
+/* a linha da agenda: ponto · texto · ações (que descem para baixo do texto quando não cabem) */
+.ed-item{align-items:flex-start;flex-wrap:wrap}
+.ed-item>.ed-ponto{margin-top:9px;flex:none}
+/* o texto pede ~380 px antes de dividir a linha com as ações: abaixo disso, as ações descem e o texto fica com a largura toda */
+.ed-item>.ed-item-meio{flex:1 1 380px;min-width:200px}
+.ed-item-acoes{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;flex:0 0 auto;
+  margin-left:auto;position:relative}
+.ed-item-acoes .ed-item-min{color:var(--sutil)}
+.ed-estudar{white-space:nowrap}
+.ed-item-tem{font-size:12px;color:var(--sutil);margin-top:4px}
+.ed-item-tem.vazio{font-style:italic}
+.ed-item-disc{color:var(--texto);font-weight:600}
+.ed-selo-feito{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:12px;
+  font-weight:700;background:rgba(34,197,94,.16);color:var(--ok);border:1px solid rgba(34,197,94,.45)}
+.ed-selo-feito.rev{background:#15803d;color:#fff;border-color:transparent}
+/* os ramos: o resumo abre e fecha os chips */
+.ed-ramos-resumo.ed-ramos-alt{background:none;border:0;padding:2px 0;margin:0;font:inherit;font-weight:700;color:var(--texto);
+  cursor:pointer;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}
+.ed-ramos-resumo.ed-ramos-alt:hover{color:var(--info)}
+.ed-ramos-det{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%}
+.ed-ramos-det[hidden]{display:none}
+/* nos ajustes da agenda: os editais que entram nela e o modo das disciplinas que têm modo próprio */
+.hub-modo-disc-tit{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--sutil);margin:10px 0 4px}
+.hub-modo-mais{justify-content:flex-start}
+.hub-modo-mais select{min-height:32px}
+.hub-aj-editais{margin:6px 0 4px}
+/* a bancada: o resumo e uma fileira de ações, nos dois estados; copiar e limpar só com o texto aberto */
+.ed-banc-acoes{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+.ed-banc-texto-acoes{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin:0 0 8px}
+@media (max-width:640px){
+  .ed-item-acoes{width:100%;justify-content:flex-start;margin-left:0}
+  .ed-topo-fim{margin-left:0}
+}
+/* =====================================================================
  * (19.93.0) A ABA EDITAL LEGÍVEL — fase 1: a escala de letra e o tamanho dos botões
  * Medido com o ISS: 62% do texto tinha 11,5 px ou menos, em 11 tamanhos diferentes (9 a 16 px), e 67 dos 149
  * controles tinham menos de 24 px de altura (o "?" tinha 15). Agora, SÓ NESTA ABA, quatro tamanhos:
@@ -7202,20 +7261,19 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 #secEdital .lac-nome,#secEdital .edm-nome,#secEdital .edm-resumo,#secEdital .lac-num,#secEdital .dom-termo-txt,
 #secEdital summary,#secEdital .hub-aviso-chip,#secEdital .hub-vinc-txt,#secEdital .hub-vinc-ex,#secEdital .ed-item-min,
 #secEdital .di-sem-min,#secEdital .ag-med-rot,#secEdital .ed-ag-opt,#secEdital .plog-gatilho,#secEdital .banc-alternar,
-#secEdital .ed-reg,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
+#secEdital .ed-menu-item,#secEdital .ed-topo-sel,#secEdital .btn,#secEdital .hub-modo-lin label,#secEdital .hub-modo-rot,#secEdital .ac-meta-quero,
 #secEdital .ed-sim-txt,#secEdital .ed-banc-resumo{font-size:14px}
 /* 12 px — detalhes */
 #secEdital .ed-selo-cc,#secEdital .ed-selo-fase,#secEdital .ed-selo-andamento,#secEdital .ed-selo-volta,#secEdital .ed-item-trava,
 #secEdital .ac-c,#secEdital .ac-rot,#secEdital .ac-escopo,#secEdital .lac-cab-c,#secEdital .lac-linha i,
 #secEdital .di-sem-prev,#secEdital .di-sem-cod,#secEdital .ed-min-estado,#secEdital .ed-st-item,#secEdital .ed-ramo,
-#secEdital .ed-agenda-cfg-item,#secEdital .di-per,#secEdital .selo-ajuda,#secEdital .ed-rev,#secEdital .ed-faixa span{font-size:12px}
+#secEdital .ed-agenda-cfg-item,#secEdital .di-per,#secEdital .selo-ajuda,#secEdital .ed-item-tem,#secEdital .ed-selo-feito,
+#secEdital .hub-modo-disc-tit,#secEdital .ed-faixa span{font-size:12px}
 /* os selos que não quebravam linha (nowrap) passaram da largura da coluna com a letra maior: agora quebram */
 #secEdital .ed-selo-andamento,#secEdital .ed-item-trava{white-space:normal;max-width:100%;box-sizing:border-box}
 /* botões: alvo de toque */
 #secEdital .btn-min,#secEdital .hub-aviso-chip,#secEdital .ed-ag-opt,#secEdital .di-per,#secEdital .plog-gatilho,
 #secEdital .banc-alternar{min-height:32px;box-sizing:border-box}
-#secEdital .ed-reg{width:32px;height:32px}
-#secEdital .ed-rev{width:28px;height:28px}
 #secEdital .selo-ajuda{width:24px;height:24px}
 #secEdital .ed-st-item,#secEdital .ed-selo-cc,#secEdital button.ed-ramo,#secEdital button.ac-c{min-height:28px;display:inline-flex;align-items:center;box-sizing:border-box}
 #secEdital summary{min-height:28px}
@@ -7224,8 +7282,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 #secEdital .ed-item{padding-top:12px;padding-bottom:12px;flex-wrap:wrap}
 @media (pointer:coarse){
   #secEdital .btn-min,#secEdital .hub-aviso-chip,#secEdital .ed-ag-opt,#secEdital .di-per,#secEdital .banc-alternar{min-height:44px}
-  #secEdital .ed-reg{width:44px;height:44px}
-  #secEdital .ed-rev,#secEdital .selo-ajuda{width:36px;height:36px}
+  #secEdital .selo-ajuda{width:36px;height:36px}
+  #secEdital .ed-menu-item{min-height:44px}
   #secEdital .ed-st-item,#secEdital .ed-selo-cc,#secEdital button.ed-ramo{min-height:36px}
 }
 
@@ -7595,10 +7653,28 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button class="btn-min" id="btnDesfazerRegNao" data-i18n="ed_desfazer_nao"
       title="Fecha este aviso. O registro fica."></button>
   </div>
-  <div class="ed-atalhos">
-    <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
-    <!-- só aparece quando o edital em uso é um previsto -->
-    <button type="button" class="btn-min btn-min-ok" id="btnVirada" data-i18n="vr_botao" hidden></button>
+  <!-- (19.94.0) O TOPO DA ABA: um seletor de edital só (era escolhido em quatro lugares) e as ferramentas do edital
+       escolhido, que antes ficavam depois da agenda inteira. "Renomear" e "novo edital" moram no ⋯. -->
+  <div class="ed-topo" id="edTopo">
+    <label class="ed-topo-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
+      <select id="edSel"></select></label>
+    <div class="ed-topo-ferr" id="edTopoFerr" hidden>
+      <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
+      <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
+      <span class="ed-dom-termo" id="edDomTermo" role="button" tabindex="0" hidden></span>
+      <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
+      <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
+    </div>
+    <div class="ed-topo-fim">
+      <button type="button" class="btn-min" id="btnDiarioTopo" data-i18n="ed_diario_btn"></button>
+      <!-- só aparece quando o edital em uso é um previsto -->
+      <button type="button" class="btn-min btn-min-ok" id="btnVirada" data-i18n="vr_botao" hidden></button>
+      <span class="ed-topo-mais">
+        <button type="button" class="btn-min ed-mais-bt" id="btnEdTopoMais" aria-haspopup="menu" aria-expanded="false"
+          data-i18n-title="ed_sel_mais_tip">⋯</button>
+        <div class="ed-menu" id="edTopoMenu" role="menu" hidden></div>
+      </span>
+    </div>
   </div>
   <div id="edAgendaTopo" class="ed-agenda-topo"></div>
 
@@ -7652,37 +7728,22 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 
   <!-- BANCADA: só aparece ao incluir, consultar ou editar um edital. -->
   <div id="edBancada" hidden>
-    <div class="ed-voltar-linha">
-      <button class="btn-min" id="btnEdVoltar" data-i18n="hub_voltar"></button>
-      <span class="ed-aberto-nome" id="edNomeAberto"></span>
-      <button class="btn-min" id="btnEdHoras" data-i18n="hor_btn"></button>
-      <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
-      <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
-      <span class="ed-dom-termo" id="edDomTermo" role="button" tabindex="0" hidden></span>
-      <button class="btn-min" id="btnEdVert" data-i18n="vert_btn"></button>
-      <button class="btn-min" id="btnEdRenomear" data-i18n="hub_renomear"></button>
-    </div>
   <div class="duas-colunas">
     <div class="grupo" id="painelEdital">
       <div class="bancada-cab">
         <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
-        <span class="bancada-acoes">
-          <!-- Depois que o edital está colado, a bancada é uma caixa de texto
-               enorme que não muda mais. Recolher devolve a tela para o que
-               se usa todo dia: a agenda e o painel.
-
-               O BOTÃO DE VOLTA PRECISA SER ACHÁVEL. Recolhido, tudo o que
-               resta desta coluna é uma linha de resumo — e o caminho de
-               volta era um botão pálido igual aos outros dois, do mesmo
-               tamanho e da mesma cor, no canto. Quem recolhe uma vez e não
-               acha o "expandir" conclui que o app comeu o edital. Por isso
-               ele tem forma própria e, quando recolhido, cor viva. -->
-          <button class="banc-alternar" id="btnEdBancRecolher" data-i18n="ed_recolher"></button>
-          <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
-          <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
-        </span>
       </div>
-      <div class="ed-banc-resumo" id="edBancResumo" hidden></div>
+      <div class="ed-banc-resumo" id="edBancResumo"></div>
+      <!-- (19.94.0) UMA FILEIRA DE AÇÕES, NOS DOIS ESTADOS. Recolhida, a bancada tinha "⚖ Pontuação e cortes", "Revisar
+           com a IA" e "✏ texto do plano"; aberta, outro "Revisar com a IA" e um "expandir/recolher" que fazia o mesmo que
+           "✏ texto do plano". E "Pontuação e cortes" ainda aparecia de novo em "Riscos de corte". Agora cada ação existe
+           uma vez, sempre aqui; o último botão abre e fecha o texto cru (copiar e limpar vão junto com ele). -->
+      <div class="ed-banc-acoes" id="edBancAcoes">
+        <button type="button" class="btn-min btn-min-ok" id="btnBancPontua" data-i18n="ep_btn" data-i18n-title="ep_btn_tip"></button>
+        <button type="button" class="btn-min" id="btnEditalColar" data-i18n="ed_rev_btn" data-i18n-title="ed_rev_exp"></button>
+        <button type="button" class="btn-min" id="btnEdNovaDisc" data-i18n="ed_nova_disc"></button>
+        <button type="button" class="banc-alternar" id="btnEdBancRecolher" aria-controls="edBancCorpo" data-i18n="ed_banc_texto"></button>
+      </div>
       <!-- Q4 (FORA do corpo recolhível: a pergunta aparece mesmo com a bancada recolhida): renomeou um ramo à mão no texto? o material dele (estudo, questões, julgados, cartões, resumo) vai junto se você confirmar -->
       <div class="ed-ramo-ren" id="edRamoRenCx" role="status" aria-live="polite" hidden>
         <span id="edRamoRenTxt"></span>
@@ -7696,18 +7757,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <button type="button" class="btn-min" id="btnRamRenDesfazer" data-i18n="ria_desfazer" data-i18n-title="ram_ren_desfazer_tip"></button>
       </div>
       <div id="edBancCorpo">
-      <!-- TRÊS AÇÕES, CADA UMA COM O QUE ELA FAZ ESCRITO EMBAIXO.
-           Eram quatro botões cujos nomes descreviam o gesto ("criar
-           prompt", "colar plano") e não o resultado, e dois deles eram
-           metades do mesmo trabalho: pedir a revisão e receber a revisão.
-           Separados, davam para ser apertados fora de ordem e não diziam
-           que um dependia do outro. Agora são um caminho só, de dois
-           passos, dentro da mesma caixa. -->
-      <div class="ed-acoes">
-        <div class="ed-acao">
-          <button class="btn btn-roxo" id="btnEditalColar" data-i18n="ed_rev_btn"></button>
-          <span class="ed-acao-exp" data-i18n="ed_rev_exp"></span>
-        </div>
+      <div class="ed-banc-texto-acoes">
+        <button class="btn-min" id="btnEditalCopiar" data-i18n="copy_all"></button>
+        <button class="btn-min" id="btnEditalLimpar" data-i18n="ed_limpar"></button>
       </div>
       <label class="bancada-sub" data-i18n="ed_colar"></label>
       <div class="editor-wrap ed-wrap">
@@ -7718,9 +7770,6 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
       <div id="editalSug" class="sugestoes"></div>
       <button class="btn btn-verde" id="btnEditalCorrigir" disabled></button>
       </div><!-- /edBancCorpo -->
-      <!-- Incluir disciplina à mão, sem passar pela IA nem editar o texto
-           cru. Fica FORA do corpo recolhível: é o gesto que se repete. -->
-      <button class="btn btn-azul" id="btnEdNovaDisc" data-i18n="ed_nova_disc"></button>
     </div>
 
     <div class="grupo">

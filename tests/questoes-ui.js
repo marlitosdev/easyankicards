@@ -64,14 +64,16 @@ async function testes() {
     /* T1: o que FALTA não mora mais num "⋮" — "📚 materiais" abre a ficha, e lá está a ação de criar */
     let mat = null;
     const anda2 = (x) => Array.from(x.children || []).forEach((f) => {
-      if (/ed-materiais/.test(f.className || "") && !mat) mat = f;
+      /* (19.94.0) "📚 materiais" virou "▶ Estudar": a mesma ficha */
+      if (/(^| )ed-estudar( |$)/.test(f.className || "") && !mat) mat = f;
       anda2(f);
     });
     anda2(linha);
     if (mat && apiF) {
       mat.onclick({ stopPropagation() {} });
       const anda3 = (x) => Array.from(x.children || []).forEach((f) => {
-        if (!achado && typeof f.onclick === "function" && /criar|responder|estudar/i.test(f.textContent || "") && re.test(f.textContent || "")) achado = f;
+        /* na ficha, o botão diz o verbo ("estudar", "responder") e a classe diz o material (slot-cartoes, slot-questoes) */
+        if (!achado && typeof f.onclick === "function" && /criar|responder|estudar/i.test(f.textContent || "") && (re.test(f.textContent || "") || re.test(f.className || ""))) achado = f;
         anda3(f);
       });
       anda3(apiF.$("matFichaLista"));
@@ -1331,8 +1333,8 @@ async function testes() {
 
     const li = aL.edLinhaAgendaTeste({ disciplina: "Direito Financeiro",
       nome: "Leis Orcamentarias", chave: cL });
-    const bc = atalhoDa(li, /cart/i);
-    ok(!!bc, "K1 a linha perdeu o atalho dos cartoes (nem na linha, nem no menu)");
+    const bc = atalhoDa(li, /cart/i, aL);
+    ok(!!bc, "K1 a linha perdeu o atalho dos cartoes (nem na linha, nem na ficha do '▶ Estudar')");
     if (!bc) { falhas.quantas = n; return falhas; }
     bc.onclick({ stopPropagation() {} });
     ok(aL.$("dlgGerEstudo").open === true && aL.$("dlgGerCartoes").open === true,
@@ -1444,11 +1446,12 @@ async function testes() {
       anda(li); return r;
     };
     const li = aN.edLinhaAgendaTeste({ disciplina: "D", nome: "T", chave: cN });
-    const marca = acha(li, "ed-st-qst")[0];
-    ok(!!marca, "K3 a linha nao mostra que o topico tem questoes");
-    ok(/tem/.test((marca && marca.className) || ""),
-       "K3b a etiqueta de questoes apareceu apagada");
-    const bq = atalhoDa(li, /quest/i);
+    /* (19.94.0) o material da linha é texto ("tem: resumo · 1 questão"); o caminho é "▶ Estudar" → ficha → responder */
+    const marca = acha(li, "ed-item-tem")[0];
+    ok(!!marca && /quest/.test(marca.textContent || ""), "K3 a linha nao mostra que o topico tem questoes");
+    ok(!/(^| )vazio( |$)/.test((marca && marca.className) || ""),
+       "K3b a linha do material apareceu como vazia");
+    const bq = atalhoDa(li, /quest/i, aN);
     ok(!!bq, "K3b2 nao ha como chegar nas questoes do topico");
     if (bq) bq.onclick({ stopPropagation() {} });
     ok(aN.$("dlgQsResponder").open === true,
@@ -1493,17 +1496,18 @@ async function testes() {
 
     const li = aP.edLinhaAgendaTeste({ disciplina: disc, nome: top,
       chave: aP.matChave(disc, top) });
-    const acesa = (cls) => {
+    /* (19.94.0) o material da linha é texto: "tem: resumo · 1 cartão" */
+    const acesa = (re) => {
       let achou = false;
       const anda = (x) => Array.from(x.children || []).forEach((f) => {
         const c = (f.className || "").split(/\s+/);
-        if (c.includes(cls) && c.includes("tem")) achou = true;
+        if (c.includes("ed-item-tem") && re.test(f.textContent || "")) achou = true;
         anda(f);
       });
       anda(li); return achou;
     };
-    ok(acesa("ed-st-doc"), "K5b a etiqueta do resumo nao apareceu com o resumo existindo");
-    ok(acesa("ed-st-crt"), "K5c a etiqueta dos cartoes nao apareceu com cartao existindo");
+    ok(acesa(/resumo/), "K5b a linha nao disse 'resumo' com o resumo existindo");
+    ok(acesa(/cart/), "K5c a linha nao disse 'cartão' com cartao existindo");
     ok(aP.matChaveViva(disc, top) === variante,
        "K5d a chave viva nao encontrou a gaveta que tem o material");
   }

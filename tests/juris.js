@@ -303,7 +303,8 @@ async function testes() {
       });
       return out;
     };
-    const chips = achar(api.$("edAgendaTopo"), "ed-st-jur", []);
+    /* (19.94.0) o material da linha é texto ("tem: resumo · 2 julgados"), não etiquetas clicáveis */
+    const chips = achar(api.$("edAgendaTopo"), "ed-item-tem", []).filter((x) => /julgado/i.test(x.textContent || ""));
     ok(chips.length > 0,
        "J10 o julgado guardado nao aparece na agenda");
     /* o "|| {}" evita que a falha acima derrube o arquivo com

@@ -267,7 +267,8 @@ async function testes() {
       const box = api.$("edAgendaTopo");
       const achar = (el, saida) => {
         Array.from(el.children || []).forEach((f) => {
-          if (/ed-st-crt/.test(f.className || "")) saida.push(f);
+          /* (19.94.0) o material da linha é texto: "tem: … 1 cartão" */
+          if (/(^| )ed-item-tem( |$)/.test(f.className || "") && /cart/i.test(f.textContent || "")) saida.push(f);
           achar(f, saida);
         });
         return saida;
