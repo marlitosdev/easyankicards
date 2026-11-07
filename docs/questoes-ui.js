@@ -2034,7 +2034,8 @@ function qsUiLeiIr(c, q, botao) {
         + qsUiLeiMotivoFalha(c, lista));
   } catch (e) {}
 
-  if (alvo.motivo === "ambigua"
+  /* (19.96.0) "sem_artigo": a única lei do tópico não tem o artigo citado — a mesma pergunta (qual lei?) */
+  if (alvo.motivo === "ambigua" || alvo.motivo === "sem_artigo"
       || (alvo.motivo === "desconhecida" && doTopico.length > 0)) {
     /* DOIS MOTIVOS, A MESMA PERGUNTA. "Ambígua": a citação não disse
      * qual das leis já ligadas. "Desconhecida" com o tópico já tendo
@@ -2388,7 +2389,12 @@ function qsVincEscolher(alvo) {
       const l0 = c0 && c0.rotulo ? leiCasarRotulo(c0.rotulo, lista) : null;
       if (l0 && !alvo.cit) sug = l0.id;
     } catch (e) {}
-    if (!sug && doTopico.length === 1) sug = doTopico[0].id;
+    /* (19.96.0) a lei do tópico só é a sugestão quando tem o artigo do trecho (a LC 101 não sugere "art. 105") */
+    if (!sug && doTopico.length === 1) {
+      let num = alvo.cit && alvo.cit.num ? alvo.cit.num : "";
+      if (!num) { try { const c1 = leiCitacoesNoTexto(alvo.trecho)[0]; num = c1 ? c1.num : ""; } catch (e) { num = ""; } }
+      if (!num || typeof leiTemArtigo !== "function" || leiTemArtigo(doTopico[0], num)) sug = doTopico[0].id;
+    }
   }
   qsVincPintarLeis(sug);
   s.value = sug;
@@ -2409,6 +2415,7 @@ function qsVincEscolher(alvo) {
   if ($("qsVincAlcTopico")) $("qsVincAlcTopico").checked = true;
   if ($("qsVincAlcTudo")) $("qsVincAlcTudo").checked = false;
   $("qsVincEscAviso").textContent = "";
+  if ($("qsVincLigar")) $("qsVincLigar").checked = true;
   qsVincPintarEsc();
   abrirModal("dlgQsVincEsc");
 }
@@ -2493,12 +2500,27 @@ function qsVincNovaLei() {
 }
 
 /* repinta tudo o que depende da lei e do destino: fichas, achados, partes e prévia */
+/* (19.96.0) "Ligar também a lei ao tópico?" — só quando há tópico e a lei escolhida ainda não é dele */
+function qsVincTopicoDe(q) {
+  return q && q.disciplina && q.topico && typeof matChave === "function" ? matChave(q.disciplina, q.topico) : "";
+}
+function qsVincPintarLigar(lei, doTopico) {
+  const c = qsVincCtx;
+  const box = $("qsVincLigarBox");
+  if (!box) return false;
+  const ch = c ? qsVincTopicoDe(c.q) : "";
+  const mostra = !!(lei && ch && !(doTopico || []).some((d) => d.id === lei.id));
+  box.hidden = !mostra;
+  if (mostra) $("qsVincLigarTxt").textContent = t("qs_vinc_ligar_txt", { l: lei.apelido || lei.nome, t: c.q.topico });
+  return mostra;
+}
 function qsVincPintarEsc() {
   const c = qsVincCtx;
   if (!c || !c.esc) return;
   const { doTopico } = qsVincContexto(c.q);
   const leiId = String($("qsVincLei").value || "");
   const lei = leiId ? leiDe(leiId) : null;
+  qsVincPintarLigar(lei, doTopico);
 
   /* 1. as leis do tópico, em fichas */
   const fx = $("qsVincLeisTopico");
@@ -2705,6 +2727,13 @@ function qsVincSalvar() {
   const trecho = c.esc.trecho;
   const q = c.q;
   const soTopico = !$("qsVincAlcTudo") || !$("qsVincAlcTudo").checked;
+  /* (19.96.0) ligar a lei ao tópico, se a pessoa deixou marcado */
+  let ligou = false;
+  const chLig = qsVincTopicoDe(c.q);
+  if ($("qsVincLigarBox") && !$("qsVincLigarBox").hidden && $("qsVincLigar").checked && chLig && typeof leiLigar === "function") {
+    ligou = !!leiLigar(leiId, chLig);
+    try { reg("QUESTOES", "vínculo: lei ligada ao tópico", l.nome + " · " + (c.q.topico || "")); } catch (e) {}
+  }
   const chave = soTopico && q && q.disciplina && q.topico && typeof matChave === "function"
     ? matChave(q.disciplina, q.topico) : "";
   $("dlgQsVincEsc").close();
@@ -2732,6 +2761,7 @@ function qsVincSalvar() {
     try {
       msg = t("qs_vinc_feito", { tr: qsVincCurto(trecho), l: l.apelido || l.nome, a: artigos.map((x) => x.numCru).filter(Boolean).join("; ") || "—",
         alc: t(chave ? "qs_vinc_alc_topico" : "qs_vinc_alc_tudo_curto") });
+      if (ligou) msg += " " + t("qs_vinc_ligou", { l: l.apelido || l.nome, t: q.topico || "" });
     } catch (e) {}
     citConfirmarNaTela(trecho, msg);
     return true;

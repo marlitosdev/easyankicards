@@ -4450,6 +4450,22 @@ function leiCitacoesNoTexto(texto) {
       abrir(iniNum, c[1], n2);
     }
 
+    /* (19.96.0) PARTES DO MESMO ARTIGO: "art. 105, § 2º e § 4º, da Lei nº 4.320/1964". A lista acima é de ARTIGOS
+     * (números soltos); "e § 4º" é outra parte do art. 105, e parava a leitura antes da lei — o "art. 105, § 2º" ficava
+     * sem lei e caía na lei do tópico (a LC 101, que nem tem art. 105). Cada parte vira o seu pedaço clicável, com o
+     * número do artigo de antes; se a enumeração não acabar numa lei, volta a ser só o primeiro (a regra de baixo). */
+    for (let k = 0; k < 8; k++) {
+      const c = s.slice(fim).match(/^\s*(?:[,;]\s*)?(?:e|ou)\s+(?=(?:§|par[áa]grafo|inc(?:iso)?s?\.?\s|al[íi]nea))/i);
+      if (!c) break;
+      const ini2 = fim + c[0].length;
+      const e = leiConsumirEndereco(s.slice(ini2));
+      const sb = e.sub || {};
+      if (!e.len || !((sb.paragrafos || []).length || (sb.incisos || []).length || (sb.alineas || []).length)) break;
+      const base = itens[itens.length - 1];
+      fim = ini2 + e.len;
+      itens.push({ ini: ini2, fim, num: base.num, numCru: base.numCru, sub: sb, parte: true });
+    }
+
     /* a lei, que vale para a lista toda */
     let resto = s.slice(fim);
     let rotulo = "";
@@ -4547,6 +4563,34 @@ function leiAcharUnidades(textoArtigo, sub) {
  * Vínculo antigo, sem sub e sem chave, continua valendo em todo o app.
  * ===================================================================== */
 const CIT_VINC_CHAVE = "eac_cit_vinculos";
+
+/* (19.96.0) AS LEIS QUE OS VÍNCULOS JÁ USAM NUM TÓPICO, SEM ESTAREM LIGADAS A ELE. Antes da pergunta "ligar também ao
+ * tópico?", o vínculo manual não ligava a lei: no backup de 07/11 eram 16 vínculos assim (a Lei 9.784 e a 4.717 em
+ * "Atos administrativos", a 4.320 no PCASP…) — a lei não aparecia na lei seca do tópico nem na pasta 📋 do edital.
+ * Devolve um par por lei e tópico: {leiId, chave, nome, topico, n (quantos vínculos)}. */
+function citLigacoesSugeridas() {
+  const pares = new Map();
+  let vs = [];
+  try { vs = citVinculosLer(); } catch (e) { vs = []; }
+  vs.forEach((v) => {
+    if (!v || v.nenhum || v.tipo === "jur" || !v.leiId || !v.chave) return;
+    const l = leiDe(v.leiId);
+    if (!l) return;
+    const alvo = leisChaveComparavel(v.chave);
+    if ((l.topicos || []).some((c) => leisChaveComparavel(c) === alvo)) return;
+    const k = l.id + "|" + alvo;
+    const p = pares.get(k) || { leiId: l.id, chave: v.chave, nome: l.apelido || l.nome, topico: String(v.chave).split("›").pop(), n: 0 };
+    p.n++;
+    pares.set(k, p);
+  });
+  return [...pares.values()];
+}
+function citLigarSugeridas(pares) {
+  let n = 0;
+  (pares || []).forEach((p) => { if (leiLigar(p.leiId, p.chave)) n++; });
+  try { reg("LEI", "leis dos vínculos ligadas aos tópicos", n + " ligação(ões)"); } catch (e) {}
+  return n;
+}
 
 function citVinculosLer() {
   try {
@@ -5085,12 +5129,16 @@ function leiResolverCitacao(c, lista, doTopico) {
     if (l) return { lei: l, ligada: ligada(l) };
     return { lei: null, motivo: "desconhecida" };
   }
-  if (dt.length === 1) return { lei: dt[0], ligada: true };
+  /* (19.96.0) A LEI DO TÓPICO SÓ QUANDO TEM O ARTIGO. Com uma lei só ligada ao tópico, a citação sem lei ia para ela
+   * sem conferir — e "art. 105" num tópico ligado à LC 101 (que termina no art. 75) abria a LC 101 dizendo "não achei o
+   * art. 105". Sem o artigo, ela não serve: tenta a lei dita antes no parágrafo e, sem ela, pergunta. */
+  if (dt.length === 1 && (!c || !c.num || leiTemArtigo(dt[0], c.num))) return { lei: dt[0], ligada: true };
   if (c && c.rotuloDeduzido) {
     let l = null;
     try { l = leiCasarRotulo(c.rotuloDeduzido, ls); } catch (e) { l = null; }
     if (l) return { lei: l, ligada: ligada(l), deduzida: true };
   }
+  if (dt.length === 1) return { lei: null, motivo: "sem_artigo", doTopico: dt[0] };
   return { lei: null, motivo: dt.length ? "ambigua" : "vazia" };
 }
 

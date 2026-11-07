@@ -1798,6 +1798,11 @@ dialog.lei-upd-cheia .lei-upd-corpo{max-width:1100px}
 .qs-vinc-prev-alvo{background:rgba(250,204,21,.28);outline:1px solid rgba(250,204,21,.6)}
 .qs-vinc-aviso{color:var(--atencao)}
 .qs-vinc-alcance{display:flex;flex-wrap:wrap;gap:12px;margin:2px 0 4px 22px;font-size:13px}
+.qs-vinc-ligar{display:flex;align-items:flex-start;gap:8px;margin:8px 0 4px;padding:8px 10px;border-radius:8px;border:1px dashed var(--info);font-size:13px;cursor:pointer}
+.qs-vinc-ligar[hidden]{display:none}
+.lei-bib-ligsug{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0;padding:8px 10px;border-radius:8px;border:1px dashed var(--info);font-size:13px}
+.lei-bib-ligsug[hidden]{display:none}
+.qs-vinc-ligar input{margin-top:3px;flex:none}
 .lei-anexos{margin-top:12px}
 .lei-anexos-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lei-anexo{border:1px solid var(--borda);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--panel)}
@@ -10050,6 +10055,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <label><input type="radio" name="qsVincAlc" id="qsVincAlcTopico" checked> <span data-i18n="qs_vinc_alc_topico"></span></label>
     <label><input type="radio" name="qsVincAlc" id="qsVincAlcTudo"> <span data-i18n="qs_vinc_alc_tudo"></span></label>
   </div>
+  <!-- (19.96.0) A LEI ESCOLHIDA AINDA NÃO É DO TÓPICO: ligar também? Ligada, ela entra na lei seca do tópico, na pasta 📋
+       do edital, e passa a ser a resposta quando o texto disser só "art. 105". -->
+  <label class="qs-vinc-ligar" id="qsVincLigarBox" hidden>
+    <input type="checkbox" id="qsVincLigar" checked>
+    <span id="qsVincLigarTxt"></span>
+  </label>
   <p class="nota qs-vinc-aviso" id="qsVincEscAviso"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnQsVincEscOk" data-i18n="qs_vinc_ok"></button>
@@ -10843,6 +10854,11 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <p class="nota" id="leiBibResumo"></p>
   <div id="leiBibDup" hidden>
     <button class="btn-min btn-min-perigo" id="btnLeiBibDup"></button>
+  </div>
+  <!-- (19.96.0) leis usadas em vínculos de um tópico sem estarem ligadas a ele: ligar de uma vez -->
+  <div id="leiBibLigSug" class="lei-bib-ligsug" hidden>
+    <span id="leiBibLigSugTxt"></span>
+    <button type="button" class="btn-min btn-min-ok" id="btnLeiBibLigSug" data-i18n="lei_lig_sug_bt"></button>
   </div>
   <div id="leiBibLista" class="lei-dup-lista"></div>
   <div class="dlg-rodape">

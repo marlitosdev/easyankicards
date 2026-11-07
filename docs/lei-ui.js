@@ -6355,6 +6355,22 @@ function leiBibPintar() {
   $("leiBibResumo").textContent = t("lei_bib_resumo", { n: lista.length, v: semVinculo });
 
   const dup = leiDuplicadasNaBiblioteca();
+  /* (19.96.0) leis usadas em vínculos de um tópico e ainda não ligadas a ele */
+  if ($("leiBibLigSug") && typeof citLigacoesSugeridas === "function") {
+    let pares = [];
+    try { pares = citLigacoesSugeridas(); } catch (e) { pares = []; }
+    $("leiBibLigSug").hidden = !pares.length;
+    if (pares.length) {
+      $("leiBibLigSugTxt").textContent = t("lei_lig_sug_txt", { n: pares.length });
+      $("btnLeiBibLigSug").onclick = async () => {
+        const lista = pares.map((p) => "• " + p.nome + " → " + p.topico).join("\n");
+        if (!(await uiConfirm(t("lei_lig_sug_conf", { n: pares.length, l: lista }), { ok: t("lei_lig_sug_ok", { n: pares.length }) }))) return;
+        const n = citLigarSugeridas(pares);
+        try { toastMsg(t("lei_lig_sug_feito", { n }), 5000); } catch (e) {}
+        leiBibPintar();
+      };
+    }
+  }
   $("leiBibDup").hidden = !dup.length;
   if (dup.length) $("btnLeiBibDup").textContent = t("lei_bib_dup_aviso", { n: dup.length });
 
