@@ -41,7 +41,7 @@ const TN_CORES = [
   { id: "laranja", cor: "#e8a33d" },
   { id: "roxo", cor: "#9b5de5" },
 ];
-const TN_FERRAMENTAS = ["lapis", "marca", "borracha", "mao"];
+const TN_FERRAMENTAS = ["lapis", "marca", "borracha", "mao", "texto"];
 /* espessura em px para letra de 16px, por ferramenta (a borracha é o raio) */
 const TN_LARG_PADRAO = { lapis: 3, marca: 16, borracha: 14 };
 const TN_LARG_LIMITE = { lapis: [1, 12], marca: [6, 32], borracha: [6, 40] };
@@ -72,7 +72,7 @@ let tnPathVivo = null;
 function tnPrefLer() {
   try {
     const p = JSON.parse(localStorage.getItem(TN_PREF) || "{}") || {};
-    if (TN_FERRAMENTAS.indexOf(p.f) >= 0 && p.f !== "borracha") tnFerr = p.f;
+    if (TN_FERRAMENTAS.indexOf(p.f) >= 0 && p.f !== "borracha" && p.f !== "texto") tnFerr = p.f;
     if (TN_CORES.some((c) => c.id === p.c)) tnCor = p.c;
     Object.keys(TN_LARG_LIMITE).forEach((k) => {
       const v = Number(p.l && p.l[k]);
@@ -449,6 +449,12 @@ function tnPonto(ev) { return [Number(ev.clientX) || 0, Number(ev.clientY) || 0]
 function tnComecar(ev) {
   if (!tnAberta || !tnQid || tnFerr === "mao") return false;
   const borrachaJa = tnBorrachaDoPonteiro(ev);
+  /* (19.114.0) T sobre a questão: o texto mora no quadro — abre o quadro com uma caixa pronta para digitar */
+  if (tnFerr === "texto" && !borrachaJa) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    tnTextoNoQuadro();
+    return false;
+  }
   if (ev && ev.pointerType === "pen") { tnUltimaCaneta = tnRelogio(); tnCanetaVista = true; }
   if (!borrachaJa && !tnAceitaPonteiro(ev)) {
     /* a palma (ou o dedo com a caneta em uso): não risca — rola a questão */
@@ -711,7 +717,9 @@ function tnPintar() {
   /* MEDIR SEM A CAMADA: com ela dentro, scrollWidth/Height contavam o próprio SVG — e ele nunca encolhia depois que a
    * tela estreitava (o texto do celular saía cortado à direita). Zera, mede, aplica; a largura é a visível. */
   if (svg.style) { svg.style.width = "0px"; svg.style.height = "0px"; }
-  const w = host.clientWidth || host.scrollWidth || 0, h = Math.max(host.scrollHeight || 0, host.clientHeight || 0);
+  /* (19.114.0) UM PIXEL A MENOS: a medida vem arredondada para cima e, com a camada na área que rola, 1px a mais criava
+   * as duas barras de rolagem (que estreitavam a área, que remedia a camada…) */
+  const w = Math.max(0, (host.clientWidth || host.scrollWidth || 0) - 1), h = Math.max(0, Math.max(host.scrollHeight || 0, host.clientHeight || 0) - 1);
   svg.setAttribute("width", String(w));
   svg.setAttribute("height", String(h));
   if (svg.style) { svg.style.width = w + "px"; svg.style.height = h + "px"; }
@@ -730,7 +738,9 @@ function tnPintarClasse() {
   if (!tnSvg || !tnSvg.setAttribute) return;
   const ativa = tnAberta && tnFerr !== "mao";
   /* no SVG, a classe vai pelo atributo (className é um objeto, não texto) */
-  tnSvg.setAttribute("class", ["tn-camada", ativa ? "tn-ativa" : "", ativa && tnFerr === "borracha" ? "tn-apagar" : ""].filter(Boolean).join(" "));
+  tnSvg.setAttribute("class", ["tn-camada", ativa ? "tn-ativa" : "", ativa && tnFerr === "borracha" ? "tn-apagar" : "", ativa && tnFerr === "texto" ? "tn-escrever" : ""].filter(Boolean).join(" "));
+  /* o quadro aberto acompanha a barra (as ferramentas dele somem ou voltam) */
+  try { if (typeof rsPintar === "function" && typeof rsAberto === "function" && rsAberto()) rsPintar(); } catch (e) {}
 }
 
 /* ---------- a camada na questão (a cada repintura do corpo) ---------- */
@@ -1027,35 +1037,46 @@ function tnBarraMontar() {
   b.hidden = true;
   b.setAttribute("role", "toolbar");
   b.setAttribute("aria-label", t("tn_barra"));
+  /* (19.114.0) EM GRUPOS: na tela larga a barra fica em pé, encostada à direita (sem cobrir os botões do topo); no
+   * celular, deitada embaixo, perto do polegar. Os grupos é que deixam a mesma barra servir aos dois jeitos. */
+  let alvo = b;
+  const grupo = (cls) => { const g = document.createElement("div"); g.className = "tn-grupo " + cls; b.append(g); alvo = g; return g; };
   const bt = (id, txt, tit, fn, cls) => {
     const x = document.createElement("button");
     x.type = "button"; x.id = id; x.className = "tn-bt" + (cls ? " " + cls : "");
     x.textContent = txt; x.title = tit; x.setAttribute("aria-label", tit);
     x.onclick = fn;
-    b.append(x);
+    alvo.append(x);
     return x;
   };
   const sep = () => { const s = document.createElement("span"); s.className = "tn-sep"; b.append(s); };
+  grupo("tn-g-ferr");
   bt("btnTnLapis", "✏️", t("tn_lapis"), () => tnFerramenta("lapis"));
   bt("btnTnMarca", "🖍️", t("tn_marca"), () => tnFerramenta("marca"));
+  bt("btnTnTexto", "T", t("tn_texto"), () => tnFerramenta("texto"), "tn-bt-texto");
   bt("btnTnBorracha", "🧽", t("tn_borracha"), () => tnFerramenta("borracha"));
   bt("btnTnMao", "✋", t("tn_mao"), () => tnFerramenta("mao"));
   sep();
+  grupo("tn-g-cores");
   TN_CORES.forEach((c) => {
     const x = bt("btnTnCor_" + c.id, "", t("tn_cor_" + c.id), () => tnCorEscolher(c.id), "tn-cor");
     if (x.style) x.style.background = c.cor;
   });
   sep();
+  grupo("tn-g-esp");
   const r = document.createElement("input");
   r.type = "range"; r.id = "tnEspessura"; r.className = "tn-esp";
   r.title = t("tn_espessura"); r.setAttribute("aria-label", t("tn_espessura"));
   r.oninput = () => tnEspessura(Number(r.value));
-  b.append(r);
+  alvo.append(r);
   sep();
+  grupo("tn-g-acoes");
+  bt("btnTnQuadro", "📄", t("tn_quadro"), () => tnQuadroAlternar());
   bt("btnTnDesfazer", "↶", t("tn_desfazer"), () => tnDesfazer());
   bt("btnTnLimpar", "🗑", t("tn_limpar"), () => tnLimpar(), "tn-perigo");
   bt("btnTnGuardar", "📌", t("tn_guardar_off"), () => tnGuardarAlternar());
   sep();
+  grupo("tn-g-fim");
   bt("btnTnFechar", "✕", t("tn_fechar"), () => tnFechar());
   dlg.append(b);
   return b;
@@ -1066,11 +1087,21 @@ function tnPintarBarra() {
   if (g && g.classList) {
     g.classList.toggle("btn-min-ok", tnAberta); g.setAttribute("aria-pressed", tnAberta ? "true" : "false");
     /* a questão tem marcas (desta sessão ou guardadas): um ponto no ✏️, para lembrar que há algo ali */
-    g.classList.toggle("tn-tem", tnContar() > 0);
+    let temQuadro = false;
+    try { temQuadro = !!(tnQid && typeof rsDaQuestao === "function" && rsDaQuestao(tnQid)); } catch (e) {}
+    g.classList.toggle("tn-tem", tnContar() > 0 || temQuadro);
   }
+  const dlg = $("dlgQsResponder");
+  if (dlg && dlg.classList) dlg.classList.toggle("tn-doca", tnAberta);
   const b = $("tnBarra");
   if (!b) return;
   b.hidden = !tnAberta;
+  const bq = $("btnTnQuadro");
+  if (bq && bq.classList) {
+    let ab = false;
+    try { ab = typeof rsAberto === "function" && rsAberto(); } catch (e) {}
+    bq.classList.toggle("on", ab); bq.setAttribute("aria-pressed", ab ? "true" : "false");
+  }
   TN_FERRAMENTAS.forEach((f) => {
     const x = $("btnTn" + f.charAt(0).toUpperCase() + f.slice(1));
     if (x && x.classList) { x.classList.toggle("on", tnFerr === f); x.setAttribute("aria-pressed", tnFerr === f ? "true" : "false"); }
@@ -1081,10 +1112,10 @@ function tnPintarBarra() {
   });
   const r = $("tnEspessura");
   if (r) {
-    const k = tnFerr === "mao" ? "lapis" : tnFerr;
+    const k = tnFerr === "mao" || tnFerr === "texto" ? "lapis" : tnFerr;
     r.min = String(TN_LARG_LIMITE[k][0]); r.max = String(TN_LARG_LIMITE[k][1]);
     r.value = String(tnLarg[k]);
-    r.disabled = tnFerr === "mao";
+    r.disabled = tnFerr === "mao" || tnFerr === "texto";
   }
   if ($("btnTnDesfazer")) $("btnTnDesfazer").disabled = !(tnHist[tnQid] || []).length;
   if ($("btnTnLimpar")) $("btnTnLimpar").disabled = !tnContar();
@@ -1096,6 +1127,21 @@ function tnPintarBarra() {
     gd.title = rec ? t("tn_guardar_on_" + (rec.motivo === "pedido" ? "pedido" : rec.motivo === "chute" ? "chute" : "errou")) : t("tn_guardar_off");
     gd.setAttribute("aria-label", gd.title);
   }
+}
+function tnTextoNoQuadro() {
+  if (typeof rsQuadroAlternar !== "function") return false;
+  rsQuadroAlternar(true);
+  const p = typeof rsNotaProximaPos === "function" ? rsNotaProximaPos() : [24, 24];
+  /* depois do quadro abrir e medir a folha: a caixa nasce com o cursor dentro */
+  try { setTimeout(() => { try { rsNotaNova(p[0], p[1], "", true); } catch (e) {} }, 0); } catch (e) {}
+  tnPintarBarra();
+  return true;
+}
+function tnQuadroAlternar() {
+  if (typeof rsQuadroAlternar !== "function") return false;
+  const ab = rsQuadroAlternar();
+  tnPintarBarra();
+  return ab;
 }
 function tnFerramenta(f) {
   if (TN_FERRAMENTAS.indexOf(f) < 0) return false;
@@ -1172,7 +1218,7 @@ function tnTecla(ev) {
   const k = String(ev.key || "");
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && k.toLowerCase() === "z") { tnDesfazer(); return true; }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
-  const mapa = { p: "lapis", m: "marca", r: "borracha", h: "mao" };
+  const mapa = { p: "lapis", m: "marca", r: "borracha", h: "mao", t: "texto" };
   if (mapa[k.toLowerCase()]) return tnFerramenta(mapa[k.toLowerCase()]);
   return false;
 }

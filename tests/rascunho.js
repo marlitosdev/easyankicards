@@ -38,8 +38,10 @@ async function testes() {
        "R1b o rascunho fechado continua ocupando lugar na tela");
     ok(api.$("rsCorpo").hidden === true,
        "R1c o quadro abriu sozinho — o pedido era ficar fechado por padrao");
-    ok(api.$("btnRsAbrir").hidden === false,
-       "R1d falta o gatilho para abrir o rascunho");
+    /* (19.114.0) a entrada é UMA: o ✏️ da questão abre a barra do lápis, e o 📄 dela abre este quadro. O "rascunho"
+     * do cabeçalho duplicava o caminho; fica escondido (e ainda abre o quadro, se algo o chamar). */
+    ok(api.$("btnRsAbrir").hidden === true,
+       "R1d (19.114.0) o 'rascunho' do cabecalho devia ficar escondido: a entrada e o ✏️ do lapis");
     /* "FOLHA INTEIRA" NÃO É MAIS UM GATILHO À PARTE — era um segundo
      * botão duplicando btnRsCheia, que já mora dentro do rascunho
      * aberto (ver tests/rascunho-painel.js, o bloco que abre normal e
@@ -300,8 +302,8 @@ async function testes() {
      * abre é o gatilho — mas o gatilho tem de estar visível assim que a
      * rodada começa, senão o rascunho não existe para quem não sabe
      * dele. */
-    ok(api.$("btnRsAbrir").hidden === false,
-       "R6b a sessao de questoes abriu sem o gatilho do rascunho a mao");
+    ok(api.$("btnRsAbrir").hidden === true && !!api.$("btnQsTinta"),
+       "R6b (19.114.0) a sessao abre com o ✏️ do lapis (a entrada unica) e sem o 'rascunho' duplicado no cabecalho");
     ok(api.$("rsCaixa").hidden === true,
        "R6b2 o painel do rascunho abriu sozinho na sessao");
     ok(api.$("rsCorpo").hidden === true, "R6c o rascunho abriu expandido na sessao");

@@ -97,6 +97,12 @@ function rsBorrachaDefinir(raio) {
 
 let rsQid = null;        // questão a que este rascunho pertence
 let rsTracos = [];       // [{cor, larg, pontos:[[x,y],...]}]
+/* (19.114.0) AS CAIXAS DE TEXTO DO QUADRO: [{x, y, t}] nas coordenadas da folha (as mesmas dos traços). Desenho e
+ * texto convivem na mesma folha — antes era um OU outro (o "modo teclado" trocava a folha por um campo de texto). */
+let rsNotas = [];
+let rsNotaFoco = null;   // a caixa em que o cursor está (para os símbolos)
+let rsApagandoAgora = false;   // a borracha do lápis (ou a ponta da caneta) neste gesto
+let rsRaioAgora = 0;
 let rsCaneta = "preta";
 let rsBorracha = false;
 let rsDesenhando = false;
@@ -147,11 +153,16 @@ function rsPrepararPara(id) {
     cor: tr.cor, larg: tr.larg, pontos: tr.pontos.map((p) => p.slice()),
   })) : [];
   const tx0 = $("rsTexto");
-  if (tx0) tx0.value = (guardado && guardado.texto) || "";
+  /* (19.114.0) o texto do antigo "modo teclado" vira uma caixa no alto da folha; quem já tem caixas guardadas não
+   * ganha a cópia (o texto delas também vai em "texto", por compatibilidade) */
+  const notasG = guardado && Array.isArray(guardado.notas) && guardado.notas.length ? guardado.notas : null;
+  rsNotas = notasG ? notasG.map((n) => ({ x: Number(n.x) || 0, y: Number(n.y) || 0, t: String(n.t || "") }))
+    : (guardado && String(guardado.texto || "").trim() ? [{ x: 24, y: 24, t: String(guardado.texto) }] : []);
+  rsNotaFoco = null;
+  if (tx0) tx0.value = "";
   /* volta no modo em que há conteúdo: guardado só texto, abrir na
    * caneta mostraria uma folha em branco sobre um rascunho que existe */
-  rsModoTrocar(guardado && !rsTracos.length && String((guardado || {}).texto || "").trim()
-    ? "teclado" : "caneta");
+  rsModoTrocar("caneta");
   rsSalvo = !!guardado;
   rsLixo = [];
   rsBorracha = false;
@@ -240,6 +251,7 @@ function rsRedimensionar(w, h) {
      * numa folha pequena vira um fio invisível na folha grande */
     tr.larg = (Number(tr.larg) || 3) * Math.min(fx, fy);
   });
+  rsNotas.forEach((n) => { n.x *= fx; n.y *= fy; });
   cv.width = w;
   cv.height = h;
   rsPintar();
@@ -253,7 +265,8 @@ function rsCheiaTrocar(sim) {
   /* abrir a folha inteira com o rascunho recolhido não faria sentido:
    * a tela ficaria vazia com um botão de voltar */
   if (rsCheia && !rsAberto()) rsRecolher(false);
-  const f = rsCheia ? rsFolhaDaTela() : RS_FOLHA_NORMAL;
+  const ladoJa = rsLadoMarcar(!rsCheia && rsAberto() && rsLadoCabe());
+  const f = rsCheia ? rsFolhaDaTela() : (ladoJa ? rsFolhaDoLado() : RS_FOLHA_NORMAL);
   rsRedimensionar(f.w, f.h);
   /* sair da folha inteira leva junto o fundo transparente: ele só existe
    * lá, e ficar ligado por baixo faria o painel de 72% abrir sem papel */
@@ -288,7 +301,66 @@ function rsRecolher(sim) {
     b.title = t("rs_recolher_ajuda");
   }
   rsPintarGatilhos();
+  if (!rsCheia) {
+    const lado = !sim && rsLadoCabe();
+    rsLadoMarcar(lado);
+    const fl = lado ? rsFolhaDoLado() : RS_FOLHA_NORMAL;
+    rsRedimensionar(fl.w, fl.h);
+  }
   if (!sim) rsPintar();
+  try { if (typeof tnPintarBarra === "function") tnPintarBarra(); } catch (e) {}
+}
+/* =====================================================================
+ * (19.114.0) O QUADRO AO LADO DA QUESTÃO
+ *
+ * Em tela larga, o quadro abre À DIREITA da questão, na altura toda: a conta fica do lado do enunciado, como o papel
+ * ao lado da prova. Em tela estreita continua o painel que sobe por baixo; a folha inteira continua a um toque.
+ * ===================================================================== */
+const RS_FOLHA_LADO = { w: 800, h: 1100 };
+const RS_LADO_MIN = 1000;
+function rsLadoCabe() {
+  const dlg = typeof document !== "undefined" ? $("dlgQsResponder") : null;
+  let w = 0;
+  try { w = dlg && dlg.getBoundingClientRect ? dlg.getBoundingClientRect().width : 0; } catch (e) { w = 0; }
+  return w >= RS_LADO_MIN;
+}
+function rsLadoMarcar(sim) {
+  const dlg = $("dlgQsResponder");
+  if (dlg && dlg.classList) dlg.classList.toggle("rs-lado", !!sim);
+  return !!sim;
+}
+/* a folha do lado tem o tamanho do painel (medido depois de o painel ir para o lado); sem medida, um tamanho fixo */
+function rsFolhaDoLado() {
+  try {
+    const f = typeof document !== "undefined" && document.querySelector ? document.querySelector("#rsCaixa .rs-folha") : null;
+    const r = f && f.getBoundingClientRect ? f.getBoundingClientRect() : null;
+    if (r && r.width > 100 && r.height > 100) {
+      const dpr = Math.max(1, Math.min(2, (typeof window !== "undefined" && window.devicePixelRatio) || 1));
+      return { w: Math.round(r.width * dpr), h: Math.round((r.height - 4) * dpr) };
+    }
+  } catch (e) {}
+  return RS_FOLHA_LADO;
+}
+function rsLadoAtual() { const d = $("dlgQsResponder"); return !!(d && d.classList && d.classList.contains("rs-lado")); }
+/* o quadro pelo 📄 da barra do lápis: abre (ou fecha) sem sair da questão */
+function rsQuadroAlternar(abrir) {
+  if (!rsIniciado) rsIniciar();
+  const vai = abrir === undefined ? !rsAberto() : !!abrir;
+  if (vai) { rsRecolher(false); } else rsRecolher(true);
+  return rsAberto();
+}
+/* a janela mudou de tamanho: o quadro aberto troca entre embaixo e ao lado */
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("resize", () => {
+    try {
+      if (!rsIniciado || !rsAberto() || rsCheia) return;
+      const lado = rsLadoCabe();
+      if (lado === rsLadoAtual()) return;
+      rsLadoMarcar(lado);
+      const fl = lado ? rsFolhaDoLado() : RS_FOLHA_NORMAL;
+      rsRedimensionar(fl.w, fl.h);
+    } catch (e) {}
+  });
 }
 /* a instrução serve à primeira vez; com a folha rabiscada ela vira uma
  * faixa de texto ocupando altura que a conta precisa */
@@ -330,7 +402,9 @@ function rsModoTrocar(qual) {
 
 function rsTextoAtual() {
   const tx = $("rsTexto");
-  return tx ? String(tx.value || "") : "";
+  const doCampo = tx ? String(tx.value || "") : "";
+  const dasNotas = rsNotas.map((n) => n.t).filter((x) => String(x || "").trim()).join("\n");
+  return [dasNotas, doCampo].filter((x) => x.trim()).join("\n");
 }
 
 function rsTemAlgo() {
@@ -359,7 +433,10 @@ function rsPintarGatilhos() {
    * Se a questão não estiver pronta, quem descobre isso é o clique — e
    * aí há uma mensagem, em vez de um botão ausente. */
   if (b1) {
-    b1.hidden = aberto;
+    /* (19.114.0) A ENTRADA É UMA SÓ: o ✏️ da questão abre a barra, e o 📄 dela abre este quadro. O "rascunho" do
+     * cabeçalho duplicava o caminho (o relato: "a ferramenta de anotação está duplicada"); fica no HTML, escondido,
+     * e ainda abre o quadro se algo o chamar. */
+    b1.hidden = true;
     b1.textContent = "";
     b1.append(document.createTextNode(t("rs_abrir")));
     if (temSalvo) {
@@ -401,9 +478,47 @@ function rsCanetaAtual() {
   return RS_CANETAS.filter((c) => c.id === rsCaneta)[0] || RS_CANETAS[0];
 }
 
+/* (19.114.0) UM MOTOR SÓ: com a barra do lápis aberta, o quadro usa as ferramentas DELA — a mesma cor, a mesma
+ * espessura, o marca-texto, a borracha, a mão, o texto —, a palma da mão ignorada com a caneta em uso, a ponta de
+ * borracha da caneta e o botão direito do mouse apagando. As canetas próprias do quadro só aparecem com a barra
+ * fechada. */
+function rsPeloLapis() {
+  try { return typeof tnAbertaAgora === "function" && tnAbertaAgora(); } catch (e) { return false; }
+}
+/* pixels da folha por pixel da tela (a folha tem tamanho interno próprio) */
+function rsEscala() {
+  const cv = rsTela();
+  try {
+    const r = cv && cv.getBoundingClientRect ? cv.getBoundingClientRect() : null;
+    if (r && r.width) return cv.width / r.width;
+  } catch (e) {}
+  return 1;
+}
+function rsComecarPeloLapis(e, x, y) {
+  const borr = tnFerr === "borracha" || (typeof tnBorrachaDoPonteiro === "function" && tnBorrachaDoPonteiro(e));
+  if (!borr && tnFerr === "mao") return false;
+  if (!borr && typeof tnAceitaPonteiro === "function" && !tnAceitaPonteiro(e)) return false;
+  if (!borr && tnFerr === "texto") { rsNotaNova(x, y, "", true); return true; }
+  const esc = rsEscala();
+  if (borr) {
+    rsApagandoAgora = true;
+    rsRaioAgora = Math.max(4, (Number(tnLarg.borracha) || 14) * esc);
+    rsApagarEm(x, y, rsRaioAgora);
+    rsDesenhando = true;
+    return true;
+  }
+  const marca = tnFerr === "marca";
+  const cor = tnCorDe(tnCor);
+  rsTracos.push({ cor: marca ? cor + "61" : cor, larg: Math.max(1, (Number(tnLarg[marca ? "marca" : "lapis"]) || 3) * esc), pontos: [[x, y]] });
+  rsDesenhando = true;
+  rsMarcarSujo();
+  rsPintar();
+  return true;
+}
 function rsComecar(e) {
   if (!rsAberto()) return;
   const [x, y] = rsCoords(e);
+  if (rsPeloLapis()) { rsComecarPeloLapis(e, x, y); return; }
   if (rsBorracha) { rsApagarEm(x, y); rsDesenhando = true; return; }
   const c = rsCanetaAtual();
   /* a largura vai GRAVADA no traço: trocar de espessura depois não pode
@@ -416,18 +531,26 @@ function rsComecar(e) {
 function rsMover(e) {
   if (!rsDesenhando) return;
   const [x, y] = rsCoords(e);
+  if (rsApagandoAgora) { rsApagarEm(x, y, rsRaioAgora); return; }
   if (rsBorracha) { rsApagarEm(x, y); return; }
   const tr = rsTracos[rsTracos.length - 1];
   if (!tr) return;
-  const ult = tr.pontos[tr.pontos.length - 1];
-  /* ponto praticamente no mesmo lugar só engorda o guardado */
-  if (ult && Math.abs(ult[0] - x) < 1 && Math.abs(ult[1] - y) < 1) return;
-  tr.pontos.push([x, y]);
+  /* (19.114.0) os pontos agrupados pelo navegador: o traço da caneta sai liso, sem os cantos de quem perdeu pontos */
+  let evs = null;
+  try { evs = e.getCoalescedEvents ? e.getCoalescedEvents() : null; } catch (er) { evs = null; }
+  const pts = evs && evs.length ? evs.map(rsCoords) : [[x, y]];
+  pts.forEach((p) => {
+    const ult = tr.pontos[tr.pontos.length - 1];
+    /* ponto praticamente no mesmo lugar só engorda o guardado */
+    if (ult && Math.abs(ult[0] - p[0]) < 1 && Math.abs(ult[1] - p[1]) < 1) return;
+    tr.pontos.push([p[0], p[1]]);
+  });
   rsPintar();
 }
 function rsSoltar() {
   if (!rsDesenhando) return;
   rsDesenhando = false;
+  if (rsApagandoAgora) { rsApagandoAgora = false; rsPintar(); return; }
   /* toque seco sem arrastar vira um ponto visível, não um traço vazio */
   const tr = rsTracos[rsTracos.length - 1];
   if (tr && tr.pontos.length === 1) tr.pontos.push([tr.pontos[0][0] + 0.6, tr.pontos[0][1] + 0.6]);
@@ -472,11 +595,11 @@ function rsPartirTraco(tr, x, y, raio) {
   return partes.map((pontos) => Object.assign({}, tr, { pontos }));
 }
 
-function rsApagarEm(x, y) {
+function rsApagarEm(x, y, raio) {
   const sobrou = [];
   const tirados = [], postos = [];
   rsTracos.forEach((tr) => {
-    const partes = rsPartirTraco(tr, x, y, rsBorrachaRaio);
+    const partes = rsPartirTraco(tr, x, y, raio || rsBorrachaRaio);
     if (partes.length === 1 && partes[0].pontos.length === (tr.pontos || []).length) {
       sobrou.push(tr);                     /* a borracha não encostou */
       return;
@@ -502,6 +625,7 @@ function rsDesfazer() {
       rsTracos = rsTracos.filter((tr) => v.novos.indexOf(tr) < 0);
     }
     rsTracos = rsTracos.concat(v.tracos);
+    if (v.notas && v.notas.length) rsNotas = rsNotas.concat(v.notas);
   } else if (rsTracos.length) {
     rsTracos.pop();
   } else return;
@@ -510,10 +634,11 @@ function rsDesfazer() {
 }
 
 async function rsLimpar() {
-  if (!rsTracos.length) { uiAlert(t("rs_vazio")); return; }
-  if (!(await uiConfirm(t("rs_limpar_conf", { n: rsTracos.length })))) return;
-  rsLixo.push({ tipo: "limpeza", tracos: rsTracos });
+  if (!rsTracos.length && !rsNotas.length) { uiAlert(t("rs_vazio")); return; }
+  if (!(await uiConfirm(t("rs_limpar_conf", { n: rsTracos.length + rsNotas.length })))) return;
+  rsLixo.push({ tipo: "limpeza", tracos: rsTracos, notas: rsNotas });
   rsTracos = [];
+  rsNotas = [];
   rsMarcarSujo();
   rsPintar();
 }
@@ -541,6 +666,9 @@ function rsPintar() {
       });
     }
   }
+  rsPintarNotas();
+  const cx = $("rsCaixa");
+  if (cx && cx.classList) cx.classList.toggle("rs-pelo-lapis", rsPeloLapis());
   /* estado das ferramentas */
   RS_CANETAS.forEach((c) => {
     const b = rsBotoes[c.id];
@@ -550,17 +678,14 @@ function rsPintar() {
   if (rsBotoes.borracha) rsBotoes.borracha.className =
     "btn-min rs-borracha" + (rsBorracha ? " rs-sel" : "");
   rsPintarBorrachas();
-  const av = $("rsAviso");
-  if (av) {
-    av.textContent = !rsTracos.length ? ""
-      : t(rsSalvo ? "rs_estado_salvo" : "rs_estado_nao", { n: rsTracos.length });
-    av.className = "rs-aviso" + (rsSalvo ? " rs-ok" : "");
-  }
+  rsPintarAviso();
   const bs = $("btnRsSalvar");
   if (bs) bs.textContent = t(rsSalvo ? "rs_salvar_de_novo" : "rs_salvar");
   const bl = $("btnRsApagarSalvo");
   if (bl) bl.hidden = !(rsQid && rsDaQuestao(rsQid));
   const bModo = $("btnRsModo");
+  /* (19.114.0) o "modo teclado" deu lugar às caixas de texto na própria folha (ferramenta T do lápis) */
+  if (bModo) bModo.hidden = true;
   if (bModo) {
     bModo.textContent = t(rsModo === "caneta" ? "rs_modo_teclado" : "rs_modo_caneta");
     bModo.title = t(rsModo === "caneta" ? "rs_modo_teclado_ajuda" : "rs_modo_caneta_ajuda");
@@ -569,7 +694,8 @@ function rsPintar() {
   if (bVidro) {
     /* só faz sentido na folha inteira: no painel de 72% a questão já
      * está visível acima dele */
-    bVidro.hidden = !rsCheia;
+    /* (19.114.0) riscar por cima do enunciado é o lápis da própria questão: a folha transparente saiu de cena */
+    bVidro.hidden = true;
     bVidro.textContent = t("rs_vidro");
     bVidro.title = t("rs_vidro_ajuda");
   }
@@ -590,6 +716,7 @@ function rsSalvarNaQuestao() {
   if (!rsTemAlgo()) { uiAlert(t("rs_vazio")); return false; }
   const tudo = rsLerTudo();
   tudo[rsQid] = { tracos: rsTracos, texto: rsTextoAtual(),
+                  notas: rsNotas.filter((n) => String(n.t || "").trim()).map((n) => ({ x: Math.round(n.x), y: Math.round(n.y), t: n.t })),
                   q: new Date().toISOString() };
   if (!rsGravarTudo(tudo)) return false;
   rsSalvo = true;
@@ -620,12 +747,199 @@ async function rsApagarSalvo() {
  * pode passar a depender de um ciclo de espera so porque existe um
  * quadro de rascunho na tela. */
 function rsPrecisaPerguntar() {
-  return !!(rsQid && rsTracos.length && !rsSalvo);
+  return !!(rsQid && rsTemAlgo() && !rsSalvo);
 }
 
 async function rsGuardarSeSair() {
-  if (!rsQid || !rsTracos.length || rsSalvo) return;
+  if (!rsQid || !rsTemAlgo() || rsSalvo) return;
   if (await uiConfirm(t("rs_sair_conf"))) rsSalvarNaQuestao();
+}
+
+/* =====================================================================
+ * (19.114.0) CAIXAS DE TEXTO NA FOLHA
+ *
+ * Com a ferramenta T do lápis, um toque na folha abre uma caixa ali mesmo: os dados da questão, a conta digitada, um
+ * lembrete — ao lado do que foi desenhado. Caixa que fica vazia some sozinha ao sair dela.
+ * ===================================================================== */
+function rsNotasCaixa() {
+  let box = $("rsNotas");
+  if (box) return box;
+  const folha = typeof document !== "undefined" && document.querySelector ? document.querySelector("#rsCaixa .rs-folha") : null;
+  if (!folha || !folha.append) return null;
+  box = document.createElement("div");
+  box.id = "rsNotas";
+  box.className = "rs-notas";
+  folha.append(box);
+  return box;
+}
+function rsNotaNova(x, y, txt, focar) {
+  const n = { x: Number(x) || 0, y: Number(y) || 0, t: String(txt || "") };
+  rsNotas.push(n);
+  rsNotaFoco = n;
+  rsMarcarSujo();
+  rsPintarNotas();
+  if (focar) {
+    const el = rsNotaEl(n);
+    try { if (el && el.focus) el.focus(); } catch (e) {}
+  }
+  return n;
+}
+function rsNotaEl(n) {
+  const box = $("rsNotas");
+  if (!box || !box.children) return null;
+  const i = rsNotas.indexOf(n);
+  return i >= 0 ? box.children[i] || null : null;
+}
+/* a próxima caixa nasce embaixo da última (o teclado não escolhe lugar na folha) */
+function rsNotaProximaPos() {
+  if (!rsNotas.length) return [24, 24];
+  const u = rsNotas[rsNotas.length - 1];
+  const linhas = String(u.t || "").split("\n").length;
+  return [u.x, u.y + (linhas + 1) * 22 * rsEscala()];
+}
+function rsAjustarAltura(ta) {
+  if (!ta || !ta.style) return;
+  ta.rows = Math.max(1, String(ta.value || "").split("\n").length);
+}
+function rsPintarNotas() {
+  const box = rsNotasCaixa();
+  if (!box) return;
+  const cv = rsTela();
+  const W = (cv && cv.width) || RS_FOLHA_NORMAL.w, H = (cv && cv.height) || RS_FOLHA_NORMAL.h;
+  /* a camada das caixas cobre exatamente a folha (o canvas): posição em % da folha */
+  if (box.style && cv) {
+    box.style.width = (cv.offsetWidth || 0) + "px";
+    box.style.height = (cv.offsetHeight || 0) + "px";
+  }
+  const ativo = typeof document !== "undefined" ? document.activeElement : null;
+  /* não refaz a caixa em que se está digitando: o cursor pularia para o fim */
+  const vivas = Array.from(box.children || []);
+  if (vivas.length === rsNotas.length && vivas.every((el, i) => el._nota === rsNotas[i])) {
+    vivas.forEach((el) => { el.style.left = (el._nota.x / W * 100) + "%"; el.style.top = (el._nota.y / H * 100) + "%"; });
+    return;
+  }
+  box.innerHTML = "";
+  rsNotas.forEach((n) => {
+    const ta = document.createElement("textarea");
+    ta.className = "rs-nota";
+    ta._nota = n;
+    ta.value = n.t;
+    ta.rows = 1;
+    ta.spellcheck = false;
+    ta.placeholder = t("rs_nota_ph");
+    ta.setAttribute("aria-label", t("rs_nota_aj"));
+    ta.style.left = (n.x / W * 100) + "%";
+    ta.style.top = (n.y / H * 100) + "%";
+    rsAjustarAltura(ta);
+    ta.oninput = (ev) => {
+      const tipo = String((ev && ev.inputType) || "insertText");
+      const r = /^insert/.test(tipo) && tipo !== "insertFromPaste" && tipo !== "insertFromDrop"
+        ? simbAutoTrocar(ta.value, ta.selectionStart, ev && ev.data ? String(ev.data).length : 1) : { txt: ta.value };
+      if (r.txt !== ta.value) {
+        ta.value = r.txt;
+        try { ta.setSelectionRange(r.pos, r.pos); } catch (e) {}
+      }
+      n.t = ta.value;
+      rsAjustarAltura(ta);
+      rsMarcarSujo();
+      rsPintarAviso();
+    };
+    ta.onfocus = () => { rsNotaFoco = n; };
+    ta.onblur = () => {
+      if (!String(n.t || "").trim()) {
+        const i = rsNotas.indexOf(n);
+        if (i >= 0) { rsNotas.splice(i, 1); rsPintarNotas(); rsPintarAviso(); }
+        if (rsNotaFoco === n) rsNotaFoco = null;
+      }
+    };
+    /* Esc sai da caixa (e não fecha a rodada); as teclas de responder não valem aqui dentro */
+    ta.onkeydown = (ev) => {
+      if (ev.key === "Escape") { if (ev.preventDefault) ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation(); try { ta.blur(); } catch (e) {} }
+    };
+    box.append(ta);
+    if (ativo && ativo._nota === n) { try { ta.focus(); } catch (e) {} }
+  });
+}
+function rsPintarAviso() {
+  const av = $("rsAviso");
+  if (!av) return;
+  const n = rsTracos.length + rsNotas.filter((x) => String(x.t || "").trim()).length;
+  av.textContent = !n ? "" : t(rsSalvo ? "rs_estado_salvo" : "rs_estado_nao", { n });
+  av.className = "rs-aviso" + (rsSalvo ? " rs-ok" : "");
+}
+/* um símbolo no cursor da caixa em uso (ou numa caixa nova, embaixo da última) */
+function rsInserirSimbolo(sb) {
+  let n = rsNotaFoco && rsNotas.indexOf(rsNotaFoco) >= 0 ? rsNotaFoco : null;
+  if (!n) { const p = rsNotaProximaPos(); n = rsNotaNova(p[0], p[1], "", false); }
+  const el = rsNotaEl(n);
+  if (el && typeof el.selectionStart === "number" && el.value === n.t) {
+    const a = el.selectionStart, b = el.selectionEnd;
+    el.value = n.t.slice(0, a) + sb + n.t.slice(b);
+    n.t = el.value;
+    try { el.focus(); el.setSelectionRange(a + sb.length, a + sb.length); } catch (e) {}
+    rsAjustarAltura(el);
+  } else {
+    n.t += sb;
+    rsPintarNotas();
+  }
+  rsMarcarSujo();
+  rsPintarAviso();
+  return n.t;
+}
+
+/* =====================================================================
+ * (19.114.0) SÍMBOLOS — lógica, conjuntos, estatística e matemática financeira
+ *
+ * Uma fileira para tocar, e atalhos que viram símbolo enquanto se digita: "->" vira →, "<->" vira ↔, "<=" vira ≤,
+ * "^2" vira ², "^n" vira ⁿ. Para quem não tem tela de toque nem caneta, é o teclado que escreve a fórmula.
+ * ===================================================================== */
+const SIMB_FILEIRA = ["¬", "∧", "∨", "⊻", "→", "↔", "≡", "∀", "∃", "∈", "∩", "∪", "≤", "≥", "≠", "≈", "±", "×", "÷", "√", "Σ", "x̄", "σ", "μ", "²", "ⁿ", "%"];
+const SIMB_TROCAS = [["<->", "↔"], ["->", "→"], ["=>", "⇒"], ["<=", "≤"], [">=", "≥"], ["!=", "≠"], ["~=", "≈"], ["+-", "±"],
+  ["^n", "ⁿ"], ["^i", "ⁱ"], ["^0", "⁰"], ["^1", "¹"], ["^2", "²"], ["^3", "³"], ["^4", "⁴"], ["^5", "⁵"], ["^6", "⁶"], ["^7", "⁷"], ["^8", "⁸"], ["^9", "⁹"]];
+const SIMB_SOBRE = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+/* troca só o que acabou de ser digitado — os "n" caracteres antes do cursor (1 numa tecla; o trecho inteiro no ditado
+ * ou na correção automática), mais 2 de contexto para o atalho que começou antes ("<-" + ">"). Texto colado ou já
+ * escrito fica como está. */
+function simbAutoTrocar(txt, pos, n) {
+  const s = String(txt || "");
+  const p = typeof pos === "number" ? pos : s.length;
+  const ini = Math.max(0, p - Math.max(1, Number(n) || 1) - 2);
+  let jan = s.slice(ini, p);
+  SIMB_TROCAS.forEach(([de, para]) => { if (jan.indexOf(de) >= 0) jan = jan.split(de).join(para); });
+  /* o expoente continua: "¹" + "2" vira "¹²" */
+  let mudou = true;
+  while (mudou) {
+    mudou = false;
+    jan = jan.replace(/([⁰¹²³⁴⁵⁶⁷⁸⁹])(\d)/, (m, a, d) => { mudou = true; return a + SIMB_SOBRE[d]; });
+  }
+  if (jan === s.slice(ini, p)) return { txt: s, pos: p };
+  const novo = s.slice(0, ini) + jan;
+  return { txt: novo + s.slice(p), pos: novo.length };
+}
+function rsSimbolosMontar() {
+  let fila = $("rsSimbolos");
+  if (fila) return fila;
+  const acoes = typeof document !== "undefined" && document.querySelector ? document.querySelector("#rsCaixa .rs-acoes") : null;
+  if (!acoes || !acoes.parentNode) return null;
+  fila = document.createElement("div");
+  fila.id = "rsSimbolos";
+  fila.className = "rs-simbolos";
+  fila.setAttribute("role", "toolbar");
+  fila.setAttribute("aria-label", t("rs_simb_aj"));
+  SIMB_FILEIRA.forEach((sb) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rs-simb";
+    b.textContent = sb;
+    b.title = t("rs_simb_inserir", { s: sb });
+    /* o toque no símbolo não tira o cursor da caixa */
+    b.onpointerdown = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); };
+    b.onmousedown = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); };
+    b.onclick = () => rsInserirSimbolo(sb);
+    fila.append(b);
+  });
+  acoes.parentNode.insertBefore(fila, acoes);
+  return fila;
 }
 
 /* ---------------- ligação ---------------- */
@@ -813,7 +1127,10 @@ function rsIniciar() {
     cv.onpointerup = () => rsSoltar();
     cv.onpointercancel = () => rsSoltar();
     cv.onpointerleave = () => rsSoltar();
+    /* o botão direito do mouse apaga (com a barra do lápis aberta): o menu do navegador não abre por cima */
+    cv.oncontextmenu = (e) => { if (rsPeloLapis() && e && e.preventDefault) e.preventDefault(); };
   }
+  try { rsSimbolosMontar(); rsNotasCaixa(); } catch (e) {}
   rsPintar();
 }
 
@@ -825,5 +1142,6 @@ if (typeof module !== "undefined" && module.exports) {
     rsQuantosSalvos, rsPintar, rsFerramenta, rsPrecisaPerguntar,
     RS_BORRACHAS, rsBorrachaDefinir, rsPintarBorrachas,
     rsBorrachaRaioAtual: () => rsBorrachaRaio,
+    rsNotaNova, rsInserirSimbolo, simbAutoTrocar, rsQuadroAlternar,
   };
 }

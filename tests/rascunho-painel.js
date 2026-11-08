@@ -66,8 +66,8 @@ async function testes() {
     /* NADA de rsIniciar, NADA de questão: o estado do arranque */
     api.qsUiIniciar();
     const b1 = api.$("btnRsAbrir");
-    ok(b1.hidden === false,
-       "O0 o gatilho nasce escondido e so aparece se algo mais rodar");
+    ok(b1.hidden === true,
+       "O0 (19.114.0) o 'rascunho' do cabecalho fica escondido: a entrada e o ✏️ do lapis");
     ok(/\S/.test(b1.textContent || ""),
        "O0b o gatilho nasce sem rotulo — um botao sem texto e um botao invisivel");
     /* o rótulo vem do HTML, então vale mesmo que nenhum JS tenha rodado */
@@ -90,8 +90,8 @@ async function testes() {
     api.rsPrepararPara("q1");
     ok(api.$("rsCaixa").hidden === true,
        "O2 o rascunho fechado continua na tela");
-    ok(api.$("btnRsAbrir").hidden === false,
-       "O2b o gatilho devia estar a mao com o rascunho fechado");
+    ok(api.$("btnRsAbrir").hidden === true,
+       "O2b (19.114.0) o gatilho do cabecalho continua escondido com o rascunho fechado");
 
     ok(typeof api.$("btnRsAbrir").onclick === "function",
        "O2c-pre o gatilho nao esta ligado a nada");
@@ -123,8 +123,8 @@ async function testes() {
     api.rsRecolher(true);
     ok(api.$("rsCaixa").hidden === true,
        "O2g fechar o rascunho deixou o painel na tela");
-    ok(api.$("btnRsAbrir").hidden === false,
-       "O2h fechar o rascunho nao devolveu o gatilho");
+    ok(api.$("btnRsAbrir").hidden === true,
+       "O2h (19.114.0) fechar o quadro nao traz de volta o gatilho duplicado");
   }
 
   /* ================================================================
@@ -206,8 +206,10 @@ async function testes() {
     ok(api.$("btnRsVidro").hidden === true,
        "O1d o 'ver a questao' aparece no painel de 72%, onde ela ja esta visivel");
     api.rsCheiaTrocar(true);
-    ok(api.$("btnRsVidro").hidden === false,
-       "O1d2 falta o 'ver a questao' na folha inteira");
+    /* (19.114.0) riscar por cima do enunciado é o lápis da própria questão (que agora cobre a questão inteira): a
+     * folha transparente saiu de cena */
+    ok(api.$("btnRsVidro").hidden === true,
+       "O1d2 (19.114.0) o 'ver a questao' saiu: riscar sobre o enunciado e o lapis da questao");
     /* PAPEL É O PADRÃO: número escrito sobre texto não se lê, e somar um
      * balanço é o caso que pediu a folha inteira. */
     ok(api.rsVidroAtual() === false,
@@ -318,13 +320,49 @@ async function testes() {
     ok(/PL 600/.test((g || {}).texto || ""),
        "O6f o texto digitado nao foi salvo: " + JSON.stringify((g || {}).texto));
 
-    /* e volta NO MODO em que há conteúdo: abrir na caneta mostraria uma
-     * folha em branco sobre um rascunho que existe */
+    /* (19.114.0) o "modo teclado" deu lugar às caixas de texto NA folha: o texto antigo volta como a primeira caixa,
+     * no alto, ao lado de onde se desenha */
     api.rsPrepararPara("q9");
-    ok(api.rsModoAtual() === "teclado",
-       "O6g voltou na caneta para um rascunho que era de texto");
+    ok(api.rsModoAtual() === "caneta" && api.rsNotasAtual().length === 1 && /PL 600/.test(api.rsNotasAtual()[0].t),
+       "O6g (19.114.0) o texto do antigo modo teclado volta como uma caixa na folha: " + JSON.stringify(api.rsNotasAtual()));
     ok(/PL 600/.test(api.rsTextoAtual()),
        "O6h o texto guardado nao voltou: " + api.rsTextoAtual());
+  }
+
+  /* ---- (19.114.0) O7: caixas de texto e símbolos no quadro ---- */
+  {
+    const { api } = rodar();
+    const tr = (txt, pos) => api.simbAutoTrocar(txt, pos === undefined ? txt.length : pos);
+    ok(tr("p ->").txt === "p →" && tr("p <->").txt === "p ↔" && tr("x <=").txt === "x ≤" && tr("a !=").txt === "a ≠"
+       && tr("(1+i)^n").txt === "(1+i)ⁿ" && tr("x^2").txt === "x²" && tr("x¹2").txt === "x¹²" && tr("abc").txt === "abc",
+       "O7 atalhos que viram simbolo: " + ["p ->", "p <->", "x <=", "a !=", "(1+i)^n", "x^2", "x¹2"].map((x) => tr(x).txt).join(" | "));
+    ok(tr("p -> q", 4).txt === "p → q" && tr("p -> q", 4).pos === 3, "O7a troca so o que acabou de ser digitado, antes do cursor");
+    const ja = "a->b ";
+    const blk = api.simbAutoTrocar(ja + "M = C(1+i)^n -> x <= 2^12", (ja + "M = C(1+i)^n -> x <= 2^12").length, 20);
+    ok(blk.txt === "a->b M = C(1+i)ⁿ → x ≤ 2¹²", "O7a2 um trecho inteiro de uma vez (ditado, correcao automatica): troca o trecho e deixa o texto de antes: " + blk.txt);
+    api.rsIniciar();
+    api.rsPrepararPara("q7");
+    api.rsRecolher(false);
+    api.rsNotaNova(100, 60, "Ativo 1.000");
+    api.rsNotaNova(100, 200, "");
+    ok(api.rsNotasAtual().length === 2 && api.rsTemAlgo() === true, "O7b duas caixas na folha");
+    api.rsInserirSimbolo("Σ");
+    ok(api.rsNotasAtual()[1].t === "Σ", "O7c o simbolo vai para a caixa em uso: " + JSON.stringify(api.rsNotasAtual()));
+    api.rsComecar({ clientX: 10, clientY: 10 }); api.rsMover({ clientX: 40, clientY: 40 }); api.rsSoltar({});
+    api.rsNotaNova(300, 300, "   ");
+    const p = api.rsSalvarNaQuestao();
+    api._uiFechar(true);
+    await Promise.resolve();
+    await p;
+    const g = api.rsDaQuestao("q7");
+    ok(g && g.notas && g.notas.length === 2 && g.notas[0].x === 100 && g.notas[0].y === 60 && g.tracos.length === 1,
+       "O7d desenho e texto guardados juntos; caixa em branco nao vai: " + JSON.stringify(g && g.notas));
+    api.rsPrepararPara(null);
+    api.rsPrepararPara("q7");
+    ok(api.rsNotasAtual().length === 2 && api.rsNotasAtual()[0].t === "Ativo 1.000" && api.rsTracosAtual().length === 1,
+       "O7e e voltam juntos, no lugar: " + JSON.stringify(api.rsNotasAtual()));
+    api.rsRedimensionar(api.RS_FOLHA_NORMAL.w * 2, api.RS_FOLHA_NORMAL.h * 2);
+    ok(api.rsNotasAtual()[0].x === 200 && api.rsNotasAtual()[0].y === 120, "O7f a folha cresce: as caixas acompanham");
   }
 
   return Object.assign(falhas, { quantas: n });

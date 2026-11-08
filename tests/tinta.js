@@ -205,6 +205,42 @@ async function testes() {
     api.tnComecar(ev(40, 200)); api.tnSoltar(ev(40, 200));
     ok(api.tnContar() === 2, "A3a toque sem botão debaixo continua sendo um ponto");
     api.tnDesfazer();
+    /* (19.114.0) UM MOTOR SÓ: o quadro, aberto pelo 📄 da barra, desenha com as ferramentas DA BARRA */
+    {
+      ok(api.$("btnTnQuadro") && api.$("btnTnTexto"), "U1 a barra tem o 📄 (quadro) e o T (texto)");
+      ok(api.$("btnRsAbrir").hidden === true, "U1a o 'rascunho' do cabecalho nao duplica a entrada");
+      ok(/tn-doca/.test(api.$("dlgQsResponder").className || ""), "U1b com a barra aberta, o dialogo abre espaco para ela (a barra nao cobre o topo)");
+      api.$("btnTnQuadro").onclick();
+      ok(api.rsAberto() === true && api.rsPeloLapis() === true && /on/.test(api.$("btnTnQuadro").className), "U2 o 📄 abre o quadro, que passa a seguir a barra");
+      ok(/rs-pelo-lapis/.test(api.$("rsCaixa").className || ""), "U2a as canetas proprias do quadro saem de cena");
+      const n0 = api.rsTracosAtual().length;
+      api.tnCorEscolher("azul");
+      api.rsComecar({ clientX: 10, clientY: 10, pointerType: "mouse", button: 0 }); api.rsMover({ clientX: 60, clientY: 40 }); api.rsSoltar({});
+      const azul = api.TN_CORES.filter((c) => c.id === "azul")[0].cor;
+      ok(api.rsTracosAtual().length === n0 + 1 && api.rsTracosAtual()[n0].cor === azul, "U3 o traco do quadro sai na cor da barra: " + (api.rsTracosAtual()[n0] || {}).cor);
+      api.tnFerramenta("marca");
+      api.rsComecar({ clientX: 10, clientY: 80, pointerType: "mouse", button: 0 }); api.rsMover({ clientX: 90, clientY: 80 }); api.rsSoltar({});
+      ok(/^#[0-9a-f]{6}61$/i.test(api.rsTracosAtual()[n0 + 1].cor), "U3a o marca-texto sai translucido: " + api.rsTracosAtual()[n0 + 1].cor);
+      api.tnFerramenta("lapis");
+      api.rsComecar({ clientX: 60, clientY: 40, pointerType: "pen", button: 5, buttons: 32 }); api.rsSoltar({});
+      ok(api.rsTracosAtual().filter((x) => x.cor === azul).length === 0 && api.rsTracosAtual().length === n0 + 1, "U4 a ponta de borracha da caneta apaga no quadro (sem trocar de ferramenta): " + api.rsTracosAtual().length);
+      api.tnCanetaReset();
+      api.tnFerramenta("mao");
+      const n1 = api.rsTracosAtual().length;
+      api.rsComecar({ clientX: 10, clientY: 10, pointerType: "mouse", button: 0 }); api.rsMover({ clientX: 60, clientY: 60 }); api.rsSoltar({});
+      ok(api.rsTracosAtual().length === n1, "U5 com a mao, o quadro nao desenha");
+      api.tnFerramenta("texto");
+      api.rsComecar({ clientX: 50, clientY: 50, pointerType: "mouse", button: 0 });
+      ok(api.rsNotasAtual().length === 1, "U6 com o T, tocar na folha abre uma caixa de texto ali");
+      api.$("btnTnQuadro").onclick();
+      ok(api.rsAberto() === false, "U7 o 📄 fecha o quadro");
+      /* T sobre a questão: abre o quadro com uma caixa pronta */
+      api.tnComecar(ev(40, 120));
+      ok(api.rsAberto() === true && api.rsNotasAtual().length === 2, "U8 T sobre a questao abre o quadro com uma caixa nova: " + api.rsNotasAtual().length);
+      api.rsQuadroAlternar(false);
+      api.rsPrepararPara(null);
+      api.tnFerramenta("lapis");
+    }
     /* a mão não desenha */
     api.tnFerramenta("mao");
     ok(api.tnComecar(ev(10, 110)) === false && !/tn-ativa/.test(svg().getAttribute("class")), "Q5 a mão não desenha e devolve o toque à página");
