@@ -113,18 +113,139 @@ let rsBotoes = {};       // canetas e borracha, por referência
 
 /* ---------------- armazenamento ---------------- */
 
+/* =====================================================================
+ * (19.115.0) OS RASCUNHOS NO INDEXEDDB — o mesmo padrão dos julgados (idb-juris.js)
+ *
+ * Medido: UM rascunho guardado ocupava 115 KB do localStorage, que tem teto de ~5 MB para o app inteiro e já passava
+ * de 2 MB. Com o quadro ao lado da questão (folha maior) e o traço liso da caneta (mais pontos), dez rascunhos
+ * guardados disputariam espaço com o edital e o material. Agora:
+ *  · moram no IndexedDB (cota bem maior); rsLerTudo/rsGravarTudo continuam SÍNCRONAS (cache em texto JSON);
+ *  · a migração é única e silenciosa, com a proteção da janela do carregamento (idb-guarda.js): enquanto a gaveta
+ *    não chegou, gravar é recusado; sobra no localStorage com rascunhos também no IndexedDB → junta, não copia;
+ *  · o traço é guardado COMPACTO (rsCompactar): pontos inteiros e sem os que estão na mesma reta.
+ * ===================================================================== */
+const RS_IDB_NOME = "eac_idb_rascunhos";
+const RS_IDB_LOJA = "r";
+let _rsIdbDb = null;
+let _rsCache = null;      /* texto JSON do mapa {qid: rascunho}, depois de migrar; null = ainda no localStorage */
+let _rsMigrando = null;
+let _rsGravando = null;   /* a última gravação em segundo plano (o backup espera por ela antes de recarregar) */
+function rsIdbSuportado() { try { return typeof indexedDB !== "undefined" && indexedDB !== null; } catch (e) { return false; } }
+function rsIdbAbrir() {
+  if (_rsIdbDb) return Promise.resolve(_rsIdbDb);
+  if (!rsIdbSuportado()) return Promise.reject(new Error("sem indexedDB"));
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(RS_IDB_NOME, 1); } catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(RS_IDB_LOJA)) db.createObjectStore(RS_IDB_LOJA); };
+    req.onsuccess = () => { _rsIdbDb = req.result; resolve(_rsIdbDb); };
+    req.onerror = () => reject(req.error || new Error("erro ao abrir o indexedDB dos rascunhos"));
+    req.onblocked = () => reject(new Error("indexedDB bloqueado (outra aba com versão antiga aberta)"));
+  });
+}
+function rsIdbLerTudo() {
+  return rsIdbAbrir().then((db) => new Promise((resolve, reject) => {
+    const out = {};
+    const req = db.transaction([RS_IDB_LOJA], "readonly").objectStore(RS_IDB_LOJA).openCursor();
+    req.onsuccess = () => { const c = req.result; if (c) { out[c.key] = c.value; c.continue(); } else resolve(out); };
+    req.onerror = () => reject(req.error || new Error("erro ao ler os rascunhos do indexedDB"));
+  }));
+}
+/* grava o MAPA INTEIRO (o mesmo contrato do localStorage): limpa a loja e regrava, numa transação só */
+function rsIdbGravarTudo(o) {
+  return rsIdbAbrir().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction([RS_IDB_LOJA], "readwrite");
+    const loja = tx.objectStore(RS_IDB_LOJA);
+    loja.clear();
+    Object.keys(o || {}).forEach((k) => loja.put(o[k], k));
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error || new Error("erro ao gravar os rascunhos no indexedDB"));
+    tx.onabort = () => reject(tx.error || new Error("gravação dos rascunhos abortada"));
+  }));
+}
+function rsIdbMigrar() {
+  if (_rsMigrando) return _rsMigrando;
+  if (!rsIdbSuportado() || typeof idbGuardaComecar !== "function") { _rsMigrando = Promise.resolve(); return _rsMigrando; }
+  let brutoAntes = null;
+  try { brutoAntes = localStorage.getItem(RS_CHAVE); } catch (e) {}
+  if (brutoAntes == null) {
+    const marcada = idbMarcaTem(RS_CHAVE);
+    _rsMigrando = idbGuardaComecar("rascunhos", async () => {
+      /* nada no localStorage: ou nunca houve rascunho, ou já migrou — lê o IndexedDB. Sem nada em lugar nenhum, fica
+       * como os julgados: o primeiro rascunho vai ao localStorage e migra no carregamento seguinte (marcar uma gaveta
+       * vazia faria uma leitura quebrada avisar e bloquear por nada) */
+      const idb = await rsIdbLerTudo();
+      if (!marcada && !Object.keys(idb || {}).length) return;
+      _rsCache = JSON.stringify(idb || {});
+      idbMarcaPor(RS_CHAVE);
+      try { if (rsQid && typeof rsPintarGatilhos === "function") rsPintarGatilhos(); } catch (e) {}
+    }, marcada);
+    return _rsMigrando;
+  }
+  _rsMigrando = idbGuardaComecar("rascunhos", async () => {
+    let o = {};
+    try { o = JSON.parse(brutoAntes) || {}; } catch (e) { o = {}; }
+    if (!o || typeof o !== "object" || Array.isArray(o)) o = {};
+    /* já que vai regravar tudo, guarda compacto (os traços antigos tinham pontos com 14 casas decimais) */
+    Object.keys(o).forEach((k) => { if (o[k] && Array.isArray(o[k].tracos)) o[k].tracos = rsCompactar(o[k].tracos); });
+    const idb = await rsIdbLerTudo();
+    const sobra = Object.keys(idb || {}).length > 0;
+    const final = sobra ? idbJuntarMapas(idb, o) : o;
+    await rsIdbGravarTudo(final);
+    let brutoDepois = null;
+    try { brutoDepois = localStorage.getItem(RS_CHAVE); } catch (e) {}
+    /* mudou durante a cópia: fica para o próximo carregamento, com o valor mais novo */
+    if (brutoDepois !== brutoAntes) return;
+    if (!idbMarcaPor(RS_CHAVE)) return;
+    try { localStorage.removeItem(RS_CHAVE); } catch (e) {}
+    _rsCache = JSON.stringify(final);
+    try { reg("ARMAZEN", "rascunhos: do localStorage para o IndexedDB", Object.keys(o).length + " rascunho(s) · " + Math.round(brutoAntes.length * 2 / 1024) + " KB → " + Math.round(_rsCache.length * 2 / 1024) + " KB"); } catch (e) {}
+  }, false);
+  return _rsMigrando;
+}
+function rsNoIdb() { return typeof _rsCache === "string" && !!_rsCache; }
+/* só para teste (o Node não tem indexedDB): simular "já migrou" */
+function rsCacheForcarTeste(texto) { _rsCache = texto; }
+
+/* O TRAÇO COMPACTO: pontos inteiros (a folha já tem resolução de tela, até 2× a densidade) e sem os que caem na mesma
+ * reta — a forma desenhada não muda, o tamanho cai a uma fração */
+function rsCompactar(tracos) {
+  return (tracos || []).map((tr) => {
+    let pts = (tr.pontos || []).map((p) => [Math.round(Number(p[0]) || 0), Math.round(Number(p[1]) || 0)]);
+    if (pts.length > 2 && typeof tnSimplificar === "function") { try { pts = tnSimplificar(pts, 0.75); } catch (e) {} }
+    pts = pts.filter((p, i) => i === 0 || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
+    if (pts.length === 1) pts.push([pts[0][0] + 1, pts[0][1] + 1]);
+    return Object.assign({}, tr, { larg: Math.round((Number(tr.larg) || 3) * 10) / 10, pontos: pts });
+  }).filter((tr) => tr.pontos.length > 1);
+}
+
 function rsLerTudo() {
-  try { return JSON.parse(localStorage.getItem(RS_CHAVE) || "{}") || {}; }
-  catch (e) { return {}; }
+  try {
+    const bruto = rsNoIdb() ? _rsCache : localStorage.getItem(RS_CHAVE);
+    const o = JSON.parse(bruto || "{}");
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  } catch (e) { return {}; }
 }
 function rsGravarTudo(o) {
-  try { localStorage.setItem(RS_CHAVE, JSON.stringify(o)); return true; }
-  catch (e) {
+  /* a gaveta ainda está chegando do IndexedDB: gravar agora trocaria todos os rascunhos pelos da memória */
+  if (typeof idbGuardaPodeGravar === "function" && !idbGuardaPodeGravar("rascunhos")) return false;
+  try {
+    const s = JSON.stringify(o || {});
+    if (rsNoIdb()) {
+      _rsCache = s;
+      _rsGravando = rsIdbGravarTudo(JSON.parse(s)).catch(() => { try { uiAlert(t("rs_sem_espaco")); } catch (e2) {} });
+      return true;
+    }
+    localStorage.setItem(RS_CHAVE, s);
+    return true;
+  } catch (e) {
     /* cota estourada: avisar em vez de fingir que salvou */
     try { uiAlert(t("rs_sem_espaco")); } catch (e2) {}
     return false;
   }
 }
+/* começa a migração em segundo plano (no Node não há indexedDB: não faz nada) */
+try { rsIdbMigrar(); } catch (e) {}
 function rsDaQuestao(id) {
   const r = rsLerTudo()[String(id)];
   if (!r) return null;
@@ -715,7 +836,7 @@ function rsSalvarNaQuestao() {
    * faria "salvar" recusar uma conta inteiramente digitada. */
   if (!rsTemAlgo()) { uiAlert(t("rs_vazio")); return false; }
   const tudo = rsLerTudo();
-  tudo[rsQid] = { tracos: rsTracos, texto: rsTextoAtual(),
+  tudo[rsQid] = { tracos: rsCompactar(rsTracos), texto: rsTextoAtual(),
                   notas: rsNotas.filter((n) => String(n.t || "").trim()).map((n) => ({ x: Math.round(n.x), y: Math.round(n.y), t: n.t })),
                   q: new Date().toISOString() };
   if (!rsGravarTudo(tudo)) return false;
@@ -1143,5 +1264,6 @@ if (typeof module !== "undefined" && module.exports) {
     RS_BORRACHAS, rsBorrachaDefinir, rsPintarBorrachas,
     rsBorrachaRaioAtual: () => rsBorrachaRaio,
     rsNotaNova, rsInserirSimbolo, simbAutoTrocar, rsQuadroAlternar,
+    rsCompactar, rsLerTudo, rsGravarTudo, rsNoIdb, rsCacheForcarTeste,
   };
 }

@@ -5356,6 +5356,8 @@ function qsTeclaResponder(ev) {
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (alvo && alvo.isContentEditable)) return false;
   const q = qsAtual();
   if (!q) return false;
+  /* (19.115.0) anotar só com o teclado: N (barra), Q (quadro), T (caixa de texto) — ver tnTeclaAnotar */
+  if (typeof tnTeclaAnotar === "function" && tnTeclaAnotar(ev)) { if (ev.preventDefault) ev.preventDefault(); return true; }
   const pode = (id) => { const b = $(id); return !!(b && !b.hidden && !b.disabled && typeof b.onclick === "function"); };
   const clicar = (id) => { $(id).onclick(); return true; };
   const jaFoi = !!qsJaRespondida();

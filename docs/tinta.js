@@ -1218,8 +1218,56 @@ function tnTecla(ev) {
   const k = String(ev.key || "");
   if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && k.toLowerCase() === "z") { tnDesfazer(); return true; }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
-  const mapa = { p: "lapis", m: "marca", r: "borracha", h: "mao", t: "texto" };
+  /* (19.115.0) T escolhe o texto E já abre uma caixa no quadro: pelo teclado não há onde tocar para dizer o lugar */
+  if (k.toLowerCase() === "t") { tnFerramenta("texto"); tnTextoNoQuadro(); return true; }
+  const mapa = { p: "lapis", m: "marca", r: "borracha", h: "mao" };
   if (mapa[k.toLowerCase()]) return tnFerramenta(mapa[k.toLowerCase()]);
+  return false;
+}
+/* =====================================================================
+ * (19.115.0) ANOTAR SÓ COM O TECLADO — para quem não tem tela de toque nem caneta
+ *
+ *  · N liga e desliga a anotação (a barra do lápis);
+ *  · Q abre o quadro com o cursor numa caixa de texto (a última, ou uma nova) — e fecha, se já estiver aberto;
+ *  · T abre uma caixa nova no quadro;
+ *  · Esc sai em camadas: da caixa de texto, do quadro, da barra — e só então da rodada.
+ * As letras das alternativas (A–E) e os números continuam respondendo: N, Q e T não são alternativa.
+ * ===================================================================== */
+function tnTeclaAnotar(ev) {
+  if (!ev || ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+  const k = String(ev.key || "").toLowerCase();
+  if (k === "n") { tnAlternar(); return true; }
+  if (k === "q") { tnQuadroTeclado(); return true; }
+  if (k === "t") { if (!tnAberta) tnAbrir(); tnFerramenta("texto"); tnTextoNoQuadro(); return true; }
+  return false;
+}
+function tnQuadroTeclado() {
+  if (typeof rsQuadroAlternar !== "function") return false;
+  if (typeof rsAberto === "function" && rsAberto()) { rsQuadroAlternar(false); tnPintarBarra(); return false; }
+  if (!tnAberta) tnAbrir();
+  rsQuadroAlternar(true);
+  /* o cursor vai para a última caixa (continuar a conta) ou para uma nova, embaixo */
+  try {
+    setTimeout(() => {
+      try {
+        const ult = typeof rsNotas !== "undefined" && rsNotas.length ? rsNotas[rsNotas.length - 1] : null;
+        const el = ult && typeof rsNotaEl === "function" ? rsNotaEl(ult) : null;
+        if (el && el.focus) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} }
+        else { const p = rsNotaProximaPos(); rsNotaNova(p[0], p[1], "", true); }
+      } catch (e) {}
+    }, 0);
+  } catch (e) {}
+  tnPintarBarra();
+  return true;
+}
+/* Esc na janela da questão: fecha a camada de cima (o quadro na folha inteira quem trata é o rascunho) */
+function tnEsc(ev) {
+  if (ev && ev.defaultPrevented) return false;
+  let quadro = false, cheia = false;
+  try { quadro = typeof rsAberto === "function" && rsAberto(); cheia = typeof rsCheia !== "undefined" && rsCheia; } catch (e) {}
+  if (cheia) return false;
+  if (quadro) { if (ev && ev.preventDefault) ev.preventDefault(); rsQuadroAlternar(false); tnPintarBarra(); return true; }
+  if (tnAberta) { if (ev && ev.preventDefault) ev.preventDefault(); tnFechar(); return true; }
   return false;
 }
 
@@ -1229,8 +1277,22 @@ function tnIniciar() {
   const dlg = typeof document !== "undefined" ? $("dlgQsResponder") : null;
   if (dlg && dlg.addEventListener) {
     dlg.addEventListener("close", () => { tnFechar(); });
-    /* Esc com a barra aberta fecha a barra, não a sessão */
-    dlg.addEventListener("cancel", (ev) => { if (tnAberta) { if (ev.preventDefault) ev.preventDefault(); tnFechar(); } });
+    /* Esc com a barra (ou o quadro) aberta fecha a barra (o quadro), não a sessão.
+     * (19.115.0) NO APERTO DA TECLA, e não só no "cancel" da janela: o Chrome só deixa impedir o "cancel" UMA vez entre
+     * dois gestos da pessoa (clique, toque) — visto no navegador: Esc fechou o quadro, Esc fechou a barra… e o terceiro
+     * fechou a rodada junto. Impedido no keydown, o "cancel" nem chega a acontecer. */
+    /* no DOCUMENTO, na captura: depois de sair de uma caixa de texto o foco fica na página, fora da janela */
+    if (document.addEventListener) {
+      document.addEventListener("keydown", (ev) => {
+        if (!ev || ev.key !== "Escape" || ev.defaultPrevented || !dlg.open) return;
+        if ($("uiModal") && $("uiModal").open) return;
+        /* dentro de uma caixa de texto, o Esc é dela (sai da caixa): esta escuta vem antes, na captura */
+        const tg = ev.target;
+        if (tg && /^(INPUT|TEXTAREA|SELECT)$/.test(String(tg.tagName || "").toUpperCase())) return;
+        if (tnEsc(ev) && ev.stopPropagation) ev.stopPropagation();
+      }, true);
+    }
+    dlg.addEventListener("cancel", (ev) => { tnEsc(ev); });
   }
 }
 if (typeof document !== "undefined") { try { tnIniciar(); } catch (e) {} }

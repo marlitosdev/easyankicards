@@ -305,6 +305,36 @@ async function testes() {
     ok(api.tnContar() === 1, "K5a desenhou na nova questão");
     tecla("z", { ctrlKey: true });
     ok(api.tnContar() === 0, "K5 Ctrl+Z desfaz");
+    /* (19.115.0) ANOTAR SÓ COM O TECLADO: N, Q, T e o Esc em camadas */
+    {
+      api.tnFechar();
+      ok(api.tnAbertaAgora() === false, "K6-pre a barra fechada");
+      tecla("n");
+      ok(api.tnAbertaAgora() === true, "K6 N liga a anotacao (a barra do lapis)");
+      tecla("n");
+      ok(api.tnAbertaAgora() === false, "K6a N de novo desliga");
+      const nN = api.rsNotasAtual().length;
+      tecla("q");
+      ok(api.tnAbertaAgora() === true && api.rsAberto() === true && api.rsNotasAtual().length === nN + 1,
+         "K7 Q abre a barra e o quadro, com uma caixa de texto pronta: " + api.rsNotasAtual().length);
+      tecla("q");
+      ok(api.rsAberto() === false && api.tnAbertaAgora() === true, "K7a Q de novo fecha o quadro (a barra fica)");
+      tecla("t");
+      ok(api.rsAberto() === true && api.rsNotasAtual().length === nN + 2 && api.$("btnTnTexto").classList.contains("on"),
+         "K8 T abre o quadro com uma caixa nova e escolhe o texto");
+      tecla("c");
+      ok(api.$("qsSessCorpo").querySelectorAll(".qs-op-sel").length === 1, "K8a as alternativas continuam respondendo pelo teclado");
+      let prev = 0;
+      const esc = () => api.tnEsc({ preventDefault() { prev++; } });
+      ok(esc() === true && api.rsAberto() === false && api.tnAbertaAgora() === true && prev === 1, "K9 Esc fecha primeiro o quadro (a barra fica)");
+      ok(esc() === true && api.tnAbertaAgora() === false, "K9a Esc de novo fecha a barra");
+      ok(esc() === false && prev === 2, "K9b e so entao o Esc fica com a janela (fecha a rodada)");
+      ok(api.tnTeclaAnotar({ key: "n", ctrlKey: true }) === false, "K9c Ctrl+N nao e atalho de anotar");
+      ok(/N anotar · Q quadro · T texto/.test(api.t("qs_teclas")), "K9d a dica de teclas mostra N, Q e T");
+      api.rsPrepararPara(null);
+      api.tnAbrir();
+      api.tnFerramenta("lapis");
+    }
     /* caneta: a palma não risca */
     api.tnCanetaReset();
     let t1 = 50000;

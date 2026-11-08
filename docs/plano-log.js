@@ -678,8 +678,12 @@ function plPodaLogs(fazer) {
  * NUNCA os de questão sem resposta: aquele desenho é trabalho em curso. */
 function plPodaRascunhos(dias, fazer, bancoDado) {
   let tudo = {};
-  try { tudo = JSON.parse(localStorage.getItem("eac_rascunhos") || "{}") || {}; }
-  catch (e) { tudo = {}; }
+  /* (19.115.0) pela gaveta: depois da migração os rascunhos moram no IndexedDB, não no localStorage */
+  if (typeof rsLerTudo === "function") tudo = rsLerTudo();
+  else {
+    try { tudo = JSON.parse(localStorage.getItem("eac_rascunhos") || "{}") || {}; }
+    catch (e) { tudo = {}; }
+  }
   const limite = Date.now() - (dias || 90) * 86400000;
   const banco = bancoDado
     || (typeof qsBanco !== "undefined" && qsBanco) || [];
@@ -705,8 +709,8 @@ function plPodaRascunhos(dias, fazer, bancoDado) {
     }
   });
   if (fazer && itens) {
-    try { localStorage.setItem("eac_rascunhos", JSON.stringify(ficam)); }
-    catch (e) {}
+    if (typeof rsGravarTudo === "function") rsGravarTudo(ficam);
+    else { try { localStorage.setItem("eac_rascunhos", JSON.stringify(ficam)); } catch (e) {} }
   }
   return { bytes, itens };
 }

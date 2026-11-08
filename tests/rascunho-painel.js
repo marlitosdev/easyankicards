@@ -365,6 +365,40 @@ async function testes() {
     ok(api.rsNotasAtual()[0].x === 200 && api.rsNotasAtual()[0].y === 120, "O7f a folha cresce: as caixas acompanham");
   }
 
+  /* ---- (19.115.0) O8: o traço guardado compacto, e a gaveta no IndexedDB ---- */
+  {
+    const { api, janela } = rodar();
+    const reta = []; for (let i = 0; i <= 60; i++) reta.push([10.123456789 + i * 3.3333333, 20.987654321]);
+    const torto = [[0.4, 0.4], [10.6, 30.2], [20.3, 0.1], [30.7, 30.9]];
+    const c = api.rsCompactar([{ cor: "#111", larg: 2.666666, pontos: reta }, { cor: "#222", larg: 3, pontos: torto }, { cor: "#333", larg: 3, pontos: [[5.2, 5.2]] }]);
+    ok(c[0].pontos.length === 2 && c[0].pontos.every((p) => Number.isInteger(p[0]) && Number.isInteger(p[1])) && c[0].larg === 2.7,
+       "O8 a reta de 61 pontos com 9 casas vira 2 pontos inteiros: " + JSON.stringify(c[0]));
+    ok(c[1].pontos.length === 4 && JSON.stringify(c[1].pontos) === "[[0,0],[11,30],[20,0],[31,31]]", "O8a os cantos ficam: " + JSON.stringify(c[1].pontos));
+    ok(c.length === 3 && c[2].pontos.length === 2, "O8b o ponto solto continua visivel (vira um tracinho)");
+    const antes = JSON.stringify([{ cor: "#111", larg: 2.666666, pontos: reta }]).length, depois = JSON.stringify([c[0]]).length;
+    ok(depois * 5 < antes, "O8c o tamanho cai a uma fracao: " + antes + " → " + depois);
+    /* sem IndexedDB (o Node), a gaveta continua no localStorage */
+    api.rsIniciar();
+    api.rsPrepararPara("q8");
+    api.rsRecolher(false);
+    api.rsComecar({ clientX: 10, clientY: 10 }); api.rsMover({ clientX: 40, clientY: 40 }); api.rsSoltar({});
+    let p = api.rsSalvarNaQuestao(); api._uiFechar(true); await Promise.resolve(); await p;
+    ok(api.rsNoIdb() === false && /q8/.test(janela.localStorage.getItem("eac_rascunhos") || ""), "O8d sem IndexedDB, o rascunho vai para o localStorage, como antes");
+    /* já migrado: a gravação vai para a memória (e o IndexedDB, em segundo plano) — o localStorage não é mais tocado */
+    janela.localStorage.removeItem("eac_rascunhos");
+    api.rsCacheForcarTeste(JSON.stringify({ q8: { tracos: [], texto: "x", q: "2026-01-01" } }));
+    ok(api.rsNoIdb() === true && !!api.rsDaQuestao("q8"), "O8e migrado: a leitura vem do cache do IndexedDB");
+    api.rsPrepararPara("q9b");
+    api.rsRecolher(false);
+    api.rsNotaNova(30, 30, "VP = VF/(1+i)ⁿ");
+    p = api.rsSalvarNaQuestao(); api._uiFechar(true); await Promise.resolve(); await p;
+    ok(!!api.rsDaQuestao("q9b") && !!api.rsDaQuestao("q8") && janela.localStorage.getItem("eac_rascunhos") === null,
+       "O8f migrado: o rascunho novo vai para o IndexedDB, junto dos outros, e o localStorage fica vazio");
+    const bk = api.montarBackup();
+    const tudo = JSON.stringify(bk.dados || bk);
+    ok(/q9b/.test(tudo) && /VP = VF/.test(tudo), "O8g o backup leva os rascunhos que moram no IndexedDB");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 
