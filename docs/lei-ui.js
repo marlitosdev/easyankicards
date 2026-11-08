@@ -5619,7 +5619,7 @@ function leiRelatorioFluxo(tela, opc) {
       }
     } catch (e) { p.push("  (conferência indisponível: " + (e && e.message) + ")"); }
     /* (19.107.0) a janela do texto de cada sugestão, com as mesmas marcas da tela */
-    p.push("  janelas do texto: [-sai-] [+entra+] [^junta à linha de cima^] {trecho de outra lei} · ▸ = linha afetada");
+    p.push("  janelas do texto: [-sai-] [+entra+] [^junta à linha de cima^] {trecho de outra lei} [#vira anexo à parte#] · ▸ = linha afetada");
     const janela = (itens) => { try { leiPreJanelaTexto(c, itens).forEach((x) => p.push(x)); } catch (e) { p.push("        (janela indisponível: " + (e && e.message) + ")"); } };
     LEI_PRE_GRUPOS.slice().sort((a, b) => (leiPreGravidade(a) === "segura") - (leiPreGravidade(b) === "segura")).forEach((g) => {
       const it = c.pre.mudancas.filter((m) => m.grupo === g);
@@ -5627,9 +5627,12 @@ function leiRelatorioFluxo(tela, opc) {
       const gv = leiPreGravidade(g);
       p.push("  · " + (gv === "apaga" ? "[APAGA LINHAS] " : gv === "estrutura" ? "[MUDA A ESTRUTURA] " : "[limpeza segura] ") + g + ": " + it.length + " (aceitas " + it.filter((m) => leiPreAceita(c, m)).length + ")");
       if (g === "anexo") {
-        /* todos os anexos, com a escolha de cada um (a tela pede uma decisão por anexo) */
-        it.slice(0, 40).forEach((m) => p.push("      " + m.titulo + " · linhas " + m.linhas[0] + "-" + m.linhas[1] + " · " + m.tamanho + " car."
-          + (m.revogado ? " · revogado" : "") + " · escolha: " + (c.decisoes[m.id] || "—")));
+        /* todos os anexos, com a escolha de cada um (a tela pede uma decisão por anexo); a janela dos 6 primeiros */
+        it.slice(0, 40).forEach((m, q) => {
+          p.push("      " + m.titulo + " · linhas " + m.linhas[0] + "-" + m.linhas[1] + " · " + m.tamanho + " car."
+            + (m.revogado ? " · revogado" : "") + " · escolha: " + (c.decisoes[m.id] || "—"));
+          if (q < 6) janela([m]);
+        });
         if (it.length > 40) p.push("      …e mais " + (it.length - 40));
         return;
       }
@@ -6989,6 +6992,19 @@ function leiPreJanelaModelo(c, itens, vista, oc) {
   const semMarca = (partes) => partes.map((p) => ({ t: p.t, k: p.k === "prot" ? "prot" : "" }));
   const out = [];
   let provas = [], mais = 0;
+  if (g === "anexo") {
+    const ini = m.linhas[0], fim = m.linhas[1];
+    const legivel = (x) => { const s0 = leiPreLinhaLimpa(x); let r = null; try { r = leiDesdobrarLetras(s0) || leiDesespacarNota(s0); } catch (e) { r = null; } return r || s0; };
+    leiPreVizinhas(L, ini, -1, LEI_PRE_JAN_CTX).forEach((n) => out.push(ctx(n, "antes")));
+    const nums = [];
+    for (let k = ini; k <= fim; k++) if (String(L[k - 1]).trim()) nums.push(k);
+    const d = c.decisoes[m.id];
+    if (fica && d === "descartar") { out.push({ corte: nums.length }); return { linhas: out, provas, mais: 0, igual: false }; }
+    if (fica && d === "separar") out.push({ sep: t("lei_pre_jan_anexo_sep") });
+    nums.slice(0, 3).forEach((n) => out.push(alvo(n, [{ t: legivel(L[n - 1]), k: fica ? "" : "anexo" }])));
+    return { linhas: out, provas, mais: Math.max(0, nums.length - 3), maisChave: "lei_pre_jan_mais_anexo", igual: false,
+      nota: fica && d === "manter" ? t("lei_pre_jan_anexo_dentro") : "" };
+  }
   if (g === "remissao") {
     const anc = m.ancora || Math.max(1, m.linhas[0] - 1);
     leiPreVizinhas(L, anc, -1, LEI_PRE_JAN_CTX - 1).forEach((n) => out.push(ctx(n, "antes")));
@@ -7051,13 +7067,14 @@ function leiPreJanelaModelo(c, itens, vista, oc) {
   leiPreVizinhas(L, alvos[alvos.length - 1], 1, LEI_PRE_JAN_CTX).forEach((n) => out.push(ctx(n, "depois")));
   return { linhas: out, provas, mais, igual: fica && !aceita };
 }
-/* a janela como texto, para o relatório: [-sai-] [+entra+] [^junta^] {outra lei} */
+/* a janela como texto, para o relatório: [-sai-] [+entra+] [^junta^] {outra lei} [#anexo#] */
 function leiPreJanelaTexto(c, itens, vista, oc) {
   const mod = leiPreJanelaModelo(c, itens, vista || "marcado", oc || 0);
-  const marca = (p) => (p.k === "sai" ? "[-" + p.t + "-]" : p.k === "entra" ? "[+" + p.t + "+]" : p.k === "junta" ? "[^" + p.t + "^]" : p.k === "prot" ? "{" + p.t + "}" : p.t);
-  return mod.linhas.map((r) => (r.corte ? "        ✂ " + r.corte + " linha(s) tirada(s)"
+  const marca = (p) => (p.k === "sai" ? "[-" + p.t + "-]" : p.k === "entra" ? "[+" + p.t + "+]" : p.k === "junta" ? "[^" + p.t + "^]" : p.k === "prot" ? "{" + p.t + "}" : p.k === "anexo" ? "[#" + p.t + "#]" : p.t);
+  return mod.linhas.map((r) => (r.corte ? "        ✂ " + r.corte + " linha(s) tirada(s)" : r.sep ? "        ── " + r.sep
     : "        " + String(r.n).padStart(5, " ") + (r.alvo ? " ▸ " : " | ") + r.partes.map(marca).join("").replace(/\s+/g, " ").slice(0, 220)))
-    .concat(mod.mais ? ["        … e mais " + mod.mais + " linha(s) riscada(s)"] : []);
+    .concat(mod.mais ? ["        … e mais " + mod.mais + " linha(s)" + (itens[0].grupo === "anexo" ? " do anexo" : " riscada(s)")] : [])
+    .concat(mod.nota ? ["        (" + mod.nota + ")"] : []);
 }
 function leiPreJanelaEl(c, itens) {
   const m = itens[0];
@@ -7103,6 +7120,7 @@ function leiPreJanelaEl(c, itens) {
     const corpo = el("div", "lei-pre-jan-txt");
     mod.linhas.forEach((r) => {
       if (r.corte) { corpo.append(el("span", "lei-pre-jan-corte", t("lei_pre_jan_corte", { n: r.corte }))); return; }
+      if (r.sep) { corpo.append(el("span", "lei-pre-jan-sep", r.sep)); return; }
       const l = el("span", "lei-pre-jan-l" + (r.alvo ? " alvo" : ""));
       l.append(el("span", "lei-pre-jan-n", String(r.n)));
       r.partes.forEach((p) => {
@@ -7114,7 +7132,8 @@ function leiPreJanelaEl(c, itens) {
       });
       corpo.append(l);
     });
-    if (mod.mais) corpo.append(el("span", "lei-pre-jan-nota", t("lei_pre_jan_mais", { n: mod.mais })));
+    if (mod.mais) corpo.append(el("span", "lei-pre-jan-nota", t(mod.maisChave || "lei_pre_jan_mais", { n: mod.mais })));
+    if (mod.nota) corpo.append(el("span", "lei-pre-jan-nota", mod.nota));
     if (mod.igual) corpo.append(el("span", "lei-pre-jan-nota", t("lei_pre_jan_igual")));
     box.append(corpo);
   };
@@ -7122,6 +7141,157 @@ function leiPreJanelaEl(c, itens) {
   pintar();
   return box;
 }
+/* =====================================================================
+ * (19.108.0) O TOPO ENXUTO DA REVISÃO
+ *   · TRÊS NÚMEROS no lugar do parágrafo de abertura, da linha do contador e dos atalhos por grupo: o que é para você
+ *     decidir (o que apaga linhas ou muda a estrutura), os avisos do "como a lei vai ficar" e as já aceitas. Cada um
+ *     leva ao lugar dele;
+ *   · O MAPA DO TEXTO: uma faixa com o texto inteiro e uma marca (na cor da gravidade) onde cada sugestão age — os
+ *     trechos de outras leis em roxo e os anexos em azul. Um toque leva até a sugestão (e à ocorrência certa);
+ *   · a explicação de cada grupo fica no "ⓘ", fechada.
+ * ===================================================================== */
+function leiPreEl(tag, cls, txt) { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; }
+function leiPreRolarAte(alvo) { try { if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: "start" }); } catch (e) {} }
+function leiPreNumsPintar(c, o) {
+  const box = $("leiPreResumo");
+  if (!box) return;
+  box.innerHTML = "";
+  const total = c.pre.mudancas.length;
+  box.title = o.soNum ? "" : t("lei_pre_resumo", { n: total, a: o.aceitas }) + (o.nRever ? " · " + t("lei_pre_resumo_rever", { r: o.nRever }) : "");
+  const peca = (cls, num, rot, id, faz) => {
+    const b = leiPreEl("button", "lei-pre-num-t " + cls);
+    b.type = "button";
+    b.id = id;
+    b.append(leiPreEl("b", "", String(num)), leiPreEl("span", "", rot));
+    b.onclick = faz;
+    box.append(b);
+  };
+  if (!o.soNum) peca(o.nRever ? "decidir" : "ok", o.nRever, t("lei_pre_num_decidir"), "btnLeiPreNumDecidir",
+    () => leiPreRolarAte(o.rever.length ? $("leiPreGrupo_" + o.rever[0].g) : $("leiPreLista")));
+  const conf = (o.como && o.como.conferir) || [];
+  peca(conf.length ? (conf.some((p) => p.gravidade === "grave") ? "grave" : "aviso") : "ok", conf.length, t(conf.length === 1 ? "lei_pre_num_avisos_1" : "lei_pre_num_avisos"), "btnLeiPreNumAvisos",
+    () => leiPreRolarAte($("leiPreComo") && !$("leiPreComo").hidden ? $("leiPreComo") : $("leiPreNumeracao")));
+  if (!o.soNum) peca("aceitas", o.aceitas, t("lei_pre_num_aceitas", { n: total }), "btnLeiPreNumAceitas", () => {
+    if ($("leiPreSeguras")) { c.segurasAbertas = true; $("leiPreSeguras").open = true; leiPreRolarAte($("leiPreSeguras")); }
+    else leiPreRolarAte($("leiPreLista"));
+  });
+}
+/* levar a pessoa até uma sugestão: abre o que estiver fechado, escolhe a ocorrência certa e destaca o cartão */
+function leiPreIrPara(c, m, linha) {
+  if (leiPreGravidade(m.grupo) === "segura" && $("leiPreSeguras")) { c.segurasAbertas = true; $("leiPreSeguras").open = true; }
+  const det = $("leiPreDet_" + m.grupo);
+  if (det) { c.gruposAbertos = c.gruposAbertos || {}; c.gruposAbertos[m.grupo] = true; det.open = true; }
+  let alvo = $("leiPreItem_" + m.id);
+  if (!alvo && m.grupo === "remissao") {
+    const k = leiPreCadeias(c.pre.mudancas.filter((x) => x.grupo === "remissao")).find((q) => q.some((x) => x.id === m.id));
+    if (k) alvo = $("leiPreCadeia_" + k[0].id);
+  }
+  if (LEI_PRE_OCORRENCIAS.indexOf(m.grupo) >= 0 && linha) {
+    const i = (m.linhas || []).indexOf(linha);
+    if (i >= 0) { c.janOc = c.janOc || {}; c.janOc[m.id] = i; const jan = $("leiPreJan_" + m.id); if (jan && jan.pintar) jan.pintar(); }
+  }
+  if (alvo) {
+    try { if (alvo.scrollIntoView) alvo.scrollIntoView({ block: "center" }); } catch (e) {}
+    if (alvo.classList) {
+      alvo.classList.add("lei-pre-foco");
+      if (typeof setTimeout === "function") { const tm = setTimeout(() => alvo.classList.remove("lei-pre-foco"), 1600); if (tm && tm.unref) tm.unref(); }
+    }
+  }
+  return alvo;
+}
+const LEI_PRE_MAPA_CASAS = 100;
+function leiPreMapaPintar(c, soNum) {
+  const box = $("leiPreMapa");
+  if (!box) return;
+  box.innerHTML = "";
+  const mud = (c.pre && c.pre.mudancas) || [];
+  if (soNum || !mud.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const total = Math.max(1, leiPreLinhasDaColagem(c).length);
+  const pos = (ln) => Math.max(0, Math.min(99.4, ((ln - 1) / total) * 100));
+  const cab = leiPreEl("div", "lei-pre-mapa-cab");
+  cab.append(leiPreEl("span", "lei-pre-mapa-tit", t("lei_pre_mapa_tit", { n: total })), leiPreEl("span", "lei-pre-mapa-dica", t("lei_pre_mapa_dica")));
+  const barra = leiPreEl("div", "lei-pre-mapa-barra");
+  barra.id = "leiPreMapaBarra";
+  const faixa = (ini, fim, cls, titulo, faz) => {
+    const f = leiPreEl("button", "lei-pre-mapa-f " + cls);
+    f.type = "button";
+    f.style.left = pos(ini).toFixed(2) + "%";
+    f.style.width = Math.max(0.6, ((fim - ini + 1) / total) * 100).toFixed(2) + "%";
+    f.title = titulo;
+    f.setAttribute("aria-label", titulo);
+    if (faz) f.onclick = faz;
+    barra.append(f);
+  };
+  ((c.pre && c.pre.blocos) || []).forEach((b) => {
+    if (b.recusado) return;
+    (b.trechos || []).forEach((tr) => faixa(tr.ini, tr.fim, "prot", t("lei_pre_mapa_prot", { a: tr.ini, b: tr.fim }), () => leiPreRolarAte($("leiPreGrupo_alteracao"))));
+  });
+  mud.filter((m) => m.grupo === "anexo").forEach((m) => faixa(m.linhas[0], m.linhas[1], "anexo", t("lei_pre_mapa_anexo", { a: m.titulo, i: m.linhas[0], f: m.linhas[1] }), () => leiPreIrPara(c, m)));
+  /* uma casa por 1% do texto; em cada uma, a sugestão mais grave (e quantas há ali) */
+  const peso = { apaga: 3, estrutura: 2, segura: 1 };
+  const casas = {};
+  mud.forEach((m) => {
+    if (m.grupo === "anexo") return;
+    const lns = LEI_PRE_OCORRENCIAS.indexOf(m.grupo) >= 0 ? (m.linhas || []) : [(m.linhas || [])[0]];
+    lns.forEach((ln) => {
+      if (!ln) return;
+      const k = Math.min(LEI_PRE_MAPA_CASAS - 1, Math.floor(pos(ln)));
+      const gv = leiPreGravidade(m.grupo);
+      const x = casas[k] || (casas[k] = { n: 0, m, ln, gv });
+      x.n++;
+      if (peso[gv] > peso[x.gv]) { x.m = m; x.ln = ln; x.gv = gv; }
+    });
+  });
+  Object.keys(casas).forEach((k) => {
+    const x = casas[k];
+    const b = leiPreEl("button", "lei-pre-mapa-m " + x.gv);
+    b.type = "button";
+    b.id = "leiPreMapaM_" + k;
+    b.style.left = k + "%";
+    b.title = t(x.n > 1 ? "lei_pre_mapa_marca_n" : "lei_pre_mapa_marca", { g: t("lei_pre_curto_" + x.m.grupo), l: x.ln, n: x.n });
+    b.setAttribute("aria-label", b.title);
+    b.onclick = () => leiPreIrPara(c, x.m, x.ln);
+    barra.append(b);
+  });
+  box.append(cab, barra);
+}
+/* a explicação de um grupo, fechada atrás do "ⓘ" (continua no texto do cartão para quem a abrir) */
+function leiPreAjudaEl(c, cab, card, chave, texto) {
+  c.ajudaAberta = c.ajudaAberta || {};
+  const aj = leiPreEl("div", "lei-pre-ajuda", texto);
+  aj.id = "leiPreAjuda_" + chave;
+  aj.hidden = !c.ajudaAberta[chave];
+  const b = leiPreEl("button", "lei-pre-info", "ⓘ");
+  b.type = "button";
+  b.id = "btnLeiPreInfo_" + chave;
+  b.title = t("lei_pre_info_tip");
+  b.setAttribute("aria-label", t("lei_pre_info_tip"));
+  b.setAttribute("aria-expanded", aj.hidden ? "false" : "true");
+  b.onclick = (ev) => {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    c.ajudaAberta[chave] = !c.ajudaAberta[chave];
+    aj.hidden = !c.ajudaAberta[chave];
+    b.setAttribute("aria-expanded", aj.hidden ? "false" : "true");
+  };
+  cab.append(b);
+  card.append(aj);
+  return aj;
+}
+/* A SEQUÊNCIA EM VOLTA de um ponto da numeração: os números de antes e de depois, o fora do lugar pintado */
+function leiPreSeqEl(arts, q) {
+  const box = leiPreEl("div", "lei-pre-seq");
+  const i = (arts || []).findIndex((a) => a.linha === q.linha);
+  if (i < 0) return box;
+  for (let k = Math.max(0, i - 3); k <= Math.min(arts.length - 1, i + 2); k++) {
+    if (k === i && q.tipo === "salto" && (q.faltam || []).length) {
+      box.append(leiPreEl("span", "lei-pre-seq-falta", t("lei_pre_seq_falta", { f: q.faltam.slice(0, 3).join(", ") + ((q.nFaltam || 0) > 3 ? "…" : "") })));
+    }
+    box.append(leiPreEl("span", "lei-pre-seq-n" + (k === i ? " mal " + q.gravidade : ""), arts[k].numCru));
+  }
+  return box;
+}
+
 /* OS DOIS BOTÕES DA DECISÃO, com o nome da ação ("Tirar as 3" / "Manter"): o ligado fica cheio e com o visto */
 function leiPreRotulos(g, n, cadeia) {
   if (cadeia) return { sim: t("lei_pre_op_sim_cadeia", { n }), nao: t("lei_pre_op_nao_cadeia") };
@@ -7176,15 +7346,9 @@ function leiPreItemEl(c, m) {
       rv.textContent = t("lei_pre_anx_rev", { f: m.revogado.fonte || "—" });
       el.append(rv);
     }
-    /* uma amostra do que é: as primeiras linhas depois do título */
-    /* (v19.23.0) o TÍTULO partido em duas linhas se junta com espaço: "…SERVIÇOS DE QUALQUER" + "NATUREZA PARA OS
-     * AUTÔNOMOS" (as duas em maiúsculas, a de cima sem pontuação no fim) ou a de baixo começando em minúscula; título e
-     * primeira linha da tabela ("…POR PRODUTO" + "Produto A 10%") continuam separados por " · " */
-    const continua = (a, x) => !/[.:;!?)]$/.test(a) && (/^[a-zà-ÿ]/.test(x) || (a === a.toUpperCase() && x === x.toUpperCase() && /[A-ZÀ-Ú]{3}/.test(x)));
-    /* (v19.25.0) a amostra já com as letras dobradas/espaçadas desfeitas (como o anexo vai ficar) */
-    const amostra = leiPreLinhasDaColagem(c).slice(m.linhas[0], m.linhas[1]).map((x) => leiDesdobrarLetras(x) || leiDesespacarNota(x) || x).map((x) => String(x).replace(/\s+/g, " ").trim())
-      .filter(Boolean).slice(0, 2).reduce((a, x) => (!a ? x : a + (continua(a, x) ? " " : " · ") + x), "").slice(0, 200);
-    if (amostra) { const am = document.createElement("div"); am.className = "lei-pre-anexo-amostra"; am.textContent = "» " + amostra; el.append(am); }
+    /* (19.108.0) A JANELA PINTADA no lugar da amostra: o fim do último artigo, a FRONTEIRA do anexo e as primeiras
+     * linhas dele (com as letras dobradas/espaçadas já desfeitas); "como fica" mostra a escolha de agora */
+    el.append(leiPreJanelaEl(c, [m]));
     el.append(leiPreAnexoVerEl(c, m));
     const op = document.createElement("div");
     op.className = "lei-pre-anexo-op";
@@ -7267,10 +7431,7 @@ function leiPreBlocosEl(c) {
   tit.textContent = t("lei_pre_alt_titulo", { n: bl.length });
   cab.append(tit);
   card.append(cab);
-  const aj = document.createElement("div");
-  aj.className = "lei-pre-ajuda";
-  aj.textContent = t("lei_pre_alt_ajuda");
-  card.append(aj);
+  leiPreAjudaEl(c, cab, card, "alteracao", t("lei_pre_alt_ajuda"));
   const det = document.createElement("details");
   const sm = document.createElement("summary");
   sm.textContent = t("lei_pre_ver_itens", { n: bl.length });
@@ -7305,10 +7466,7 @@ function leiPreIdentificadoresEl(c) {
   tit.textContent = t("lei_pre_ident_titulo", { n: it.length });
   cab.append(tit);
   card.append(cab);
-  const aj = document.createElement("div");
-  aj.className = "lei-pre-ajuda";
-  aj.textContent = t("lei_pre_ident_ajuda");
-  card.append(aj);
+  leiPreAjudaEl(c, cab, card, "identificador", t("lei_pre_ident_ajuda"));
   const det = document.createElement("details");
   const sm = document.createElement("summary");
   sm.textContent = t("lei_pre_ver_itens", { n: it.length });
@@ -7469,7 +7627,8 @@ function leiPreGrupoEl(c, g, itens) {
   selo.className = "lei-pre-grav-selo " + grav;
   selo.textContent = t("lei_pre_grav_" + grav);
   cab.append(selo, tit);
-  if (g !== "anexo") {
+  /* (19.108.0) com UM item, os botões dele já decidem: "aceitar todos" / "recusar todos" só repetiam */
+  if (g !== "anexo" && itens.length > 1) {
     /* O ESTADO DO GRUPO, sempre à vista: quantas estão aceitas, e qual dos dois botões descreve o grupo agora
      * (todas aceitas → "aceitar todos" ligado; nenhuma → "recusar todos" ligado; misto → nenhum dos dois).
      * É recalculado a cada repintura, então acompanha também as escolhas item a item. */
@@ -7497,14 +7656,15 @@ function leiPreGrupoEl(c, g, itens) {
     });
   }
   card.append(cab);
-  const aj = document.createElement("div");
-  aj.className = "lei-pre-ajuda";
-  aj.textContent = t("lei_pre_h_" + g);
-  card.append(aj);
+  leiPreAjudaEl(c, cab, card, g, t("lei_pre_h_" + g));
 
   let lista = card;
   if (itens.length > 30) {
     const det = document.createElement("details");
+    det.id = "leiPreDet_" + g;
+    c.gruposAbertos = c.gruposAbertos || {};
+    det.open = !!c.gruposAbertos[g];
+    det.ontoggle = () => { c.gruposAbertos[g] = det.open; };
     const sm = document.createElement("summary");
     sm.textContent = t("lei_pre_ver_itens", { n: itens.length });
     det.append(sm);
@@ -7532,36 +7692,29 @@ function leiPrePintar() {
   const soNum = !c.pre.mudancas.length;
   $("leiPreTitulo").textContent = t(soNum ? "lei_pre_titulo_num"
     : (atualizar ? "lei_pre_titulo_upd" : "lei_pre_titulo_criar"));
+  /* (19.108.0) a explicação longa fica a um toque ("ⓘ como funciona"), fechada */
   $("leiPreAjuda").textContent = t(soNum ? "lei_pre_ajuda_num" : "lei_pre_ajuda");
+  $("leiPreAjuda").hidden = !c.ajudaGeral;
+  const bAj = $("btnLeiPreAjudaVer");
+  if (bAj) {
+    bAj.textContent = t(c.ajudaGeral ? "lei_pre_como_funciona_fechar" : "lei_pre_como_funciona");
+    bAj.setAttribute("aria-expanded", c.ajudaGeral ? "true" : "false");
+    bAj.onclick = () => { c.ajudaGeral = !c.ajudaGeral; leiPrePintar(); };
+  }
   const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
   const grupos = LEI_PRE_GRUPOS.map((g) => ({ g, itens: c.pre.mudancas.filter((m) => m.grupo === g) })).filter((x) => x.itens.length);
   const rever = grupos.filter((x) => leiPreGravidade(x.g) !== "segura");
   const seguras = grupos.filter((x) => leiPreGravidade(x.g) === "segura");
   const nRever = rever.reduce((a, x) => a + x.itens.length, 0);
-  $("leiPreResumo").textContent = soNum ? "" : t("lei_pre_resumo", { n: c.pre.mudancas.length, a: aceitas })
-    + (nRever ? " · " + t("lei_pre_resumo_rever", { r: nRever }) : "");
   $("btnLeiPreOriginal").hidden = soNum;
-
-  /* (v19.24.0) OS ATALHOS: um por grupo, na cor da gravidade — "o que precisa do seu olho" à vista e a um toque */
-  const chips = $("leiPreChips");
-  if (chips) {
-    chips.innerHTML = "";
-    chips.hidden = soNum || grupos.length < 2;
-    rever.concat(seguras).forEach((x) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "lei-pre-chip " + leiPreGravidade(x.g);
-      b.id = "btnLeiPreChip_" + x.g;
-      b.textContent = t("lei_pre_curto_" + x.g) + " " + x.itens.length;
-      b.title = t("lei_pre_grav_" + leiPreGravidade(x.g)) + " — " + t("lei_pre_g_" + x.g);
-      b.onclick = () => {
-        if (leiPreGravidade(x.g) === "segura" && rever.length) { c.segurasAbertas = true; if ($("leiPreSeguras")) $("leiPreSeguras").open = true; }
-        const alvo = $("leiPreGrupo_" + x.g);
-        try { if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: "start" }); } catch (e) {}
-      };
-      chips.append(b);
-    });
-  }
+  /* o texto como ficaria com as escolhas de agora: o "como vai ficar", os avisos e a numeração saem dele */
+  const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+  const arts = leiArtigos(res.texto);
+  const como = leiPreComoPintar(c, res, arts);
+  /* (19.108.0) OS TRÊS NÚMEROS no lugar do parágrafo, da linha do contador e dos atalhos */
+  leiPreNumsPintar(c, { soNum, nRever, rever, seguras, aceitas, como });
+  /* (19.108.0) O MAPA DO TEXTO: uma marca onde cada sugestão age; um toque leva até ela */
+  leiPreMapaPintar(c, soNum);
 
   /* (19.107.0) A LEGENDA DAS CORES da janela do texto: só as que aparecem nesta revisão */
   const leg = $("leiPreLegenda");
@@ -7570,7 +7723,7 @@ function leiPrePintar() {
     const tem = (gs) => c.pre.mudancas.some((m) => gs.indexOf(m.grupo) >= 0);
     const cores = [["sai", tem(["cabecalho", "pagina", "tachado", "invisiveis", "grafia", "letras"])],
       ["entra", tem(["grafia", "letras"]) || c.pre.mudancas.some((m) => m.grupo === "tachado" && m.cabecalhos && Object.keys(m.cabecalhos).length)],
-      ["junta", tem(["remissao"])], ["prot", ((c.pre && c.pre.blocos) || []).length > 0]].filter((x) => x[1]);
+      ["junta", tem(["remissao"])], ["anexo", tem(["anexo"])], ["prot", ((c.pre && c.pre.blocos) || []).length > 0]].filter((x) => x[1]);
     cores.forEach(([k]) => {
       const it = document.createElement("span");
       it.className = "lei-pre-leg";
@@ -7607,10 +7760,8 @@ function leiPrePintar() {
   if (((c.pre && c.pre.identificadores) || []).length) cx.append(leiPreIdentificadoresEl(c));
 
   /* A CRÍTICA DA NUMERAÇÃO, sobre o texto COMO FICARIA com as escolhas de
-   * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto */
-  const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
-  const arts = leiArtigos(res.texto);
-  leiPreComoPintar(c, res, arts);
+   * agora: recusar uma limpeza pode fazer aparecer (ou sumir) um salto. (19.108.0) Mora logo abaixo do "como a lei
+   * vai ficar" (não mais no fim da tela), e cada ponto mostra a SEQUÊNCIA em volta, com o número fora do lugar pintado. */
   const pn = $("leiPreNumeracao");
   pn.innerHTML = "";
   if (arts.length < LEI_NUMERACAO_MIN_ARTIGOS || c.semNumeracao || leiEhAlteradora(c.texto)) {
@@ -7626,10 +7777,12 @@ function leiPrePintar() {
     if (num.problemas.length) {
       const ul = document.createElement("ul");
       const ord = num.problemas.slice().sort((x, y) => (x.gravidade === y.gravidade ? 0 : x.gravidade === "grave" ? -1 : 1));
-      leiNumeracaoLinhas(ord).slice(0, 12).forEach((p) => {
+      ord.slice(0, 12).forEach((q) => {
+        const p = leiNumeracaoLinhas([q])[0];
         const li = document.createElement("li");
         li.className = p.gravidade;
         li.textContent = p.texto;
+        li.append(leiPreSeqEl(arts, q));
         ul.append(li);
       });
       if (ord.length > 12) {

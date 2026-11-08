@@ -571,7 +571,7 @@ async function main() {
                     ["horas por assunto e Domínio: um 'vale X% da prova' só, meta do período, tela cheia e voltar ao painel", pvoT],
                     ["painel do edital: urgências, filtros com % da prova, ordem, tempo × peso, o detalhe na mesma tela e a fila \"o que estudar agora\" (corte e tempo na conta)", pedtT],
                     ["lei com trecho citado que abre em “CAPÍTULO (Lei 14.133, Art. 178): artigos citados fora da numeração; a pena repetida nunca é cabeçalho", lccT],
-                    ["limpeza da lei: a janela do texto pintada em cada sugestão (sai, entra, junta, outra lei), 'como fica' e os botões com o nome da ação", ljaT],
+                    ["limpeza da lei: a janela do texto pintada em cada sugestão, 'como fica', os botões com o nome da ação, os três números, o mapa do texto, a numeração com a sequência e o anexo", ljaT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];

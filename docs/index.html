@@ -1460,6 +1460,37 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-pre-legenda{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:var(--sutil)}
 .lei-pre-leg{display:inline-flex;align-items:center;gap:5px}
 .lei-pre-leg-cor{display:inline-block;min-width:22px;text-decoration:none}
+/* (19.108.0) o topo enxuto: três números, o mapa do texto, a explicação a um toque; a sequência da numeração; o anexo */
+.lei-pre-nums{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;min-width:0}
+.lei-pre-num-t{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--borda);background:var(--panel);color:var(--texto);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12.5px}
+.lei-pre-num-t b{font-size:18px}
+.lei-pre-num-t.decidir{border-color:var(--erro);color:var(--erro);background:rgba(229,72,77,.10)}
+.lei-pre-num-t.grave{border-color:var(--erro);color:var(--erro);background:rgba(229,72,77,.10)}
+.lei-pre-num-t.aviso{border-color:var(--atencao);color:var(--atencao);background:rgba(232,148,10,.10)}
+.lei-pre-num-t.ok{color:var(--sutil)}
+.lei-pre-num-t.aceitas{color:var(--ok)}
+.lei-pre-ferr{display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.lei-pre-mapa{margin-top:6px}
+.lei-pre-mapa-cab{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--sutil);margin-bottom:2px}
+.lei-pre-mapa-dica{margin-left:auto}
+.lei-pre-mapa-barra{position:relative;height:16px;border-radius:4px;background:var(--campo);border:1px solid var(--borda)}
+.lei-pre-mapa-m{position:absolute;top:1px;width:4px;height:12px;min-width:0;min-height:0;border:0;padding:0;border-radius:1px;cursor:pointer;background:var(--sutil)}
+.lei-pre-mapa-m.apaga{background:var(--erro)}
+.lei-pre-mapa-m.estrutura{background:var(--atencao)}
+.lei-pre-mapa-m.segura{background:var(--sutil);opacity:.7}
+.lei-pre-mapa-f{position:absolute;top:3px;height:8px;min-width:0;min-height:0;border:0;padding:0;border-radius:2px;cursor:pointer;opacity:.75}
+.lei-pre-mapa-f.prot{background:var(--roxo-txt,#7c3aed)}
+.lei-pre-mapa-f.anexo{background:var(--azul-txt,#2563eb)}
+.lei-pre-info{border:1px solid var(--borda);background:var(--panel);color:var(--sutil);border-radius:999px;width:22px;height:22px;padding:0;font-size:12px;line-height:1;cursor:pointer;margin-left:4px}
+.lei-pre-info[aria-expanded="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
+.lei-pre-foco{outline:2px solid var(--acao);outline-offset:2px}
+.lei-pre-anexo{background:rgba(37,99,235,.14);color:var(--azul-txt,#2563eb);border-radius:3px;padding:0 2px}
+.lei-pre-jan-sep{display:block;color:var(--azul-txt,#2563eb);font-size:11.5px;padding-left:42px;border-top:1px dashed var(--azul-txt,#2563eb);margin:2px 0}
+.lei-pre-seq{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 5px}
+.lei-pre-seq-n{font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--campo);border:1px solid var(--borda);color:var(--texto)}
+.lei-pre-seq-n.mal.grave{background:rgba(229,72,77,.16);border-color:var(--erro);color:var(--erro);font-weight:700}
+.lei-pre-seq-n.mal.leve{background:rgba(232,148,10,.16);border-color:var(--atencao);color:var(--atencao);font-weight:700}
+.lei-pre-seq-falta{font-size:11.5px;padding:1px 7px;border-radius:5px;border:1px dashed var(--atencao);color:var(--atencao)}
 .lei-pre-seguras>summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:2px 0}
 .lei-pre-seguras>.lei-pre-grupo{margin-top:8px}
 .lei-pre-como{border:1px solid var(--borda);border-left-width:4px;border-radius:10px;padding:9px 11px;background:var(--panel);margin:8px 0}
@@ -10887,29 +10918,34 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     <button type="button" class="dlg-x" id="btnLeiPreX" data-i18n-title="lei_pre_voltar">✖</button>
   </div>
   <div class="lei-nova-faixa" id="leiNovaFaixaPre" role="status" hidden></div>
-  <p class="nota" id="leiPreAjuda"></p>
-  <!-- FIXO NO TOPO: o contador e a frase do que acabou de acontecer ficam à vista mesmo com a lista rolada -->
+  <!-- (19.108.0) a explicação longa fica fechada, a um toque ("ⓘ como funciona") -->
+  <p class="nota" id="leiPreAjuda" hidden></p>
+  <!-- FIXO NO TOPO: os três números, a frase do que acabou de acontecer, a legenda e o mapa do texto ficam à vista
+       mesmo com a lista rolada -->
   <div class="lei-pre-sticky">
     <div class="lei-dup-topo">
-      <span class="nota" id="leiPreResumo"></span>
-      <button class="btn-min" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
-      <button type="button" class="btn-min lei-fx-btn" id="btnLeiPreFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
-      <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+      <div class="lei-pre-nums" id="leiPreResumo"></div>
+      <span class="lei-pre-ferr">
+        <button type="button" class="btn-min" id="btnLeiPreAjudaVer" aria-expanded="false" data-i18n="lei_pre_como_funciona"></button>
+        <button type="button" class="btn-min lei-fx-btn" id="btnLeiPreFx" data-i18n="lei_fx_btn" data-i18n-title="lei_fx_btn_tip"></button>
+        <button class="btn-min" id="btnLeiRelPre" data-i18n="lei_rel_btn" title="Copia o que está nesta tela — o que o app entendeu, o que sugeriu e o que você escolheu — e as últimas linhas do registro. Cole numa conversa para relatar um problema. Nada é enviado sozinho."></button>
+      </span>
     </div>
     <p class="lei-pre-aviso" id="leiPreAviso" role="status" aria-live="polite" hidden></p>
-    <!-- (v19.24.0) um atalho por grupo, na cor da gravidade -->
-    <div class="lei-pre-chips" id="leiPreChips" hidden></div>
     <!-- (19.107.0) a legenda das cores da janela do texto -->
     <div class="lei-pre-legenda" id="leiPreLegenda" hidden></div>
+    <!-- (19.108.0) o mapa do texto: uma marca onde cada sugestão age -->
+    <div class="lei-pre-mapa" id="leiPreMapa" hidden></div>
   </div>
   <!-- (v19.24.0) COMO A LEI VAI FICAR: a estrutura que vai ser criada e o que nela parece errado (artigo gigante, anexo
-       repetido ou faltando…) — é no resultado que o erro aparece -->
+       repetido ou faltando…) — é no resultado que o erro aparece. (19.108.0) A numeração vem logo abaixo dele. -->
   <div id="leiPreComo" class="lei-pre-como" hidden></div>
-  <div id="leiPreLista" class="lei-dup-lista"></div>
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
+  <div id="leiPreLista" class="lei-dup-lista"></div>
   <p class="nota" id="leiPreFim"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnLeiPreConfirmar"></button>
+    <button class="btn btn-cinza" id="btnLeiPreOriginal" data-i18n="lei_pre_original"></button>
     <button class="btn btn-cinza" id="btnLeiPreVoltar" data-i18n="lei_pre_voltar"></button>
   </div>
 </dialog>

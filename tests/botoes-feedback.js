@@ -38,7 +38,8 @@ async function testes() {
 
   const L = ["LEI Nº 1, DE 2025"];
   for (let i = 1; i <= 24; i++) {
-    if (i % 6 === 1) L.push("Presidência da República — Subchefia para Assuntos Jurídicos");
+    /* (19.108.0) dois cabeçalhos diferentes: "aceitar todos" / "recusar todos" só aparecem com mais de um item */
+    if (i % 6 === 1) L.push("Presidência da República — Subchefia para Assuntos Jurídicos", "Casa Civil — Imprensa Nacional — Diário Oficial da União");
     L.push("Art. " + i + "º Texto próprio do artigo " + i + ", que trata do imposto e da sua incidência.");
   }
   L.push("Art . 25 Texto com um espaço a mais antes do ponto.");

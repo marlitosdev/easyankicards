@@ -82,9 +82,16 @@ async function testes() {
     "L6c a janela do item pinta o que sai e o que entra: " + (item && item.textContent));
   const mIV = pre.mudancas.filter((m) => m.grupo === "anexo" && m.titulo === "ANEXO IV")[0];
   const elIV = mIV && api.$("leiPreItem_" + mIV.id);
-  ok(elIV && /» \(Redação dada pela Lei Complementar 018, de 09 de outubro de 2009\) · APURAÇÃO DO VALOR VENAL/.test(elIV.textContent),
-    "L6d a amostra do anexo já sai legível: " + (elIV && elIV.textContent.slice(0, 200)));
-  ok(api.$("btnLeiPreChip_letras") && /^Letras 3$/.test(api.$("btnLeiPreChip_letras").textContent), "L6a o atalho do grupo");
+  /* (19.108.0) a janela do anexo já mostra as linhas legíveis (letras desdobradas, nota desespaçada) */
+  const azuis = [];
+  const w2 = (e) => Array.from((e && e.children) || []).forEach((c) => { if (c.className === "lei-pre-anexo") azuis.push(c.textContent); w2(c); });
+  w2(elIV);
+  ok(azuis.indexOf("(Redação dada pela Lei Complementar 018, de 09 de outubro de 2009)") >= 0 && azuis.indexOf("APURAÇÃO DO VALOR VENAL") >= 0,
+    "L6d a janela do anexo já sai legível: " + azuis.join(" | "));
+  const marcas = [];
+  const w3 = (e) => Array.from((e && e.children) || []).forEach((c) => { if (/^Letras · linha \d+/.test(c.title || "")) marcas.push(c.title); w3(c); });
+  w3(api.$("leiPreMapa"));
+  ok(marcas.length >= 1, "L6a o mapa do texto marca as letras: " + marcas.join(" | "));
   ok(/3 linha\(s\) com letras dobradas ou espaçadas corrigida\(s\)/.test(api.$("leiPreFim").textContent), "L6b o resumo do fim: " + api.$("leiPreFim").textContent);
   ["lei_pre_g_letras", "lei_pre_h_letras", "lei_pre_c_letras", "lei_pre_curto_letras", "lei_pre_res_letras", "lei_como_anexo_vazio"].forEach((k) =>
     ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "X falta " + k + " em " + l); }));

@@ -433,8 +433,9 @@ async function testes() {
     a.leiAbrir("Direito Tributário", "Código Tributário Municipal");
     a.$("leiTexto").value = PDF6;
     a.leiGravar();
-    const btn = achar(a.$("leiPreLista"), (c) => c.id === "btnLeiPreNenhum_cabecalho")[0];
-    ok(!!btn, "U2 nao ha botao 'recusar todos' no grupo do cabecalho");
+    /* (19.108.0) o cabeçalho é UM item (6 ocorrências): a decisão é o "Manter" dele */
+    const btn = achar(a.$("leiPreLista"), (c) => /^leiPreNao_cab:/.test(c.id || ""))[0];
+    ok(!!btn, "U2 nao ha botao 'Manter' no cabecalho");
     btn.onclick();
     ok(achar(a.$("leiPreLista"), (c) => /lei-pre-consequencia/.test(c.className || "")).some((c) => /cabeçalho fica/.test(c.textContent)),
        "U2a recusar o grupo nao explicou a consequencia");

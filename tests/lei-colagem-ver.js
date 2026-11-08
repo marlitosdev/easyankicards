@@ -50,9 +50,10 @@ async function testes() {
     const it = itensAnexo();
     ok(it.length === 2, "A1 dois anexos na tela: " + it.length);
     const det = (i) => achar(it[i], (c) => cls(c, "lei-pre-anexo-ver"))[0];
-    const amostra = (i) => achar(it[i], (c) => cls(c, "lei-pre-anexo-amostra"))[0];
-    ok(amostra(0) && /^» TABELA DE ALÍQUOTAS POR PRODUTO · Produto A 10%$/.test(amostra(0).textContent), "A2 o anexo I mostra uma AMOSTRA do que e': " + (amostra(0) && amostra(0).textContent));
-    ok(amostra(1) && /^» CLASSIFICAÇÃO DE MERCADORIAS · 0101\.21\.00 Cavalos reprodutores$/.test(amostra(1).textContent), "A2a e o II mostra a dele: " + (amostra(1) && amostra(1).textContent));
+    /* (19.108.0) a amostra virou a JANELA PINTADA: a fronteira do anexo e as primeiras linhas dele, em azul */
+    const amostra = (i) => achar(it[i], (c) => cls(c, "lei-pre-anexo")).map((c) => c.textContent).join(" · ");
+    ok(amostra(0) === "ANEXO I · TABELA DE ALÍQUOTAS POR PRODUTO · Produto A 10%", "A2 o anexo I mostra o começo dele, pintado: " + amostra(0));
+    ok(/^ANEXO II · CLASSIFICAÇÃO DE MERCADORIAS · 0101\.21\.00 Cavalos reprodutores$/.test(amostra(1)), "A2a e o II mostra o dele: " + amostra(1));
     ok(det(0) && det(0).open !== true && /^ver o conteúdo deste anexo \(5 linhas\)$/.test(achar(det(0), (c) => String(c.tag || c.tagName).toLowerCase() === "summary")[0].textContent), "A3 o conteudo esta RECOLHIDO, e a etiqueta diz quantas linhas");
     const caixa = (i) => achar(det(i), (c) => cls(c, "lei-pre-anexo-txt"))[0];
     ok(caixa(0).textContent === "", "A3a e nao e' desenhado ate a pessoa abrir");

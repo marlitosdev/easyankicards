@@ -189,8 +189,9 @@ async function testes() {
     const api = iniciar();
     const texto = paginas("DIÁRIO OFICIAL DA UNIÃO - SEÇÃO 1 - Lei nº 9.999 de 2020");
     api.leiRevisarColagemAbrir({ modo: "criar", texto, pre: api.leiPreAnalisar(texto).pre, aoConfirmar: () => {} });
-    const btn = achar(api.$("leiPreLista"), (x) => x.id === "btnLeiPreNenhum_cabecalho")[0];
-    ok(!!btn, "F2-pre o botao 'recusar todos' do grupo existe");
+    /* (19.108.0) o grupo tem um item só: a decisão é o "Manter" dele (o "recusar todos" só aparece com mais de um) */
+    const btn = achar(api.$("leiPreLista"), (x) => /^leiPreNao_cab:/.test(x.id || ""))[0];
+    ok(!!btn, "F2-pre o botao 'Manter' do cabecalho existe");
     btn.onclick();
     api.leiPreConfirmar();
     const l = api.decLer();

@@ -17,6 +17,16 @@
  *   JA8 a legenda só traz as cores que aparecem nesta revisão
  *   JA9 o relatório traz a janela de cada sugestão com as mesmas marcas
  *   JA10 os textos novos existem em português e em inglês
+ *
+ * (19.108.0) O TOPO ENXUTO
+ *   JB1 três números (para decidir · avisos · aceitas) no lugar do parágrafo, do contador e dos atalhos; o "copiar
+ *       relatório" continua no topo; "usar o texto original" vai para o rodapé
+ *   JB2 a explicação longa a um toque ("ⓘ como funciona"), fechada   JB3 a de cada grupo no "ⓘ", fechada
+ *   JB4 grupo de um item só não repete "aceitar/recusar todos"
+ *   JB5 o mapa do texto: uma marca por sugestão; tocar leva à ocorrência certa
+ *   JB6 a numeração logo abaixo do "como vai ficar", com a sequência em volta de cada ponto
+ *   JB7 o anexo com a janela pintada: a fronteira, o "como fica" de separar, manter e descartar, e o relatório
+ *   JB8 as limpezas seguras numa linha curta   JB9 os textos
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
 
@@ -134,6 +144,76 @@ async function testes() {
     "lei_pre_ocor_tip", "lei_pre_prova_pagina", "lei_pre_prova_sem_pagina", "lei_pre_prova_art", "lei_pre_prova_inicio", "lei_pre_jan_corte",
     "lei_pre_jan_mais", "lei_pre_jan_igual", "lei_pre_op_sim_cabecalho_n", "lei_pre_op_nao_cadeia", "lei_pre_op_sim_tachado"].forEach((k) =>
     ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "JA10 falta " + k + " em " + l); }));
+  api.setLanguage("pt");
+
+  /* ======== (19.108.0) O TOPO ENXUTO, O MAPA, A NUMERAÇÃO E O ANEXO ======== */
+  const fs = require("fs");
+  const path = require("path");
+  const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+  const dlgHtml = html.slice(html.indexOf('<dialog id="dlgLeiPre"'), html.indexOf("</dialog>", html.indexOf('<dialog id="dlgLeiPre"')));
+  /* ---- JB1 os três números ---- */
+  abrir(P.join("\n"));
+  const num = (id) => api.$(id) && api.$(id).textContent;
+  ok(/^1para você decidir$/.test(num("btnLeiPreNumDecidir")) && /avisos? na estrutura$/.test(num("btnLeiPreNumAvisos")) && /^\d+aceitas de \d+$/.test(num("btnLeiPreNumAceitas")),
+    "JB1 os três números no topo: " + [num("btnLeiPreNumDecidir"), num("btnLeiPreNumAvisos"), num("btnLeiPreNumAceitas")].join(" | "));
+  ok(!/id="leiPreChips"/.test(dlgHtml) && /<div class="lei-pre-sticky">[\s\S]*id="btnLeiRelPre"[\s\S]*id="leiPreMapa"/.test(dlgHtml), "JB1a sem os atalhos por grupo; o 'copiar relatório' continua no topo, com o mapa");
+  ok(/<div class="dlg-rodape">[\s\S]*id="btnLeiPreOriginal"/.test(dlgHtml), "JB1b 'usar o texto original' vai para o rodapé, junto das saídas");
+  /* ---- JB2 a explicação a um toque ---- */
+  ok(api.$("leiPreAjuda").hidden === true && /como funciona/.test(api.$("btnLeiPreAjudaVer").textContent), "JB2 a explicação longa começa fechada");
+  api.$("btnLeiPreAjudaVer").onclick();
+  ok(api.$("leiPreAjuda").hidden === false && /Texto copiado de PDF/.test(api.$("leiPreAjuda").textContent) && /fechar/.test(api.$("btnLeiPreAjudaVer").textContent), "JB2a um toque abre");
+  api.$("btnLeiPreAjudaVer").onclick();
+  /* ---- JB3 a explicação do grupo no ⓘ ---- */
+  ok(api.$("leiPreAjuda_cabecalho").hidden === true && /Linhas iguais que se repetem/.test(api.$("leiPreAjuda_cabecalho").textContent), "JB3 a explicação do grupo fechada (mas lá)");
+  api.$("btnLeiPreInfo_cabecalho").onclick();
+  ok(api.$("leiPreAjuda_cabecalho").hidden === false && api.$("btnLeiPreInfo_cabecalho").getAttribute("aria-expanded") === "true", "JB3a o ⓘ abre");
+  api.leiPrePintar();
+  ok(api.$("leiPreAjuda_cabecalho").hidden === false, "JB3b e continua aberta ao repintar");
+  /* ---- JB4 grupo de UM item: sem "aceitar/recusar todos" ---- */
+  ok(!api.$("btnLeiPreTodos_cabecalho") || !achar(api.$("leiPreGrupo_cabecalho"), (c) => c.id === "btnLeiPreTodos_cabecalho").length, "JB4 com um item só, o grupo não repete 'aceitar todos'");
+  /* ---- JB5 o mapa leva à ocorrência certa ---- */
+  const mCab5 = api.leiPreCtxAtual().pre.mudancas.find((m) => m.grupo === "cabecalho");
+  const alvoLinha = mCab5.linhas[3];
+  const marca = achar(api.$("leiPreMapa"), (c) => c.title === "Cabeçalhos · linha " + alvoLinha)[0];
+  ok(!!marca && /apaga/.test(marca.className), "JB5 uma marca vermelha por ocorrência do cabeçalho (a 4ª, linha " + alvoLinha + ")");
+  if (marca) marca.onclick();
+  ok(alvoN(api.$("leiPreItem_" + mCab5.id))[0] === String(alvoLinha), "JB5a tocar na marca leva à ocorrência certa: " + alvoN(api.$("leiPreItem_" + mCab5.id)));
+  /* ---- JB6 a numeração, logo abaixo do 'como vai ficar', com a sequência ---- */
+  ok(dlgHtml.indexOf('id="leiPreNumeracao"') > dlgHtml.indexOf('id="leiPreComo"') && dlgHtml.indexOf('id="leiPreNumeracao"') < dlgHtml.indexOf('id="leiPreLista"'), "JB6 a numeração mora logo abaixo do 'como a lei vai ficar'");
+  abrir(["Art. 1º Um.", "Art. 2º Dois.", "Art. 3º Três.", "Art. 4º Quatro.", "Art. 5º Cinco.", "Art. 6º Seis.", "Art. 7º Sete.", "Art. 90. Noventa.", "Art. 9º Nove.", "Art. 10. Dez."].join("\n"));
+  const seqMal = achar(api.$("leiPreNumeracao"), (c) => /lei-pre-seq-n mal grave/.test(c.className || "")).map((c) => c.textContent);
+  const falta = achar(api.$("leiPreNumeracao"), (c) => c.className === "lei-pre-seq-falta").map((c) => c.textContent);
+  ok(seqMal.indexOf("90") >= 0 && falta.indexOf("faltam 8") >= 0, "JB6a cada ponto mostra a sequência, com o fora do lugar pintado e o que falta: " + [seqMal, falta]);
+  const pecas = achar(api.$("leiPreResumo"), (c) => /(^| )lei-pre-num-t( |$)/.test(c.className || "")).map((c) => c.id + "=" + c.textContent);
+  ok(pecas.length === 1 && /^btnLeiPreNumAvisos=1aviso na estrutura$/.test(pecas[0]), "JB6b só a numeração para conferir: só o número dos avisos, contando-a: " + pecas.join(" | "));
+  /* ---- JB7 a janela do anexo ---- */
+  const A = [];
+  for (let k = 1; k <= 9; k++) A.push("Art. " + k + "º Texto do artigo " + k + " da lei de teste, com a redação completa.");
+  A.push("ANEXO I", "TABELA DE ALÍQUOTAS POR PRODUTO", "Produto A 10%", "Produto B 12%", "Produto C 15%", "Produto D 18%");
+  const preA = abrir(A.join("\n"));
+  const mAx = preA.mudancas.find((m) => m.grupo === "anexo");
+  const itA = () => api.$("leiPreItem_" + mAx.id);
+  ok(!!mAx && pintadas(itA(), "anexo").join(" · ") === "ANEXO I · TABELA DE ALÍQUOTAS POR PRODUTO · Produto A 10%" && /e mais 3 linha\(s\) do anexo/.test(itA().textContent),
+    "JB7 a fronteira do anexo pintada de azul, e o resto contado: " + (mAx && pintadas(itA(), "anexo")));
+  ok(linhasJan(itA()).some((c) => !cls(c, "alvo") && /Art\. 9º/.test(c.textContent)), "JB7a com o fim do último artigo em cima");
+  api.$("leiPreVista_" + mAx.id + "_fica").onclick();
+  ok(/▤ daqui em diante: anexo à parte/.test(itA().textContent), "JB7b 'como fica' (separar): a fronteira do anexo à parte");
+  achar(itA(), (c) => c.type === "radio" && c.value === "manter")[0].onchange();
+  ok(/fica dentro do último artigo/.test(itA().textContent) && !/▤/.test(itA().textContent), "JB7c manter: fica dentro do último artigo");
+  achar(itA(), (c) => c.type === "radio" && c.value === "descartar")[0].onchange();
+  ok(/✂ 6 linha\(s\) tirada\(s\)/.test(itA().textContent), "JB7d descartar: as 6 linhas saem: " + itA().textContent.slice(0, 160));
+  ok(/vira anexo à parte/.test(api.$("leiPreLegenda").textContent), "JB7e a cor do anexo na legenda");
+  const relA = api.leiRelatorioFluxo("revisar a colagem");
+  ok(/▸ \[#ANEXO I#\]/.test(relA), "JB7f o relatório traz a janela do anexo");
+  /* ---- JB8 a linha das limpezas seguras ---- */
+  abrir(P.join("\n"));
+  const seg = api.$("leiPreSeguras");
+  ok(seg && /^✓ Limpezas seguras: \d+ · \d+ aceitas · não mudam o conteúdo/.test(achar(seg, (c) => String(c.tag || c.tagName).toLowerCase() === "summary")[0].textContent), "JB8 as seguras numa linha curta, recolhida");
+  /* ---- JB9 os textos ---- */
+  ["lei_pre_como_funciona", "lei_pre_como_funciona_fechar", "lei_pre_num_decidir", "lei_pre_num_avisos", "lei_pre_num_avisos_1", "lei_pre_num_aceitas", "lei_pre_mapa_tit", "lei_pre_mapa_dica",
+    "lei_pre_mapa_marca", "lei_pre_mapa_marca_n", "lei_pre_mapa_prot", "lei_pre_mapa_anexo", "lei_pre_info_tip", "lei_pre_leg_anexo", "lei_pre_jan_anexo_sep",
+    "lei_pre_jan_anexo_dentro", "lei_pre_jan_mais_anexo", "lei_pre_seq_falta"].forEach((k) =>
+    ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "JB9 falta " + k + " em " + l); }));
   api.setLanguage("pt");
   try { api.$("dlgLeiPre").close(); } catch (e) {}
   return Object.assign(falhas, { quantas: n });

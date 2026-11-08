@@ -86,17 +86,20 @@ async function testes() {
     ok(/lei-pre-grav-apaga/.test(grupo("cabecalho").className) && /lei-pre-grav-estrutura/.test(grupo("remissao").className) && /lei-pre-grav-estrutura/.test(grupo("anexo").className) && /lei-pre-grav-segura/.test(grupo("pagina").className),
       "T1 cada grupo com a cor da gravidade");
     ok(/apaga linhas/.test(grupo("cabecalho").textContent) && /muda a estrutura/.test(grupo("anexo").textContent) && /limpeza segura/.test(grupo("grafia").textContent), "T1a e a etiqueta escrita");
-    const chips = achar(api.$("leiPreChips"), (c) => /lei-pre-chip/.test(c.className || ""));
-    ok(!api.$("leiPreChips").hidden && chips.length >= 5 && /apaga/.test(api.$("btnLeiPreChip_cabecalho").className) && /^Anexos \d/.test(api.$("btnLeiPreChip_anexo").textContent),
-      "T1b os atalhos no topo, na cor do grupo: " + chips.map((c) => c.textContent).join(" | "));
-    ok(/para conferir/.test(api.$("leiPreResumo").textContent), "T1c o resumo diz quantos precisam de conferência: " + api.$("leiPreResumo").textContent);
+    /* (19.108.0) o mapa do texto no lugar dos atalhos: uma marca na cor da gravidade onde cada sugestão age */
+    const marcas = achar(api.$("leiPreMapa"), (c) => /(^| )lei-pre-mapa-m( |$)/.test(c.className || ""));
+    const faixas = achar(api.$("leiPreMapa"), (c) => /(^| )lei-pre-mapa-f anexo( |$)/.test(c.className || ""));
+    /* num trecho com várias sugestões, a marca é a da mais grave (aqui as remissões caem junto dos cabeçalhos) */
+    ok(!api.$("leiPreMapa").hidden && marcas.some((c) => /apaga/.test(c.className)) && faixas.length >= 1 && marcas.every((c) => /linha \d+/.test(c.title)),
+      "T1b o mapa marca o que apaga (vermelho) e os anexos (faixa azul), cada marca com a linha: " + marcas.map((c) => c.title).slice(0, 6).join(" | ") + " · faixas " + faixas.length);
+    ok(/para você decidir/.test(api.$("leiPreResumo").textContent) && /aceitas de \d+/.test(api.$("leiPreResumo").textContent), "T1c os números dizem quantos são para decidir e quantos já estão aceitos: " + api.$("leiPreResumo").textContent);
     const filhos = Array.from(lista.children).map((c) => c.id);
     ok(filhos.indexOf("leiPreGrupo_cabecalho") < filhos.indexOf("leiPreSeguras") && filhos.indexOf("leiPreGrupo_anexo") < filhos.indexOf("leiPreSeguras"),
       "T2 o que precisa do seu olho vem antes das limpezas seguras: " + filhos.join(","));
     const seg = api.$("leiPreSeguras");
     ok(seg && seg.open === false && achar(seg, (c) => c.id === "leiPreGrupo_grafia").length === 1 && /Limpezas seguras/.test(seg.textContent), "T2a as limpezas seguras num bloco recolhido");
-    api.$("btnLeiPreChip_grafia").onclick();
-    ok(api.$("leiPreSeguras").open === true, "T2b o atalho de uma limpeza segura abre o bloco");
+    api.$("btnLeiPreNumAceitas").onclick();
+    ok(api.$("leiPreSeguras").open === true, "T2b o número das aceitas abre o bloco das limpezas seguras");
     api.leiPrePintar();
     ok(api.$("leiPreSeguras").open === true, "T2c e o bloco continua aberto ao repintar");
     const como = api.$("leiPreComo");
