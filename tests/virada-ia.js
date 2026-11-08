@@ -9,6 +9,8 @@
  *   VI6  o destino vem sugerido pela IA (ou pelo nome parecido), marcado; escolher à mão tira a marca e vale
  *   VI7  aplicar leva o tópico inteiro: resumo, estudo, leis, julgados, questões e vínculos de citação
  *   VI8  o carimbo de pré-edital só pega os registros deste concurso
+ *   VI9  (19.102.0) a virada guarda um recibo, e o ⋯ do topo oferece desfazer
+ *   VI10 desfazer devolve tudo: texto, resumo, lei, citação e o carimbo; avisa se o plano mudou depois
  */
 const { rodar } = require("./fumaca.js");
 
@@ -115,6 +117,30 @@ async function testes() {
   const di = api.diarioAtual();
   ok(di[0].fase === "pre" && di[1].fase !== "pre" && di[2].fase === "pre" && di[3].fase !== "pre",
     "VI8 o carimbo pegou só o ISS (pelo nome e pelo tópico), não o TCE nem o tópico de fora: " + di.map((x) => x.fase || "-").join(","));
+  /* VI9 / VI10: desfazer a virada por inteiro */
+  const rec = api.vrReciboDe(e.id);
+  ok(rec && rec.mat.length === 1 && rec.leis.length === 1 && rec.cit.length === 1 && rec.diario === 2 && rec.textoAntes === PRE,
+    "VI9 a virada guardou o recibo (material, lei, citação, carimbo e o texto de antes)");
+  ok(/Desfazer a virada/.test(api.t("vr_pronto_desfazer", { n: 30 })), "VI9b o aviso do fim da virada diz como desfazer");
+  const itens = api.hubTopoMenuItens();
+  const itD = itens.find((x) => x.id === "btnEdDesfazerVirada");
+  ok(itD && /↶ Desfazer a virada de \d{2}\/\d{2}\/\d{4}/.test(itD.rot), "VI9c o ⋯ do topo oferece desfazer: " + (itD && itD.rot));
+  api.$("editalTexto").value = api.$("editalTexto").value + "\n+ Um tópico novo :: 3";
+  const perguntas = [];
+  ok(await api.vrDesfazer(async (m) => { perguntas.push(m); return false; }) === false && /mudado depois da virada/.test(perguntas[0]) && api.vrReciboDe(e.id),
+    "VI10 com o plano mudado depois, o desfazer avisa — e 'não' não desfaz");
+  const dz = api.vrDesfazer(async () => true);
+  await new Promise((r) => setImmediate(r));
+  api.uiModalResponder(true);
+  ok(await dz === true, "VI10b desfez");
+  const mat2 = api.matResumosAtual();
+  ok(mat2[chPC] && /Resumo do PCASP/.test(mat2[chPC].texto) && !mat2[chNovo], "VI10c o resumo voltou ao PCASP (e o tópico novo, que não existia, sumiu)");
+  ok(api.leisDoTopico(chPC).some((l) => l.id === "l4320") && !api.leisDoTopico(chNovo).length, "VI10d a lei voltou");
+  ok(api.citVinculosLer().some((v) => v.chave === chPC && v.k.indexOf(chPC + "|") === 0), "VI10e o vínculo de citação voltou");
+  const di2 = api.diarioAtual();
+  ok(di2.every((x) => !x.fase && !x.faseVirada), "VI10f o carimbo saiu do diário");
+  ok(api.$("editalTexto").value === PRE && api.vrEhPrevisto() === true && !api.vrReciboDe(e.id) && !api.hubTopoMenuItens().some((x) => x.id === "btnEdDesfazerVirada"),
+    "VI10g o plano voltou a ser o previsto e o recibo foi usado");
   api.edApagar(e.id); api.edApagar(outro.id); api.diarioPor([]);
   return Object.assign(falhas, { quantas: n });
 }

@@ -3156,6 +3156,9 @@ function hubTopoMenuItens() {
   const itens = [];
   if (aberto) itens.push({ id: "btnEdRenomear", rot: t("hub_renomear"), faz: () => hubRenomear() });
   if (aberto) itens.push({ id: "btnEdTopoTodos", rot: t("ed_sel_ver_todos"), faz: () => hubVoltar() });
+  /* (19.102.0) a virada feita há pouco pode ser desfeita por inteiro */
+  const rv = aberto && typeof vrReciboDe === "function" ? vrReciboDe(aberto.id) : null;
+  if (rv) itens.push({ id: "btnEdDesfazerVirada", rot: t("vr_desf_menu", { d: vrDataCurta(rv.quando) }), dica: t("vr_desf_dica"), faz: () => vrDesfazer() });
   return itens;
 }
 

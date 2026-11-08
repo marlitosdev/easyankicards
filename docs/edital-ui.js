@@ -8589,13 +8589,17 @@ async function vrAplicar() {
   const antes = $("editalTexto").value;
   const novo = vrTextoFinal();
   guardarVersao("antes da virada do edital", antes);
+  /* (19.102.0) o recibo para o desfazer: o que estava em cada lugar antes de mexer */
+  const rec = { id: "vr" + Date.now().toString(36), editalId: ed ? ed.id : "", quando: new Date().toISOString(),
+    textoAntes: antes, textoDepois: "", diario: 0, mat: [], vk: [], leis: [], jur: [], qs: [], cit: [] };
 
   /* 1. carimbar o diário ANTES de mexer no plano — só os registros DESTE concurso (19.101.0) */
   const A = lerEdital(antes);
   const chavesPre = new Set();
   A.disciplinas.forEach((d) => d.topicos.forEach((tp) => chavesPre.add(preNormal(d.nome) + "›" + preNormal(tp.nome))));
   const carimbados = preCarimbarDiario(edDiario, ed ? ed.nome : "", hojeISO(),
-    { nomes: [ed ? ed.nome : "", A.cfg.concurso || ""], chaves: chavesPre });
+    { nomes: [ed ? ed.nome : "", A.cfg.concurso || ""], chaves: chavesPre, virada: rec.id });
+  rec.diario = carimbados;
   salvarDiario();
 
   /* 2. remanejar o que a pessoa apontou (ou aceitou da sugestão): o tópico inteiro */
@@ -8603,18 +8607,24 @@ async function vrAplicar() {
   const lig = { leis: 0, jur: 0, qs: 0, cit: 0 };
   remanejar.forEach((o) => {
     if (o.tem.material && matResumos[o.matChave]) {
-      if (preRemanejarMaterial(matResumos, o.matChave, o.destino.disciplina, o.destino.topico, matSalvar)) mats++;
+      const paraCh = matChave(o.destino.disciplina, o.destino.topico);
+      const snap = { de: o.matChave, para: paraCh, antesDe: vrCopia(matResumos[o.matChave]), antesPara: vrCopia(matResumos[paraCh]) };
+      if (preRemanejarMaterial(matResumos, o.matChave, o.destino.disciplina, o.destino.topico, matSalvar)) { mats++; rec.mat.push(snap); }
     }
     if (o.tem.estudo) {
-      if (preRemanejarEstudo(o.disciplina, o.topico, o.destino.disciplina, o.destino.topico, ed ? ed.id : "")) estudos++;
+      const re = preRemanejarEstudo(o.disciplina, o.topico, o.destino.disciplina, o.destino.topico, ed ? ed.id : "");
+      if (re) estudos++;
+      if (re && re.novos) rec.vk.push({ a: vkChave(o.disciplina, o.topico), b: vkChave(o.destino.disciplina, o.destino.topico) });
     }
-    const m = preMoverLigacoes(o.matChave || matChave(o.disciplina, o.topico), o.destino.disciplina, o.destino.topico);
+    const m = preMoverLigacoes(o.matChave || matChave(o.disciplina, o.topico), o.destino.disciplina, o.destino.topico, rec);
     Object.keys(lig).forEach((k) => { lig[k] += m[k]; });
   });
 
   /* 3. só então o texto novo. O progresso NÃO é apagado: fica guardado
    * pela chave, como na exclusão de disciplina (v8.73). */
   $("editalTexto").value = preAplicar(novo, c).texto;
+  rec.textoDepois = $("editalTexto").value;
+  if (ed) vrReciboGuardar(rec);
 
   reg("VIRADA", "aplicada: " + (ed ? ed.nome : ""),
       c.ficam.length + " mantidos, " + c.somem.length + " saíram ("
@@ -8630,7 +8640,94 @@ async function vrAplicar() {
   await uiAlert(t("vr_pronto", {
     f: c.ficam.length, n: c.surgem.length,
     h: Math.round((c.minutosPerdidos / 60) * 10) / 10,
-    m: remanejar.length }) + (lig.leis + lig.jur + lig.qs + lig.cit ? " " + t("vr_pronto_lig", lig) : ""));
+    m: remanejar.length }) + (lig.leis + lig.jur + lig.qs + lig.cit ? " " + t("vr_pronto_lig", lig) : "")
+    + "\n\n" + t("vr_pronto_desfazer", { n: VR_RECIBO_DIAS }));
+}
+
+/* =====================================================================
+ * (19.102.0) DESFAZER A VIRADA — por inteiro
+ *
+ * A versão guardada antes da virada devolvia só o TEXTO do plano: o resumo que tinha ido para o tópico novo, as leis, as
+ * questões, os julgados, os vínculos de citação, o vínculo de estudo e o carimbo do diário ficavam como a virada deixou.
+ * Agora a virada grava um RECIBO (o que estava em cada lugar antes de mexer) e o "↶ Desfazer a virada", no ⋯ do topo,
+ * devolve tudo — por 30 dias, um recibo por edital (a virada mais recente). Mudou o plano depois da virada? O desfazer
+ * avisa que essas mudanças se perdem, antes de fazer.
+ * ===================================================================== */
+const VR_RECIBOS = "eac_virada_recibos";
+const VR_RECIBO_DIAS = 30;
+function vrRecibosLer() {
+  try { const v = JSON.parse(localStorage.getItem(VR_RECIBOS) || "{}"); return v && typeof v === "object" ? v : {}; }
+  catch (e) { return {}; }
+}
+function vrRecibosGravar(v) {
+  try { localStorage.setItem(VR_RECIBOS, JSON.stringify(v || {})); return true; } catch (e) { return false; }
+}
+function vrReciboDe(editalId) {
+  const r = vrRecibosLer()[String(editalId)];
+  if (!r || !r.quando) return null;
+  const dias = (Date.now() - new Date(r.quando).getTime()) / 86400000;
+  return dias <= VR_RECIBO_DIAS ? r : null;
+}
+function vrReciboGuardar(r) {
+  const tudo = vrRecibosLer();
+  tudo[String(r.editalId)] = r;
+  return vrRecibosGravar(tudo);
+}
+/* a data do recibo no fuso de quem estuda (o ISO é UTC: depois das 21h, no Brasil, já seria "amanhã") */
+function vrDataCurta(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+}
+function vrCopia(x) { return x === undefined || x === null ? null : JSON.parse(JSON.stringify(x)); }
+
+async function vrDesfazer(confirmar) {
+  const ed = edAberto();
+  const r = ed ? vrReciboDe(ed.id) : null;
+  if (!r) { await uiAlert(t("vr_desf_nada")); return false; }
+  const mudou = $("editalTexto").value !== r.textoDepois;
+  const n = (r.mat || []).length + (r.vk || []).length;
+  const lig = (r.leis || []).length + (r.jur || []).length + (r.qs || []).length + (r.cit || []).length;
+  const pergunta = t("vr_desf_conf", { d: vrDataCurta(r.quando), m: n, l: lig, c: (r.diario || 0) })
+    + (mudou ? "\n\n" + t("vr_desf_mudou") : "");
+  if (!(await (confirmar || uiConfirm)(pergunta))) return false;
+
+  /* na ordem inversa da virada: primeiro as ligações, depois o material e o estudo, o diário e, por fim, o texto */
+  try {
+    if ((r.cit || []).length && typeof citVinculosLer === "function") {
+      const lista = citVinculosLer();
+      r.cit.forEach((c) => { const v = lista.find((x) => x.k === c.kNovo); if (v) { v.k = c.kAntigo; v.chave = c.chaveAntiga; } });
+      citVinculosGravar(lista);
+    }
+  } catch (e) {}
+  try { if ((r.qs || []).length && typeof qsDesfazerMover === "function") qsDesfazerMover(r.qs); } catch (e) {}
+  try { (r.jur || []).slice().reverse().forEach((j) => jurGravar({ id: j.id, topicos: j.topicos || [], rotulos: j.rotulos || {} })); } catch (e) {}
+  try { (r.leis || []).slice().reverse().forEach((l) => leiGuardar({ id: l.id, topicos: l.topicos || [] })); } catch (e) {}
+  try {
+    (r.mat || []).slice().reverse().forEach((m) => {
+      if (m.antesDe) matResumos[m.de] = m.antesDe; else delete matResumos[m.de];
+      if (m.antesPara) matResumos[m.para] = m.antesPara; else delete matResumos[m.para];
+    });
+    if ((r.mat || []).length && typeof matSalvar === "function") matSalvar();
+  } catch (e) {}
+  try { (r.vk || []).forEach((v) => vkDesfazer(v.a, v.b)); } catch (e) {}
+  let desc = 0;
+  (edDiario || []).forEach((x) => {
+    if (!x || x.faseVirada !== r.id) return;
+    delete x.fase; delete x.faseEdital; delete x.faseAte; delete x.faseVirada; desc++;
+  });
+  if (desc) salvarDiario();
+  $("editalTexto").value = r.textoAntes;
+  const tudo = vrRecibosLer();
+  delete tudo[String(r.editalId)];
+  vrRecibosGravar(tudo);
+  reg("VIRADA", "desfeita: " + (ed.nome || ""), n + " remanejamentos e " + lig + " ligações devolvidos · " + desc + " registros sem o carimbo");
+  edRender();
+  if (typeof hubPintarAgenda === "function") hubPintarAgenda();
+  if (typeof hubRender === "function") hubRender();
+  vrAtualizarBotao();
+  await uiAlert(t("vr_desf_pronto"));
+  return true;
 }
 
 function vrIniciar() {

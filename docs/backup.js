@@ -82,7 +82,9 @@ const BK_CHAVES = {
              /* (v19.12.0) as pastas livres de leis e julgados (só nomes e atalhos) */
              "eac_pastas",
              /* (v19.97.0) o que foi posto à mão na pasta de um edital */
-             "eac_pastas_ed"],
+             "eac_pastas_ed",
+             /* (v19.102.0) o recibo da virada do edital: o backup leva junto o que permite desfazê-la */
+             "eac_virada_recibos"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.
    *
    * Ele é sobre ESTE aparelho: quais arquivos existem na pasta de

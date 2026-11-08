@@ -563,7 +563,7 @@ async function main() {
                     ["biblioteca de leis: tela cheia, uma fileira de filtros, cada lei em uma linha com Abrir e ⋯", lbtT],
                     ["novo edital à vista (topo e seletor), o previsto avisa na agenda e a caixa oferece a virada", enaT],
                     ["pré-edital com IA (base no edital anterior) e a confiança valendo: boato fora da agenda até incluir", pieT],
-                    ["virada com IA: de-para, destinos sugeridos, o tópico inteiro vai junto, cabeçalho e carimbo certos", viaT],
+                    ["virada com IA: de-para, destinos sugeridos, o tópico inteiro vai junto, cabeçalho e carimbo certos, e o desfazer completo", viaT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];

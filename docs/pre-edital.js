@@ -181,6 +181,8 @@ function preCarimbarDiario(diario, nomeEdital, quandoSaiu, opc) {
   (diario || []).forEach((x) => {
     if (!x || x.fase) return;
     if (!desteConcurso(x)) return;
+    /* (19.102.0) a marca da virada que carimbou: é por ela que o desfazer tira o carimbo */
+    if (opc && opc.virada) x.faseVirada = opc.virada;
     x.fase = "pre";
     x.faseEdital = nomeEdital || "";
     x.faseAte = quandoSaiu || (typeof hojeISO === "function"
@@ -389,12 +391,14 @@ function preLigacoesDe(chave) {
   return n;
 }
 /* leva as leis, os julgados, as questões e os vínculos de citação de um tópico para outro */
-function preMoverLigacoes(deChave, disciplina, topico) {
+/* (19.102.0) `rec` (opcional) recebe o que estava em cada lugar antes, para o desfazer da virada */
+function preMoverLigacoes(deChave, disciplina, topico, rec) {
   const para = (typeof matChave === "function") ? matChave(disciplina, topico) : (disciplina + "›" + topico).toLowerCase();
   const n = { leis: 0, jur: 0, qs: 0, cit: 0 };
   if (!deChave || preNormal(deChave) === preNormal(para)) return n;
   try {
     if (typeof leisDoTopico === "function") leisDoTopico(deChave).forEach((l) => {
+      if (rec) rec.leis.push({ id: l.id, topicos: (l.topicos || []).slice() });
       leiLigar(l.id, para);
       (l.topicos || []).filter((c) => preNormal(c) === preNormal(deChave)).forEach((c) => leiDesligar(l.id, c));
       n.leis++;
@@ -402,13 +406,14 @@ function preMoverLigacoes(deChave, disciplina, topico) {
   } catch (e) {}
   try {
     if (typeof jurDoTopico === "function") jurDoTopico(deChave).forEach((j) => {
+      if (rec) rec.jur.push({ id: j.id, topicos: (j.topicos || []).slice(), rotulos: Object.assign({}, j.rotulos || {}) });
       jurLigar(j.id, para, disciplina, topico); jurDesligar(j.id, deChave); n.jur++;
     });
   } catch (e) {}
   try {
     if (typeof qsTodas === "function" && typeof qsMover === "function") {
       const ids = qsTodas().filter((q) => q.chave && preNormal(q.chave) === preNormal(deChave)).map((q) => q.id);
-      if (ids.length) n.qs = qsMover(ids, { disciplina, topico }).length;
+      if (ids.length) { const rq = qsMover(ids, { disciplina, topico }); n.qs = rq.length; if (rec) rec.qs.push(...rq); }
     }
   } catch (e) {}
   try {
@@ -417,6 +422,7 @@ function preMoverLigacoes(deChave, disciplina, topico) {
       lista.forEach((v) => {
         if (!v.chave || preNormal(v.chave) !== preNormal(deChave)) return;
         const resto = String(v.k || "").slice(String(v.chave).length);
+        if (rec) rec.cit.push({ kNovo: para + resto, kAntigo: v.k, chaveAntiga: v.chave });
         v.chave = para; v.k = para + resto; n.cit++;
       });
       if (n.cit) citVinculosGravar(lista);

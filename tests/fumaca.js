@@ -1191,7 +1191,7 @@ function rodar(opc) {
  preComparar, preCarimbarDiario, preOrfaos,
     preAplicar, preConfiancaDe, preNaAgenda, preConfLinha, preConfTrocar, preBaseDoEdital, preNomeDaLinha,
     vrIniciar, vrAbrir, vrConferir, vrAplicar, vrAtualizarBotao, vrEhPrevisto, vrPrompt, vrGerarPrompt, vrTextoFinal,
-    preDePara, preTirarDePara, preSugerirDestino, preMoverLigacoes, preCabecalhoVirada, preLigacoesDe, preSemelhanca,
+    preDePara, preTirarDePara, preSugerirDestino, preMoverLigacoes, preCabecalhoVirada, preLigacoesDe, preSemelhanca, vrReciboDe, vrDesfazer, vrRecibosLer,
     vrOrfaosAtuais: () => vrOrfaos,
     preMaterialOrfao, preDestinos, preRemanejarMaterial, preRemanejarEstudo,
     edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
