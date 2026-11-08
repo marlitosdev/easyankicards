@@ -10,7 +10,7 @@
  * ===================================================================== */
 
 let qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "",
-                   soIneditas: false, soErradas: false, busca: "" };
+                   soIneditas: false, soErradas: false, busca: "", lote: "" };
 let qsUiCtxCriar = null;      /* de qual tópico vieram as questões sendo criadas */
 let qsUiAchados = null;
 let qsUiDoTexto = [];   /* as que o detector achou no próprio texto */
@@ -997,6 +997,16 @@ function qsUiAplicar() {
         numeros: { gravadas: qsUiRecibo.novas, fora: deixadas.length } });
   } catch (e) {}
   uiAlert(t("qs_aplicadas2", { n: qsUiRecibo.novas, f: deixadas.length }));
+  /* (19.117.0) no próprio aviso, o atalho para as que acabaram de entrar */
+  try {
+    const msg = $("uiModalMsg");
+    if (msg && qsUiRecibo.lote && qsUiRecibo.novas) {
+      const p = document.createElement("div");
+      p.className = "qs-ver-lote-cx";
+      p.append(qsUiBotaoVerLote(qsUiRecibo.lote, qsUiRecibo.novas, () => { try { _uiFechar(true); } catch (e) {} }));
+      msg.append(p);
+    }
+  } catch (e) {}
 }
 
 function qsUiMostrarDesfazer(rec) {
@@ -1004,6 +1014,10 @@ function qsUiMostrarDesfazer(rec) {
   if (!b || !rec || !rec.novas) return;
   b.hidden = false;
   $("qsDesfazerTxt").textContent = t("qs_desfazer_txt", { n: rec.novas });
+  /* (19.117.0) e o atalho para vê-las juntas, ao lado do desfazer */
+  const velho = b.querySelector ? b.querySelector(".qs-ver-lote") : null;
+  if (velho && velho.remove) velho.remove();
+  if (rec.lote) b.append(qsUiBotaoVerLote(rec.lote, rec.novas));
 }
 
 function qsUiDesfazer() {
@@ -3879,6 +3893,121 @@ function qsUiPintarFacetas() {
     });
     st.value = qsUiFiltro.tipo || "";
   }
+  qsUiPintarLotes();
+}
+
+/* =====================================================================
+ * (19.117.0) "CRIADAS EM" — AS QUESTÕES DE UMA CRIAÇÃO
+ *
+ * O relato: "não existe um modo simples de acessar a lista de questões que criei, e ficou com erro para apagá-la e
+ * refazer". Cada colagem gravada vira uma criação (o lote); aqui ela é um filtro da biblioteca, e com uma escolhida
+ * aparecem as duas ações que faltavam: apagar todas de uma vez (para a lixeira) e refazer no mesmo tópico.
+ * ===================================================================== */
+function qsUiLoteRotulo(g, comTopico) {
+  const d = new Date(g.quando);
+  const dd = isNaN(d.getTime()) ? "—" : String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0")
+    + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const onde = comTopico ? (g.topico || t("qs_sem_topico_chip")) + (g.ramoNome ? " › " + g.ramoNome : "") : "";
+  return dd + (onde ? " · " + onde : "");
+}
+const QS_LOTES_MAX = 40;
+function qsUiPintarLotes() {
+  const s = $("qsFLote");
+  if (!s) return;
+  const lotes = qsLotes(qsUiBaseSem(["lote"]));
+  s.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = t("qs_todas_lotes");
+  s.append(o0);
+  const vistos = lotes.slice(0, QS_LOTES_MAX);
+  /* a escolhida continua na lista mesmo que outro filtro a esconda (com 0) */
+  if (qsUiFiltro.lote && !vistos.some((g) => g.id === qsUiFiltro.lote)) {
+    const g = qsLotes(qsFiltrar({ lote: qsUiFiltro.lote }))[0];
+    vistos.unshift(g ? Object.assign({}, g, { n: 0 }) : { id: qsUiFiltro.lote, quando: "", n: 0 });
+  }
+  vistos.forEach((g) => {
+    const o = document.createElement("option");
+    o.value = g.id;
+    o.textContent = qsUiLoteRotulo(g, true) + " (" + g.n + ")";
+    s.append(o);
+  });
+  s.value = qsUiFiltro.lote || "";
+  if ($("qsCampoLote")) $("qsCampoLote").hidden = !lotes.length && !qsUiFiltro.lote;
+}
+/* abre a biblioteca só com as questões de uma criação */
+function qsUiVerLote(lote) {
+  if (!lote) return false;
+  try { if (typeof trocarModo === "function") trocarModo("questoes"); } catch (e) {}
+  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "", lote };
+  qsUiFiltrosNaTela();
+  qsUiRender();
+  return true;
+}
+/* o botão "ver estas N na biblioteca" (no aviso de gravação e na faixa do desfazer) */
+function qsUiBotaoVerLote(lote, n, aoTocar) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn-min qs-ver-lote";
+  b.textContent = t("qs_lote_ver", { n });
+  b.title = t("qs_lote_ver_aj");
+  b.onclick = () => { if (aoTocar) aoTocar(); qsUiVerLote(lote); };
+  return b;
+}
+/* a faixa da criação escolhida: o que é, apagar todas, refazer */
+function qsUiPintarLoteAcoes(lista) {
+  const cx = $("qsLoteAcoes");
+  if (!cx) return;
+  cx.innerHTML = "";
+  cx.hidden = !qsUiFiltro.lote;
+  if (!qsUiFiltro.lote) return;
+  const g = qsLotes(qsFiltrar({ lote: qsUiFiltro.lote }))[0];
+  const tx = document.createElement("span");
+  tx.className = "qs-lote-txt";
+  tx.textContent = t("qs_lote_barra", { d: g ? qsUiLoteRotulo(g, true) : "—", n: lista.length });
+  cx.append(tx);
+  if (lista.length) {
+    const bA = document.createElement("button");
+    bA.type = "button";
+    bA.id = "btnQsLoteApagar";
+    bA.className = "btn-min btn-perigo";
+    bA.textContent = t("qs_lote_apagar", { n: lista.length });
+    bA.title = t("qs_lote_apagar_aj");
+    bA.onclick = () => qsUiApagarLote(lista.map((q) => q.id));
+    cx.append(bA);
+  }
+  if (g && g.disciplina && g.topico) {
+    const bR = document.createElement("button");
+    bR.type = "button";
+    bR.id = "btnQsLoteRefazer";
+    bR.className = "btn-min";
+    bR.textContent = t("qs_lote_refazer");
+    bR.title = t("qs_lote_refazer_aj");
+    bR.onclick = () => qsUiRefazerLote(g);
+    cx.append(bR);
+  }
+}
+async function qsUiApagarLote(ids) {
+  const qs = qsTodas().filter((q) => ids.indexOf(q.id) >= 0);
+  if (!qs.length) return 0;
+  const comResp = qs.filter((q) => (q.tentativas || []).length).length;
+  const txt = t("qs_lote_apagar_conf", { n: qs.length }) + (comResp ? t("qs_lote_apagar_resp", { r: comResp }) : "");
+  if (!(await uiConfirm(txt, { perigo: true, ok: t("qs_lote_apagar", { n: qs.length }) }))) return 0;
+  const n = qsApagarVarias(qs.map((q) => q.id));
+  try { matReg("questao", "criação apagada", n + " questão(ões)"); } catch (e) {}
+  qsUiFiltro.lote = "";
+  qsUiFiltrosNaTela();
+  qsUiPintarBotaoResumo();
+  qsUiRender();
+  uiAlert(t("qs_lote_apagadas", { n }));
+  return n;
+}
+/* refazer: a criação de questões no mesmo tópico (e no mesmo ramo, se a criação era de um ramo só), com o pedido atual */
+function qsUiRefazerLote(g) {
+  if (!g || !g.disciplina || !g.topico || typeof mcApontarTopico !== "function") return false;
+  mcApontarTopico(g.disciplina, g.topico);
+  if (g.ramo) qsUiRamoAlvo = { id: g.ramo, nome: g.ramoNome || "" };
+  qsUiVirarSelecao("resumo");
+  return true;
 }
 
 /* OS FILTROS ATIVOS, em etiquetas: cada uma diz o que está filtrando e sai com o ✕; "limpar" tira todos */
@@ -3898,6 +4027,7 @@ function qsUiPintarChips() {
   if (f.soIneditas) chips.push(["soIneditas", t("qs_f_situacao"), t("qs_so_ineditas")]);
   if (f.soErradas) chips.push(["soErradas", t("qs_f_situacao"), t("qs_so_erradas")]);
   if (f.busca) chips.push(["busca", t("qs_f_busca"), "“" + f.busca + "”"]);
+  if (f.lote) { const g = qsLotes(qsFiltrar({ lote: f.lote }))[0]; chips.push(["lote", t("qs_f_lote"), g ? qsUiLoteRotulo(g, false) : "—"]); }
   if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").hidden = !chips.length;
   if (!cx) return chips.length;
   cx.innerHTML = "";
@@ -3929,7 +4059,7 @@ function qsUiTirarFiltro(k) {
   qsUiRender();
 }
 function qsUiLimparFiltros() {
-  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "" };
+  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "", lote: "" };
   qsUiFiltrosNaTela();
   qsUiRender();
 }
@@ -3957,6 +4087,7 @@ function qsUiRender() {
   /* o filtro de edital vira um CONJUNTO DE CHAVES aqui, não lá dentro:
    * o banco de questões não precisa saber o que é um edital */
   const lista = qsUiListaFiltrada();
+  qsUiPintarLoteAcoes(lista);
   const d = qsDesempenho(lista);
   try { qsUiHistRender(); } catch (e) {}
   $("qsResumo").textContent = qsTodas().length
@@ -4362,6 +4493,7 @@ function qsUiLerFiltros() {
     soIneditas: !!($("qsFIneditas") || {}).checked,
     soErradas: !!($("qsFErradas") || {}).checked,
     busca: ($("qsBusca") || {}).value || "",
+    lote: ($("qsFLote") || {}).value || "",
   };
   qsUiRender();
 }
@@ -4740,7 +4872,7 @@ function qsUiIniciar() {
   if ($("btnQsRamosDesfazer")) $("btnQsRamosDesfazer").onclick = () => qsUiLigarRamosDesfazer();
   if ($("btnQsRamosFechar")) $("btnQsRamosFechar").onclick = () => $("dlgQsRamos").close();
   ["qsFEdital", "qsFTopico", "qsFRamo", "qsFDisc", "qsFBanca", "qsFTipo",
-   "qsFIneditas", "qsFErradas"].forEach((id) => {
+   "qsFIneditas", "qsFErradas", "qsFLote"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();
   });
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();

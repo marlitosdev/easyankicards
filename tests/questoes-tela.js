@@ -230,6 +230,53 @@ async function testes() {
     api.simbLigarCampo(campo, false);
     ok(campo._simbFila.hidden === true && campo._simbLigado === false, "F9a e ela some nos outros usos da caixa de texto");
   }
+  /* ===================================================================
+   * (19.117.0) "CRIADAS EM": as questões de uma criação — ver, apagar todas, refazer
+   * O relato: "não existe um modo simples de acessar a lista de questões que criei e ficou com erro para apagá-la e
+   * refazer".
+   * =================================================================== */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.qsUiIniciar();
+    const ch = api.matChave("Raciocínio Lógico", "Proposições");
+    api.matGravar(ch, "x", { disciplina: "Raciocínio Lógico", topico: "Proposições" });
+    const ctx = { disciplina: "Raciocínio Lógico", topico: "Proposições", chave: ch };
+    const bloco = (k) => "[QUESTAO]\nTIPO: CE\nENUNCIADO: Afirmacao numero " + k + " sobre proposicoes, com texto suficiente para valer.\nGABARITO: C\nCOMENTARIO: ok " + k + ".\n[/QUESTAO]";
+    const r1 = api.qsAplicar(api.qsLerResposta([1, 2, 3].map(bloco).join("\n"), ctx).achados);
+    const r2 = api.qsAplicar(api.qsLerResposta([4, 5].map(bloco).join("\n"), ctx).achados);
+    ok(r1.novas === 3 && r2.novas === 2 && r1.lote && r2.lote && r1.lote !== r2.lote, "L1 cada gravacao e uma criacao (lote) propria: " + r1.lote + " · " + r2.lote);
+    ok(api.qsFiltrar({ lote: r1.lote }).length === 3 && api.qsFiltrar({ lote: r2.lote }).length === 2, "L1a o filtro do lote traz so as daquela criacao");
+    /* as de antes desta versão (sem a marca): agrupadas pelo minuto e pelo tópico */
+    const antigas = api.qsTodas().filter((q) => q.lote === r2.lote);
+    antigas.forEach((q) => { delete q.lote; q.criado = "2026-10-01T10:15:" + (q === antigas[0] ? "05" : "48") + ".000Z"; });
+    const idAnt = api.qsLoteDe(antigas[0]);
+    ok(idAnt && idAnt === api.qsLoteDe(antigas[1]) && api.qsFiltrar({ lote: idAnt }).length === 2, "L2 as antigas da mesma colagem (mesmo minuto e topico) viram uma criacao: " + idAnt);
+    const ls = api.qsLotes();
+    ok(ls.length === 2 && ls[0].id === r1.lote && ls[0].n === 3 && ls[0].topico === "Proposições" && ls[1].n === 2, "L2a as criacoes, da mais nova para a mais velha: " + JSON.stringify(ls.map((g) => [g.n, g.quando])));
+    /* a biblioteca com a criação escolhida */
+    api.qsUiVerLote(r1.lote);
+    ok(api.qsUiFiltroAtual().lote === r1.lote && api.$("qsLoteAcoes").hidden === false, "L3 'ver estas na biblioteca' abre a biblioteca so com a criacao");
+    const kids = (el) => Array.from(el.childNodes || el.children || []);
+    const bA = kids(api.$("qsLoteAcoes")).filter((b) => b.id === "btnQsLoteApagar")[0];
+    const bR = kids(api.$("qsLoteAcoes")).filter((b) => b.id === "btnQsLoteRefazer")[0];
+    ok(bA && /apagar estas 3/.test(bA.textContent) && bR, "L3a a faixa da criacao: apagar as 3 de uma vez e refazer: " + (bA && bA.textContent));
+    ok(/Criadas em/.test(api.$("qsChips").textContent || "") || kids(api.$("qsChips")).some((c) => /Criadas em/.test(c.textContent)), "L3b a etiqueta do filtro diz 'Criadas em'");
+    /* apagar todas de uma vez: uma confirmação, todas para a lixeira */
+    const antes = api.qsTodas().length;
+    const p = api.qsUiApagarLote(api.qsFiltrar({ lote: r1.lote }).map((q) => q.id));
+    await Promise.resolve();
+    api._uiFechar(true);
+    const n = await p;
+    ok(n === 3 && api.qsTodas().length === antes - 3 && api.qsUiFiltroAtual().lote === "", "L4 uma confirmacao apaga as 3 juntas e a biblioteca volta sem o filtro: " + n);
+    api._uiFechar(true);
+    const lix = typeof api.lixLer === "function" ? (api.lixLer() || []) : null;
+    ok(lix && lix.filter((x) => x.tipo === "questao").length >= 3, "L4a as apagadas vao para a lixeira (podem voltar): " + (lix && lix.length));
+    /* refazer: a criação de questões no mesmo tópico */
+    api.qsUiVerLote(idAnt);
+    const g = api.qsLotes(api.qsFiltrar({ lote: idAnt }))[0];
+    ok(api.qsUiRefazerLote(g) === true && api.$("dlgQsCriar").open === true, "L5 refazer abre a criacao de questoes no mesmo topico");
+    api.$("dlgQsCriar").close && api.$("dlgQsCriar").close();
+  }
   return falhas;
 }
 

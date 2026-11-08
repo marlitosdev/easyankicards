@@ -777,6 +777,9 @@ function qsSemelhante(nova, lista) {
 }
 
 function qsAplicar(lista, gravar) {
+  /* (19.117.0) O LOTE: as questões gravadas de uma vez (o mesmo pedido colado) levam a mesma marca — é por ela que a
+   * biblioteca mostra "as que eu criei agora", apaga todas juntas ou refaz o tópico */
+  const lote = "L" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const novas = [];
   let repetidas = 0;
   const recusadas = [];
@@ -803,6 +806,7 @@ function qsAplicar(lista, gravar) {
        * depois, pelo botao, via qsGravarDica. Guardar o campo na gravacao
        * seria linha que nenhuma sabotagem consegue quebrar. */
       criado: new Date().toISOString(),
+      lote,
       tentativas: [],
     };
     /* Q1 — a questão pode nascer já ligada a um RAMO do tópico */
@@ -812,7 +816,53 @@ function qsAplicar(lista, gravar) {
   });
   qsSalvar(gravar, novas.length ? novas[0].chave : "");
   return { novas: novas.length, repetidas, recusadas,
-           ids: novas.map((x) => x.id) };
+           ids: novas.map((x) => x.id), lote: novas.length ? lote : "" };
+}
+
+/* (19.117.0) DE QUE CRIAÇÃO É ESTA QUESTÃO. As gravadas a partir desta versão trazem a marca; as de antes são agrupadas
+ * pelo minuto em que foram gravadas, no mesmo tópico e com a mesma origem — o que, na prática, é a mesma colagem. */
+function qsLoteDe(q) {
+  if (!q) return "";
+  if (q.lote) return String(q.lote);
+  const quando = String(q.criado || "").slice(0, 16);
+  if (!quando) return "";
+  return "~" + qsChaveNormal(q.chave || "") + "|" + quando + "|" + (q.origem || "");
+}
+/* as criações, da mais nova para a mais velha: {id, quando, n, chave, disciplina, topico, ramo, ramoNome} */
+function qsLotes(lista) {
+  const por = {};
+  (lista || qsBanco).forEach((q) => {
+    const id = qsLoteDe(q);
+    if (!id) return;
+    const g = por[id] || (por[id] = { id, quando: q.criado || "", n: 0, chave: q.chave || "", disciplina: q.disciplina || "", topico: q.topico || "", ramos: {} });
+    g.n++;
+    if (String(q.criado || "") < String(g.quando || "")) g.quando = q.criado;
+    if (q.ramo) g.ramos[q.ramo] = q.ramoNome || q.ramo;
+  });
+  return Object.keys(por).map((k) => {
+    const g = por[k];
+    const rs = Object.keys(g.ramos);
+    /* um ramo só: refazer volta nele; vários (ou nenhum): o tópico inteiro */
+    if (rs.length === 1) { g.ramo = rs[0]; g.ramoNome = g.ramos[rs[0]]; }
+    delete g.ramos;
+    return g;
+  }).sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+}
+/* apagar várias de uma vez (uma gravação só); cada uma vai para a lixeira, para poder voltar */
+function qsApagarVarias(ids, gravar) {
+  const alvo = {};
+  (ids || []).forEach((id) => { alvo[id] = true; });
+  const apagadas = qsBanco.filter((q) => alvo[q.id]);
+  if (!apagadas.length) return 0;
+  qsBanco = qsBanco.filter((q) => !alvo[q.id]);
+  qsSalvar(gravar);
+  apagadas.forEach((q) => {
+    try {
+      lixJogar({ tipo: "questao", via: "banco", rotulo: String(q.enunciado || "").slice(0, 90),
+        onde: [q.disciplina, q.topico].filter(Boolean).join(" · "), dados: { q } });
+    } catch (e) {}
+  });
+  return apagadas.length;
 }
 
 function qsDesfazer(recibo, gravar) {
@@ -872,6 +922,8 @@ const QS_SEM_TOPICO = "__sem_topico__";
 function qsFiltrar(f) {
   const o = f || {};
   return qsBanco.filter((q) => {
+    /* (19.117.0) as de uma criação só */
+    if (o.lote && qsLoteDe(q) !== o.lote) return false;
     /* (19.39.0) "sem tópico": as que não estão ligadas a tópico nenhum */
     if (o.chave === QS_SEM_TOPICO) { if (String(q.chave || "").trim()) return false; }
     else if (o.chave && q.chave !== o.chave
@@ -1691,7 +1743,7 @@ function qsDesempenho(lista) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     qsNormal, qsCarregar, qsSalvar, qsTodas, qsPrompt, qsPromptCaderno, qsLerResposta,
-    qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas,
+    qsAplicar, qsDesfazer, qsApagar, qsFiltrar, qsContarPorChave, qsBancas, qsLoteDe, qsLotes, qsApagarVarias,
     qsDisciplinas, qsSessaoIniciar, qsAtual, qsResponder, qsAndar, qsPlacar,
     qsDesempenho, qsSessaoAtual, qsJaRespondida, qsNoTexto, qsDeBlocos,
     qsGravarDica, qsDicaDeQuestao, qsContarDoTopico, qsSemTopico, qsChaveNormal,

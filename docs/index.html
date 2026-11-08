@@ -1799,6 +1799,12 @@ dialog.lb-dlg.lb-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100
 .rs-simb{min-width:30px;height:28px;padding:0 6px;border:1px solid var(--borda);border-radius:7px;background:var(--campo);color:var(--texto);
   font:15px/1 "Cambria Math","Segoe UI Symbol",serif;cursor:pointer}
 .rs-simb:hover{border-color:var(--acao,#5b7cfa)}
+/* (19.117.0) a faixa da criação escolhida na biblioteca, e o atalho no aviso de gravação */
+.qs-lote-acoes{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 4px;padding:7px 10px;border:1px solid var(--borda);
+  border-radius:10px;background:var(--campo)}
+.qs-lote-acoes[hidden]{display:none}
+.qs-lote-txt{font-weight:600;margin-right:auto}
+.qs-ver-lote-cx{margin-top:10px}
 /* (19.116.0) FÓRMULAS E TABELAS NA QUESTÃO (fmtMontar, grifo.js): o escondido continua no texto, só não aparece */
 #dlgQsResponder .qs-enunciado,#dlgQsResponder .qs-op-t,#dlgQsResponder .qs-coment{white-space:pre-line}
 .qs-fmt-oc{display:none}
@@ -7910,6 +7916,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
           <option value="ce" data-i18n="qs_tipo_ce"></option>
           <option value="me" data-i18n="qs_tipo_me"></option>
         </select></label>
+      <!-- (19.117.0) AS QUESTÕES DE UMA CRIAÇÃO (o mesmo pedido colado de uma vez): ver, apagar todas, refazer -->
+      <label class="qs-campo" id="qsCampoLote" hidden><span class="qs-campo-rot" data-i18n="qs_f_lote"></span>
+        <select id="qsFLote" data-i18n-title="qs_f_lote_tip"></select></label>
       <fieldset class="qs-campo qs-situacao">
         <legend class="qs-campo-rot" data-i18n="qs_f_situacao"></legend>
         <label class="qs-chk" title="Só as que você nunca respondeu."><input type="checkbox" id="qsFIneditas"><span data-i18n="qs_so_ineditas"></span></label>
@@ -7920,6 +7929,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <label class="qs-campo qs-busca-cx"><span class="qs-campo-rot" data-i18n="qs_f_busca"></span>
         <input id="qsBusca" class="mat-busca" type="search" data-i18n-ph="qs_f_busca_ph" placeholder="procurar no enunciado" title="Procura no texto do enunciado."></label>
       <div class="qs-chips" id="qsChips" hidden></div>
+      <div class="qs-lote-acoes" id="qsLoteAcoes" hidden></div>
       <div class="qs-barra">
         <span class="qs-resumo" id="qsResumo"></span>
         <button class="btn btn-verde" id="btnQsResponderTudo"
