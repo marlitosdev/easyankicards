@@ -619,7 +619,8 @@ function domTermoPintar(edId) {
   const r = (k) => Math.round(n.pct[k]);
   box.append(barra, gerEl("span", "dom-termo-txt", t("dom_termo_txt", { v: r("verde"), r: r("vermelho") })));
   box.title = t("dom_termo_tip", { v: r("verde"), a: r("amarelo"), z: r("azul"), r: r("vermelho"), c: r("cinza") });
-  box.onclick = () => domAbrir(edId);
+  /* (19.104.0) o termômetro do edital aberto abre o PAINEL do edital (o Domínio inteiro fica a um toque lá dentro) */
+  box.onclick = () => { if (typeof peAbrir === "function" && $("dlgPainel") && typeof editalAtual !== "undefined" && String(edId) === String(editalAtual)) peAbrir(); else domAbrir(edId); };
   return n;
 }
 
