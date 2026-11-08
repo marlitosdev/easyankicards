@@ -165,10 +165,22 @@ function preComparar(txtPre, txtPos, progresso, diario) {
  * continua legível e localizável — e o diário sabe dizer "isto foi estudo
  * de pré-edital, antes de o edital sair em tal data".
  * ------------------------------------------------------------------ */
-function preCarimbarDiario(diario, nomeEdital, quandoSaiu) {
+/* (19.101.0) SÓ O DESTE CONCURSO. O diário é um só para todos os editais, e o carimbo pegava tudo: fazer a virada do
+ * ISS marcava como "pré-edital do ISS" o que se estudou para o TCE. Com `opc`, só leva a marca o registro deste
+ * concurso — pelo nome gravado nele (cc), ou, sem nome, pelo tópico ser do plano previsto.
+ *   opc.nomes: nomes do concurso (o do edital e o do cabeçalho);  opc.chaves: Set de "disciplina›tópico" sem acento. */
+function preCarimbarDiario(diario, nomeEdital, quandoSaiu, opc) {
   let n = 0;
+  const nomes = opc && opc.nomes ? opc.nomes.map(preNormal).filter(Boolean) : null;
+  const chaves = opc && opc.chaves ? opc.chaves : null;
+  const desteConcurso = (x) => {
+    if (!nomes && !chaves) return true;
+    if (x.cc) return !!nomes && nomes.indexOf(preNormal(x.cc)) >= 0;
+    return !!chaves && chaves.has(preNormal(x.disc) + "›" + preNormal(x.n));
+  };
   (diario || []).forEach((x) => {
     if (!x || x.fase) return;
+    if (!desteConcurso(x)) return;
     x.fase = "pre";
     x.faseEdital = nomeEdital || "";
     x.faseAte = quandoSaiu || (typeof hojeISO === "function"
@@ -300,4 +312,140 @@ function preRemanejarEstudo(deDisc, deTop, paraDisc, paraTop, editalId) {
     conf: "ALTA", por: "remanejado na virada do edital", origem: "virada",
   }], editalId || "");
   return r;
+}
+
+/* =====================================================================
+ * (19.101.0) A VIRADA COM APOIO DE IA — e o que ela leva junto
+ *
+ * 1. O DE-PARA. O pedido da virada pede à IA, além do edital no formato, as linhas do que mudou de nome, foi juntado ou
+ *    dividido:   = Disciplina antiga :: Tópico antigo => Disciplina nova :: Tópico novo
+ *    O app lê essas linhas e PRÉ-ESCOLHE o destino dos tópicos que saíram (marcado "sugestão da IA"; você confere). Sem
+ *    a IA, sugere pelo nome parecido. As linhas "=" não entram no plano.
+ * 2. O TÓPICO INTEIRO VAI JUNTO: o estudo (como vínculo), o resumo e os cartões — e agora também as leis ligadas, os
+ *    julgados, as questões e os vínculos de citação. Antes, só o resumo e o estudo; as leis ficavam presas ao nome antigo
+ *    e a pasta do edital as perdia.
+ * 3. O CABEÇALHO É SEU: da resposta da IA vêm a data (prova:) e as linhas "# fase 2" / "# discursiva"; o nome do
+ *    concurso, as horas por semana e o resto ficam como estavam (o exemplo do pedido trazia "horas: 12" e a IA copiava).
+ * ===================================================================== */
+const PRE_DEPARA_RE = /^\s*=\s*(.+?)\s*=>\s*(.+?)\s*$/;
+function preLadoDePara(s) {
+  const p = String(s || "").split("::").map((x) => x.trim());
+  return p.length >= 2 && p[0] && p[1] ? { disciplina: p[0], topico: p[1] } : null;
+}
+/* as linhas "= de => para" da resposta: [{de:{disciplina,topico}, para:{disciplina,topico}}] */
+function preDePara(txt) {
+  const out = [];
+  String(txt || "").split(/\r?\n/).forEach((l) => {
+    const m = PRE_DEPARA_RE.exec(l);
+    if (!m) return;
+    const de = preLadoDePara(m[1]);
+    m[2].split(/\s*;\s*/).forEach((alvo) => { const para = preLadoDePara(alvo); if (de && para) out.push({ de, para }); });
+  });
+  return out;
+}
+function preTirarDePara(txt) {
+  return String(txt || "").split(/\r?\n/).filter((l) => !PRE_DEPARA_RE.test(l)).join("\n");
+}
+
+/* palavras de um nome de tópico, para comparar */
+const PRE_VAZIAS = new Set(["de", "da", "do", "das", "dos", "e", "a", "o", "as", "os", "em", "no", "na", "nos", "nas", "para", "com", "por", "sobre", "lei", "geral", "noções", "nocoes"]);
+function prePalavras(s) {
+  return new Set(preNormal(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !PRE_VAZIAS.has(w)));
+}
+function preSemelhanca(a, b) {
+  const A = prePalavras(a), B = prePalavras(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  A.forEach((w) => { if (B.has(w)) n++; });
+  return n / (A.size + B.size - n);
+}
+/* o destino sugerido de um tópico que saiu: primeiro o de-para da IA (se o destino existe no edital novo), depois o nome
+ * parecido (o melhor, com folga sobre o segundo). Devolve {destino, por: "ia"|"nome"} ou null. */
+function preSugerirDestino(orf, destinos, depara) {
+  const k = (d, t) => preNormal(d) + "›" + preNormal(t);
+  const existe = (p) => destinos.find((d) => k(d.disciplina, d.topico) === k(p.disciplina, p.topico))
+    || (destinos.filter((d) => preNormal(d.topico) === preNormal(p.topico)).length === 1 ? destinos.find((d) => preNormal(d.topico) === preNormal(p.topico)) : null);
+  const meu = k(orf.disciplina, orf.topico);
+  const ia = (depara || []).find((x) => k(x.de.disciplina, x.de.topico) === meu && existe(x.para))
+    || (depara || []).find((x) => preNormal(x.de.topico) === preNormal(orf.topico) && existe(x.para));
+  if (ia) return { destino: existe(ia.para), por: "ia" };
+  let melhor = null, seg = 0;
+  destinos.forEach((d) => {
+    const s = preSemelhanca(orf.topico, d.topico) + (preNormal(d.disciplina) === preNormal(orf.disciplina) ? 0.1 : 0);
+    if (!melhor || s > melhor.s) { if (melhor) seg = Math.max(seg, melhor.s); melhor = { d, s }; }
+    else if (s > seg) seg = s;
+  });
+  if (melhor && melhor.s >= 0.5 && melhor.s - seg >= 0.15) return { destino: melhor.d, por: "nome" };
+  return null;
+}
+
+/* o que está ligado a um tópico (pela chave do app) — para dizer o que vai junto */
+function preLigacoesDe(chave) {
+  const n = { leis: 0, jur: 0, qs: 0, cit: 0 };
+  try { if (typeof leisDoTopico === "function") n.leis = leisDoTopico(chave).length; } catch (e) {}
+  try { if (typeof jurDoTopico === "function") n.jur = jurDoTopico(chave).length; } catch (e) {}
+  try { if (typeof qsContarDoTopico === "function") n.qs = qsContarDoTopico(chave); } catch (e) {}
+  try { if (typeof citVinculosLer === "function") n.cit = citVinculosLer().filter((v) => v.chave && preNormal(v.chave) === preNormal(chave)).length; } catch (e) {}
+  return n;
+}
+/* leva as leis, os julgados, as questões e os vínculos de citação de um tópico para outro */
+function preMoverLigacoes(deChave, disciplina, topico) {
+  const para = (typeof matChave === "function") ? matChave(disciplina, topico) : (disciplina + "›" + topico).toLowerCase();
+  const n = { leis: 0, jur: 0, qs: 0, cit: 0 };
+  if (!deChave || preNormal(deChave) === preNormal(para)) return n;
+  try {
+    if (typeof leisDoTopico === "function") leisDoTopico(deChave).forEach((l) => {
+      leiLigar(l.id, para);
+      (l.topicos || []).filter((c) => preNormal(c) === preNormal(deChave)).forEach((c) => leiDesligar(l.id, c));
+      n.leis++;
+    });
+  } catch (e) {}
+  try {
+    if (typeof jurDoTopico === "function") jurDoTopico(deChave).forEach((j) => {
+      jurLigar(j.id, para, disciplina, topico); jurDesligar(j.id, deChave); n.jur++;
+    });
+  } catch (e) {}
+  try {
+    if (typeof qsTodas === "function" && typeof qsMover === "function") {
+      const ids = qsTodas().filter((q) => q.chave && preNormal(q.chave) === preNormal(deChave)).map((q) => q.id);
+      if (ids.length) n.qs = qsMover(ids, { disciplina, topico }).length;
+    }
+  } catch (e) {}
+  try {
+    if (typeof citVinculosLer === "function") {
+      const lista = citVinculosLer();
+      lista.forEach((v) => {
+        if (!v.chave || preNormal(v.chave) !== preNormal(deChave)) return;
+        const resto = String(v.k || "").slice(String(v.chave).length);
+        v.chave = para; v.k = para + resto; n.cit++;
+      });
+      if (n.cit) citVinculosGravar(lista);
+    }
+  } catch (e) {}
+  return n;
+}
+
+/* O cabeçalho da virada: o SEU (nome, horas, o resto), com a data do edital publicado no lugar do "previsto:". Sem data
+ * no publicado, o "previsto:" fica (continua previsto, como a confirmação avisa). As linhas "# fase 2" e "# discursiva"
+ * vêm da resposta; as de antes só ficam se a resposta não trouxer as suas. */
+function preCabecalhoVirada(txtAntes, txtNovo) {
+  const linhasA = String(txtAntes || "").replace(/\r/g, "").split("\n");
+  const linhasN = preTirarDePara(txtNovo).replace(/\r/g, "").split("\n");
+  const ehExtra = (l) => /^\s*#\s*(?:fase\s*2\s*:|discursiva\b)/i.test(l);
+  const iA = linhasA.findIndex((l) => /^\s*#/.test(l) && !ehExtra(l));
+  const iN = linhasN.findIndex((l) => /^\s*#/.test(l) && !ehExtra(l));
+  const B = lerEdital(linhasN.join("\n"));
+  const prova = B.cfg && B.cfg.prova;
+  let cab = iA >= 0 ? linhasA[iA].trim() : (iN >= 0 ? linhasN[iN].trim() : "");
+  if (cab) {
+    const partes = cab.replace(/^\s*#\s*/, "").split("|").map((x) => x.trim()).filter(Boolean);
+    const fora = prova ? /^(?:prova|previsto|previsao|previsão)\s*:/i : /^prova\s*:/i;
+    const ficam = partes.filter((x, i) => i === 0 || !fora.test(x));
+    if (prova) ficam.splice(1, 0, "prova: " + prova);
+    cab = "# " + ficam.join(" | ");
+  }
+  const extrasN = linhasN.filter(ehExtra);
+  const extrasA = linhasA.filter(ehExtra).filter((l) => !extrasN.some((x) => /fase\s*2/i.test(x) === /fase\s*2/i.test(l)));
+  const corpo = linhasN.filter((l, i) => i !== iN && !ehExtra(l));
+  return [cab].concat(extrasN, extrasA, corpo).filter((l, i) => i > 0 || l).join("\n").replace(/^\n+/, "");
 }

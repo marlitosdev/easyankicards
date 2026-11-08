@@ -2050,15 +2050,15 @@ async function testes() {
         ok(/3 h|3\.0 h/.test(aviso),
            "AH2b a virada não diz QUANTAS horas estão nos tópicos que saem");
 
-        /* os dois órfãos aparecem para remanejo: o estudo e o material */
+        /* (19.101.0) o tópico que sai aparece UMA vez, com o estudo e o material juntos */
         const orf = api.vrOrfaosAtuais();
-        ok(orf.length === 2, `AH3 esperava 2 órfãos, veio ${orf.length}`);
-        ok(orf.some((o) => o.tipo === "estudo") && orf.some((o) => o.tipo === "material"),
-           "AH3b faltou o órfão de estudo ou o de material");
+        ok(orf.length === 1, `AH3 esperava 1 tópico órfão, veio ${orf.length}`);
+        ok(orf[0].tem.estudo && orf[0].tem.material,
+           "AH3b o tópico órfão não diz que tem estudo e material");
 
-        /* escolhe destino só para o material e aplica */
-        orf.find((o) => o.tipo === "material").destino =
-          { disciplina: "Direito Constitucional", topico: "Tratamento de dados" };
+        /* escolhe o destino do tópico e aplica */
+        orf[0].destino = { disciplina: "Direito Constitucional", topico: "Tratamento de dados" };
+        orf[0].tocado = true;
         /* AH3c — o "não" tem de não aplicar. Sem isto a confirmação é
          * decorativa, e aqui ela guarda o texto do edital inteiro. */
         const negando = api.vrAplicar();

@@ -8391,21 +8391,51 @@ function vrAbrir() {
   reg("VIRADA", "ritual aberto", (edAberto() && edAberto().nome) || "");
 }
 
-function vrGerarPrompt() {
-  const txt = t("vr_prompt", { antes: $("editalTexto").value });
-  try { navigator.clipboard.writeText(txt); } catch (e) {}
+/* (19.101.0) O PEDIDO DA VIRADA: o MESMO bloco "FORMATO + REGRAS" do pedido do edital (blocos com mínimo, peso em
+ * questões, ramos, 2ª fase — o pedido antigo da virada tinha só 6 regras e perdia tudo isso), mais duas: os nomes do
+ * previsto valem, e o de-para do que mudou de nome. O previsto vai sem o cabeçalho (a data e as horas são da pessoa). */
+function vrPrompt(textoPrevisto) {
+  const ed = t("ed_prompt");
+  const ini = ed.search(/\n\n(?:FORMATO|FORMAT)\b/);
+  const fim = ed.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+  const miolo = ini >= 0 && fim > ini ? ed.slice(ini + 2, fim) : "";
+  let n = 0;
+  miolo.replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
+  const corpo = typeof preBaseDoEdital === "function" ? preBaseDoEdital(textoPrevisto || "") : String(textoPrevisto || "");
+  return [t("vr_prompt_intro"), "", miolo, t("vr_prompt_nomes", { n: n + 1 }), t("vr_prompt_depara", { n: n + 2 }), "",
+    t("vr_prompt_previsto"), corpo, "", t("vr_prompt_publicado"), "", t("vr_prompt_onde")].join("\n");
+}
+
+/* (19.101.0) "copiado" só quando copiou: antes, o aviso saía mesmo com a área de transferência recusada */
+async function vrGerarPrompt() {
+  const txt = vrPrompt($("editalTexto").value);
+  try {
+    await navigator.clipboard.writeText(txt);
+  } catch (e) {
+    reg("VIRADA", "prompt de conversão: a cópia falhou", String(e && e.message || e));
+    await uiAlert(t("vr_prompt_falhou"));
+    return false;
+  }
   reg("VIRADA", "prompt de conversão gerado", "");
   toast("vr_prompt_copiado");
+  return true;
+}
+
+/* o texto que será aplicado: o cabeçalho é o seu, o resto é o edital publicado, sem as linhas do de-para */
+function vrTextoFinal() {
+  return preCabecalhoVirada($("editalTexto").value, $("vrTexto").value);
 }
 
 function vrConferir() {
-  const novo = $("vrTexto").value;
+  const bruto = $("vrTexto").value;
   const av = $("vrAviso");
   const cx = $("vrOrfaos");
   cx.innerHTML = "";
-  if (!novo.trim()) { av.hidden = true; vrCmp = null; return null; }
+  if (!bruto.trim()) { av.hidden = true; vrCmp = null; return null; }
+  const novo = vrTextoFinal();
 
   const c = preComparar($("editalTexto").value, novo, edProgresso, edDiario);
+  c.depara = preDePara(bruto);
   vrCmp = c;
   av.hidden = false;
   av.innerHTML = "";
@@ -8429,36 +8459,45 @@ function vrConferir() {
   c.discSomem.forEach((d) => linha(t("vr_r_disc_sai", {
     n: d.nome, c: d.confianca || t("vr_sem_confianca"), t: d.topicos }), "vr-perigo"));
   if (!c.temData) linha(t("vr_r_sem_data"), "vr-perigo");
+  if (c.depara.length) linha(t("vr_r_depara", { n: c.depara.length }), "vr-ok");
 
   vrPintarOrfaos(novo, c);
   return c;
 }
 
-/* P5 — cada órfão ganha um destino escolhido POR VOCÊ. Nada é adivinhado:
- * o que a máquina faria de palpite aqui já se mostrou ruim com os cartões
- * (v8.78), e aqui o erro custa mais. */
+/* (19.101.0) UMA LINHA POR TÓPICO QUE SAIU, com tudo o que ele tem — o estudo, o resumo e os cartões, as leis, os
+ * julgados, as questões, os vínculos de citação — e UM destino para tudo. Antes eram duas linhas soltas (estudo e
+ * material), o material listado era o de qualquer edital (até de outro concurso) e as leis e questões ficavam para trás.
+ * O destino vem PRÉ-ESCOLHIDO quando a IA disse para onde o tópico foi (ou o nome é claramente parecido), marcado como
+ * sugestão; o que a pessoa escolheu nunca é trocado pela sugestão. */
 function vrPintarOrfaos(txtPos, c) {
   const cx = $("vrOrfaos");
   const destinos = preDestinos(txtPos);
-  /* GUARDA AS ESCOLHAS ANTES DE REDESENHAR.
-   * A lista é reconstruída a cada conferência — e a conferência roda de
-   * novo dentro do "Aplicar". Sem isto, clicar em Aplicar apagava os
-   * destinos que a pessoa acabara de escolher, e o remanejo não acontecia
-   * nunca. Mesma coisa ao corrigir uma vírgula no texto colado. */
+  /* GUARDA AS ESCOLHAS ANTES DE REDESENHAR (a conferência roda de novo dentro do "Aplicar" e a cada tecla) */
   const escolhido = {};
-  vrOrfaos.forEach((o) => {
-    if (o.destino) escolhido[o.tipo + "|" + o.chave] = o.destino;
-  });
+  vrOrfaos.forEach((o) => { if (o.tocado) escolhido[o.chave] = o.destino || "manter"; });
   vrOrfaos = [];
 
-  c.estudadosQueSomem.forEach((e) => {
-    vrOrfaos.push({ tipo: "estudo", disciplina: e.disciplina, topico: e.topico,
-                    chave: e.chave, destino: escolhido["estudo|" + e.chave] || null });
-  });
-  preMaterialOrfao(matResumos, txtPos).forEach((m) => {
-    vrOrfaos.push({ tipo: "material", disciplina: m.disciplina, topico: m.topico,
-                    chave: m.chave, chars: m.chars, cartoes: m.cartoes,
-                    destino: escolhido["material|" + m.chave] || null });
+  const estudados = new Set(c.estudadosQueSomem.map((e) => e.chave));
+  c.somem.forEach((s) => {
+    const ch = typeof matChave === "function" ? matChave(s.disciplina, s.topico) : s.chave;
+    const r = (typeof matResumos !== "undefined" && matResumos) ? (matResumos[ch]
+      || matResumos[Object.keys(matResumos).find((k) => preNormal(k) === preNormal(ch)) || ""]) : null;
+    const chars = r ? String(r.texto || "").length : 0;
+    const cartoes = r ? String(r.cartoes || "").split("\n").filter(Boolean).length : 0;
+    const lig = preLigacoesDe(ch);
+    const tem = { estudo: estudados.has(s.chave), material: chars > 0 || cartoes > 0, chars, cartoes, ...lig };
+    if (!tem.estudo && !tem.material && !lig.leis && !lig.jur && !lig.qs && !lig.cit) return;
+    const o = { chave: s.chave, matChave: r ? Object.keys(matResumos).find((k) => matResumos[k] === r) : ch,
+      disciplina: s.disciplina, topico: s.topico, tem, destino: null, sugestao: "", tocado: false };
+    if (escolhido[o.chave] !== undefined) {
+      o.tocado = true;
+      o.destino = escolhido[o.chave] === "manter" ? null : escolhido[o.chave];
+    } else {
+      const sg = preSugerirDestino(o, destinos, c.depara);
+      if (sg) { o.destino = { disciplina: sg.destino.disciplina, topico: sg.destino.topico }; o.sugestao = sg.por; }
+    }
+    vrOrfaos.push(o);
   });
   if (!vrOrfaos.length) return;
 
@@ -8466,30 +8505,42 @@ function vrPintarOrfaos(txtPos, c) {
   tit.className = "nd-rot";
   tit.textContent = t("vr_orfaos_tit", { n: vrOrfaos.length });
   cx.append(tit);
+  const nSug = vrOrfaos.filter((o) => o.sugestao).length;
+  if (nSug) {
+    const p = document.createElement("p");
+    p.className = "nota";
+    p.textContent = t("vr_sug_aj", { n: nSug });
+    cx.append(p);
+  }
 
+  const discs = [];
+  destinos.forEach((d) => { if (discs.indexOf(d.disciplina) < 0) discs.push(d.disciplina); });
   vrOrfaos.forEach((o, k) => {
     const li = document.createElement("div");
     li.className = "vr-linha";
+    li.id = "vrOrf_" + k;
     const nome = document.createElement("div");
     const b = document.createElement("span");
     b.className = "vr-o-nome"; b.textContent = o.topico;
-    const tp = document.createElement("span");
-    tp.className = "vr-o-tipo " + (o.tipo === "estudo" ? "vr-t-estudo" : "vr-t-material");
-    tp.textContent = t(o.tipo === "estudo" ? "vr_t_estudo" : "vr_t_material");
-    nome.append(b, tp);
+    nome.append(b);
     const sub = document.createElement("div");
     sub.className = "vr-o-sub";
-    sub.textContent = o.tipo === "material"
-      ? t("vr_o_material", { d: o.disciplina, c: o.chars, n: o.cartoes })
-      : t("vr_o_estudo", { d: o.disciplina });
+    const leva = [];
+    if (o.tem.estudo) leva.push(t("vr_t_estudo"));
+    if (o.tem.chars) leva.push(t("vr_l_resumo", { c: o.tem.chars }));
+    if (o.tem.cartoes) leva.push(t("vr_l_cartoes", { n: o.tem.cartoes }));
+    if (o.tem.leis) leva.push(t("vr_l_leis", { n: o.tem.leis }));
+    if (o.tem.jur) leva.push(t("vr_l_jur", { n: o.tem.jur }));
+    if (o.tem.qs) leva.push(t("vr_l_qs", { n: o.tem.qs }));
+    if (o.tem.cit) leva.push(t("vr_l_cit", { n: o.tem.cit }));
+    sub.textContent = o.disciplina + " · " + leva.join(" · ");
     const esc = document.createElement("div");
     esc.className = "vr-o-esc";
     const sel = document.createElement("select");
+    sel.id = "vrOrfSel_" + k;
     const vazio = document.createElement("option");
     vazio.value = ""; vazio.textContent = t("vr_o_manter");
     sel.append(vazio);
-    const discs = [];
-    destinos.forEach((d) => { if (discs.indexOf(d.disciplina) < 0) discs.push(d.disciplina); });
     discs.forEach((disc) => {
       const g = document.createElement("optgroup");
       g.label = disc;
@@ -8502,12 +8553,20 @@ function vrPintarOrfaos(txtPos, c) {
       sel.append(g);
     });
     if (o.destino) sel.value = o.destino.disciplina + "›" + o.destino.topico;
+    const tag = document.createElement("span");
+    tag.className = "vr-o-sug";
+    tag.id = "vrOrfSug_" + k;
+    tag.textContent = o.sugestao ? t("vr_sug_" + o.sugestao) : "";
+    tag.hidden = !o.sugestao;
     sel.onchange = () => {
+      vrOrfaos[k].tocado = true;
+      vrOrfaos[k].sugestao = "";
+      tag.hidden = true;
       if (!sel.value) { vrOrfaos[k].destino = null; return; }
-      const p = sel.value.split("›");
-      vrOrfaos[k].destino = { disciplina: p[0], topico: p[1] };
+      const i = sel.value.indexOf("›");
+      vrOrfaos[k].destino = { disciplina: sel.value.slice(0, i), topico: sel.value.slice(i + 1) };
     };
-    esc.append(sel);
+    esc.append(sel, tag);
     li.append(nome, sub, esc);
     cx.append(li);
   });
@@ -8528,34 +8587,41 @@ async function vrAplicar() {
 
   const ed = edAberto();
   const antes = $("editalTexto").value;
+  const novo = vrTextoFinal();
   guardarVersao("antes da virada do edital", antes);
 
-  /* 1. carimbar o diário ANTES de mexer no plano: depois disso, mesmo que
-   * o tópico deixe de existir, o registro continua identificável */
-  const carimbados = preCarimbarDiario(edDiario, ed ? ed.nome : "", hojeISO());
+  /* 1. carimbar o diário ANTES de mexer no plano — só os registros DESTE concurso (19.101.0) */
+  const A = lerEdital(antes);
+  const chavesPre = new Set();
+  A.disciplinas.forEach((d) => d.topicos.forEach((tp) => chavesPre.add(preNormal(d.nome) + "›" + preNormal(tp.nome))));
+  const carimbados = preCarimbarDiario(edDiario, ed ? ed.nome : "", hojeISO(),
+    { nomes: [ed ? ed.nome : "", A.cfg.concurso || ""], chaves: chavesPre });
   salvarDiario();
 
-  /* 2. remanejar o que a pessoa apontou */
+  /* 2. remanejar o que a pessoa apontou (ou aceitou da sugestão): o tópico inteiro */
   let mats = 0, estudos = 0;
+  const lig = { leis: 0, jur: 0, qs: 0, cit: 0 };
   remanejar.forEach((o) => {
-    if (o.tipo === "material") {
-      if (preRemanejarMaterial(matResumos, o.chave, o.destino.disciplina,
-            o.destino.topico, matSalvar)) mats++;
-    } else {
-      if (preRemanejarEstudo(o.disciplina, o.topico, o.destino.disciplina,
-            o.destino.topico, ed ? ed.id : "")) estudos++;
+    if (o.tem.material && matResumos[o.matChave]) {
+      if (preRemanejarMaterial(matResumos, o.matChave, o.destino.disciplina, o.destino.topico, matSalvar)) mats++;
     }
+    if (o.tem.estudo) {
+      if (preRemanejarEstudo(o.disciplina, o.topico, o.destino.disciplina, o.destino.topico, ed ? ed.id : "")) estudos++;
+    }
+    const m = preMoverLigacoes(o.matChave || matChave(o.disciplina, o.topico), o.destino.disciplina, o.destino.topico);
+    Object.keys(lig).forEach((k) => { lig[k] += m[k]; });
   });
 
   /* 3. só então o texto novo. O progresso NÃO é apagado: fica guardado
    * pela chave, como na exclusão de disciplina (v8.73). */
-  $("editalTexto").value = preAplicar($("vrTexto").value, c).texto;
+  $("editalTexto").value = preAplicar(novo, c).texto;
 
   reg("VIRADA", "aplicada: " + (ed ? ed.nome : ""),
       c.ficam.length + " mantidos, " + c.somem.length + " saíram ("
       + c.estudadosQueSomem.length + " estudados), " + c.surgem.length + " novos · "
       + carimbados + " registros carimbados como pré-edital · "
-      + mats + " materiais e " + estudos + " estudos remanejados");
+      + mats + " materiais e " + estudos + " estudos remanejados · "
+      + lig.leis + " leis, " + lig.jur + " julgados, " + lig.qs + " questões, " + lig.cit + " citações levadas");
 
   $("dlgVirada").close();
   edRender();
@@ -8564,7 +8630,7 @@ async function vrAplicar() {
   await uiAlert(t("vr_pronto", {
     f: c.ficam.length, n: c.surgem.length,
     h: Math.round((c.minutosPerdidos / 60) * 10) / 10,
-    m: mats + estudos }));
+    m: remanejar.length }) + (lig.leis + lig.jur + lig.qs + lig.cit ? " " + t("vr_pronto_lig", lig) : ""));
 }
 
 function vrIniciar() {
