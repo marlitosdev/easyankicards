@@ -219,6 +219,23 @@ function hubPintarAgenda() {
   tit.textContent = t("hub_agenda_tit");
   cab.append(tit, hubControlesAgenda());
   cx.append(cab);
+  /* (19.99.0) PRÉ-EDITAL NA AGENDA: o previsto diz que é previsto e oferece a virada — o caminho do "saiu o edital" ficava
+   * só no topo do Plano, com o previsto aberto */
+  todosAtivos.filter(edEhPrevisto).slice(0, 3).forEach((e) => {
+    const av = document.createElement("div");
+    av.className = "ed-prev-aviso";
+    av.id = "edPrevAviso_" + e.id;
+    const tx = document.createElement("span");
+    tx.className = "nota ed-prev-aviso-txt";
+    const j = edPrevistoTexto(lerEdital(e.texto || "").cfg.previsto);
+    tx.textContent = t("ed_prev_aviso", { n: e.nome || t("ed_sem_nome"), j: j ? t("ed_prev_janela", { j }) : "" });
+    const bt = document.createElement("button");
+    bt.type = "button"; bt.className = "btn-min"; bt.id = "btnEdPrevVirada_" + e.id;
+    bt.textContent = t("ed_prev_bt"); bt.title = t("ed_prev_bt_tip");
+    bt.onclick = () => hubViradaDe(e.id);
+    av.append(tx, bt);
+    cx.append(av);
+  });
   /* (19.94.0) "quais editais entram nesta agenda" é um ajuste, não uma navegação: os chips ✓ ISS / ✓ SEFAZ moravam no
    * alto da agenda, ao lado de outros três jeitos de escolher edital. Foram para "⚙ Ajustes da agenda"; o seletor do
    * topo da aba é o que escolhe o edital que se olha. */
@@ -2547,7 +2564,72 @@ function hubNovoPintar() {
     criar.className = String(criar.className || "").replace(/\s*btn-pend/g, "") + (faltam.length ? " btn-pend" : "");
     criar.title = est.estado === "prompt" ? t("ed_novo_criar_bloq") : (faltam.length ? t("ed_novo_criar_pend", { f: faltam.map((e) => e.msg).join(" ") }) : "");
   }
+  hubNovoPintarVirada(v);
   return est;
+}
+
+/* (19.99.0) O EDITAL QUE SAIU É DE UM PREVISTO QUE JÁ ESTÁ AQUI?
+ * Quem cria um edital novo quando sai o definitivo fica com dois concursos sem ligação: o estudo do pré-edital não
+ * acompanha. Assim que a pessoa diz que o edital saiu ("tenho a data" ou "saiu, sem data"), a caixa mostra os previstos —
+ * o de nome mais parecido primeiro — com a virada a um toque. Criar outro continua possível: é só seguir. */
+const HUB_VIR_VAZIAS = new Set(["concurso", "edital", "prefeitura", "municipio", "estado", "governo", "cargo", "para", "com", "dos", "das", "del"]);
+function hubNovoPalavras(x) {
+  return new Set(edSemAcento(String(x || "")).toLowerCase().split(/[^a-z0-9]+/).filter((w) => (w.length >= 3 || /\d/.test(w)) && !HUB_VIR_VAZIAS.has(w)));
+}
+function hubNovoPrevistosParecidos(nome) {
+  const a = hubNovoPalavras(nome);
+  return editais.filter(edEhPrevisto).map((e) => {
+    let n = 0;
+    hubNovoPalavras(e.nome + " " + (lerEdital(e.texto || "").cfg.concurso || "")).forEach((w) => { if (a.has(w)) n++; });
+    return { e, n };
+  }).sort((x, y) => y.n - x.n);
+}
+function hubNovoPintarVirada(v) {
+  const box = document.getElementById("edNovoVirada");
+  if (!box) return [];
+  box.innerHTML = "";
+  const val = v || hubNovoValidar();
+  const lista = val.modo === "data" || val.modo === "sem" ? hubNovoPrevistosParecidos(val.nome).slice(0, 3) : [];
+  box.hidden = !lista.length;
+  if (!lista.length) return lista;
+  const p = document.createElement("div");
+  p.className = "nota";
+  p.textContent = t("ed_novo_vir_txt");
+  const bts = document.createElement("div");
+  bts.className = "ednovo-virada-bts";
+  lista.forEach((x, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min" + (i === 0 && x.n > 0 ? " btn-min-ok" : "");
+    b.id = "btnEdNovoVirada_" + x.e.id;
+    b.textContent = t("ed_novo_vir_bt", { n: x.e.nome || t("ed_sem_nome") });
+    if (x.n > 0) b.title = t("ed_novo_vir_parece");
+    b.onclick = () => hubNovoParaVirada(x.e.id);
+    bts.append(b);
+  });
+  box.append(p, bts);
+  return lista;
+}
+/* leva o que foi preenchido na caixa para a virada do previsto: a data digitada e o plano colado */
+function hubNovoParaVirada(id) {
+  const e = editais.find((x) => String(x.id) === String(id));
+  if (!e) return false;
+  const val = (k) => String((document.getElementById(k) || {}).value || "").trim();
+  const v = hubNovoValidar();
+  const plano = val("edNovoPlano");
+  const f2on = !!(document.getElementById("edNovoF2On") || {}).checked && v.modo === "data";
+  const cfg = lerEdital(e.texto || "").cfg || {};
+  const texto = plano || v.prova ? hubNovoTexto({
+    nome: e.nome || cfg.concurso || "", prova: v.modo === "data" ? v.prova : "",
+    horas: cfg.horas || val("edNovoHoras"), f2Nome: f2on ? val("edNovoF2Nome") : "", f2Prova: f2on ? val("edNovoF2Prova") : "",
+    plano,
+  }) : "";
+  try { document.getElementById("dlgEdNovo").close(); } catch (x) {}
+  reg("EDITAL", "novo edital → virada do previsto", e.nome);
+  hubViradaDe(e.id);
+  const ta = document.getElementById("vrTexto");
+  if (ta && texto && plano) { ta.value = texto; if (typeof vrConferir === "function") vrConferir(); }
+  return true;
 }
 
 function hubNovoLimparPlano() {
@@ -2763,6 +2845,29 @@ function hubRender() {
  * depois da agenda inteira. Agora: um seletor só ("Todos os editais" mostra a lista; um edital abre o plano dele) e as
  * ferramentas do edital escolhido ao lado. "Renomear" e "novo edital" moram no "⋯".
  * ===================================================================== */
+/* (19.99.0) o valor do item "＋ Novo edital…" no seletor (nenhum id de edital tem esta forma) */
+const HUB_SEL_NOVO = "__novo__";
+/* o edital ainda é pré-edital (cabeçalho com "previsto:") */
+function edEhPrevisto(e) {
+  try { return lerEdital((e && e.texto) || "").cfg.fase === "pre"; } catch (x) { return false; }
+}
+/* "previsto: 2027-03..2027-06" → "mar/2027 – jun/2027" */
+function edPrevistoTexto(previsto) {
+  const p = String(previsto || "").split("..").map((x) => x.trim()).filter(Boolean);
+  if (!p.length) return "";
+  const meses = String(t("ed_novo_meses")).split(",");
+  const f = (x) => { const m = /^(\d{4})-(\d{2})/.exec(x); return m ? (meses[Number(m[2]) - 1] || m[2]).slice(0, 3) + "/" + m[1] : x; };
+  return p.length > 1 && p[1] !== p[0] ? f(p[0]) + " – " + f(p[1]) : f(p[0]);
+}
+/* (19.99.0) "SAIU O EDITAL?" — abre o previsto e a virada nele */
+function hubViradaDe(id) {
+  if (!id) return false;
+  edAbaAtual = "plano";
+  hubAbrirEdital(id);
+  if (typeof vrAbrir === "function") vrAbrir();
+  return true;
+}
+
 function hubTopoPintar() {
   const sel = document.getElementById("edSel");
   const aberto = edAberto();
@@ -2772,11 +2877,14 @@ function hubTopoPintar() {
     opt("", t("ed_sel_todos", { n: editais.length }));
     const sit = (e) => { try { return edSituacao(e).grupo; } catch (x) { return ""; } };
     editais.filter((e) => sit(e) !== "encerrado").concat(editais.filter((e) => sit(e) === "encerrado")).forEach((e) => {
-      opt(e.id, (e.nome || t("ed_sem_nome")) + (sit(e) === "encerrado" ? " " + t("ed_sel_encerrado") : ""));
+      opt(e.id, (e.nome || t("ed_sem_nome")) + (sit(e) === "encerrado" ? " " + t("ed_sel_encerrado") : edEhPrevisto(e) ? " " + t("ed_sel_previsto") : ""));
     });
+    /* (19.99.0) o último item do seletor cria um edital: é onde se procura quando se quer "outro edital" */
+    opt(HUB_SEL_NOVO, t("ed_sel_novo_opt"));
     sel.value = aberto ? aberto.id : "";
     sel.onchange = () => {
       const v = sel.value;
+      if (v === HUB_SEL_NOVO) { sel.value = aberto ? aberto.id : ""; hubNovo(); return; }
       reg("EDITAL", "seletor do topo", v || "todos");
       /* (19.95.0) escolher um edital na Agenda não mudaria nada à vista (a agenda é de todos): vai para o Plano dele */
       if (edAbaAtual === "agenda" || (!v && edAbaAtual === "diag")) edAbaAtual = "plano";
@@ -2872,7 +2980,6 @@ function hubTopoMenuItens() {
   const aberto = edAberto();
   const itens = [];
   if (aberto) itens.push({ id: "btnEdRenomear", rot: t("hub_renomear"), faz: () => hubRenomear() });
-  itens.push({ id: "btnEdTopoNovo", rot: t("hub_novo"), faz: () => hubNovo() });
   if (aberto) itens.push({ id: "btnEdTopoTodos", rot: t("ed_sel_ver_todos"), faz: () => hubVoltar() });
   return itens;
 }
@@ -2891,6 +2998,8 @@ function hubIniciar() {
   if (v) v.onclick = hubVoltar;
   const r = document.getElementById("btnEdRenomear");
   if (r) r.onclick = hubRenomear;
+  const nt = document.getElementById("btnEdNovoTopo");
+  if (nt) nt.onclick = () => hubNovo();
   const tm = document.getElementById("btnEdTopoMais");
   if (tm) tm.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (typeof edMenuAbrir === "function") edMenuAbrir(tm, document.getElementById("edTopoMenu"), hubTopoMenuItens); };
   const bp = document.getElementById("btnBancPontua");

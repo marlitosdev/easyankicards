@@ -7224,6 +7224,12 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .edsel-ferr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .edsel-ferr[hidden]{display:none}
 .edsel-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
+.edsel-novo{white-space:nowrap}
+.ednovo-virada{margin:8px 0;padding:10px 12px;border:1px solid var(--borda);border-left:4px solid #2a7;border-radius:8px;background:rgba(40,170,120,.07)}
+.ednovo-virada[hidden]{display:none}
+.ednovo-virada-bts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ed-prev-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 8px;padding:8px 10px;border:1px dashed #8a8;border-radius:8px}
+.ed-prev-aviso-txt{flex:1 1 240px;min-width:0}
 .edsel-mais{position:relative}
 /* o "⋯" (da linha e do topo): o mesmo desenho do menu da janela da disciplina */
 .ed-mais-bt{font-size:18px;line-height:1;padding:2px 12px;min-width:40px}
@@ -7710,6 +7716,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   <div class="edsel" id="edTopo">
     <label class="edsel-sel" id="edTopoSel"><span data-i18n="ed_sel_rot"></span>
       <select id="edSel"></select></label>
+    <!-- (19.99.0) "NOVO EDITAL" À VISTA: morava só no ⋯ do topo e na lista "Seus editais" (aba Plano, sem edital
+         escolhido) — da Agenda, onde se passa o dia, não havia caminho visível. -->
+    <button type="button" class="btn-min btn-min-ok edsel-novo" id="btnEdNovoTopo" data-i18n="ed_sel_novo_bt" data-i18n-title="ed_sel_novo_tip"></button>
     <div class="edsel-ferr" id="edTopoFerr" hidden>
       <button class="btn-min" id="btnEdDominio" data-i18n="dom_btn"></button>
       <!-- (v18.88.0) o termômetro do domínio deste edital: o peso por nível, num relance; toque abre o Domínio -->
@@ -9232,6 +9241,9 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
     </div>
     <p class="nota ednovo-erro" id="edNovoDataErro" role="alert" hidden></p>
   </fieldset>
+  <!-- (19.99.0) O EDITAL QUE SAIU PODE SER O DE UM PRÉ-EDITAL QUE JÁ ESTÁ AQUI: criar outro separaria o estudo feito
+       antes. Ao dizer que o edital saiu, a caixa oferece a virada nos previstos (o mais parecido com o nome primeiro). -->
+  <div class="ednovo-virada" id="edNovoVirada" role="status" hidden></div>
   <div class="ednovo-linha ednovo-horas">
     <label class="nd-rot" for="edNovoHoras"><span data-i18n="ed_novo_horas"></span> <span class="nota" data-i18n="ed_novo_horas_dica"></span></label>
     <input type="number" id="edNovoHoras" class="mat-busca" min="1" max="80" value="20">

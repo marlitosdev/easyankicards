@@ -99,8 +99,8 @@ async function testes() {
     api.hubVoltar();
     const sel = api.$("edSel");
     const ops = Array.from(sel.children || []);
-    ok(ops.length === 3 && ops[0].value === "" && /Todos os editais \(2\)/.test(tx(ops[0])) && sel.value === "" && api.$("edTopoFerr").hidden === true && !api.$("edHub").hidden,
-      "SR9 o seletor: 'Todos os editais (2)' e um por edital; em 'todos', a lista aparece e as ferramentas do edital não: " + ops.map(tx).join(" | "));
+    ok(ops.length === 4 && ops[0].value === "" && /Todos os editais \(2\)/.test(tx(ops[0])) && ops[3].value === "__novo__" && sel.value === "" && api.$("edTopoFerr").hidden === true && !api.$("edHub").hidden,
+      "SR9 o seletor: 'Todos os editais (2)', um por edital e '＋ Novo edital…' no fim; em 'todos', a lista aparece e as ferramentas do edital não: " + ops.map(tx).join(" | "));
     sel.value = e2.id; sel.onchange();
     ok(api.edAberto() && api.edAberto().id === e2.id && api.$("edTopoFerr").hidden === false && !api.$("edBancada").hidden && api.$("edSel").value === e2.id,
       "SR10 escolher um edital abre o plano dele e mostra Domínio, Horas e Verticalizado no topo");
@@ -109,7 +109,7 @@ async function testes() {
     const tm = api.$("btnEdTopoMais");
     tm.onclick(ev);
     const its = de(api.$("edTopoMenu"), "ed-menu-item");
-    ok(its.some((b) => b.id === "btnEdRenomear") && its.some((b) => b.id === "btnEdTopoNovo") && api.$("edTopoMenu").hidden === false, "SR11 o '⋯' do topo tem renomear e novo edital: " + its.map(tx).join(" | "));
+    ok(its.some((b) => b.id === "btnEdRenomear") && !its.some((b) => b.id === "btnEdTopoNovo") && api.$("edTopoMenu").hidden === false, "SR11 o '⋯' do topo tem renomear (o novo edital virou botão à vista): " + its.map(tx).join(" | "));
     api.edMenuFechar();
     /* ---- SR12: a agenda ---- */
     api.hubVoltar();
