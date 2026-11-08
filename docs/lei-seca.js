@@ -1188,6 +1188,9 @@ const LEI_RE_INVISIVEIS = /[­​-‍⁠﻿]/g;
  * "1. os incisos I e II do caput; e" em quatro alíneas) e não é o cabeçalho do PDF: tomá-la por cabeçalho
  * APAGAVA texto de lei por padrão. Cabeçalho de página não começa com numeração nem termina assim. */
 const LEI_RE_ITEM_NUMERADO = /^\s*\d{1,3}\s*[.)]\s+\S/;
+/* (19.106.0) A LINHA DA PENA ("Pena - reclusão, de 4 (quatro) a 8 (oito) anos, e multa."): uma lei penal repete a mesma
+ * pena em vários crimes, espaçada como um rodapé — e nunca é cabeçalho de página. */
+const LEI_RE_LINHA_PENA = /^\s*Penas?\s*[-–—:]\s*\S/i;
 function leiLinhaDeConteudo(linha) {
   const s = String(linha || "").trim();
   return LEI_RE_ITEM_NUMERADO.test(s) || /[;:]\s*$/.test(s) || /[;,]\s*(?:e|ou)\s*$/i.test(s);
@@ -1741,6 +1744,7 @@ function leiPreprocessar(texto, opc) {
     if (aceitos[k]) return;
     const todas = ondeEsta[k];
     if (leiLinhaEstrutural(k) || leiLinhaDeConteudo(k)) return;
+    if (LEI_RE_LINHA_PENA.test(k)) return;                /* a pena de um crime, repetida em vários */
     if (/^[\d\s.,;:()\-–—/%R$]+$/.test(k)) return;       /* linha de tabela, só números */
     if (leiPedacoDeFrase(k)) return;
     /* o NOME de uma divisão: vem logo depois de "CAPÍTULO II"/"SEÇÃO I" SOZINHO (sem o nome na mesma linha) — mesmo que
@@ -3671,7 +3675,11 @@ function leiPareceAlteradora(texto) {
  * "colada" na frase de cima. Aqui se acha CADA REGIÃO citada (da linha que abre com aspas até a que fecha) e o
  * artigo que altera e a lei-alvo dele. Só regiões FECHADAS contam: uma aspa que nunca fecha não engole o texto.
  * ===================================================================== */
-const LEI_RE_ABRE_CITACAO = /^\s*[“"«]\s*Art(?:\.|igo)?\s*\d/i;
+/* (19.106.0) o trecho citado pode abrir também com uma DIVISÃO: o Art. 178 da Lei 14.133 "passa a vigorar acrescido do
+ * seguinte Capítulo II-B" no Código Penal e a citação abre com “CAPÍTULO II-B. Sem reconhecê-la, os Arts. 337-E a 337-P
+ * viravam artigos da própria lei (a numeração "voltava" do 337-P para o 179) e as penas iguais deles, cabeçalho de página.
+ * Só com a ASPA na frente: "CAPÍTULO II" sem aspas é divisão da própria lei. */
+const LEI_RE_ABRE_CITACAO = /^\s*[“"«]\s*(?:Art(?:\.|igo)?\s*\d|(?:CAP[ÍI]TULO|T[ÍI]TULO|LIVRO|PARTE|SUBSE[ÇC][ÃA]O|SE[ÇC][ÃA]O)\s+[IVXLCDM\d]+\b)/i;
 /* fecha com aspas, a marca (NR)/(AC)/(VETADO) e — no Planalto — notas editoriais depois dela: "” (NR)   (Vide Lei nº 227)" */
 const LEI_RE_NOTA_DEPOIS = "(?:\\s*\\((?:Vide|Vig[êe]ncia|Regulamento|Produ[çc][ãa]o|Reda[çc][ãa]o|Inclu[ií]d|Revogad)[^)]*\\))*";
 const LEI_RE_FECHA_CITACAO = new RegExp("[”\"»]\\s*(?:\\((?:NR|AC|VETADO)\\))?" + LEI_RE_NOTA_DEPOIS + "\\s*\\.?\\s*$");
