@@ -652,7 +652,11 @@ function lerEdital(raw) {
       /* terceiro campo da disciplina: a confiança, usada só no pré-edital.
        * "@ Auditoria :: 5 :: provavel" */
       const conf = (typeof preConfiancaDe === "function") ? preConfiancaDe(p[2]) : "";
+      /* (19.100.0) "boato · na agenda": o boato que você mandou para a agenda; o resto do campo é o motivo da marca */
+      const conf3 = (typeof preNormal === "function") ? preNormal(p[2] || "") : String(p[2] || "").toLowerCase();
       atual = { nome: p[0], peso, linha: n, topicos: [], confianca: conf,
+                naAgenda: conf === "boato" && /\bna agenda\b/.test(conf3),
+                confNota: conf ? String(p[2] || "").replace(/^\s*(?:confirmada|prov[aá]vel|boato)\b/i, "").replace(/[·,;]?\s*na agenda\b/i, "").replace(/^[\s—–\-·:,;]+/, "").trim() : "",
                 escolha: mesc ? mesc[1].trim() : "",
                 /* o número real do edital, quando ele foi escrito */
                 abs: abs || null, unidade: unidade || "",
@@ -726,6 +730,12 @@ function lerEdital(raw) {
    * à maior disciplina da prova, que é a régua com significado. */
   /* AS OPTATIVAS ("escolha 1 de N"): a não escolhida fica no texto, mas FORA do plano e das contas (ver edAplicarEscolhas) */
   const optativas = edAplicarEscolhas(disciplinas, cfg, achados, blocos);
+  /* (19.100.0) NO PRÉ-EDITAL, O BOATO FICA FORA DO PLANO até você incluir ("boato · na agenda"): estudar por especulação é
+   * o desperdício mais caro de um concurso. A regra (preNaAgenda) existia e não era usada — o boato ganhava horas como as
+   * outras. Mesmo mecanismo da optativa não escolhida: fica no texto, sai do plano, da fatia e das contas. */
+  if (cfg.fase === "pre" && typeof preNaAgenda === "function") {
+    disciplinas.forEach((d) => { if (!d.inativa && !preNaAgenda(d)) { d.inativa = true; d.foraBoato = true; } });
+  }
   const absAll = disciplinas.filter((d) => d.abs > 0 && !d.inativa);
   if (absAll.length) {
     const maxAbs = absAll.reduce((m, d) => Math.max(m, d.abs), 0) || 1;
@@ -1284,7 +1294,13 @@ function edFaseAtual(cfg, hoje) {
            nome2: f2 ? (f2.nome || "2ª fase") : "" };
 }
 
+/* (19.100.0) o plano devolve `foraBoato`: as disciplinas do pré-edital que estão fora por serem boato (ver lerEdital) */
 function montarPlano(r, opcoes) {
+  const pl = montarPlanoBase(r, opcoes);
+  if (pl && typeof pl === "object") pl.foraBoato = ((r && r.disciplinas) || []).filter((d) => d.foraBoato).map((d) => d.nome);
+  return pl;
+}
+function montarPlanoBase(r, opcoes) {
   const o = opcoes || {};
   const cfg = (r && r.cfg) || {};
   /* A FASE MANDA NO PRAZO E NAS HORAS.
@@ -3075,7 +3091,7 @@ function diagnosticoPlano(r, plano) {
    * onde o certo era 19. Padrão curto demais acha o que não existe. */
   const RE_MOTIVO_VAZIO = /n[ãa]o\s+(localizei|sei|encontrei|consta)|sem\s+informa[çc]|desconhec|^n\/a$|not\s+found/i;
   const genericos = itens.filter((i) => i.motivo && RE_MOTIVO_VAZIO.test(i.motivo));
-  if (genericos.length >= itens.length * 0.3)
+  if (genericos.length && genericos.length >= itens.length * 0.3)
     add("motivo_generico", false, genericos.length + " de " + itens.length
       + ' tópicos repetem uma justificativa genérica ("' + genericos[0].motivo.slice(0, 40)
       + '..."). O campo está preenchido, mas não informa nada — e isso desliga o '

@@ -34,7 +34,63 @@ function preConfiancaDe(txt) {
  * exceções fica no próprio texto, para não haver estado escondido. */
 function preNaAgenda(disc, forcadas) {
   if (disc.confianca !== "boato") return true;
+  /* (19.100.0) "@ X :: 3 :: boato · na agenda" — a inclusão escrita na própria linha */
+  if (disc.naAgenda) return true;
   return (forcadas || []).indexOf(preNormal(disc.nome)) >= 0;
+}
+
+/* ------------------------------------------------------------------
+ * (19.100.0) A MARCA NA LINHA DA DISCIPLINA
+ * "@ Contabilidade :: 5 :: confirmada — mantida no projeto básico". Trocar a marca reescreve SÓ o terceiro campo,
+ * guardando o motivo e o que vem depois ("| minimo:", "| escolha:"). A inclusão de um boato na agenda também é escrita
+ * ali ("boato · na agenda"): estado nenhum fora do texto.
+ * ------------------------------------------------------------------ */
+const PRE_ROTULO = { confirmada: "confirmada", provavel: "provável", boato: "boato" };
+function preConfLinha(linha, conf, naAgenda, notaPadrao) {
+  const m = /^(\s*@\s*)(.*)$/.exec(String(linha || ""));
+  if (!m) return linha;
+  let corpo = m[2], suf = "";
+  const ip = corpo.search(/\s*\|\s*(?:m[íi]nimo|escolha)\s*:/i);
+  if (ip >= 0) { suf = corpo.slice(ip); corpo = corpo.slice(0, ip); }
+  const p = corpo.split("::").map((x) => x.trim());
+  const velho = p[2] || "";
+  let nota = velho.replace(/^\s*(?:confirmada|prov[aá]vel|boato)\b/i, "").replace(/[·,;]?\s*na agenda\b/i, "")
+    .replace(/^[\s—–\-·:,;]+/, "").trim();
+  if (!preConfiancaDe(velho) && velho && !nota) nota = velho;
+  if (!nota && notaPadrao) nota = notaPadrao;
+  const c = PRE_CONFIANCA.indexOf(conf) >= 0 ? conf : "";
+  const campo3 = c ? PRE_ROTULO[c] + (c === "boato" && naAgenda ? " · na agenda" : "") + (nota ? " — " + nota : "") : "";
+  const partes = [p[0], p[1] || "3"];
+  if (campo3 || p.length > 3) partes.push(campo3);
+  return m[1] + partes.concat(p.slice(3)).join(" :: ") + suf;
+}
+function preNomeDaLinha(linha) {
+  const m = /^\s*@\s*(.*)$/.exec(String(linha || ""));
+  if (!m) return null;
+  return m[1].split(/\s*\|\s*(?:m[íi]nimo|escolha)\s*:/i)[0].split("::")[0].trim();
+}
+/* troca a marca de UMA disciplina no texto do plano; devolve o texto (igual, se não achou) */
+function preConfTrocar(texto, nomeDisc, conf, naAgenda) {
+  const alvo = preNormal(nomeDisc);
+  let mudou = false;
+  const out = String(texto || "").split("\n").map((l) => {
+    const nm = preNomeDaLinha(l);
+    if (nm === null || preNormal(nm) !== alvo || mudou) return l;
+    mudou = true;
+    return preConfLinha(l, conf, naAgenda);
+  }).join("\n");
+  return mudou ? out : String(texto || "");
+}
+/* O PLANO DE UM EDITAL DO APP COMO BASE DO PRÉ-EDITAL: as disciplinas e os tópicos (com blocos, ramos e a discursiva),
+ * sem o cabeçalho e sem a data da 2ª fase — são do concurso antigo. Com `nota`, a disciplina sem marca vira "provável"
+ * (estava no edital anterior, sem confirmação nova). */
+function preBaseDoEdital(texto, nota) {
+  /* fica só a linha "# discursiva" (o formato da prova); cabeçalho e "# fase 2" (datas do concurso antigo) saem */
+  return String(texto || "").replace(/\r/g, "").split("\n").filter((l) => !/^\s*#/.test(l) || /^\s*#\s*discursiva\b/i.test(l)).map((l) => {
+    if (nota === undefined || nota === null || preNomeDaLinha(l) === null) return l;
+    const p = (l.split(/\s*\|\s*(?:m[íi]nimo|escolha)\s*:/i)[0]).split("::");
+    return preConfiancaDe(p[2] || "") ? l : preConfLinha(l, "provavel", false, nota);
+  }).join("\n").trim();
 }
 
 /* ------------------------------------------------------------------

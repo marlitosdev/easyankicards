@@ -943,7 +943,7 @@ function rodar(opc) {
     matSalvarDicasPendentes,
     matLogAlternarHoje, matLogDoDia, matLogFiltrado,
     matLerColagemFormatada, matHtmlParaMarcas, qsUiCaixaDica,
-    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false), edLinhaPainelTeste: (i) => edLinhaTopico(i, true), edUltimaVez, edUltimaVezTexto, edRamosNaLinhaTeste: (i) => edRamosNaLinha(i), edMenuAbrir, edMenuFechar, edMenuAtualTeste: () => edMenuAtual, edItensDaLinha, edTemTexto, edPorQueAgora, hubTopoPintar, hubTopoMenuItens, hubViradaDe, edEhPrevisto, edPrevistoTexto, hubNovoPintarVirada, hubNovoParaVirada, hubNovoPrevistosParecidos, pasEdIndice, pasEdMotivo, pasEdAlternar, pasEditaisDoItem, pasEdManualLer, pasVerEncerradosForcar: (v) => { pasVerEncerrados = v; }, citLigacoesSugeridas, citLigarSugeridas, qsVincPintarLigar, qsVincCtxForcar: (v) => { qsVincCtx = v; }, edAbaDefinir, edAbaAplicar, edAbasTecla, edAbaAtualTeste: () => edAbaAtual, edAbaForcar: (v) => { edAbaAtual = v; }, edDiagRiscosAtual: () => edDiagRiscos,
+    edLinhaAgendaTeste: (i) => edLinhaTopico(i, false), edLinhaPainelTeste: (i) => edLinhaTopico(i, true), edUltimaVez, edUltimaVezTexto, edRamosNaLinhaTeste: (i) => edRamosNaLinha(i), edMenuAbrir, edMenuFechar, edMenuAtualTeste: () => edMenuAtual, edItensDaLinha, edTemTexto, edPorQueAgora, hubTopoPintar, hubTopoMenuItens, hubViradaDe, edEhPrevisto, edPrevistoTexto, edPromptPreEdital, hubNovoUsarBase, hubNovoCopiarPrompt, hubNovoPreencherBase, edPreConfPintar, edPreConfMudar, hubNovoPintarVirada, hubNovoParaVirada, hubNovoPrevistosParecidos, pasEdIndice, pasEdMotivo, pasEdAlternar, pasEditaisDoItem, pasEdManualLer, pasVerEncerradosForcar: (v) => { pasVerEncerrados = v; }, citLigacoesSugeridas, citLigarSugeridas, qsVincPintarLigar, qsVincCtxForcar: (v) => { qsVincCtx = v; }, edAbaDefinir, edAbaAplicar, edAbasTecla, edAbaAtualTeste: () => edAbaAtual, edAbaForcar: (v) => { edAbaAtual = v; }, edDiagRiscosAtual: () => edDiagRiscos,
     edFatorReal, minutosDoTopico, minutosDeRevisao, edHistoricoDoTopico, edHistoricoTexto,
     matAlternarProva, matProvaBlocos, matProvaEstaLigada, matProvaResponder,
     matPintarProvaBotao, qsNoTexto, qsDeBlocos,
@@ -1189,7 +1189,7 @@ function rodar(opc) {
     /* o seletor de pasta do navegador, que so existe em alguns */
     porSeletorDePasta: (f) => { window.showSaveFilePicker = f; },
  preComparar, preCarimbarDiario, preOrfaos,
-    preAplicar, preConfiancaDe, preNaAgenda,
+    preAplicar, preConfiancaDe, preNaAgenda, preConfLinha, preConfTrocar, preBaseDoEdital, preNomeDaLinha,
     vrIniciar, vrAbrir, vrConferir, vrAplicar, vrAtualizarBotao, vrEhPrevisto,
     vrOrfaosAtuais: () => vrOrfaos,
     preMaterialOrfao, preDestinos, preRemanejarMaterial, preRemanejarEstudo,

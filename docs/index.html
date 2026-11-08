@@ -7225,6 +7225,17 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .edsel-ferr[hidden]{display:none}
 .edsel-fim{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
 .edsel-novo{white-space:nowrap}
+.ednovo-pre-base{margin-top:8px}
+.ednovo-pre-base-lin{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ednovo-pre-base-lin select{flex:1 1 220px;min-width:0}
+.ed-pconf{margin:10px 0;padding:10px 12px;border:1px dashed var(--borda);border-radius:8px}
+.ed-pconf[hidden]{display:none}
+.ed-pconf-lista{display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow:auto}
+.ed-pconf-lin{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:3px 0;border-bottom:1px solid var(--borda)}
+.ed-pconf-nome{flex:1 1 130px;min-width:0;font-weight:600}
+.ed-pconf-sel{flex:0 0 auto}
+.ed-pconf-fora .ed-pconf-nome{opacity:.6;text-decoration:line-through}
+.ed-pconf-nota{flex-basis:100%}
 .ednovo-virada{margin:8px 0;padding:10px 12px;border:1px solid var(--borda);border-left:4px solid #2a7;border-radius:8px;background:rgba(40,170,120,.07)}
 .ednovo-virada[hidden]{display:none}
 .ednovo-virada-bts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -7807,6 +7818,8 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <h2 class="bancada-nome" data-i18n="ed_bancada"></h2>
       </div>
       <div class="ed-banc-resumo" id="edBancResumo"></div>
+      <!-- (19.100.0) pré-edital: a confiança de cada disciplina (o boato fica fora da agenda até você incluir) -->
+      <div class="ed-pconf" id="edPreConf" hidden></div>
       <!-- (19.94.0) UMA FILEIRA DE AÇÕES, NOS DOIS ESTADOS. Recolhida, a bancada tinha "⚖ Pontuação e cortes", "Revisar
            com a IA" e "✏ texto do plano"; aberta, outro "Revisar com a IA" e um "expandir/recolher" que fazia o mesmo que
            "✏ texto do plano". E "Pontuação e cortes" ainda aparecia de novo em "Riscos de corte". Agora cada ação existe
@@ -9238,6 +9251,16 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
         <select id="edNovoPreAteA" class="mat-busca"></select>
       </div>
       <p class="nota" id="edNovoPreLeitura"></p>
+      <!-- (19.100.0) A BASE DO PRÉ-EDITAL: o edital anterior quase sempre já está no app (a prova passada). Escolhido, ele vai
+           dentro do pedido à IA — ou entra direto, marcado "provável", sem IA. -->
+      <div class="ednovo-pre-base">
+        <label class="nd-rot" for="edNovoPreBase" data-i18n="ed_novo_base_rot"></label>
+        <div class="ednovo-pre-base-lin">
+          <select id="edNovoPreBase" class="mat-busca"></select>
+          <button type="button" class="btn-min" id="btnEdNovoPreUsar" data-i18n="ed_novo_base_usar" data-i18n-title="ed_novo_base_usar_tip"></button>
+        </div>
+        <p class="nota" id="edNovoPreBaseMsg" role="status"></p>
+      </div>
     </div>
     <p class="nota ednovo-erro" id="edNovoDataErro" role="alert" hidden></p>
   </fieldset>
@@ -9273,7 +9296,7 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
        Antes, o botão do prompt ficava no rodapé, embaixo do campo onde a resposta é colada, e o aviso "copiado"
        aparecia no mesmo lugar da contagem — a pessoa não sabia se já tinha copiado nem o que fazer depois. -->
   <div class="ednovo-passo" id="edNovoPasso1">
-    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span data-i18n="ed_novo_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
+    <div class="ednovo-passo-tit"><span class="ednovo-passo-n">1</span> <span id="edNovoPasso1Txt" data-i18n="ed_novo_passo1"></span> <span class="ednovo-tag tag-vai" data-i18n="ed_novo_tag1"></span></div>
     <label class="nota ednovo-ramos"><input type="checkbox" id="edNovoPedirRamos"> <span data-i18n="ed_novo_ramos"></span></label>
     <button class="btn-min" id="btnEdNovoPrompt" data-i18n="ed_prompt_btn"
       title="Copia o prompt para a IA montar a lista de disciplinas e tópicos a partir do edital. Depois, cole a resposta no passo 2."></button>

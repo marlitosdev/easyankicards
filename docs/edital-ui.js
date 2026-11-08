@@ -5512,10 +5512,17 @@ function edMudancasFechar(sim) {
 /* Simulador de horas: a decisão é uma troca, e troca se decide vendo os dois
  * lados ao mesmo tempo. Antes o campo mudava o número e o efeito só aparecia
  * se o usuário fosse ler a tabela inteira. */
+/* (19.100.0) O PRAZO DO PRÉ-EDITAL: sem a data da prova, vale a borda mais próxima da janela prevista (a mesma conta da
+ * agenda). A bancada dizia "Informe a data da prova" para um concurso que, por definição, ainda não tem data. */
+function edProvaDaBancada(r) {
+  const v = $("edProva").value;
+  if (v) return v;
+  return r && r.cfg && r.cfg.fase === "pre" && typeof edDataPlanejada === "function" ? edDataPlanejada(r.cfg) : v;
+}
 function edSimular() {
   const r = lerEdital($("editalTexto").value);
   const horas = Number($("edHorasSlider").value) || 1;
-  const p = montarPlano(r, { horas, prova: $("edProva").value, feitos: edProgresso });
+  const p = montarPlano(r, { horas, prova: edProvaDaBancada(r), feitos: edProgresso });
   const el = $("edSimTxt");
   el.innerHTML = "";
   if (!p.total) { el.textContent = ""; return; }
@@ -5550,12 +5557,13 @@ function edRender() {
 
   const plano = montarPlano(r, {
     horas: Number($("edHoras").value) || r.cfg.horas,
-    prova: $("edProva").value, feitos: edProgresso,
+    prova: edProvaDaBancada(r), feitos: edProgresso,
     /* (19.48.0) a mesma ordem da agenda: o modo de estudo escolhido lá */
     modos: typeof hubModosLer === "function" ? hubModosLer() : undefined,
   });
   const itens = plano.itens;
-  const s = semanasAte($("edProva").value);
+  const s = semanasAte(edProvaDaBancada(r));
+  const prevJ = !$("edProva").value && r.cfg.fase === "pre" && typeof edPrevistoTexto === "function" ? edPrevistoTexto(r.cfg.previsto) : "";
   /* PROVA QUE JÁ FOI NÃO TEM "SEMANAS RESTANTES".
    * Dizia "0 semanas até a prova (−6 dias)" — dois números errados na
    * mesma linha. Agora diz o que é: já foi, há quanto tempo, e que o
@@ -5567,7 +5575,7 @@ function edRender() {
     if (bRestam.classList) bRestam.classList.add("ed-passou");
   } else {
     bRestam.textContent = s
-      ? t("ed_restam", { s: s.semanas, d: s.dias }) : t("ed_sem_data");
+      ? (prevJ ? t("ed_restam_pre", { s: s.semanas, d: s.dias, j: prevJ }) : t("ed_restam", { s: s.semanas, d: s.dias })) : t("ed_sem_data");
     if (bRestam.classList) bRestam.classList.remove("ed-passou");
     /* CONCURSO DE DUAS DATAS: dizer as duas.
      * O prazo mostrado é o da PRÓXIMA fase; a outra não pode ficar

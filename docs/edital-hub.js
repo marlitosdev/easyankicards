@@ -227,8 +227,12 @@ function hubPintarAgenda() {
     av.id = "edPrevAviso_" + e.id;
     const tx = document.createElement("span");
     tx.className = "nota ed-prev-aviso-txt";
-    const j = edPrevistoTexto(lerEdital(e.texto || "").cfg.previsto);
-    tx.textContent = t("ed_prev_aviso", { n: e.nome || t("ed_sem_nome"), j: j ? t("ed_prev_janela", { j }) : "" });
+    const rp = lerEdital(e.texto || "");
+    const j = edPrevistoTexto(rp.cfg.previsto);
+    /* (19.100.0) o que ficou fora por ser boato, dito aqui: some da lista sem ninguém saber por quê */
+    const foraB = (rp.disciplinas || []).filter((d) => d.foraBoato).map((d) => d.nome);
+    tx.textContent = t("ed_prev_aviso", { n: e.nome || t("ed_sem_nome"), j: j ? t("ed_prev_janela", { j }) : "" })
+      + (foraB.length ? " " + t("ed_prev_fora", { n: foraB.length, l: foraB.slice(0, 3).join(", ") }) : "");
     const bt = document.createElement("button");
     bt.type = "button"; bt.className = "btn-min"; bt.id = "btnEdPrevVirada_" + e.id;
     bt.textContent = t("ed_prev_bt"); bt.title = t("ed_prev_bt_tip");
@@ -2227,6 +2231,7 @@ function hubNovo() {
   v("edNovoProva", ""); v("edNovoHoras", "20");
   ["edNovoModoData", "edNovoModoSem", "edNovoModoPre"].forEach((id) => { const r = document.getElementById(id); if (r) r.checked = false; });
   hubNovoPreencherSeletores();
+  hubNovoPreencherBase();
   hubNovoTocado = false;
   v("edNovoF2Nome", ""); v("edNovoF2Prova", ""); v("edNovoPlano", "");
   const f2 = document.getElementById("edNovoF2cx"), f2on = document.getElementById("edNovoF2On");
@@ -2565,6 +2570,7 @@ function hubNovoPintar() {
     criar.title = est.estado === "prompt" ? t("ed_novo_criar_bloq") : (faltam.length ? t("ed_novo_criar_pend", { f: faltam.map((e) => e.msg).join(" ") }) : "");
   }
   hubNovoPintarVirada(v);
+  hubNovoPintarPre(v);
   return est;
 }
 
@@ -2629,6 +2635,175 @@ function hubNovoParaVirada(id) {
   hubViradaDe(e.id);
   const ta = document.getElementById("vrTexto");
   if (ta && texto && plano) { ta.value = texto; if (typeof vrConferir === "function") vrConferir(); }
+  return true;
+}
+
+/* =====================================================================
+ * (19.100.0) PRÉ-EDITAL COM IA — o plano esperado a partir do edital anterior
+ *
+ * No modo pré-edital, o passo 1 pedia à IA para "organizar o edital" — que ainda não existe. O pedido agora é outro: montar
+ * o plano ESPERADO a partir do edital anterior (o do mesmo concurso, ou um edital do app escolhido como base) e do que já
+ * se sabe hoje (notícias, projeto básico), com a confiança de cada disciplina no terceiro campo:
+ *   confirmada — estava no anterior e há confirmação nova;  provável — estava no anterior;  boato — só especulação.
+ * O formato e as regras são os MESMOS do pedido do edital (o miolo do ed_prompt), para os dois não se separarem.
+ * ===================================================================== */
+function edPromptPreEdital(comRamos, base) {
+  const ed = t("ed_prompt");
+  const ini = ed.search(/\n\n(?:FORMATO|FORMAT)\b/);
+  const fim = ed.search(/\n\n(?:EXEMPLO DE SAÍDA|SYLLABUS|EDITAL):/);
+  let miolo = ini >= 0 && fim > ini ? ed.slice(ini + 2, fim) : "";
+  let n = 0;
+  miolo.replace(/(?:^|\n)(\d+)\./g, (m, d) => { n = Math.max(n, Number(d)); return m; });
+  if (comRamos) { miolo += "\n" + t("ed_prompt_ramos", { n: n + 1 }); n++; }
+  return [t("ed_pre_prompt_intro"), "", miolo, t("ed_pre_prompt_regra", { n: n + 1 }), "",
+    t("ed_pre_prompt_exemplo"), "", t("ed_pre_prompt_base"), String(base || "").trim() || t("ed_pre_prompt_base_vazia"), "",
+    t("ed_pre_prompt_hoje"), "", t("ed_prompt_onde")].join("\n");
+}
+
+/* o edital do app escolhido como base (ou nada) */
+function hubNovoBaseEdital() {
+  const sel = document.getElementById("edNovoPreBase");
+  const v = sel ? String(sel.value || "") : "";
+  return v ? editais.find((x) => String(x.id) === v) || null : null;
+}
+function hubNovoPreencherBase() {
+  const sel = document.getElementById("edNovoPreBase");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const opt = (v, txt) => { const o = document.createElement("option"); o.value = v; o.textContent = txt; sel.append(o); };
+  opt("", t("ed_novo_base_nenhum"));
+  const sit = (e) => { try { return edSituacao(e).grupo; } catch (x) { return ""; } };
+  /* a prova que já passou é a base mais comum (o concurso anterior): vem primeiro */
+  editais.filter((e) => sit(e) === "encerrado").concat(editais.filter((e) => sit(e) !== "encerrado")).forEach((e) => {
+    opt(String(e.id), (e.nome || t("ed_sem_nome")) + (sit(e) === "encerrado" ? " " + t("ed_sel_encerrado") : ""));
+  });
+  sel.value = "";
+  const msg = document.getElementById("edNovoPreBaseMsg");
+  if (msg) msg.textContent = "";
+}
+/* "usar como está (sem IA)": as disciplinas e os tópicos do edital base, marcados "provável" */
+async function hubNovoUsarBase(confirmar) {
+  const msg = document.getElementById("edNovoPreBaseMsg");
+  const e = hubNovoBaseEdital();
+  if (!e) { if (msg) msg.textContent = t("ed_novo_base_escolha"); return false; }
+  const corpo = preBaseDoEdital(e.texto || "", t("ed_novo_base_nota", { n: e.nome || "" }));
+  if (!corpo.trim()) { if (msg) msg.textContent = t("ed_novo_base_vazio", { n: e.nome || "" }); return false; }
+  const pl = document.getElementById("edNovoPlano");
+  if (!pl) return false;
+  if (String(pl.value || "").trim() && !(await (confirmar || uiConfirm)(t("ed_novo_base_subst")))) return false;
+  pl.value = corpo;
+  if (pl.oninput) pl.oninput(); else hubNovoPintar();
+  const r = lerEdital("# x\n" + corpo);
+  const nt = (r.disciplinas || []).reduce((a, d) => a + d.topicos.length, 0);
+  if (msg) msg.textContent = t("ed_novo_base_ok", { d: (r.disciplinas || []).length, t: nt, n: e.nome || "" });
+  hubNovoPassoFeito();
+  reg("EDITAL", "pré-edital: base de outro edital", e.nome || "");
+  return true;
+}
+/* o texto do passo 1 muda com o modo: no pré-edital, a IA trabalha com o edital ANTERIOR */
+function hubNovoPintarPre(v) {
+  const val = v || hubNovoValidar();
+  const p1 = document.getElementById("edNovoPasso1Txt");
+  if (p1) p1.textContent = t(val.modo === "pre" ? "ed_novo_passo1_pre" : "ed_novo_passo1");
+  const bt = document.getElementById("btnEdNovoPrompt");
+  if (bt) { bt.title = t(val.modo === "pre" ? "ed_novo_prompt_tip_pre" : "ed_novo_prompt_tip"); bt.textContent = t(val.modo === "pre" ? "ed_novo_prompt_bt_pre" : "ed_prompt_btn"); }
+}
+/* o botão do prompt: no pré-edital, o pedido do plano esperado (com a base, se escolhida) */
+function hubNovoCopiarPrompt() {
+  const comRamos = !!(document.getElementById("edNovoPedirRamos") || {}).checked;
+  const pre = hubNovoModo() === "pre";
+  const e = pre ? hubNovoBaseEdital() : null;
+  const txt = pre ? edPromptPreEdital(comRamos, e ? preBaseDoEdital(e.texto || "") : "") : edPromptEdital(comRamos);
+  try { navigator.clipboard.writeText(txt); } catch (x) {}
+  const c = document.getElementById("edNovoPromptMsg");
+  if (c) c.textContent = pre ? t(e ? "ed_novo_prompt_ok_pre_base" : "ed_novo_prompt_ok_pre", { n: e ? e.nome || "" : "" })
+    : t(comRamos ? "ed_novo_prompt_ok_ramos" : "ed_novo_prompt_ok");
+  hubNovoPassoFeito();
+  return txt;
+}
+
+/* =====================================================================
+ * (19.100.0) A CONFIANÇA DO PRÉ-EDITAL, NA ABA PLANO
+ * Uma linha por disciplina, com a marca (confirmada / provável / boato) para trocar sem mexer no texto. "Boato" fica fora
+ * da agenda; a caixa "incluir na agenda" escreve "boato · na agenda" na linha. O texto do plano continua sendo a fonte.
+ * ===================================================================== */
+const ED_PCONF = ["", "confirmada", "provavel", "boato"];
+function edPreConfPintar() {
+  const box = document.getElementById("edPreConf");
+  if (!box) return null;
+  box.innerHTML = "";
+  const ta = document.getElementById("editalTexto");
+  const r = lerEdital((ta && ta.value) || "");
+  const sim = !!edAberto() && !!r.cfg && r.cfg.fase === "pre" && r.disciplinas.length > 0;
+  box.hidden = !sim;
+  if (!sim) return null;
+  const tit = document.createElement("div");
+  tit.className = "ed-caixa-tit ed-pconf-tit";
+  tit.textContent = t("ed_pconf_tit");
+  const fora = r.disciplinas.filter((d) => d.foraBoato);
+  const semMarca = r.disciplinas.filter((d) => !d.confianca).length;
+  const aj = document.createElement("p");
+  aj.className = "nota";
+  aj.textContent = t("ed_pconf_aj") + (fora.length ? " " + t("ed_pconf_fora", { n: fora.length, l: fora.map((d) => d.nome).slice(0, 3).join(", ") }) : "")
+    + (semMarca ? " " + t("ed_pconf_sem", { n: semMarca }) : "");
+  box.append(tit, aj);
+  const lista = document.createElement("div");
+  lista.className = "ed-pconf-lista";
+  /* o motivo repetido em todas ("estava no edital de …", da base) vira dica; o motivo próprio de uma disciplina aparece */
+  const vezes = {};
+  r.disciplinas.forEach((d) => { if (d.confNota) vezes[d.confNota] = (vezes[d.confNota] || 0) + 1; });
+  r.disciplinas.forEach((d, i) => {
+    const lin = document.createElement("div");
+    lin.className = "ed-pconf-lin" + (d.confianca === "boato" && !d.naAgenda ? " ed-pconf-fora" : "");
+    lin.id = "edPconf_" + i;
+    const nm = document.createElement("span");
+    nm.className = "ed-pconf-nome";
+    nm.textContent = d.nome;
+    if (d.confNota) nm.title = d.confNota;
+    const sel = document.createElement("select");
+    sel.id = "edPconfSel_" + i;
+    sel.className = "ed-pconf-sel";
+    sel.setAttribute("aria-label", t("ed_pconf_sel_aria", { n: d.nome }));
+    ED_PCONF.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c; o.textContent = t("ed_pconf_o_" + (c || "nenhuma"));
+      sel.append(o);
+    });
+    sel.value = d.confianca || "";
+    sel.onchange = () => edPreConfMudar(d.nome, sel.value, false);
+    lin.append(nm, sel);
+    if (d.confianca === "boato") {
+      const lb = document.createElement("label");
+      lb.className = "nota ed-pconf-ag";
+      const ck = document.createElement("input");
+      ck.type = "checkbox"; ck.id = "edPconfAg_" + i; ck.checked = !!d.naAgenda;
+      ck.onchange = () => edPreConfMudar(d.nome, "boato", !!ck.checked);
+      const sp = document.createElement("span");
+      sp.textContent = t("ed_pconf_incluir");
+      lb.append(ck, sp);
+      lin.append(lb);
+    }
+    if (d.confNota && vezes[d.confNota] === 1) {
+      const nt = document.createElement("span");
+      nt.className = "nota ed-pconf-nota";
+      nt.textContent = d.confNota;
+      lin.append(nt);
+    }
+    lista.append(lin);
+  });
+  box.append(lista);
+  return { fora: fora.map((d) => d.nome), semMarca };
+}
+function edPreConfMudar(nome, conf, naAgenda) {
+  const ta = document.getElementById("editalTexto");
+  if (!ta) return false;
+  const novo = preConfTrocar(ta.value, nome, conf, naAgenda);
+  if (novo === ta.value) return false;
+  ta.value = novo;
+  reg("EDITAL", "pré-edital: confiança", nome + " → " + (conf || "sem marca") + (naAgenda ? " (na agenda)" : ""));
+  if (typeof edRender === "function") { try { edRender(); } catch (e) {} }
+  try { hubPintarAgenda(); } catch (e) {}
+  edPreConfPintar();
   return true;
 }
 
@@ -3032,14 +3207,13 @@ function hubIniciar() {
     /* o prompt fica NA CAIXA onde o plano vai ser colado: mandar a
      * pessoa procurá-lo noutra tela é onde ela desiste e cria o edital
      * vazio */
-    np.onclick = () => {
-      const comRamos = !!(document.getElementById("edNovoPedirRamos") || {}).checked;
-      try { navigator.clipboard.writeText(edPromptEdital(comRamos)); } catch (e) {}
-      const c = document.getElementById("edNovoPromptMsg");
-      if (c) c.textContent = t(comRamos ? "ed_novo_prompt_ok_ramos" : "ed_novo_prompt_ok");
-      hubNovoPassoFeito();
-    };
+    np.onclick = () => { hubNovoCopiarPrompt(); };
   }
+  /* (19.100.0) a base do pré-edital: um edital do app */
+  const pu = document.getElementById("btnEdNovoPreUsar");
+  if (pu) pu.onclick = () => hubNovoUsarBase();
+  const pb = document.getElementById("edNovoPreBase");
+  if (pb) pb.onchange = () => { const m = document.getElementById("edNovoPreBaseMsg"); if (m) m.textContent = ""; };
   /* conferência viva: dizer quantas disciplinas o texto colado tem ANTES
    * de criar é o que evita criar cinco editais até acertar o formato */
   const pl = document.getElementById("edNovoPlano");
@@ -3123,6 +3297,7 @@ function bancAplicar() {
   b.textContent = r.disciplinas.length ? t("ed_banc_resumo", { d: r.disciplinas.length, t: tops }) : t("ed_banc_vazia");
   resumo.append(b);
   try { localStorage.setItem("eac_banc_recolhida", bancRecolhida ? "1" : "0"); } catch (e) {}
+  try { edPreConfPintar(); } catch (e) {}
 }
 
 function bancAlternar() {
