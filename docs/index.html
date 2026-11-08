@@ -6694,7 +6694,15 @@ dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
 }
 /* ---- HORAS POR ASSUNTO: colunas por disciplina (estudo novo x revisão), corte e ramos cumpridos ---- */
 dialog.hor-dlg[open]{display:flex;flex-direction:column;width:min(1100px,97vw);height:min(92vh,900px);max-height:94vh;margin:auto;overflow:hidden}
-@media (min-width:761px){dialog.hor-dlg.hor-grande[open]{width:min(1600px,97vw);max-width:97vw}}
+/* (19.103.0) tela cheia (o padrão), como o Domínio */
+#dlgHoras.hor-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
+/* (19.103.0) o rodapé "↩ Voltar para o painel" (quando o que foi aberto levou a outra tela do app) */
+.voltar-chip{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:4px;
+  padding:4px 4px 4px 6px;border-radius:999px;border:1px solid var(--borda);background:var(--card,#fff);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.voltar-chip[hidden]{display:none}
+.voltar-chip button{all:unset;cursor:pointer;padding:6px 10px;border-radius:999px;font-size:14px;font-weight:600}
+.voltar-chip button:focus-visible{outline:2px solid var(--acao)}
+.voltar-chip .voltar-x{font-weight:400;padding:6px 9px;color:var(--sutil)}
 .hor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .hor-cab h3{margin:0;flex:1 1 auto}
 .hor-grande-btn{white-space:nowrap}
@@ -11904,6 +11912,10 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 </dialog>
 
 <!-- HORAS POR ASSUNTO: estudo novo x revisão por disciplina (na ordem do peso), com ramos cumpridos e os pontos de corte -->
+<div class="voltar-chip" id="voltarChip" hidden>
+  <button type="button" id="btnVoltarPainel"></button>
+  <button type="button" class="voltar-x" id="btnVoltarFechar" data-i18n-title="voltar_fechar" aria-label="Dispensar">✕</button>
+</div>
 <dialog id="dlgHoras" class="ui-modal hor-dlg">
   <div class="hor-cab">
     <h3 data-i18n="hor_titulo"></h3>

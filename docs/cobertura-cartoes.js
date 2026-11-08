@@ -64,6 +64,11 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
   const comAbs = ds.filter((d) => d.abs > 0);
   const exata = fase === 1 && comAbs.length > 0 && comAbs.length === ds.length;
   const somaAbs = exata ? comAbs.reduce((a, d) => a + d.abs, 0) : 0;
+  /* (19.103.0) A FATIA DO PLANO. Cada tela fazia a sua conta ("58,3%" nas horas, "40,6%" no Domínio, "44%" na agenda para a
+   * mesma disciplina). Quem passa `opc.fatia` (a fatia de montarPlano, sem arredondar) faz este mapa usar a mesma: dentro
+   * da disciplina, ela se reparte pelo peso dos tópicos. Na 2ª fase, não (lá só contam os tópicos da discursiva). */
+  const fatiaOpc = fase === 1 && o.fatia && Object.keys(o.fatia).length ? o.fatia : null;
+  const fatiaDe = (nome) => (fatiaOpc && fatiaOpc[nome] != null ? Number(fatiaOpc[nome]) : null);
   /* o total de cartões do escopo: só os dos tópicos DESTE plano (e desta fase) */
   let total = 0;
   const chaves = new Set();
@@ -82,7 +87,8 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
     d.topicos.forEach((t) => {
       if (!wDe(t)) return;
       const chave = chaveDe(d.nome, t.nome);
-      const share = exata ? (d.abs / somaAbs) * (wDe(t) / somaW) : (d.peso * wDe(t)) / somaBruto;
+      const fz = fatiaDe(d.nome);
+      const share = fz !== null ? (fz / 100) * (wDe(t) / somaW) : (exata ? (d.abs / somaAbs) * (wDe(t) / somaW) : (d.peso * wDe(t)) / somaBruto);
       const n = ct.get(chave) || 0;
       const jaContado = vistos.has(chave);     /* o mesmo tópico repetido no plano não soma duas vezes */
       vistos.add(chave);
@@ -150,13 +156,17 @@ function covMapa(disciplinas, cont, chaveDe, opc) {
     .map((f) => Object.assign({}, f, { sobra: f.cartoes - Math.max(f.alvo, Math.round(f.alvoProp)) }))
     .sort((a, b) => b.sobra - a.sobra);
   return { total, disciplinas: disciplinasOut, folhas, resumo, faltando, sobrando, fase, somaAbs,
-    base: fase === 2 ? "fase2" : (exata ? "questoes" : "estimado") };
+    base: fase === 2 ? "fase2" : (exata ? "questoes" : (fatiaOpc ? "plano" : "estimado")) };
 }
 
 /* O mapa de UM edital cadastrado, com os cartões da biblioteca de agora. */
 function covDoEdital(ed, notas, opc) {
-  const plano = lerEdital((ed && ed.texto) || "").disciplinas;
-  return covMapa(plano, covContar(notas), (d, t) => matChaveViva(d, t), opc);
+  const r = lerEdital((ed && ed.texto) || "");
+  let o = opc;
+  if (!(opc && (opc.fase === 2 || opc.fatia))) {
+    try { const pl = montarPlano(r, {}); if (pl && pl.fatiaFina) o = Object.assign({}, opc || {}, { fatia: pl.fatiaFina }); } catch (e) {}
+  }
+  return covMapa(r.disciplinas, covContar(notas), (d, t) => matChaveViva(d, t), o);
 }
 
 /* =====================================================================
@@ -322,7 +332,7 @@ function covSegmentos(pai, itens, totalPeso) {
   itens.forEach((it) => {
     const seg = gerEl("div", "cov-seg cov-f-" + it.faixa);
     seg.style.width = (totalPeso ? (it.pesoPct / totalPeso) * 100 : 100 / itens.length).toFixed(2) + "%";
-    seg.title = (it.ramoNome || it.nome || it.topico || "") + " — " + t("cov_cartoes_de", { n: it.cartoes, a: it.alvo }) + " — " + t("cov_peso", { p: it.pesoPct.toFixed(1) });
+    seg.title = (it.ramoNome || it.nome || it.topico || "") + " — " + t("cov_cartoes_de", { n: it.cartoes, a: it.alvo }) + " — " + t("cov_vale", { p: pctProva(it.pesoPct) });
     tira.append(seg);
   });
   pai.append(tira);
@@ -374,7 +384,7 @@ function covPintar() {
   ordem.forEach((d) => {
     const linha = gerEl("div", "cov-disc");
     const cab = gerEl("div", "cov-disc-cab");
-    cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })),
+    cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_vale", { p: pctProva(d.pesoPct) })),
       gerEl("span", "cov-n" + (d.vazias ? " cov-n-alerta" : ""), t("cov_disc_n", { n: d.cartoes, v: d.vazias, p: d.pouco })));
     linha.append(cab);
     covSegmentos(linha, d.topicos, d.pesoPct);

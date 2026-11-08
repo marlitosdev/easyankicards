@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.102.0";
+const VERSAO = "19.103.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -553,6 +553,107 @@ const _abrirNaoModalUmaVez = new Set();
  * de cima (o aviso da lixeira) precisa saber qual é. A top layer do navegador não deixa perguntar. */
 const _modaisAbertos = new Set();
 
+/* =====================================================================
+ * (19.103.0) VOLTAR PARA O PAINEL
+ *
+ * "Horas por assunto" e "Domínio" são painéis de decisão: dali se abre o estudo, os cartões, as questões, a ficha. Cada
+ * um desses fechava o painel e largava a pessoa no que abriu — ao terminar, ela tinha de reabrir o painel e achar de novo
+ * a disciplina onde estava. Agora o painel fica "armado": quando o que foi aberto a partir dele fecha (e nada mais está
+ * aberto), o painel volta, na mesma disciplina, filtro e rolagem. Se a pessoa saiu para outra tela do app (os cartões,
+ * por exemplo), ele não volta sozinho por cima dela: aparece o botão "↩ Voltar para …" no rodapé.
+ * ===================================================================== */
+let voltarPara = null;      /* { painel: id do dialog, rotulo, reabrir(), vigia: dialog aberto a partir dele, modo } */
+
+function voltarTopo(excluir) {
+  let lista = [];
+  try { lista = Array.from(document.querySelectorAll("dialog[open]")); } catch (e) { lista = []; }
+  const painel = voltarPara ? voltarPara.painel : "";
+  const ok = (d) => d && d.open && d !== excluir && d.id !== painel;
+  const ordem = Array.from(_modaisAbertos).filter(ok);
+  if (ordem.length) return ordem[ordem.length - 1];
+  lista = lista.filter(ok);
+  return lista.length ? lista[lista.length - 1] : null;
+}
+
+function voltarChipPintar() {
+  const cx = document.getElementById("voltarChip");
+  if (!cx) return;
+  const mostra = !!(voltarPara && !voltarPara.vigia);
+  cx.hidden = !mostra;
+  const b = document.getElementById("btnVoltarPainel");
+  if (b) { b.textContent = mostra ? t("voltar_chip", { n: voltarPara.rotulo }) : ""; b.onclick = () => voltarIr(); }
+  const x = document.getElementById("btnVoltarFechar");
+  if (x) x.onclick = () => voltarLimpar();
+}
+
+/* fecha o painel e o deixa "armado" para voltar; quem chama abre o que quiser logo em seguida */
+function painelArmar(dlgId, rotulo, reabrir) {
+  voltarPara = { painel: dlgId, rotulo: rotulo || "", reabrir, vigia: null, armadoEm: Date.now(),
+    modo: typeof modoAtual !== "undefined" ? modoAtual : "" };
+  const dlg = document.getElementById(dlgId);
+  try { if (dlg && dlg.open) dlg.close(); } catch (e) {}
+  setTimeout(voltarAdotar, 0);
+  voltarVigiar();
+}
+
+/* O EVENTO "close" NÃO BASTA: com a aba em segundo plano (ou o painel do navegador escondido) o navegador o segura, e o
+ * painel não voltava. Enquanto há volta armada, uma olhada a cada 0,6 s confere se a janela vigiada fechou. */
+let voltarTimer = 0;
+function voltarVigiar() {
+  if (voltarTimer) return;
+  voltarTimer = setInterval(() => {
+    if (!voltarPara) { clearInterval(voltarTimer); voltarTimer = 0; return; }
+    if (voltarPara.vigia && !voltarPara.vigia.open) voltarDialogoFechou(voltarPara.vigia);
+  }, 600);
+}
+
+/* a janela que o painel abriu passa a ser vigiada (a de cima, se abriu mais de uma) */
+function voltarAdotar() {
+  if (!voltarPara) return;
+  if (!voltarPara.vigia || !voltarPara.vigia.open) voltarPara.vigia = voltarTopo(null);
+  voltarChipPintar();
+}
+
+/* uma janela fechou: se era a vigiada e não há outra aberta, o painel volta */
+function voltarDialogoFechou(d) {
+  if (!voltarPara || !d || d.id === voltarPara.painel) return false;
+  if (voltarPara.vigia && d !== voltarPara.vigia) return false;
+  const outra = voltarTopo(d);
+  if (outra) { voltarPara.vigia = outra; return false; }
+  /* foi para outra tela do app: não cobre a tela nova — oferece o botão */
+  if (typeof modoAtual !== "undefined" && voltarPara.modo && modoAtual !== voltarPara.modo) {
+    voltarPara.vigia = null;
+    voltarChipPintar();
+    return false;
+  }
+  return voltarIr();
+}
+
+function voltarIr() {
+  const v = voltarPara;
+  voltarPara = null;
+  voltarChipPintar();
+  if (!v || typeof v.reabrir !== "function") return false;
+  try { reg("PAINEL", "voltou para " + v.rotulo, ""); } catch (e) {}
+  try { v.reabrir(); } catch (e) { return false; }
+  return true;
+}
+
+/* abrir o painel pelo botão dele (ou dispensar o rodapé) desarma a volta */
+function voltarLimpar(painel) {
+  if (!voltarPara || (painel && voltarPara.painel !== painel)) return false;
+  voltarPara = null;
+  voltarChipPintar();
+  return true;
+}
+
+/* "vale 44% da prova": inteiro a partir de 10%, uma casa abaixo disso */
+function pctProva(p) {
+  const v = Number(p) || 0;
+  if (v >= 10 || v === 0) return String(Math.round(v));
+  return String(Math.round(v * 10) / 10).replace(".", ",");
+}
+
 /* a página por trás de uma janela modal não rola: quando a última fecha, a classe sai */
 if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("close", (ev) => {
@@ -561,6 +662,8 @@ if (typeof document !== "undefined" && document.addEventListener) {
       const algum = Array.from(document.querySelectorAll("dialog")).some((x) => x !== ev.target && x.open);
       if (!algum) document.documentElement.classList.remove("tem-modal");
     } catch (e) {}
+    /* (19.103.0) o painel de onde isto foi aberto volta, se for o caso */
+    try { if (ev && ev.target && ev.target.tagName === "DIALOG") voltarDialogoFechou(ev.target); } catch (e) {}
   }, true);
 }
 
@@ -573,6 +676,10 @@ function abrirModal(id) {
     if (!d.open) {
       if (naoModal) d.show(); else { d.showModal(); document.documentElement.classList.add("tem-modal"); }
       _modaisAbertos.delete(d); _modaisAbertos.add(d);
+      /* (19.103.0) aberto a partir de um painel armado: esta é a janela a vigiar */
+      /* só logo depois de armar: uma janela qualquer aberta mais tarde, já em outra tela, não é "a que o painel abriu" */
+      if (voltarPara && d.id !== voltarPara.painel && (!voltarPara.vigia || !voltarPara.vigia.open)
+          && Date.now() - (voltarPara.armadoEm || 0) < 3000) { voltarPara.vigia = d; voltarChipPintar(); }
     }
   } catch (e) {
     /* já aberto, ou não suporta modal: não é motivo para derrubar o fluxo */

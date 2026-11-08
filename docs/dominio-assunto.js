@@ -331,8 +331,11 @@ function domParFontes(ed, cob, banco, notas, regs, listaEditais, opc) {
 function domDoEdital(ed, opc) {
   const r = lerEdital((ed && ed.texto) || "");
   const notas = cqLerBiblioteca();
-  const cob = covMapa(r.disciplinas, covContar(notas), (d, t) => matChaveViva(d, t), Object.assign({}, opc || {}));
   const plano = montarPlano(r, { horas: (r.cfg || {}).horas || 10, prova: (r.cfg || {}).prova, feitos: (ed && ed.progresso) || {} });
+  /* (19.103.0) a fatia de cada disciplina é a do plano (a mesma da agenda e das horas por assunto) */
+  const oCob = Object.assign({}, opc || {});
+  if (oCob.fase !== 2 && !oCob.fatia && plano && plano.fatiaFina) oCob.fatia = plano.fatiaFina;
+  const cob = covMapa(r.disciplinas, covContar(notas), (d, t) => matChaveViva(d, t), oCob);
   const regs = estcLerJSON(ESTC_CH_REGS, {});
   const banco = typeof qsTodas === "function" ? qsTodas() : [];
   const lim = Object.assign(domLimitesLer(), opc || {});

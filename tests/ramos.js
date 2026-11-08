@@ -2341,7 +2341,7 @@ async function testes() {
       const tiras = achar(a.$("covCorpo"), (e) => cls(e, "cov-tira"));
       ok(tiras.length >= 1 && /do peso da prova está sem nenhum cartão/.test(a.$("covCorpo").textContent), "R60c aparece a manchete e uma faixa por disciplina");
       const disc = achar(a.$("covCorpo"), (e) => cls(e, "cov-disc"));
-      const pesos = disc.map((d) => Number((/peso ([\d.]+)%/.exec(d.textContent) || [])[1]));
+      const pesos = disc.map((d) => Number(((/vale ([\d,]+)% da prova/.exec(d.textContent) || [])[1] || "").replace(",", ".")));
       ok(pesos.length >= 1 && pesos.every((p, i) => !i || pesos[i - 1] >= p), "R60d as disciplinas vem na ordem do PESO: " + pesos.join(","));
       const cab = achar(disc[0], (e) => cls(e, "cov-disc-cab"))[0];
       const det = achar(disc[0], (e) => cls(e, "cov-det"))[0];
@@ -2527,19 +2527,20 @@ async function testes() {
       a.$("btnHorX").onclick();
       ok(a.$("dlgHoras").open === false, "R63h o X fecha");
 
-      /* R63i — "ver maior": some no celular, alterna e lembra entre aberturas */
+      /* R63i — (19.103.0) TELA CHEIA, como o Domínio: começa cheia, alterna e lembra entre aberturas; no celular o botão
+       * some (lá a janela já ocupa a tela) */
       const html2 = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
-      ok(/@media \(max-width:760px\)\{\.hor-grande-btn\{display:none\}\}/.test(html2), "R63i1 o botao de ver maior some no celular (CSS)");
+      ok(/@media \(max-width:760px\)\{\.hor-grande-btn\{display:none\}\}/.test(html2) && /#dlgHoras\.hor-cheia\[open\]\{width:100vw/.test(html2), "R63i1 a tela cheia tem CSS e o botao some no celular");
       a.$("btnEdHoras").onclick();
-      ok(a.horGrandeAtual() === false && a.$("dlgHoras").classList.contains("hor-grande") === false, "R63i2 comeca compacto");
+      ok(a.horGrandeAtual() === true && a.$("dlgHoras").classList.contains("hor-cheia") === true && a.$("btnHorGrande").textContent === a.t("dom_cheia_sair"), "R63i2 comeca em tela cheia (o padrao)");
       a.horTrocarGrande();
-      ok(a.horGrandeAtual() === true && a.$("dlgHoras").classList.contains("hor-grande") === true, "R63i3 alternar liga a classe");
+      ok(a.horGrandeAtual() === false && a.$("dlgHoras").classList.contains("hor-cheia") === false, "R63i3 alternar sai da tela cheia");
       a.$("btnHorX").onclick();
       a.$("btnEdHoras").onclick();
-      ok(a.horGrandeAtual() === true && a.$("dlgHoras").classList.contains("hor-grande") === true, "R63i4 reabrir lembra a preferencia (localStorage)");
+      ok(a.horGrandeAtual() === false && a.$("dlgHoras").classList.contains("hor-cheia") === false, "R63i4 reabrir lembra a preferencia (localStorage)");
       a.horTrocarGrande();
       a.$("btnHorX").onclick();
-      ok(a.horGrandeAtual() === false, "R63i5 alternar de volta desliga");
+      ok(a.horGrandeAtual() === true, "R63i5 alternar de volta liga");
     }
 
     /* R64: o AGENDADOR (De novo · Dificil · Bom · Facil) — funcoes puras */
@@ -2769,12 +2770,12 @@ async function testes() {
       const somaW = seg.reduce((x, e) => x + parseFloat(e.style.width), 0);
       ok(Math.abs(somaW - 100) < 0.05, "R69e os segmentos somam 100% da barra: " + somaW.toFixed(2));
       const discs = achar(cx(), (e) => cls(e, "cov-disc"));
-      const pesos = discs.map((d) => Number((/peso ([\d.]+)%/.exec(d.textContent) || [])[1]));
+      const pesos = discs.map((d) => Number(((/vale ([\d,]+)% da prova/.exec(d.textContent) || [])[1] || "").replace(",", ".")));
       ok(discs.length === 2 && pesos.every((x, i) => !i || pesos[i - 1] >= x), "R69f as disciplinas vem na ordem do peso: " + pesos.join(","));
       const det = achar(discs[0], (e) => cls(e, "cov-det"))[0];
       ok(det.hidden === true, "R69g os topicos comecam recolhidos");
       achar(discs[0], (e) => cls(e, "cov-disc-cab"))[0].onclick();
-      ok(det.hidden === false && a.domDiscAbertaAtual() === discs[0].textContent.split("peso")[0].trim(), "R69h clicar na disciplina abre os topicos");
+      ok(det.hidden === false && a.domDiscAbertaAtual() === discs[0].textContent.split("vale ")[0].trim(), "R69h clicar na disciplina abre os topicos");
       const ramoLin = achar(det, (e) => cls(e, "dom-ramo")).find((e) => /Modalidades/.test(e.textContent));
       ok(ramoLin && /dom-b-vermelho/.test(ramoLin.className) && /Porque:.*cartões lembrados em/.test(ramoLin.textContent), "R69i o ramo com retencao ruim (33%) fica VERMELHO e diz o motivo: " + (ramoLin && ramoLin.textContent.slice(0, 120)));
       const chips = achar(ramoLin, (e) => cls(e, "dom-chip")).map((e) => e.textContent);

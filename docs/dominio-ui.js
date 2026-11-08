@@ -118,7 +118,7 @@ function domBotaoRegistrar(pai, disciplina, topico, ramoId) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     const it = edItemDoPlano(disciplina, topico);
     if (!it) return;
-    $("dlgDominio").close();
+    domFechar();
     abrirRegistro(it, ramoId ? { ramo: ramoId } : undefined);
   };
   pai.append(rg);
@@ -187,14 +187,14 @@ function domAcaoPrincipal(f, mat, ramos) {
   try { erradas = typeof qsFiltrar === "function" ? qsFiltrar(Object.assign({ chave: f.chave, soErradas: true }, ramo ? { ramo: ramo.id } : {})) : []; } catch (e) { erradas = []; }
   /* o ramo HERDA o acerto do tópico: sem erradas ligadas ao ramo, valem as do tópico (são elas que dão a cor) */
   if (ramo && !erradas.length) { try { erradas = qsFiltrar({ chave: f.chave, soErradas: true }); } catch (e) { erradas = []; } }
-  const ficha = () => { $("dlgDominio").close(); edAbrirFicha(f.disciplina, f.topico, { ramos, ramo: ramo ? ramo.id : "", editalId: domEditalId }); };
+  const ficha = () => { domFechar(); edAbrirFicha(f.disciplina, f.topico, { ramos, ramo: ramo ? ramo.id : "", editalId: domEditalId }); };
   if ((f.nivel === "vermelho" || f.nivel === "amarelo") && erradas.length) {
     return { cod: "erradas", txt: t("dom_ac1_erradas", { n: erradas.length }), tip: t("dom_ac1_erradas_tip"),
-      fazer: () => { $("dlgDominio").close(); qsUiResponderAbrir(erradas, null, "dominio-erradas:" + f.chave + (ramo ? "#" + ramo.id : "")); } };
+      fazer: () => { domFechar(); qsUiResponderAbrir(erradas, null, "dominio-erradas:" + f.chave + (ramo ? "#" + ramo.id : "")); } };
   }
   if (f.nivel === "azul") {
     return { cod: mat.questoes ? "medir" : "criar_qs", txt: mat.questoes ? t("dom_ac1_medir", { n: mat.questoes }) : t("dom_ac1_criar_qs"), tip: t("dom_ac1_medir_tip"),
-      fazer: () => { $("dlgDominio").close(); qsUiResponderDireto(f.disciplina, f.topico, ramo); } };
+      fazer: () => { domFechar(); qsUiResponderDireto(f.disciplina, f.topico, ramo); } };
   }
   if (f.nivel === "cinza") {
     return { cod: mat.vazio ? "preparar" : "comecar", txt: t(mat.vazio ? "dom_ac1_preparar" : "dom_ac1_comecar"), tip: t("dom_ac1_ficha_tip"), fazer: ficha };
@@ -252,7 +252,7 @@ function domItemFila(f, tp, semRamos) {
       b.append(gerEl("i", "dom-leg-i dom-n-" + nv), document.createTextNode(r.ramoNome));
       b.type = "button";
       b.title = t("dom_ramo_chip_tip", { r: r.ramoNome, n: r.nivel === "pulado" ? "—" : t("dom_n_" + r.nivel) }) + (domPorque(r.motivos) ? " · " + domPorque(r.motivos) : "");
-      b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); $("dlgDominio").close(); edAbrirFicha(f.disciplina, f.topico, { ramos: ramosFicha, ramo: r.ramoId, editalId: domEditalId }); };
+      b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domFechar(); edAbrirFicha(f.disciplina, f.topico, { ramos: ramosFicha, ramo: r.ramoId, editalId: domEditalId }); };
       rl.append(b);
     });
     l.append(rl);
@@ -285,13 +285,13 @@ function domItemFila(f, tp, semRamos) {
 function domLinhaAcoes(pai, disciplina, topico, cartoes, ramo) {
   const ac = gerEl("span", "cov-acoes");
   const ab = gerEl("button", "btn-min", t("cov_abrir")); ab.type = "button";
-  ab.onclick = () => { $("dlgDominio").close(); gerAbrirNoTopico(disciplina, topico); };
+  ab.onclick = () => { domFechar(); gerAbrirNoTopico(disciplina, topico); };
   ac.append(ab);
   const go = gerEl("button", "btn-min btn-min-ok", cartoes ? t("hor_estudar", { n: cartoes }) : t("hor_criar")); go.type = "button";
-  go.onclick = () => { $("dlgDominio").close(); if (cartoes) estcEstudarTopico(disciplina, topico); else bancAlvoDefinir(disciplina, topico); };
+  go.onclick = () => { domFechar(); if (cartoes) estcEstudarTopico(disciplina, topico); else bancAlvoDefinir(disciplina, topico); };
   ac.append(go);
   const qu = gerEl("button", "btn-min", t("dom_questoes")); qu.type = "button";
-  qu.onclick = () => { $("dlgDominio").close(); qsUiResponderDireto(disciplina, topico, ramo || undefined); };
+  qu.onclick = () => { domFechar(); qsUiResponderDireto(disciplina, topico, ramo || undefined); };
   ac.append(qu);
   domBotaoRegistrar(ac, disciplina, topico, ramo ? ramo.id : "");
   pai.append(ac);
@@ -349,7 +349,7 @@ function domPintar() {
   const pEvo = painel("evo");
   /* ---- evolução (calculada sempre: a diferença de cada disciplina aparece no mapa) ---- */
   const dlt = domEvolucaoPintar(pEvo, m, ed.id, fase);
-  pEvo.append(gerEl("p", "nota cov-base", t(m.base === "questoes" ? "dom_base_questoes" : (m.base === "fase2" ? "cov_base_fase2" : "dom_base_estimado"))));
+  pEvo.append(gerEl("p", "nota cov-base", t(m.base === "questoes" ? "dom_base_questoes" : (m.base === "fase2" ? "cov_base_fase2" : (m.base === "plano" ? "dom_base_plano" : "dom_base_estimado")))));
   /* ---- prioridades: o que reforçar primeiro (com o filtro escolhido), o porquê à vista e o ganho dos primeiros ---- */
   const agrupar = domAgruparLer();
   const filaFolhas = m.reforcar.filter(domCasa);
@@ -404,7 +404,7 @@ function domPintar() {
     const linha = gerEl("div", "cov-disc" + (abertaAqui ? " cov-aberta" : ""));
     const cab = gerEl("div", "cov-disc-cab");
     const dd = d.distribuicao, ds = Object.keys(dd).reduce((x, k) => x + dd[k], 0) || 1;
-    cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })),
+    cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_vale", { p: pctProva(d.pesoPct) })),
       gerEl("span", "cov-n" + (dd.vermelho ? " cov-n-alerta" : ""), t("dom_disc_n", { v: Math.round((dd.verde / ds) * 100), r: Math.round((dd.vermelho / ds) * 100), c: Math.round((dd.cinza / ds) * 100) })));
     const dd2 = dlt && dlt.disciplinas[d.nome];
     if (dd2 && dd2.verde !== 0) cab.append(gerEl("span", "dom-evo-disc" + (dd2.verde > 0 ? " dom-evo-sobe" : " dom-evo-desce"), t("dom_evo_disc", { v: (dd2.verde > 0 ? "+" : "") + String(dd2.verde).replace(".", ",") })));
@@ -623,11 +623,27 @@ function domTermoPintar(edId) {
   return n;
 }
 
-function domAbrir(editalId, disciplina) {
+/* (19.103.0) fechar o Domínio para abrir outra coisa deixa a volta armada: ao fechar o que foi aberto, ele volta igual */
+function domFechar() {
+  const rolagens = ["dom-painel-disc", "dom-painel-prior"].map((c) => {
+    let el = null;
+    try { el = document.querySelector("#domCorpo ." + c); } catch (e) { el = null; }
+    return { c, y: el ? el.scrollTop : 0 };
+  });
+  const estado = { ed: domEditalId, disc: domDiscAberta, filtro: domFiltro, aba: domAba, fase: ($("domFase") || {}).value || "1" };
+  painelArmar("dlgDominio", t("dom_titulo"), () => {
+    domAbrir(estado.ed, estado.disc, { manter: estado });
+    rolagens.forEach((r) => { try { const el = document.querySelector("#domCorpo ." + r.c); if (el) el.scrollTop = r.y; } catch (e) {} });
+  });
+}
+
+function domAbrir(editalId, disciplina, opc) {
+  const manter = opc && opc.manter;
+  if (!manter && typeof voltarLimpar === "function") voltarLimpar("dlgDominio");
   domDiscAberta = disciplina || "";
-  domFiltro = "todos";
+  domFiltro = manter ? (manter.filtro || "todos") : "todos";
   /* aberto numa disciplina: vai direto ao mapa; senão, a visão lembrada */
-  domAba = disciplina ? "disc" : domAbaLer();
+  domAba = manter ? (manter.aba || domAbaLer()) : (disciplina ? "disc" : domAbaLer());
   let visto = false;
   try { visto = !!localStorage.getItem(DOM_CH_SUB); localStorage.setItem(DOM_CH_SUB, "1"); } catch (e) {}
   domAjudaTrocar(!visto);
@@ -637,7 +653,7 @@ function domAbrir(editalId, disciplina) {
   eds.forEach((e) => { const op = gerEl("option", "", e.nome || "—"); op.value = String(e.id); sel.append(op); });
   domEditalId = editalId ? String(editalId) : (eds[0] ? String(eds[0].id) : "");
   sel.value = domEditalId;
-  $("domFase").value = "1";
+  $("domFase").value = manter ? (manter.fase || "1") : "1";
   domPintar();
   dicasDosBotoes({ btnGerDominio: "dom_tip_abrir", btnEdDominio: "dom_tip_abrir", btnDomX: "cov_tip_x", domEdital: "cov_tip_edital", domFase: "cov_tip_fase", btnDomCheia: "dom_cheia_tip" });
   abrirModal("dlgDominio");

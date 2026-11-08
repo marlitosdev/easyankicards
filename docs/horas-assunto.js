@@ -88,14 +88,22 @@ function horMapa(plano, diario, opc) {
       };
     }).sort((a, b) => b.bruto - a.bruto);
     const total = est + rev;
-    const bl = blocos.find((b) => (b.disciplinas || []).indexOf(nome) >= 0 && b.minPct !== null && b.minPct !== undefined);
+    /* (19.103.0) "VALE X% DA PROVA": a fatia do PLANO (a mesma da agenda e do Domínio) — exata onde o edital dá o número de
+     * questões, estimada no resto, com a discursiva. Antes era a soma "peso × peso" dos tópicos (58% num edital em que a
+     * disciplina vale 44%). Sem a fatia no plano, a conta antiga continua de reserva. */
+    const pesoPct = plano.fatiaFina && plano.fatiaFina[nome] != null ? plano.fatiaFina[nome]
+      : (plano.fatiaExata && plano.fatia && plano.fatia[nome] != null ? plano.fatia[nome] : (bruto / totalBruto) * 100);
+    /* (19.103.0) COM UM PERÍODO, A META É A DO PERÍODO: as horas por semana × as semanas do período × o que a disciplina
+     * vale. Antes as horas eram as do período e a meta, a do edital inteiro ("1h30 de 62h35" na semana). */
+    const planPer = o.dias && o.minSemana ? o.minSemana * (o.dias / 7) * (pesoPct / 100) : null;
+    if (planPer !== null) plan = planPer;
+    const bl = planPer === null ? blocos.find((b) => (b.disciplinas || []).indexOf(nome) >= 0 && b.minPct !== null && b.minPct !== undefined) : null;
     const corteMin = bl ? plan * bl.minPct / 100 : null;
     const seguroMin = bl ? plan * Math.min(100, bl.minPct * ED_FOLGA_MINIMO) / 100 : null;
     const revisaoPct = total ? rev / total : 0;
     return {
-      /* a fatia EXATA (questões do edital) quando o plano a tem; senão a estimada (peso × peso) */
-      nome, peso: its[0].disciplinaPeso, pesoPct: plano.fatiaExata && plano.fatia && plano.fatia[nome] != null ? plano.fatia[nome] : (bruto / totalBruto) * 100,
-      estudoMin: est, revisaoMin: rev, totalMin: total, planejadoMin: plan, revisaoPct,
+      nome, peso: its[0].disciplinaPeso, pesoPct,
+      estudoMin: est, revisaoMin: rev, totalMin: total, planejadoMin: plan, revisaoPct, periodo: planPer !== null,
       unidades: unTotal, feitas: unFeitas, revisadas: unRev, pendentes: unTotal - unFeitas,
       bloco: bl ? { nome: bl.nome, minPct: bl.minPct, abaixo: !!bl.abaixo, apertado: !!bl.apertado } : null,
       corteMin, seguroMin,
@@ -137,7 +145,7 @@ function horDoAberto() {
   const plano = montarPlano(r, { horas: Number($("edHoras").value) || r.cfg.horas, prova: $("edProva").value, feitos: edProgresso });
   const nome = (r.cfg && r.cfg.concurso) || "";
   const diario = (edDiario || []).filter((x) => !x.cc || !nome || x.cc === nome);
-  return { r, plano, diario };
+  return { r, plano, diario, minSemana: (Number($("edHoras").value) || r.cfg.horas || 0) * 60 };
 }
 
 /* o mapa de confiança (Domínio) do MESMO edital e fase, indexado por disciplina e tópico — nada é medido de novo */
@@ -166,7 +174,7 @@ function horPeriodo() {
   if (v === "7" || v === "30" || v === "90") {
     const d = new Date(); d.setDate(d.getDate() - Number(v));
     const p = (n) => String(n).padStart(2, "0");
-    return { desde: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) };
+    return { desde: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()), dias: Number(v) };
   }
   return {};
 }
@@ -174,9 +182,10 @@ function horPeriodo() {
 function horPintar() {
   const cx = $("horCorpo");
   cx.innerHTML = "";
-  const { plano, diario } = horDoAberto();
+  const { plano, diario, minSemana } = horDoAberto();
   if (!plano.itens.length) { cx.append(gerEl("p", "nota", t("hor_sem_plano"))); return; }
-  const m = horMapa(plano, diario, horPeriodo());
+  const per = horPeriodo();
+  const m = horMapa(plano, diario, Object.assign({ minSemana }, per));
   const tt = m.total;
   const res = gerEl("div", "hor-resumo");
   res.append(gerEl("b", "", t("hor_total", { h: horTexto(tt.totalMin) })),
@@ -202,7 +211,7 @@ function horPintar() {
     col.title = d.nome + " — " + t("hor_tip_col", { e: horTexto(d.estudoMin), r: horTexto(d.revisaoMin), p: horTexto(d.planejadoMin), a: d.feitas, n: d.unidades })
       + (d.bloco ? " — " + t("hor_tip_corte", { p: d.bloco.minPct, h: horTexto(d.corteMin) }) : "");
     const topo = gerEl("div", "hor-topo");
-    topo.append(gerEl("b", "", horTexto(d.totalMin)), gerEl("span", "hor-topo-de", t("hor_de", { p: horTexto(d.planejadoMin) })));
+    topo.append(gerEl("b", "", horTexto(d.totalMin)), gerEl("span", "hor-topo-de", d.periodo ? t("hor_de_periodo", { p: horTexto(d.planejadoMin), d: per.dias }) : t("hor_de", { p: horTexto(d.planejadoMin) })));
     col.append(topo);
     const area = gerEl("div", "hor-area" + (d.totalMin > d.planejadoMin ? " hor-excede" : ""));
     area.style.height = HOR_ALTURA + "px";
@@ -220,7 +229,7 @@ function horPintar() {
     const barra = gerEl("div", "hor-prog-b"); barra.style.width = (d.unidades ? (d.feitas / d.unidades) * 100 : 0).toFixed(0) + "%";
     prog.append(barra);
     col.append(prog, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades })));
-    col.append(gerEl("div", "hor-nome", d.nome), gerEl("div", "hor-pesop", t("cov_peso", { p: d.pesoPct.toFixed(1) })));
+    col.append(gerEl("div", "hor-nome", d.nome), gerEl("div", "hor-pesop", t("cov_vale", { p: pctProva(d.pesoPct) })));
     /* o alerta ocupa SEMPRE a mesma linha (vazia quando não há), para as colunas terminarem alinhadas */
     col.append(gerEl("div", "hor-alerta", d.alerta ? "⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) }) : ""));
     col.onclick = () => { horAbrirDisc(d.nome); };
@@ -275,7 +284,7 @@ function horPintar() {
     cab.append(gerEl("i", "hor-drow-seta", aberta ? "▾" : "▸"));
     const meio = gerEl("div", "hor-drow-meio");
     const linha1 = gerEl("div", "hor-drow-l1");
-    linha1.append(gerEl("span", "", d.nome), gerEl("span", "hor-drow-peso", t("cov_peso", { p: d.pesoPct.toFixed(1) })));
+    linha1.append(gerEl("span", "", d.nome), gerEl("span", "hor-drow-peso", t("cov_vale", { p: pctProva(d.pesoPct) })));
     meio.append(linha1);
     const trilho = gerEl("div", "hor-drow-trilho");
     const base = d.planejadoMin || Math.max(60, d.totalMin);
@@ -290,7 +299,7 @@ function horPintar() {
       const det = gerEl("div", "hor-det");
       const ac = gerEl("div", "hor-acoes");
       const vc = gerEl("button", "btn-min", t("hor_ver_cobertura")); vc.type = "button";
-      vc.onclick = () => { $("dlgHoras").close(); covAbrir(editalAtual, d.nome); };
+      vc.onclick = () => { horFechar(); covAbrir(editalAtual, d.nome); };
       ac.append(vc);
       det.append(ac);
       (topsQueCasam.length || (!horBusca.trim() && horFiltro === "tudo") ? topsQueCasam : d.topicos).forEach((tp) => {
@@ -310,11 +319,11 @@ function horPintar() {
         const r = edRecursosDoTopico(d.nome, tp.nome);
         ["doc", "crt", "lei", "jur", "qst"].forEach((k) => {
           const orig = r[k].onclick;
-          r[k].onclick = (ev) => { $("dlgHoras").close(); orig(ev); };
+          r[k].onclick = (ev) => { horFechar(); orig(ev); };
         });
         const { status, estudar, mais } = edMontarStatusEMenu(tl, d.nome, tp.nome, tp.ramos, editalAtual, r);
         const origEstudar = estudar.onclick;
-        estudar.onclick = (ev) => { $("dlgHoras").close(); origEstudar(ev); };
+        estudar.onclick = (ev) => { horFechar(); origEstudar(ev); };
         tl.append(estudar, mais);
         if (status.children.length) tl.append(status);
         det.append(tl);
@@ -367,35 +376,51 @@ function horAbrirDisc(nome) {
 }
 let horRamosFechados = new Set();
 
-/* "ver maior": em telas maiores que a de um celular (o botão some abaixo disso), usa mais largura — lembrado entre
- * sessões do mesmo jeito que o material e o "2 colunas" já fazem (eac_mat_amplo, eac_2col). */
-let horGrande = false;
-function horPintarGrande() {
-  $("dlgHoras").classList.toggle("hor-grande", horGrande);
+/* (19.103.0) TELA CHEIA, como o Domínio: a janela ocupa a tela toda e pede a tela cheia ao navegador; a escolha é lembrada
+ * (padrão: tela cheia). Era "ver maior" (só mais largura). */
+const HOR_CH_CHEIA = "eac_hor_cheia";
+let horCheia = false;
+function horCheiaPreferida() { try { return localStorage.getItem(HOR_CH_CHEIA) !== "0"; } catch (e) { return true; } }
+function horCheiaTrocar(sim, lembrar) {
+  horCheia = sim === undefined ? !horCheia : !!sim;
+  const dlg = $("dlgHoras");
+  if (dlg) dlg.classList.toggle("hor-cheia", horCheia);
   const b = $("btnHorGrande");
-  if (b) {
-    b.textContent = t(horGrande ? "hor_compacto" : "hor_grande"); b.title = t("hor_grande_tip");
-    b.setAttribute("aria-pressed", horGrande ? "true" : "false");
-  }
+  if (b) { b.textContent = t(horCheia ? "dom_cheia_sair" : "dom_cheia"); b.title = t("hor_cheia_tip"); b.setAttribute("aria-pressed", horCheia ? "true" : "false"); }
+  if (horCheia) { if (typeof telaCheiaPedir === "function") telaCheiaPedir("horas", () => { if (horCheia) horCheiaTrocar(false, false); }); }
+  else if (typeof telaCheiaSair === "function") telaCheiaSair("horas");
+  if (lembrar) { try { localStorage.setItem(HOR_CH_CHEIA, horCheia ? "1" : "0"); } catch (e) {} }
+  return horCheia;
 }
-function horTrocarGrande() {
-  horGrande = !horGrande;
-  horPintarGrande();
-  try { localStorage.setItem("eac_hor_grande", horGrande ? "1" : "0"); } catch (e) {}
+function horTrocarGrande() { return horCheiaTrocar(undefined, true); }
+
+/* (19.103.0) fechar as horas para abrir outra coisa deixa a volta armada: ao fechar o que foi aberto, volta igual */
+function horFechar() {
+  const c = $("horCorpo");
+  const y = c ? c.scrollTop : 0;
+  painelArmar("dlgHoras", t("hor_titulo"), () => {
+    horAbrir({ manter: true });
+    const c2 = $("horCorpo");
+    if (c2) c2.scrollTop = y;
+  });
 }
 
-function horAbrir() {
-  horDiscAberta = ""; horBusca = ""; horFiltro = "tudo"; horRamosFechados = new Set();
-  try { horGrande = localStorage.getItem("eac_hor_grande") === "1"; } catch (e) { horGrande = false; }
-  horPintarGrande();
+function horAbrir(opc) {
+  const manter = !!(opc && opc.manter);
+  if (!manter) {
+    horDiscAberta = ""; horBusca = ""; horFiltro = "tudo"; horRamosFechados = new Set();
+    if (typeof voltarLimpar === "function") voltarLimpar("dlgHoras");
+  }
   horPintar();
   dicasDosBotoes({ btnEdHoras: "hor_tip_abrir", btnHorX: "hor_tip_x", horPeriodo: "hor_tip_periodo" });
   abrirModal("dlgHoras");
+  horCheiaTrocar(horCheiaPreferida(), false);
 }
 
 if (typeof document !== "undefined" && $("dlgHoras")) {
-  $("btnEdHoras").onclick = horAbrir;
+  $("btnEdHoras").onclick = () => horAbrir();
   $("btnHorX").onclick = () => $("dlgHoras").close();
   $("btnHorGrande").onclick = horTrocarGrande;
   $("horPeriodo").onchange = horPintar;
+  if ($("dlgHoras").addEventListener) $("dlgHoras").addEventListener("close", () => { if (horCheia) { horCheia = false; $("dlgHoras").classList.remove("hor-cheia"); if (typeof telaCheiaSair === "function") telaCheiaSair("horas"); } });
 }

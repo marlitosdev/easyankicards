@@ -1456,18 +1456,18 @@ function montarPlanoBase(r, opcoes) {
     if (escolhidas.length && objPts > 0) {
       const sD = disc.pontos / (objPts + disc.pontos);
       const fC = escolhidas.reduce((a2, k) => a2 + porD[k] / tot, 0) || 1;
-      const mult = {}, antes = {}, depois = {};
+      const mult = {}, antes = {}, depois = {}, depoisFino = {};
       Object.keys(porD).forEach((k) => {
         const f = porD[k] / tot;
         const f2 = f * (1 - sD) + (escolhidas.indexOf(k) >= 0 ? sD * f / fC : 0);
         mult[k] = f ? f2 / f : 1;
-        antes[k] = Math.round(f * 100); depois[k] = Math.round(f2 * 100);
+        antes[k] = Math.round(f * 100); depois[k] = Math.round(f2 * 100); depoisFino[k] = f2 * 100;
       });
       todos.forEach((i) => { const m = mult[i.disciplina] || 1; i.bruto *= m; i.brutoOrdem *= m; });
       const maxB = todos.reduce((m2, i) => Math.max(m2, i.brutoOrdem), 0) || 1;
       todos.forEach((i) => { i.prioridade = Math.round((i.brutoOrdem / maxB) * 100); });
       todos.sort((a2, b2) => b2.brutoOrdem - a2.brutoOrdem || a2.linha - b2.linha);
-      discInfo = { s: Math.round(sD * 100), pontos: disc.pontos, objetiva: objPts, disciplinas: escolhidas, antes, depois, mult };
+      discInfo = { s: Math.round(sD * 100), pontos: disc.pontos, objetiva: objPts, disciplinas: escolhidas, antes, depois, mult, depoisFino };
     }
   }
   /* PASSADA 1: identidade e ESTADO de cada item (o dos ramos sai dos ramos). */
@@ -1519,6 +1519,8 @@ function montarPlanoBase(r, opcoes) {
   /* Fatia de cada disciplina na prova: entra no motivo porque é o argumento
    * mais forte a favor de estudar aquilo agora. */
   const fatia = {};
+  /* (19.103.0) a MESMA fatia sem arredondar: é o "vale X% da prova" das telas (Horas por assunto, Domínio, Cobertura) */
+  const fatiaFina = {};
   /* FATIA EXATA quando o edital trouxe os números.
    * Somar "peso da disciplina × peso do tópico" estima a importância;
    * quando o edital diz "Português 10 questões, Financeiro 20", a razão
@@ -1532,19 +1534,21 @@ function montarPlanoBase(r, opcoes) {
   if (exata) {
     const somaAbs = comAbs.reduce((a, d) => a + d.abs, 0) || 1;
     comAbs.forEach((d) => {
-      fatia[d.nome] = Math.round((d.abs / somaAbs) * 100);
+      fatiaFina[d.nome] = (d.abs / somaAbs) * 100;
+      fatia[d.nome] = Math.round(fatiaFina[d.nome]);
     });
     /* com a discursiva, a fatia é a da nota final (a conta foi feita acima) */
-    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; });
+    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; fatiaFina[k] = discInfo.depoisFino[k]; });
   } else if (hibrida) {
     /* (19.61.0) a fatia dos pontos (os do edital e os estimados no que sobra da objetiva) */
-    Object.keys(hibrida.pts).forEach((k) => { fatia[k] = Math.round((hibrida.pts[k] / hibrida.total) * 100); });
-    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; });
+    Object.keys(hibrida.pts).forEach((k) => { fatiaFina[k] = (hibrida.pts[k] / hibrida.total) * 100; fatia[k] = Math.round(fatiaFina[k]); });
+    if (discInfo) Object.keys(discInfo.depois).forEach((k) => { fatia[k] = discInfo.depois[k]; fatiaFina[k] = discInfo.depoisFino[k]; });
   } else {
     const totalBruto = todos.reduce((a, i) => a + i.bruto, 0) || 1;
     todos.forEach((i) => { fatia[i.disciplina] = (fatia[i.disciplina] || 0) + i.bruto; });
     Object.keys(fatia).forEach((k) => {
-      fatia[k] = Math.round((fatia[k] / totalBruto) * 100);
+      fatiaFina[k] = (fatia[k] / totalBruto) * 100;
+      fatia[k] = Math.round(fatiaFina[k]);
     });
   }
 
@@ -1784,7 +1788,7 @@ function montarPlanoBase(r, opcoes) {
     fase2N: todos.filter((i) => i.fase2).length,
     semanas, porSemana, usado,
     orcamento: semanas === null ? null : semanas * porSemana,
-    fatia,
+    fatia, fatiaFina,
     feitos: todos.filter((i) => i.feito).length,
     revisados: todos.filter((i) => i.revisado).length,
     total: todos.length,
