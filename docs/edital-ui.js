@@ -5676,6 +5676,9 @@ function edIniciar() {
   });
   if ($("btnRegUsarPlano")) $("btnRegUsarPlano").onclick = () => regTempoDefinir(regTempoPlanejado, "plano");
   $("edDias").onchange = edRender;
+  /* (19.112.0) FECHAR COM ESC TAMBÉM ZERA O RETORNO: o "cancel" do navegador fechava o formulário sem passar pelo botão,
+   * e o retorno ficava armado para o PRÓXIMO registro (de outra tela) — a ficha voltaria num ramo que nada tinha a ver */
+  if ($("dlgRegistro") && $("dlgRegistro").addEventListener) $("dlgRegistro").addEventListener("cancel", () => { regDepois = null; });
   $("btnRegFechar").onclick = () => {
     $("dlgRegistro").close();
     regAtual = null;

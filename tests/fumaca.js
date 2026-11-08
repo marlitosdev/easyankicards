@@ -689,7 +689,7 @@ function rodar(opc) {
     matLimparColagem, matGravarCartoes, matContarCartoes, matAplicarColagem,
     matReg, matLogTexto, matLogAbrir, matLogLimpar, matLogCarregar,
     matAgrupado, matTiposDe, matAlternarLei, matRender,
-    matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico, matFichaRamosEstado, domNiveisDosRamos, matFichaTam,
+    matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico, matFichaRamosEstado, domNiveisDosRamos, matFichaTam, matFichaTecla, matFichaProximoRamo, matFichaOrdemRamos, matFichaRamoLembrado,
     leiIrDominio, leiIrCalor, leiIrDados, leiNuncaVistos, leiNuncaVistosPrioritarios, leiFilaNVIniciar, leiFilaNVProximo, leiFilaNVSair, leiFilaNVAtual: () => leiFilaNV, leiArtigoVistoMarcar, leiQuestoesDoArtigo,
     qsArtigosDaQuestao, qsIrmasDe, qsIrmasDaAtual, qsAgendarIrma, qsIrmaAgendadaDe, qsIrmaDesfazer, qsUiIrmaLinha, QS_IRMA_PASSO, qsSessaoRetomar, qsSessaoLer,
     qsValorAcerto, qsPedeRevisao, qsMarcarChute, QS_PESO_CHUTE, qsUiChuteAlternar, qsUiPintarChute, qsChuteAtual: () => qsChute,

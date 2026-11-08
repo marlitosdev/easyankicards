@@ -3785,7 +3785,60 @@ async function testes() {
        "T1c2 registrar pela ficha abre o registro JA com o ramo escolhido (Contratos, que nao e' o da vez): " + a.$("regTitulo").textContent);
     a.$("dlgRegistro").close();
     esc && a.edAbrirFicha("Licitações", "Lei 14.133", { ramos: it().ramos, item: it(), editalId: ed.id });
-    ok(rod().some((b) => b.textContent === "Registrar estudo"), "T1c3 no topico inteiro, 'Registrar estudo' (sem ramo)");
+    ok(a.matFichaEscopoAtual() === "contratos" && a.matFichaRamoLembrado(chave) === "contratos",
+       "T1c3 (19.112.0) aberta sem ramo pedido, a ficha volta no ultimo escolhido neste topico (Contratos): " + a.matFichaEscopoAtual());
+    a.matFichaEscolher("");
+    ok(rod().some((b) => b.textContent === "Registrar estudo") && a.matFichaRamoLembrado(chave) === "", "T1c3b no topico inteiro, 'Registrar estudo' (sem ramo) — e o topico inteiro tambem fica lembrado");
+
+    /* (19.112.0) a fase 3: o próximo ramo, o teclado e a volta depois de registrar */
+    {
+      const xF = Object.assign({}, a.matResumosAtual()[chave] || {}, { chave, disciplina: "Licitações", topico: "Lei 14.133" });
+      const ordem = a.matFichaOrdemRamos(xF, it().ramos, ed.id).map((r) => r.id);
+      ok(ordem.length === it().ramos.length && ordem.slice().sort().join() === it().ramos.map((r) => r.id).sort().join(),
+         "T1f a ordem dos ramos tem todos, uma vez cada: " + ordem.join(","));
+      const bProx = () => todosF(a.$("matFichaRodape"), (e) => /mat-ficha-prox/.test(cl(e)))[0];
+      ok(bProx() && bProx().textContent === a.t("mat_ficha_prox") && a.matFichaProximoRamo(xF, it().ramos, "", ed.id, true).id === ordem[0],
+         "T1f2 no topico inteiro, 'Proximo ramo' vai ao primeiro da ordem (o mais fraco, depois o de maior peso): " + (bProx() && bProx().title));
+      bProx().onclick();
+      ok(a.matFichaEscopoAtual() === ordem[0] && a.$("dlgMatFicha").open === true, "T1f3 tocar em 'Proximo ramo' troca o ramo sem fechar a ficha");
+      bProx().onclick();
+      ok(a.matFichaEscopoAtual() === ordem[1], "T1f4 de novo: o seguinte na ordem (" + ordem[1] + ")");
+      for (let k = 2; k < ordem.length; k++) bProx().onclick();
+      bProx().onclick();
+      ok(a.matFichaEscopoAtual() === ordem[0], "T1f5 depois do ultimo, volta ao primeiro");
+      /* o teclado */
+      const btnEsc = (id) => esc()[[""].concat(it().ramos.map((r) => r.id)).indexOf(id)];
+      let prev = 0;
+      const tecla = (key, alvo) => a.matFichaTecla({ key, target: alvo || btnEsc(a.matFichaEscopoAtual()), preventDefault() { prev++; } });
+      a.matFichaEscolher("");
+      ok(tecla("ArrowDown") === true && a.matFichaEscopoAtual() === it().ramos[0].id && prev === 1, "T1g seta para baixo: o ramo seguinte da lista");
+      tecla("ArrowDown");
+      ok(a.matFichaEscopoAtual() === it().ramos[1].id, "T1g2 e o seguinte");
+      tecla("ArrowUp"); tecla("ArrowUp"); tecla("ArrowUp");
+      ok(a.matFichaEscopoAtual() === "", "T1g3 seta para cima para no 'Tópico inteiro' (nao da a volta)");
+      ok(tecla("ArrowDown", { tagName: "TEXTAREA", className: "" }) === false && a.matFichaEscopoAtual() === "", "T1g4 as setas num campo de texto nao trocam o ramo");
+      ok(tecla("Enter", { tagName: "BUTTON", className: "btn-min", getAttribute: () => "false" }) === false, "T1g5 Enter fora do ramo escolhido fica com o navegador");
+      a.matFichaEscolher("modalidades");
+      a.$("dlgMaterial").open = false;
+      ok(tecla("Enter") === true && a.$("dlgMatFicha").open === false && a.$("dlgMaterial").open === true, "T1g6 Enter no ramo escolhido abre o resumo dele");
+      a.$("dlgMaterial").close && a.$("dlgMaterial").close();
+      a.$("dlgMaterial").open = false;
+      /* registrar pela ficha: confirmado, ela volta no PRÓXIMO ramo, com o aviso */
+      a.edAbrirFicha("Licitações", "Lei 14.133", { ramos: it().ramos, ramo: "modalidades", item: it(), editalId: ed.id });
+      rod().find((b) => /Registrar estudo de «Modalidades»/.test(b.textContent)).onclick();
+      ok(a.$("dlgRegistro").open === true && a.$("dlgMatFicha").open === false, "T1h registrar fecha a ficha e abre o registro");
+      a.confirmarRegistroTeste("feito");
+      const aviso = todosF(a.$("matFichaLista"), (e) => /mat-ficha-apos/.test(cl(e)))[0];
+      ok(a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() && a.matFichaEscopoAtual() !== "modalidades" && aviso && /Modalidades/.test(aviso.textContent),
+         "T1h2 confirmado, a ficha volta no proximo ramo, com o aviso do registrado: " + a.matFichaEscopoAtual() + " · " + (aviso && aviso.textContent));
+      a.matFichaEscolher(a.matFichaEscopoAtual());
+      ok(!todosF(a.$("matFichaLista"), (e) => /mat-ficha-apos/.test(cl(e))).length, "T1h3 o aviso some ao escolher um ramo");
+      /* fechar sem gravar: não volta */
+      rod().find((b) => /^Registrar estudo de/.test(b.textContent)).onclick();
+      a.$("btnRegFechar").onclick();
+      ok(a.$("dlgMatFicha").open === false && a.$("dlgRegistro").open === false, "T1h4 fechar o registro sem gravar nao reabre a ficha");
+      a.matFichaEscolher && a.$("dlgMatFicha").close && a.$("dlgMatFicha").close();
+    }
     a.$("dlgMatFicha").close();
     /* a ficha aberta pelo Material de estudo (sem contexto) acha os ramos no edital aberto */
     a.matAbrirFicha({ chave, disciplina: "Licitações", topico: "Lei 14.133" });

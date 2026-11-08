@@ -3998,17 +3998,102 @@ function matAbrirFicha(x, opc) {
     matFichaOpc.ramos = (it && it.ramos && it.ramos.length) ? it.ramos : matRamosDaFonte(x.disciplina, x.topico);
     if (it && !matFichaOpc.item) matFichaOpc.item = it;
   }
-  matFichaEscopo = matFichaOpc.ramo && matFichaOpc.ramos.some((r) => r.id === matFichaOpc.ramo) ? matFichaOpc.ramo : "";
+  /* (19.112.0) sem ramo pedido (o Material de estudo, a agenda sem "ramo da vez"), a ficha volta no último escolhido
+   * NESTE tópico — quem pede um ramo (o chip do Domínio, o "▶ Estudar" com a vez) continua mandando */
+  let pedido = matFichaOpc.ramo;
+  if (pedido === undefined || pedido === null) { const lem = matFichaRamoLembrado(x.chave); if (lem !== null) pedido = lem; }
+  matFichaEscopo = pedido && matFichaOpc.ramos.some((r) => r.id === pedido) ? pedido : "";
   const esc = $("matFichaEscopo");
   if (esc) { esc.scrollTop = 0; esc.scrollLeft = 0; }
   matPintarFicha();
   abrirModal("dlgMatFicha");
-  /* (19.110.0) o ramo escolhido à vista na lista (com muitos ramos, ele pode estar lá embaixo) */
-  try {
-    const at = esc ? Array.from(esc.children).find((b) => b.getAttribute("aria-pressed") === "true") : null;
-    if (at && matFichaEscopo && at.scrollIntoView) at.scrollIntoView({ block: "nearest", inline: "nearest" });
-  } catch (e) {}
+  dlg.onkeydown = matFichaTecla;
+  /* (19.110.0) o ramo escolhido à vista na lista (com muitos ramos, ele pode estar lá embaixo) — e com o foco, para as
+   * setas já funcionarem */
+  if (matFichaOpc.ramos.length) matFichaFocarAtual();
   return dlg;
+}
+/* (19.112.0) O ÚLTIMO RAMO DE CADA TÓPICO: { chave: ramoId } ("" = o tópico inteiro), só neste aparelho */
+const MAT_CH_FICHA_RAMO = "eac_ficha_ramo";
+function matFichaRamoLembrado(chave) {
+  try {
+    const m = JSON.parse(localStorage.getItem(MAT_CH_FICHA_RAMO) || "{}");
+    return Object.prototype.hasOwnProperty.call(m, chave) ? String(m[chave] || "") : null;
+  } catch (e) { return null; }
+}
+function matFichaRamoLembrar(chave, id) {
+  if (!chave) return;
+  try {
+    const m = JSON.parse(localStorage.getItem(MAT_CH_FICHA_RAMO) || "{}");
+    delete m[chave];
+    m[chave] = id || "";
+    const ks = Object.keys(m);
+    ks.slice(0, Math.max(0, ks.length - 300)).forEach((k) => delete m[k]);
+    localStorage.setItem(MAT_CH_FICHA_RAMO, JSON.stringify(m));
+  } catch (e) {}
+}
+function matFichaFocarAtual() {
+  try {
+    const esc = $("matFichaEscopo");
+    const at = esc ? Array.from(esc.children).find((b) => b.getAttribute("aria-pressed") === "true") : null;
+    if (!at) return null;
+    if (at.focus) at.focus();
+    if (at.scrollIntoView) at.scrollIntoView({ block: "nearest", inline: "nearest" });
+    return at;
+  } catch (e) { return null; }
+}
+/* (19.112.0) O PRÓXIMO RAMO: o mais fraco primeiro (a ordem do Domínio: vermelho, amarelo, não estudado, azul, verde),
+ * depois o de maior peso, depois a ordem do edital. "ciclo" anda um passo nessa ordem (o botão); sem ele, o primeiro que
+ * não é o atual (depois de registrar o atual). */
+function matFichaOrdemRamos(x, ramos, edId) {
+  const est = matFichaRamosEstado(x, ramos, edId);
+  const ix = (nv) => { const i = typeof DOM_NIVEIS !== "undefined" ? DOM_NIVEIS.indexOf(nv) : -1; return i >= 0 ? i : (nv === "pulado" ? 99 : 2); };
+  return (ramos || []).map((r, i) => ({ r, i, n: ix((est[r.id] || {}).nivel), p: Number(r.peso) || 0 }))
+    .sort((a, b) => (a.n - b.n) || (b.p - a.p) || (a.i - b.i)).map((o) => o.r);
+}
+function matFichaProximoRamo(x, ramos, atual, edId, ciclo) {
+  const ordem = matFichaOrdemRamos(x, ramos, edId);
+  if (!ordem.length) return null;
+  if (ciclo) {
+    const i = ordem.findIndex((r) => r.id === atual);
+    const prox = ordem[(i + 1) % ordem.length];
+    return prox && prox.id !== atual ? prox : null;
+  }
+  return ordem.find((r) => r.id !== atual) || null;
+}
+/* registrado o ramo pela ficha, ela volta no PRÓXIMO (se nada mais estiver aberto: o registro pode abrir outra janela) */
+function matFichaVoltarProximo(x, opc, feito) {
+  try { if (typeof _modaisAbertos !== "undefined" && Array.from(_modaisAbertos).some((d) => d && d.open)) return null; } catch (e) {}
+  const prox = matFichaProximoRamo(x, opc.ramos, feito, opc.editalId, false);
+  if (!prox) return null;
+  const reg0 = (typeof matObter === "function" && matObter(x.chave)) || {};
+  return matAbrirFicha(Object.assign({}, x, reg0, { chave: x.chave, disciplina: x.disciplina, topico: x.topico }),
+    Object.assign({}, opc, { ramo: prox.id, aposRegistro: feito }));
+}
+/* (19.112.0) O TECLADO: ↑/↓ (e ←/→ na faixa do celular) trocam o ramo; Enter no ramo escolhido abre o resumo dele */
+let matFichaAcaoResumo = null;
+function matFichaTecla(ev) {
+  const ramos = (matFichaOpc && matFichaOpc.ramos) || [];
+  if (!ev || !ramos.length) return false;
+  const tg = ev.target || {};
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || "") || tg.isContentEditable) return false;
+  const k = ev.key;
+  const passo = (k === "ArrowDown" || k === "ArrowRight") ? 1 : (k === "ArrowUp" || k === "ArrowLeft") ? -1 : 0;
+  if (passo) {
+    const ids = [""].concat(ramos.map((r) => r.id));
+    const i = ids.indexOf(matFichaEscopo);
+    const j = Math.max(0, Math.min(ids.length - 1, i + passo));
+    if (ev.preventDefault) ev.preventDefault();
+    if (j !== i) matFichaEscolher(ids[j]);
+    return true;
+  }
+  if (k === "Enter" && /(^| )mat-ficha-esc( |$)/.test(tg.className || "") && tg.getAttribute && tg.getAttribute("aria-pressed") === "true"
+      && typeof matFichaAcaoResumo === "function") {
+    if (ev.preventDefault) ev.preventDefault();
+    matFichaAcaoResumo();
+    return true;
+  }
+  return false;
 }
 /* (19.110.0) O QUE CADA RAMO TEM, para a lista de ramos da ficha — a cor do domínio e as mesmas contas das linhas da ficha
  * (resumo: a seção do ramo; cartões: a etiqueta; questões e julgados: os LIGADOS ao ramo). "" é o tópico inteiro. */
@@ -4048,7 +4133,13 @@ function matFichaRamoDica(e) {
   return [e.nivel && e.nivel !== "pulado" ? t("dom_n_" + e.nivel) : "", tem.length ? t("mat_ficha_esc_tem", { l: tem.join(" · ") }) : t("mat_ficha_esc_nada")]
     .filter(Boolean).join(" · ");
 }
-function matFichaEscolher(id) { matFichaEscopo = id || ""; matPintarFicha(); }
+function matFichaEscolher(id) {
+  matFichaEscopo = id || "";
+  if (matFichaOpc) matFichaOpc.aposRegistro = "";
+  if (matFichaAtual) matFichaRamoLembrar(matFichaAtual.chave, matFichaEscopo);
+  matPintarFicha();
+  matFichaFocarAtual();
+}
 function matFichaEscopoAtual() { return matFichaEscopo; }
 function matPintarFicha() {
   const dlg = $("dlgMatFicha");
@@ -4118,6 +4209,14 @@ function matPintarFicha() {
     cab.append(nmE);
     const info = ramo ? (ramo.peso ? t("mat_ficha_peso", { p: ramo.peso }) : "") : t("mat_ficha_n_ramos", { n: ramos.length });
     if (info) { const sp = document.createElement("span"); sp.className = "nota"; sp.textContent = info; cab.append(sp); }
+    const feitoR = o.aposRegistro ? ramos.find((r) => r.id === o.aposRegistro) : null;
+    if (feitoR && ramo) {
+      const av = document.createElement("div");
+      av.className = "mat-ficha-apos";
+      av.setAttribute("role", "status");
+      av.textContent = t("mat_ficha_apos_reg", { r: feitoR.nome });
+      cab.append(av);
+    }
     box.append(cab);
   }
   const fechaE = (fn) => () => { try { dlg.close(); } catch (e) {} fn(); };
@@ -4154,6 +4253,7 @@ function matPintarFicha() {
   const opcEd = { ramos, ramo: ramo ? ramo.id : "*" };
   const corpoR = ramo ? matTextoDaSecao(textoR, ramo.id, ramos) : null;
   const temEsc = ramo ? !!(corpoR && corpoR.trim()) : inf.temR;
+  matFichaAcaoResumo = fechaE(() => matAbrirEditor(ed, temEsc ? "ler" : "editar", opcEd));
   item("resumo", ramo ? t("mat_slot_resumo_ramo") : t("mat_slot_resumo"), temEsc,
     ramo ? (temEsc ? matFichaTam(corpoR.length) : t("mat_ficha_resumo_ramo_falta"))
       : (inf.temR ? matFichaTam(inf.chars) + (secs.length ? " · " + t("mat_ficha_resumo_secoes", { n: secs.length }) : "") : t("mat_ficha_falta")),
@@ -4221,7 +4321,25 @@ function matPintarFicha() {
     rod.innerHTML = "";
     if (o.item && typeof abrirRegistro === "function") {
       rod.append(botao(ramo ? t("mat_ficha_registrar_ramo", { r: ramo.nome }) : t("mat_ficha_registrar"), "btn-min mat-ficha-reg",
-        () => abrirRegistro(o.item, ramo ? { ramo: ramo.id } : undefined), t("ed_reg_novo")));
+        () => {
+          abrirRegistro(o.item, ramo ? { ramo: ramo.id } : undefined);
+          /* (19.112.0) confirmado o registro de um ramo, a ficha volta no próximo (fechar sem gravar não traz nada) */
+          if (ramo && ramos.length > 1) {
+            const xr = x, opr = Object.assign({}, o), feito = ramo.id;
+            try { regDepois = () => { setTimeout(() => matFichaVoltarProximo(xr, opr, feito), 0); }; } catch (e) {}
+          }
+        }, t("ed_reg_novo")));
+    }
+    if (ramos.length > 1) {
+      const prox = matFichaProximoRamo(x, ramos, matFichaEscopo, o.editalId, true);
+      if (prox) {
+        const bp = document.createElement("button");
+        bp.type = "button"; bp.className = "btn-min mat-ficha-prox";
+        bp.textContent = t("mat_ficha_prox");
+        bp.title = t("mat_ficha_prox_tip", { r: prox.nome });
+        bp.onclick = () => matFichaEscolher(prox.id);
+        rod.append(bp);
+      }
     }
     if (o.editalId !== undefined && typeof ramAbrirEditor === "function") {
       rod.append(botao(t(ramos.length ? "ram_menu_ajustar" : "ram_menu_criar"), "btn-min ed-menu-ramos",
