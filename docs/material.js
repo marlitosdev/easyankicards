@@ -3999,9 +3999,47 @@ function matAbrirFicha(x, opc) {
     if (it && !matFichaOpc.item) matFichaOpc.item = it;
   }
   matFichaEscopo = matFichaOpc.ramo && matFichaOpc.ramos.some((r) => r.id === matFichaOpc.ramo) ? matFichaOpc.ramo : "";
+  const esc = $("matFichaEscopo");
+  if (esc) { esc.scrollTop = 0; esc.scrollLeft = 0; }
   matPintarFicha();
   abrirModal("dlgMatFicha");
+  /* (19.110.0) o ramo escolhido à vista na lista (com muitos ramos, ele pode estar lá embaixo) */
+  try {
+    const at = esc ? Array.from(esc.children).find((b) => b.getAttribute("aria-pressed") === "true") : null;
+    if (at && matFichaEscopo && at.scrollIntoView) at.scrollIntoView({ block: "nearest", inline: "nearest" });
+  } catch (e) {}
   return dlg;
+}
+/* (19.110.0) O QUE CADA RAMO TEM, para a lista de ramos da ficha — a cor do domínio e as mesmas contas das linhas da ficha
+ * (resumo: a seção do ramo; cartões: a etiqueta; questões e julgados: os LIGADOS ao ramo). "" é o tópico inteiro. */
+const MAT_FICHA_ICS = ["resumo", "cartoes", "questoes", "juris"];
+function matFichaRamosEstado(x, ramos, edId) {
+  const out = {};
+  const inf = matInfoTopico(x);
+  const pega = (fn, vazio) => { try { return fn(); } catch (e) { return vazio; } };
+  const niv = pega(() => (typeof domNiveisDosRamos === "function" ? domNiveisDosRamos(x.disciplina, x.topico, x.chave, edId) : null), null) || { nivel: null, ramos: {} };
+  const mat = pega(() => (typeof ramMaterialDoTopico === "function" ? ramMaterialDoTopico(x.chave, ramos) : {}), {});
+  const qR = pega(() => (typeof qsContarPorRamo === "function" ? qsContarPorRamo(x.chave) : {}), {});
+  const jR = pega(() => (typeof jurContarPorRamo === "function" ? jurContarPorRamo(x.chave) : {}), {});
+  const nQ = pega(() => (typeof qsContarDoTopico === "function" ? qsContarDoTopico(x.chave) : 0), 0);
+  const texto = String(x.texto || "");
+  out[""] = { nivel: niv.nivel, resumo: inf.temR ? 1 : 0, cartoes: inf.nCart, questoes: nQ, juris: inf.nJul };
+  (ramos || []).forEach((r) => {
+    const sec = pega(() => matTextoDaSecao(texto, r.id, ramos), "");
+    out[r.id] = { nivel: niv.ramos[r.id] || null, resumo: sec && sec.trim() ? 1 : 0,
+      cartoes: (mat[r.id] || {}).cartoes || 0, questoes: qR[r.id] || 0, juris: jR[r.id] || 0 };
+  });
+  return out;
+}
+/* o balão do botão do ramo: a cor em palavras e o que ele tem */
+function matFichaRamoDica(e) {
+  const tem = [];
+  if (e.resumo) tem.push(MAT_ICONE.resumo + " " + t("dom_mat_resumo"));
+  if (e.cartoes) tem.push(MAT_ICONE.cartoes + " " + e.cartoes);
+  if (e.questoes) tem.push(MAT_ICONE.questoes + " " + e.questoes);
+  if (e.juris) tem.push(MAT_ICONE.juris + " " + e.juris);
+  return [e.nivel && e.nivel !== "pulado" ? t("dom_n_" + e.nivel) : "", tem.length ? t("mat_ficha_esc_tem", { l: tem.join(" · ") }) : t("mat_ficha_esc_nada")]
+    .filter(Boolean).join(" · ");
 }
 function matFichaEscolher(id) { matFichaEscopo = id || ""; matPintarFicha(); }
 function matFichaEscopoAtual() { return matFichaEscopo; }
@@ -4021,20 +4059,44 @@ function matPintarFicha() {
     try { domPassoPintar($("matFichaPasso"), x.disciplina, x.topico, x.chave, o.editalId || "", () => { if ($("dlgMatFicha").open) $("dlgMatFicha").close(); }); }
     catch (e) { if ($("matFichaPasso")) $("matFichaPasso").hidden = true; }
   }
+  /* (19.110.0) A LISTA DE RAMOS: a bolinha com a cor do domínio, o nome e quatro ícones (resumo, cartões, questões,
+   * julgados), acesos quando o ramo tem — o que falta se vê sem abrir ramo por ramo. Os ícones e a bolinha são
+   * elementos vazios (o desenho vem do CSS): o texto do botão continua sendo só o nome. */
   const esc = $("matFichaEscopo");
+  const corpo = $("matFichaCorpo");
+  if (corpo) corpo.classList.toggle("com-ramos", !!ramos.length);
   if (esc) {
+    const rolY = esc.scrollTop || 0, rolX = esc.scrollLeft || 0;
     esc.innerHTML = "";
     esc.hidden = !ramos.length;
+    const est = ramos.length ? matFichaRamosEstado(x, ramos, o.editalId) : {};
     [{ id: "", nome: t("mat_ficha_topico_todo") }].concat(ramos).forEach((r) => {
+      const e = est[r.id || ""] || {};
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn-min mat-ficha-esc";
-      b.textContent = r.nome;
+      b.className = "btn-min mat-ficha-esc" + (r.id ? "" : " mat-ficha-esc-todo");
       b.setAttribute("aria-pressed", r.id === matFichaEscopo ? "true" : "false");
-      b.title = r.id ? t("mat_ficha_esc_ramo_tip", { r: r.nome }) : t("mat_ficha_esc_topico_tip");
+      const nv = e.nivel && e.nivel !== "pulado" ? e.nivel : "";
+      const dot = document.createElement("i");
+      dot.className = "mat-ficha-dot" + (nv ? " dom-n-" + nv : "");
+      dot.setAttribute("aria-hidden", "true");
+      const nm = document.createElement("span");
+      nm.className = "mat-ficha-esc-nome";
+      nm.textContent = r.nome;
+      const ics = document.createElement("span");
+      ics.className = "mat-ficha-esc-ics";
+      ics.setAttribute("aria-hidden", "true");
+      MAT_FICHA_ICS.forEach((tp) => {
+        const ic = document.createElement("i");
+        ic.className = "mat-ficha-esc-ic ic-" + tp + (e[tp] ? " tem" : "");
+        ics.append(ic);
+      });
+      b.append(dot, nm, ics);
+      b.title = (r.id ? t("mat_ficha_esc_ramo_tip", { r: r.nome }) : t("mat_ficha_esc_topico_tip")) + " — " + matFichaRamoDica(e);
       b.onclick = () => matFichaEscolher(r.id);
       esc.append(b);
     });
+    esc.scrollTop = rolY; esc.scrollLeft = rolX;
   }
   const box = $("matFichaLista");
   box.innerHTML = "";

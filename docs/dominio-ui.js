@@ -542,7 +542,8 @@ function domNiveisDoEdital(edId, forcar) {
   m.disciplinas.forEach((d) => d.topicos.forEach((tp) => {
     const pior = tp.ramos.length ? tp.ramos.filter((r) => r.nivel === tp.nivel)[0] : null;
     porTopico[domChaveNome(d.nome, tp.nome)] = { nivel: tp.nivel, disciplina: d.nome, topico: tp.nome, chave: tp.chave,
-      motivos: tp.motivos || (pior && pior.motivos) || [], pior: pior ? pior.ramoNome : "" };
+      motivos: tp.motivos || (pior && pior.motivos) || [], pior: pior ? pior.ramoNome : "",
+      ramos: tp.ramos.reduce((acc, r) => { acc[r.ramoId] = r.nivel; return acc; }, {}) };
   }));
   const tot = m.resumo.total || 1, dist = m.resumo.distribuicao;
   const pct = {};
@@ -554,6 +555,13 @@ function domNiveisDoEdital(edId, forcar) {
 function domNivelDoTopico(edId, disciplina, topico) {
   const n = domNiveisDoEdital(edId);
   return n ? (n.porTopico[domChaveNome(disciplina, topico)] || null) : null;
+}
+/* (19.110.0) A COR DO TÓPICO E A DE CADA RAMO, para a lista de ramos da ficha: { nivel, ramos: { ramoId: nivel } }.
+ * O edital: o que a ficha recebeu, senão o do tópico, senão o aberto (como o próximo passo). */
+function domNiveisDosRamos(disciplina, topico, chave, edId) {
+  const ed = edId || (typeof ramEditalDoTopico === "function" ? ramEditalDoTopico(chave, "") : "") || (typeof editalAtual !== "undefined" ? editalAtual : "");
+  const n = ed ? domNivelDoTopico(ed, disciplina, topico) : null;
+  return { nivel: n ? n.nivel : null, ramos: (n && n.ramos) || {} };
 }
 /* o selo da linha da agenda: só para o que já foi estudado (não estudado é o normal e já se vê na própria linha) */
 function domSeloDaLinha(i) {

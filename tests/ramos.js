@@ -3742,6 +3742,33 @@ async function testes() {
     ok(a.$("matFichaEscopo").hidden === false && esc().map((b) => b.textContent).join("|") === ["Tópico inteiro"].concat(it().ramos.map((r) => r.nome)).join("|")
        && esc()[0].getAttribute("aria-pressed") === "true", "T1a a ficha mostra o escopo: 'Tópico inteiro' (escolhido) e um botao por ramo: " + esc().map((b) => b.textContent));
     ok(itens().length === 5 && !/ › /.test(a.$("matFichaTit").textContent), "T1a2 no topico inteiro: os cinco materiais, titulo so' do topico");
+    /* (19.110.0) a lista de ramos: cada botão com a bolinha do domínio, o nome e os quatro ícones do material (acesos quando tem) */
+    {
+      const filhosCls = (b, re) => todosF(b, (e) => re.test(cl(e)));
+      const b0 = esc()[0], bM = esc().find((b) => b.textContent === "Modalidades");
+      const htmlF = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8").replace(/\r\n/g, "\n");
+      const dlgF = htmlF.slice(htmlF.indexOf('<dialog id="dlgMatFicha"'), htmlF.indexOf("</dialog>", htmlF.indexOf('<dialog id="dlgMatFicha"')));
+      ok(/com-ramos/.test(cl(a.$("matFichaCorpo"))) && /<div id="matFichaCorpo" class="mat-ficha-corpo">\s*<div id="matFichaEscopo"[^>]*><\/div>\s*<div id="matFichaLista"[^>]*><\/div>\s*<\/div>/.test(dlgF)
+         && /class="ui-modal mat-ficha-dlg"/.test(dlgF),
+         "T1a3 a ficha com ramos fica em duas colunas: os ramos e o material lado a lado");
+      ok(esc().every((b) => filhosCls(b, /mat-ficha-dot/).length === 1 && filhosCls(b, /mat-ficha-esc-ic /).length === 4 && filhosCls(b, /mat-ficha-esc-nome/).length === 1),
+         "T1a4 cada ramo (e o tópico inteiro) tem a bolinha, o nome e os quatro ícones");
+      const xF = Object.assign({}, a.matResumosAtual()[chave] || {}, { chave, disciplina: "Licitações", topico: "Lei 14.133" });
+      const st = a.matFichaRamosEstado(xF, it().ramos, ed.id);
+      ok(it().ramos.every((r) => st[r.id] && "nivel" in st[r.id]) && st[""] && st[""].cartoes === a.matInfoTopico(xF).nCart && st[""].cartoes === 5 && st.modalidades.cartoes === 1,
+         "T1a5 o estado traz a cor e o material de cada ramo, e o do tópico inteiro: " + JSON.stringify(st[""]));
+      const acesos = (b) => filhosCls(b, /mat-ficha-esc-ic .*tem/).map((e) => cl(e).replace(/.*ic-(\w+).*/, "$1")).join(",");
+      ok(acesos(bM) === ["resumo", "cartoes", "questoes", "juris"].filter((k) => st.modalidades[k]).join(","),
+         "T1a6 os ícones acesos batem com o que o ramo tem: [" + acesos(bM) + "] " + JSON.stringify(st.modalidades));
+      const nv = a.domNiveisDosRamos("Licitações", "Lei 14.133", chave, ed.id);
+      const dotM = filhosCls(bM, /mat-ficha-dot/)[0];
+      ok(nv.ramos && Object.keys(nv.ramos).length === it().ramos.length && (!nv.ramos.modalidades || nv.ramos.modalidades === "pulado" || new RegExp("dom-n-" + nv.ramos.modalidades).test(cl(dotM))),
+         "T1a7 a bolinha tem a cor do domínio do ramo: " + JSON.stringify(nv) + " · " + cl(dotM));
+      ok(/Modalidades/.test(bM.title) && /(tem |ainda sem material)/.test(bM.title) && /Tópico inteiro|tópico/i.test(b0.title),
+         "T1a8 o balão diz a cor e o que o ramo tem: " + bM.title);
+      ok(/<div class="mat-ficha-pe">\s*<div id="matFichaRodape"[^>]*><\/div>\s*<button class="btn btn-cinza" id="btnMatFichaFechar"/.test(dlgF) && /\.btn-min\.mat-ficha-reg\{background:var\(--acao\)/.test(htmlF),
+         "T1a9 o registro e o fechar ficam juntos no rodapé fixo");
+    }
     esc().find((b) => b.textContent === "Modalidades").onclick();
     ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133 › Modalidades" && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true",
        "T1b escolher um ramo: o titulo e o botao acompanham");

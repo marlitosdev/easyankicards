@@ -7460,6 +7460,43 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ed-diag-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .ed-diag-sub{margin:4px 0 12px}
 .ed-diag #edRitmo{margin-top:12px}
+/* (19.110.0) A FICHA "ESTUDAR" EM DUAS COLUNAS. Era uma coluna de 440px: com 8 ramos, os botões dos ramos e os cinco
+ * materiais somavam o dobro da altura da tela, e "Registrar estudo" ficava no fim da rolagem. Agora: cabeçalho e rodapé
+ * fixos; à esquerda a lista de ramos (bolinha do domínio + nome + quatro ícones do material), à direita o material do
+ * escolhido — cada coluna rola sozinha. No celular, os ramos viram uma faixa que rola para o lado. */
+dialog.ui-modal.mat-ficha-dlg{max-width:min(900px,96vw);width:min(900px,96vw);max-height:94dvh;padding:14px 16px 10px}
+dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-y:auto}
+.mat-ficha-dlg > h3{flex:0 0 auto;margin:0 0 2px;font-size:17px;line-height:1.3}
+.mat-ficha-dlg > .nota{flex:0 0 auto;margin:0 0 6px}
+.mat-ficha-dlg > .dom-passo{flex:0 0 auto}
+.mat-ficha-corpo{flex:1 1 auto;min-height:min(260px,45dvh);overflow-y:auto}
+.mat-ficha-corpo.com-ramos{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:12px;overflow:hidden}
+.mat-ficha-corpo.com-ramos > .mat-ficha-escopo{flex-direction:column;flex-wrap:nowrap;gap:2px;margin:0;min-height:0;overflow-y:auto;overflow-x:hidden;padding:2px 6px 2px 0;border-right:1px solid var(--borda)}
+.mat-ficha-corpo.com-ramos > .mat-ficha-lista{margin:0;min-height:0;overflow-y:auto;padding:0 2px 2px 0}
+.btn-min.mat-ficha-esc{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:6px 8px;font-size:12.5px;line-height:1.3;white-space:normal;background:transparent;border-color:transparent}
+.btn-min.mat-ficha-esc:hover{background:rgba(127,127,127,.14)}
+.btn-min.mat-ficha-esc-todo{font-weight:700}
+.mat-ficha-dot{flex:none;width:9px;height:9px;border-radius:50%;border:1px solid var(--sutil);box-sizing:border-box}
+.mat-ficha-dot[class*="dom-n-"]{border-color:rgba(255,255,255,.55)}
+.mat-ficha-esc-nome{flex:1 1 auto;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mat-ficha-esc-ics{flex:none;display:flex;gap:2px}
+.mat-ficha-esc-ic{font-style:normal;font-size:11.5px;width:15px;text-align:center;opacity:.2;filter:grayscale(1)}
+.mat-ficha-esc-ic.tem{opacity:1;filter:none}
+.mat-ficha-esc-ic.ic-resumo::before{content:"\1F4C4"}
+.mat-ficha-esc-ic.ic-cartoes::before{content:"\1F0CF"}
+.mat-ficha-esc-ic.ic-questoes::before{content:"\2753"}
+.mat-ficha-esc-ic.ic-juris::before{content:"\2696"}
+.mat-ficha-pe{flex:0 0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--borda)}
+.mat-ficha-pe .mat-ficha-rodape{flex:1 1 auto;margin:0;padding:0;border:0}
+.mat-ficha-pe #btnMatFichaFechar{margin-left:auto;padding:6px 14px}
+.btn-min.mat-ficha-reg{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
+@media (max-width:700px){
+  .mat-ficha-corpo.com-ramos{display:flex;flex-direction:column;gap:8px}
+  .mat-ficha-corpo.com-ramos > .mat-ficha-escopo{flex:0 0 auto;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:0 0 6px;border-right:0;border-bottom:1px solid var(--borda)}
+  .btn-min.mat-ficha-esc{width:auto;flex:0 0 auto;max-width:220px;border-color:var(--borda)}
+  .mat-ficha-corpo.com-ramos > .mat-ficha-lista{flex:1 1 auto}
+}
+
 /* =====================================================================
  * (19.93.0) A ABA EDITAL LEGÍVEL — fase 1: a escala de letra e o tamanho dos botões
  * Medido com o ISS: 62% do texto tinha 11,5 px ou menos, em 11 tamanhos diferentes (9 a 16 px), e 67 dos 149
@@ -8334,16 +8371,20 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
   </div>
 </dialog>
 <!-- M4 — a ficha do tópico: os quatro materiais juntos (abre pelo nome do tópico, no Material de estudo) -->
-<dialog id="dlgMatFicha" class="ui-modal">
+<dialog id="dlgMatFicha" class="ui-modal mat-ficha-dlg">
   <h3 id="matFichaTit"></h3>
   <p class="nota" id="matFichaSub"></p>
   <!-- T1: o mesmo caminho para o tópico inteiro e para cada ramo -->
   <!-- (v18.91.0) o próximo passo pelo Domínio dos assuntos -->
   <div id="matFichaPasso" class="dom-passo" role="status" hidden></div>
-  <div id="matFichaEscopo" class="mat-ficha-escopo" role="group" data-i18n-title="mat_ficha_esc_rot" hidden></div>
-  <div id="matFichaLista" class="mat-ficha-lista"></div>
-  <div id="matFichaRodape" class="mat-ficha-rodape" hidden></div>
-  <div class="dlg-rodape">
+  <!-- (19.110.0) duas colunas: os ramos (com a cor e o que cada um tem) e o material do escolhido; cada uma rola sozinha -->
+  <div id="matFichaCorpo" class="mat-ficha-corpo">
+    <div id="matFichaEscopo" class="mat-ficha-escopo" role="group" data-i18n-title="mat_ficha_esc_rot" hidden></div>
+    <div id="matFichaLista" class="mat-ficha-lista"></div>
+  </div>
+  <!-- o rodapé fica fixo: registrar o estudo sem rolar até o fim -->
+  <div class="mat-ficha-pe">
+    <div id="matFichaRodape" class="mat-ficha-rodape" hidden></div>
     <button class="btn btn-cinza" id="btnMatFichaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
