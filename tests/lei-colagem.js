@@ -403,7 +403,8 @@ async function testes() {
     r.api.matIniciar(); r.api.leiIniciar();
     return r.api;
   };
-  const marcadores = (a, prefixo) => achar(a.$("leiPreLista"), (c) => c.type === "checkbox");
+  /* (19.107.0) a decisão de cada item: dois botões com o nome da ação; o "não" de cada item */
+  const marcadores = (a) => achar(a.$("leiPreLista"), (c) => /(^| )lei-pre-op-nao( |$)/.test(c.className || ""));
 
   /* U1: criação — o texto de PDF abre a revisão, e NADA é criado antes do finalizar */
   {
@@ -415,7 +416,7 @@ async function testes() {
     ok(a.leisLista().length === 0, "U1a a lei foi criada ANTES de a pessoa aprovar a limpeza");
     ok(/Revisar o texto colado/.test(a.$("leiPreTitulo").textContent || ""), "U1b titulo da revisao: " + a.$("leiPreTitulo").textContent);
     ok(achar(a.$("leiPreLista"), (c) => /lei-pre-grupo/.test(c.className || "")).length >= 1, "U1c a revisao nao mostrou os grupos");
-    ok(/Prefeitura de Caruaru/.test(achar(a.$("leiPreLista"), (c) => /lei-pre-antes/.test(c.className || "")).map((c) => c.textContent).join(" ")),
+    ok(/Prefeitura de Caruaru/.test(achar(a.$("leiPreLista"), (c) => /(^| )lei-pre-sai( |$)/.test(c.className || "")).map((c) => c.textContent).join(" ")),
        "U1d a revisao nao mostra o texto que sairia (o cabecalho da prefeitura)");
     ok(/6 linha\(s\) de cabeçalho/.test(a.$("leiPreFim").textContent || "") && /Nada foi gravado/.test(a.$("leiPreFim").textContent || ""),
        "U1e o resumo nao diz o que vai acontecer nem que nada foi gravado: " + a.$("leiPreFim").textContent);
@@ -448,8 +449,8 @@ async function testes() {
     a.$("leiTexto").value = ["Art. 1º. Um.", "Art . 2 Dois.", "Art. 3. A - Tres.", "Art. 4º. Quatro."].join("\n");
     a.leiGravar();
     const cbs = marcadores(a);
-    ok(cbs.length === 2, "U3 devia haver 2 itens de grafia com caixa de escolha: " + cbs.length);
-    cbs[0].checked = false; cbs[0].onchange();
+    ok(cbs.length === 2, "U3 devia haver 2 itens de grafia com os botões de escolha: " + cbs.length);
+    cbs[0].onclick();
     a.$("btnLeiPreConfirmar").onclick();
     const t = a.leisLista()[0].texto.split("\n");
     ok(t[1] === "Art . 2 Dois." && t[2] === "Art. 3-A. Tres.", "U3a recusar um item so devia manter aquela linha: " + JSON.stringify(t));

@@ -138,16 +138,24 @@ async function testes() {
     const g = () => api.$("leiPreGrupo_remissao");
     const cartoes = () => achar(g(), (c) => /(^| )lei-pre-item( |$)/.test(c.className || "") && !/lei-pre-alt-item/.test(c.className));
     const cad = () => api.$("leiPreCadeia_" + rem[0].id);
-    const depois = () => achar(cad(), (c) => c.className === "lei-pre-depois").map((c) => c.textContent);
+    /* (19.107.0) a janela do texto: "marcado" pinta as linhas que sobem; "como fica" mostra o artigo com a escolha */
+    const linhasJan = () => achar(cad(), (c) => /^lei-pre-jan-l( alvo)?$/.test(c.className || "")).map((c) => c.textContent.replace(/^\d+/, ""));
+    const comoFica = () => { api.$("leiPreVista_" + rem[0].id + "_fica").onclick(); return linhasJan(); };
+    const marcado = () => { api.$("leiPreVista_" + rem[0].id + "_marcado").onclick(); return linhasJan(); };
+    const comLivro = (ls) => ls.filter((x) => /LIVRO I/.test(x));
     ok(cartoes().length === 1 && cad() && !api.$("leiPreItem_" + rem[1].id), "K1 a lista vira UM cartão: " + cartoes().map((c) => c.id).join(","));
-    ok(depois().length === 1 && /^Art\. 2º.*distribuída: LIVRO I - .*; LIVRO II - Regula/.test(depois()[0]), "K2 o 'ficará' mostra o artigo inteiro como vai ficar: " + JSON.stringify(depois()));
-    ok(achar(cad(), (c) => c.className === "lei-pre-antes").length === 2 && /linhas \d+ a \d+ — 2 itens de uma lista/.test(cad().textContent), "K2a as duas linhas que sobem, e o título da lista");
-    const caixa = () => achar(cad(), (c) => c.type === "checkbox" && !/^leiPreUm_/.test(c.id || ""))[0];
-    ok(caixa().checked === true && caixa().indeterminate === false, "K2b começa aceito");
-    caixa().checked = false; caixa().onchange();
+    marcado();
+    ok(achar(cad(), (c) => c.className === "lei-pre-junta").length === 2 && /linhas \d+ a \d+ — 2 itens de uma lista/.test(cad().textContent), "K2a as duas linhas que sobem, pintadas de 'junta', e o título da lista");
+    const fica1 = comLivro(comoFica());
+    ok(fica1.length === 1 && /distribuída: LIVRO I - .*; LIVRO II - Regula/.test(fica1[0]), "K2 'como fica' mostra o artigo inteiro numa linha só: " + JSON.stringify(fica1));
+    const op = (k) => achar(cad(), (c) => /(^| )lei-pre-op-/.test(c.className || "") && c.id === "leiPre" + k + "_" + rem[0].id)[0];
+    ok(/(^| )on( |$)/.test(op("Sim").className) && !/(^| )on( |$)/.test(op("Nao").className) && /^Juntar as 2 ao artigo$/.test(op("Sim").textContent), "K2b começa aceito: " + op("Sim").textContent);
+    op("Nao").onclick();
     const ctx = api.leiPreCtxAtual();
-    ok(ctx.decisoes[rem[0].id] === false && ctx.decisoes[rem[1].id] === false && depois().length === 3 && /off/.test(cad().className), "K3 a caixa decide a lista toda; recusada, o 'ficará' mostra as 3 linhas separadas");
-    caixa().checked = true; caixa().onchange();
+    const fica2 = comLivro(comoFica());
+    ok(ctx.decisoes[rem[0].id] === false && ctx.decisoes[rem[1].id] === false && fica2.length === 2 && /off/.test(cad().className) && /fica como veio/.test(cad().textContent),
+      "K3 'Deixar separadas' decide a lista toda; 'como fica' mostra as linhas separadas: " + JSON.stringify(fica2));
+    op("Sim").onclick();
     /* item a item: recusar só o último */
     const det = () => achar(cad(), (c) => c.className === "lei-pre-cadeia-itens")[0];
     ok(det().open === false && /2 de 2 aceitos/.test(det().textContent), "K4 'escolher item a item' recolhido, com a conta");
@@ -155,8 +163,9 @@ async function testes() {
     const um = api.$("leiPreUm_" + rem[1].id);
     um.checked = false; um.onchange();
     ok(ctx.decisoes[rem[0].id] === true && ctx.decisoes[rem[1].id] === false, "K4a recusar só um item");
-    ok(caixa().indeterminate === true && depois().length === 2 && /LIVRO I - /.test(depois()[0]) && /^LIVRO II - /.test(depois()[1]) && det().open === true,
-      "K4b caixa em meio-termo, o 'ficará' com o recusado à parte, e o item a item continua aberto: " + JSON.stringify(depois()));
+    const fica3 = comLivro(comoFica());
+    ok(!/(^| )on( |$)/.test(op("Sim").className) && !/(^| )on( |$)/.test(op("Nao").className) && fica3.length === 2 && /distribuída: LIVRO I - /.test(fica3[0]) && /^LIVRO II - /.test(fica3[1]) && det().open === true,
+      "K4b meio-termo: nenhum dos dois botões ligado, 'como fica' com o recusado à parte, e o item a item continua aberto: " + JSON.stringify(fica3));
     const ap = api.leiAplicarPreprocesso(texto, pre.mudancas, ctx.decisoes);
     ok(/LIVRO I - Estabelece/.test(api.leiArtigo(ap.texto, "2").texto) && !/LIVRO II/.test(api.leiArtigo(ap.texto, "2").texto), "K5 a tela diz o mesmo que o texto aplicado");
     /* remissão sozinha (não é lista) continua com o cartão de sempre */

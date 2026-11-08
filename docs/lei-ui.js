@@ -5618,6 +5618,9 @@ function leiRelatorioFluxo(tela, opc) {
         if (numR.problemas.length > 12) p.push("    …e mais " + (numR.problemas.length - 12) + " ponto(s) de numeração");
       }
     } catch (e) { p.push("  (conferência indisponível: " + (e && e.message) + ")"); }
+    /* (19.107.0) a janela do texto de cada sugestão, com as mesmas marcas da tela */
+    p.push("  janelas do texto: [-sai-] [+entra+] [^junta à linha de cima^] {trecho de outra lei} · ▸ = linha afetada");
+    const janela = (itens) => { try { leiPreJanelaTexto(c, itens).forEach((x) => p.push(x)); } catch (e) { p.push("        (janela indisponível: " + (e && e.message) + ")"); } };
     LEI_PRE_GRUPOS.slice().sort((a, b) => (leiPreGravidade(a) === "segura") - (leiPreGravidade(b) === "segura")).forEach((g) => {
       const it = c.pre.mudancas.filter((m) => m.grupo === g);
       if (!it.length) return;
@@ -5632,13 +5635,19 @@ function leiRelatorioFluxo(tela, opc) {
       }
       if (g === "remissao") {
         /* as listas como a tela as mostra: um cartão por lista, com o artigo como vai ficar */
-        leiPreCadeias(it).slice(0, 20).forEach((k) => p.push("      " + (k.length > 1 ? "lista " : "") + "linha(s) " + k.map((m) => m.linhas[0]).join(",")
-          + " [" + k.map((m) => m.motivo).join(",") + "] aceitas " + k.filter((m) => leiPreAceita(c, m)).length + "/" + k.length
-          + "  =>  " + leiPreCadeiaResultado(c, k).map((x) => cortar(x, 160)).join("  ||  ")));
+        leiPreCadeias(it).slice(0, 20).forEach((k, q) => {
+          p.push("      " + (k.length > 1 ? "lista " : "") + "linha(s) " + k.map((m) => m.linhas[0]).join(",")
+            + " [" + k.map((m) => m.motivo).join(",") + "] aceitas " + k.filter((m) => leiPreAceita(c, m)).length + "/" + k.length
+            + "  =>  " + leiPreCadeiaResultado(c, k).map((x) => cortar(x, 160)).join("  ||  "));
+          if (q < 6) janela(k);
+        });
         return;
       }
-      it.slice(0, 6).forEach((m) => p.push("      " + m.id + " linha(s) " + (m.linhas || []).slice(0, 4).join(",")
-        + " · " + cortar(m.antes, 110) + (m.depois ? "  =>  " + cortar(m.depois, 110) : "")));
+      it.slice(0, 6).forEach((m) => {
+        p.push("      " + m.id + " linha(s) " + (m.linhas || []).slice(0, 4).join(",")
+          + " · " + cortar(m.antes, 110) + (m.depois ? "  =>  " + cortar(m.depois, 110) : "") + " · escolha: " + (leiPreAceita(c, m) ? "aceita" : "recusada"));
+        janela([m]);
+      });
       if (it.length > 6) p.push("      …e mais " + (it.length - 6));
     });
     /* o que a pessoa RECUSOU: é aí que mora a divergência entre o que o app sugeriu e o que ela viu */
@@ -6835,6 +6844,314 @@ function leiPreAnexoVerEl(c, m) {
   return det;
 }
 
+/* =====================================================================
+ * (19.107.0) A JANELA DO TEXTO EM CADA SUGESTÃO
+ *
+ * Antes cada sugestão mostrava só a linha solta ("aparece 3 vezes (linhas 3057, 3069, 3105)", a linha riscada e o
+ * "ficará:") e uma caixa de marcar: para decidir era preciso LER a explicação e imaginar onde aquilo estava. Agora a
+ * sugestão mostra o TRECHO DO TEXTO onde ela age, com as linhas de cima e de baixo, e a parte afetada PINTADA:
+ *   · vermelho riscado = sai do texto       · verde = entra (ou fica assim)
+ *   · laranja sublinhado = junta à linha de cima   · roxo = trecho de outra lei (protegido, a limpeza não mexe)
+ * "marcado" mostra a sugestão pintada; "como fica" mostra o trecho com a SUA escolha de agora. A linha repetida mostra
+ * uma ocorrência por vez (1, 2, 3…), cada uma com o artigo onde está e se há um número de página perto — a prova de que
+ * é cabeçalho de página. A caixa de marcar virou dois botões com o nome da ação ("Tirar as 3" / "Manter").
+ * ===================================================================== */
+const LEI_PRE_JAN_CTX = 2;          /* linhas com texto antes e depois do trecho */
+const LEI_PRE_JAN_LARG = 260;       /* caracteres de uma linha-alvo à vista (centrada na parte pintada) */
+const LEI_PRE_JAN_CTX_LARG = 150;   /* e de uma linha de contexto */
+const LEI_PRE_JAN_MAX_ALVO = 6;     /* linhas-alvo à vista numa corrida de riscados */
+const LEI_PRE_OCORRENCIAS = ["cabecalho", "pagina", "invisiveis"];
+/* as linhas (1..) que estão dentro de um trecho citado de outra lei (protegidas da limpeza) */
+function leiPreProtegidas(c) {
+  if (!c._prot) {
+    const s = new Set();
+    ((c.pre && c.pre.blocos) || []).forEach((b) => {
+      if (b.recusado) return;
+      (b.trechos || []).forEach((tr) => { for (let k = tr.ini; k <= tr.fim; k++) s.add(k); });
+    });
+    c._prot = s;
+  }
+  return c._prot;
+}
+function leiPreSemInvisiveis(s) { return typeof LEI_RE_INVISIVEIS !== "undefined" ? String(s).replace(LEI_RE_INVISIVEIS, "") : String(s); }
+/* a linha como se lê: sem as marcas do riscado (o texto fica) e sem caracteres invisíveis */
+function leiPreLinhaLimpa(s) { return leiPreSemInvisiveis(leiTirarTachado(String(s == null ? "" : s), false)); }
+/* as linhas COM TEXTO vizinhas de n (para cima, dir = -1; para baixo, dir = 1) */
+function leiPreVizinhas(L, n, dir, quantas) {
+  const out = [];
+  for (let k = n + dir; k >= 1 && k <= L.length && out.length < quantas; k += dir) if (String(L[k - 1]).trim()) out.push(k);
+  return dir < 0 ? out.reverse() : out;
+}
+/* o pedaço que muda entre duas versões da mesma linha, em palavras inteiras: { pre, a, b, suf } */
+function leiPreDiff(a, b) {
+  a = String(a == null ? "" : a); b = String(b == null ? "" : b);
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  let j = 0;
+  while (j < a.length - i && j < b.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+  while (i > 0 && !/\s/.test(a[i - 1])) i--;
+  while (j > 0 && !/\s/.test(a[a.length - j])) j--;
+  return { pre: a.slice(0, i), a: a.slice(i, a.length - j), b: b.slice(i, b.length - j), suf: a.slice(a.length - j) };
+}
+/* uma linha longa vira uma janela em volta da primeira parte pintada (contexto: o fim da de cima, o começo da de baixo) */
+function leiPreCortarPartes(partes, larg, onde) {
+  const total = partes.reduce((a, p) => a + p.t.length, 0);
+  if (total <= larg) return partes;
+  let ini;
+  if (onde === "antes") ini = total - larg;
+  else if (onde === "depois") ini = 0;
+  else {
+    let pos = 0, foco = 0;
+    for (const p of partes) { if (p.k) { foco = pos; break; } pos += p.t.length; }
+    ini = Math.max(0, Math.min(foco - 60, total - larg));
+  }
+  const fim = ini + larg;
+  const out = [];
+  let pos = 0;
+  partes.forEach((p) => {
+    const a = Math.max(ini, pos), b = Math.min(fim, pos + p.t.length);
+    if (b > a) out.push({ t: p.t.slice(a - pos, b - pos), k: p.k });
+    pos += p.t.length;
+  });
+  if (ini > 0) out.unshift({ t: "…", k: "" });
+  if (fim < total) out.push({ t: "…", k: "" });
+  return out;
+}
+/* os caracteres invisíveis de uma linha, à vista: cada um vira "◌" pintado de "sai" */
+function leiPrePartesInvisiveis(orig) {
+  const limpo = leiPreSemInvisiveis(orig);
+  const out = [];
+  let j = 0, buf = "";
+  for (let i = 0; i < orig.length; i++) {
+    if (j < limpo.length && orig[i] === limpo[j]) { buf += orig[i]; j++; continue; }
+    if (buf) { out.push({ t: buf, k: "" }); buf = ""; }
+    out.push({ t: "◌", k: "sai" });
+  }
+  if (buf) out.push({ t: buf, k: "" });
+  return out;
+}
+/* uma linha riscada: o que está entre ~~ sai */
+function leiPrePartesRiscado(linha) {
+  const s = leiPreSemInvisiveis(String(linha == null ? "" : linha));
+  const out = [];
+  let k = 0;
+  s.replace(/~~([^~\n]+?)~~/g, (m, x, off) => {
+    if (off > k) out.push({ t: s.slice(k, off), k: "" });
+    out.push({ t: x, k: "sai" });
+    k = off + m.length;
+    return m;
+  });
+  if (k < s.length) out.push({ t: s.slice(k), k: "" });
+  return out;
+}
+/* a linha corrigida de uma sugestão de grafia ou de letras (inteira, não só a prévia) */
+function leiPreLinhaCorrigida(m, orig) {
+  let novo = null;
+  try {
+    if (m.grupo === "grafia") novo = m.novo || leiGrafiaDaLinha(orig, { manterAspas: !!m.manterAspas });
+    else if (m.grupo === "letras") novo = leiDesdobrarLetras(orig) || leiDesespacarNota(orig);
+  } catch (e) { novo = null; }
+  return novo === null || novo === undefined ? null : String(novo);
+}
+/* AS EVIDÊNCIAS de uma linha que o app quer tirar como cabeçalho: o artigo onde ela está e se há número de página perto */
+function leiPreProvas(c, m, n) {
+  const L = leiPreLinhasDaColagem(c);
+  const out = [];
+  if (m.grupo !== "cabecalho" && m.grupo !== "pagina") return out;
+  if (m.grupo === "cabecalho") {
+    const pags = new Set(((c.pre.mudancas || []).find((x) => x.grupo === "pagina") || { linhas: [] }).linhas);
+    let perto = false;
+    for (let k = Math.max(1, n - 6); k <= Math.min(L.length, n + 6); k++) {
+      if (k !== n && (pags.has(k) || /^\s*\d{1,4}\s*$/.test(String(L[k - 1])))) { perto = true; break; }
+    }
+    out.push({ cls: perto ? "ok" : "aviso", txt: t(perto ? "lei_pre_prova_pagina" : "lei_pre_prova_sem_pagina") });
+  }
+  let art = "";
+  for (let k = n - 1; k >= 1 && k >= n - 400; k--) {
+    const a = leiCasarArtigo(leiPreLinhaLimpa(L[k - 1]));
+    if (a) { art = typeof leiNumCruLimpo === "function" ? leiNumCruLimpo(a[1]) : a[1]; break; }
+  }
+  out.push({ cls: "", txt: art ? t("lei_pre_prova_art", { a: art }) : t("lei_pre_prova_inicio") });
+  return out;
+}
+/* O MODELO DA JANELA: as linhas do trecho, com as partes pintadas.
+ *   itens: [m] (uma sugestão) ou a cadeia de remissões; vista: "marcado" | "fica"; oc: a ocorrência (linha repetida)
+ *   => { linhas: [{ n, partes:[{t,k}], alvo } | { corte: n } ], provas, mais, igual } */
+function leiPreJanelaModelo(c, itens, vista, oc) {
+  const L = leiPreLinhasDaColagem(c);
+  const prot = leiPreProtegidas(c);
+  const m = itens[0];
+  const g = m.grupo;
+  const fica = vista === "fica";
+  const aceitas = itens.filter((x) => leiPreAceita(c, x)).length;
+  const ctx = (n, onde) => ({ n, alvo: false, partes: leiPreCortarPartes([{ t: leiPreLinhaLimpa(L[n - 1]), k: prot.has(n) ? "prot" : "" }], LEI_PRE_JAN_CTX_LARG, onde) });
+  const alvo = (n, partes) => ({ n, alvo: true, partes: leiPreCortarPartes(partes.filter((p) => p.t), LEI_PRE_JAN_LARG) });
+  const semMarca = (partes) => partes.map((p) => ({ t: p.t, k: p.k === "prot" ? "prot" : "" }));
+  const out = [];
+  let provas = [], mais = 0;
+  if (g === "remissao") {
+    const anc = m.ancora || Math.max(1, m.linhas[0] - 1);
+    leiPreVizinhas(L, anc, -1, LEI_PRE_JAN_CTX - 1).forEach((n) => out.push(ctx(n, "antes")));
+    const linhaAnc = { n: anc, alvo: false, partes: [{ t: leiPreLinhaLimpa(L[anc - 1]), k: "" }] };
+    out.push(linhaAnc);
+    let atual = linhaAnc;
+    itens.forEach((x) => {
+      const n = x.linhas[0];
+      const tx = leiPreLinhaLimpa(L[n - 1]).trim();
+      if (fica && leiPreAceita(c, x)) { atual.partes.push({ t: " ", k: "" }, { t: tx, k: "junta" }); return; }
+      atual = { n, alvo: true, partes: [{ t: tx, k: fica ? "" : "junta" }] };
+      out.push(atual);
+    });
+    out.forEach((r, i) => { if (r.n === anc || r.alvo) out[i] = Object.assign({}, r, { partes: leiPreCortarPartes(r.partes, LEI_PRE_JAN_LARG * (r.n === anc && fica ? 2 : 1), r.n === anc && !fica ? "antes" : undefined) }); });
+    const ult = itens[itens.length - 1].linhas[0];
+    leiPreVizinhas(L, ult, 1, LEI_PRE_JAN_CTX).forEach((n) => out.push(ctx(n, "depois")));
+    return { linhas: out, provas, mais, igual: fica && !aceitas };
+  }
+  let alvos;
+  if (LEI_PRE_OCORRENCIAS.indexOf(g) >= 0) alvos = [m.linhas[Math.max(0, Math.min(oc || 0, m.linhas.length - 1))]];
+  else if (g === "tachado") { alvos = (m.linhas || []).filter((n) => String(L[n - 1]).trim()); mais = Math.max(0, alvos.length - LEI_PRE_JAN_MAX_ALVO); alvos = alvos.slice(0, LEI_PRE_JAN_MAX_ALVO); }
+  else alvos = [m.linhas[0]];
+  if (g === "cabecalho" || g === "pagina") provas = leiPreProvas(c, m, alvos[0]);
+  leiPreVizinhas(L, alvos[0], -1, LEI_PRE_JAN_CTX).forEach((n) => out.push(ctx(n, "antes")));
+  const aceita = aceitas > 0;
+  let cortadas = 0;
+  const fechaCorte = () => { if (cortadas) { out.push({ corte: cortadas }); cortadas = 0; } };
+  alvos.forEach((n, i) => {
+    if (i > 0) {
+      /* entre duas linhas-alvo de uma corrida: só linhas em branco (não se mostram) */
+    }
+    const raw = L[n - 1];
+    let marcado, depois;
+    if (g === "cabecalho" || g === "pagina") {
+      marcado = [{ t: leiPreLinhaLimpa(raw), k: "sai" }];
+      depois = null;
+    } else if (g === "invisiveis") {
+      const orig = leiTirarTachado(String(raw), false);
+      marcado = leiPrePartesInvisiveis(orig);
+      depois = [{ t: leiPreSemInvisiveis(orig), k: "" }];
+    } else if (g === "tachado") {
+      marcado = leiPrePartesRiscado(raw);
+      const rot = m.cabecalhos && m.cabecalhos[n];
+      const r = rot ? leiTirarTachadoComCabecalho(leiPreSemInvisiveis(raw), rot) : leiTirarTachado(leiPreSemInvisiveis(raw), true);
+      depois = String(r).trim() ? [{ t: r, k: rot ? "entra" : "" }] : null;
+    } else {
+      const orig = leiPreLinhaLimpa(raw);
+      const novo = leiPreLinhaCorrigida(m, orig);
+      const d = novo !== null ? leiPreDiff(orig, novo) : leiPreDiff(m.antes, m.depois);
+      marcado = [{ t: d.pre, k: "" }, { t: d.a, k: "sai" }, { t: d.b, k: "entra" }, { t: d.suf, k: "" }];
+      depois = [{ t: d.pre, k: "" }, { t: d.b, k: "entra" }, { t: d.suf, k: "" }];
+    }
+    if (!fica) { out.push(alvo(n, marcado)); return; }
+    if (!aceita) { out.push(alvo(n, semMarca(marcado.filter((p) => p.k !== "entra")).map((p) => ({ t: p.t === "◌" ? "" : p.t, k: p.k })))); return; }
+    if (depois === null) { cortadas++; return; }
+    fechaCorte();
+    out.push(alvo(n, depois));
+  });
+  fechaCorte();
+  leiPreVizinhas(L, alvos[alvos.length - 1], 1, LEI_PRE_JAN_CTX).forEach((n) => out.push(ctx(n, "depois")));
+  return { linhas: out, provas, mais, igual: fica && !aceita };
+}
+/* a janela como texto, para o relatório: [-sai-] [+entra+] [^junta^] {outra lei} */
+function leiPreJanelaTexto(c, itens, vista, oc) {
+  const mod = leiPreJanelaModelo(c, itens, vista || "marcado", oc || 0);
+  const marca = (p) => (p.k === "sai" ? "[-" + p.t + "-]" : p.k === "entra" ? "[+" + p.t + "+]" : p.k === "junta" ? "[^" + p.t + "^]" : p.k === "prot" ? "{" + p.t + "}" : p.t);
+  return mod.linhas.map((r) => (r.corte ? "        ✂ " + r.corte + " linha(s) tirada(s)"
+    : "        " + String(r.n).padStart(5, " ") + (r.alvo ? " ▸ " : " | ") + r.partes.map(marca).join("").replace(/\s+/g, " ").slice(0, 220)))
+    .concat(mod.mais ? ["        … e mais " + mod.mais + " linha(s) riscada(s)"] : []);
+}
+function leiPreJanelaEl(c, itens) {
+  const m = itens[0];
+  const id = m.id;
+  c.janVista = c.janVista || {};
+  c.janOc = c.janOc || {};
+  const box = document.createElement("div");
+  box.className = "lei-pre-jan";
+  box.id = "leiPreJan_" + id;
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const pintar = () => {
+    box.innerHTML = "";
+    const vista = c.janVista[id] === "fica" ? "fica" : "marcado";
+    const nOc = LEI_PRE_OCORRENCIAS.indexOf(m.grupo) >= 0 ? (m.linhas || []).length : 1;
+    const oc = Math.max(0, Math.min(c.janOc[id] || 0, nOc - 1));
+    const mod = leiPreJanelaModelo(c, itens, vista, oc);
+    const cab = el("div", "lei-pre-jan-cab");
+    if (nOc > 1) {
+      for (let k = 0; k < Math.min(nOc, 8); k++) {
+        const b = el("button", "lei-pre-ocor" + (k === oc ? " on" : ""), String(k + 1));
+        b.type = "button";
+        b.id = "leiPreOc_" + id + "_" + k;
+        b.title = t("lei_pre_ocor_tip", { i: k + 1, n: nOc, l: m.linhas[k] });
+        b.setAttribute("aria-pressed", k === oc ? "true" : "false");
+        b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); c.janOc[id] = k; pintar(); };
+        cab.append(b);
+      }
+      if (nOc > 8) cab.append(el("span", "lei-pre-jan-nota-cab", t("lei_pre_ocor_mais", { n: nOc - 8 })));
+    }
+    mod.provas.forEach((p) => cab.append(el("span", "lei-pre-prova" + (p.cls ? " " + p.cls : ""), p.txt)));
+    const vs = el("span", "lei-pre-vista");
+    vs.title = t("lei_pre_vista_tip");
+    [["marcado", "lei_pre_vista_marcado"], ["fica", "lei_pre_vista_fica"]].forEach(([v, k]) => {
+      const b = el("button", vista === v ? "on" : "", t(k));
+      b.type = "button";
+      b.id = "leiPreVista_" + id + "_" + v;
+      b.setAttribute("aria-pressed", vista === v ? "true" : "false");
+      b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); c.janVista[id] = v; pintar(); };
+      vs.append(b);
+    });
+    cab.append(vs);
+    box.append(cab);
+    const corpo = el("div", "lei-pre-jan-txt");
+    mod.linhas.forEach((r) => {
+      if (r.corte) { corpo.append(el("span", "lei-pre-jan-corte", t("lei_pre_jan_corte", { n: r.corte }))); return; }
+      const l = el("span", "lei-pre-jan-l" + (r.alvo ? " alvo" : ""));
+      l.append(el("span", "lei-pre-jan-n", String(r.n)));
+      r.partes.forEach((p) => {
+        if (!p.t) return;
+        if (!p.k) { l.append(document.createTextNode(p.t)); return; }
+        const s = el("span", "lei-pre-" + p.k, p.t);
+        if (p.t === "◌") s.title = t("lei_pre_jan_invis_tip");
+        l.append(s);
+      });
+      corpo.append(l);
+    });
+    if (mod.mais) corpo.append(el("span", "lei-pre-jan-nota", t("lei_pre_jan_mais", { n: mod.mais })));
+    if (mod.igual) corpo.append(el("span", "lei-pre-jan-nota", t("lei_pre_jan_igual")));
+    box.append(corpo);
+  };
+  box.pintar = pintar;
+  pintar();
+  return box;
+}
+/* OS DOIS BOTÕES DA DECISÃO, com o nome da ação ("Tirar as 3" / "Manter"): o ligado fica cheio e com o visto */
+function leiPreRotulos(g, n, cadeia) {
+  if (cadeia) return { sim: t("lei_pre_op_sim_cadeia", { n }), nao: t("lei_pre_op_nao_cadeia") };
+  const k = (x) => "lei_pre_op_" + x + "_" + g;
+  return { sim: n > 1 && (g === "cabecalho" || g === "pagina") ? t(k("sim") + "_n", { n }) : t(k("sim")), nao: t(k("nao")) };
+}
+function leiPreEscolhaEl(c, itens, rotulos, grupoAviso) {
+  const nAce = itens.filter((m) => leiPreAceita(c, m)).length;
+  const caixa = document.createElement("span");
+  caixa.className = "lei-pre-escolha";
+  caixa.setAttribute("role", "group");
+  [["sim", true], ["nao", false]].forEach(([k, v]) => {
+    const on = v ? nAce === itens.length : nAce === 0;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min lei-pre-op lei-pre-op-" + k + (on ? " on" : "");
+    b.id = "leiPre" + (v ? "Sim_" : "Nao_") + itens[0].id;
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.textContent = rotulos[k];
+    b.onclick = (ev) => {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      itens.forEach((m) => { c.decisoes[m.id] = v; });
+      leiPrePintar();
+      leiPreAvisar(t(v ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_" + (grupoAviso || itens[0].grupo)), l: leiDecRefLinhas(itens.reduce((a, m) => a.concat(m.linhas || []), [])) }));
+    };
+    caixa.append(b);
+  });
+  return caixa;
+}
+
 function leiPreItemEl(c, m) {
   const aceita = leiPreAceita(c, m);
   const el = document.createElement("div");
@@ -6893,42 +7210,18 @@ function leiPreItemEl(c, m) {
     return el;
   }
 
-  const lb = document.createElement("label");
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.checked = aceita;
-  cb.onchange = () => {
-    c.decisoes[m.id] = cb.checked;
-    leiPrePintar();
-    leiPreAvisar(t(cb.checked ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_" + m.grupo), l: leiDecRefLinhas(m.linhas) }));
-  };
-  const corpo = document.createElement("span");
-  if (m.grupo === "invisiveis") {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
-  } else if (m.grupo === "cabecalho") {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas", { n: m.ocorrencias, l: linhasTxt })));
-    corpo.append(linha("lei-pre-antes", m.antes));
-  } else if (m.grupo === "pagina") {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linhas_n", { n: m.ocorrencias })));
-    corpo.append(linha("lei-pre-antes", m.antes));
-  } else if (m.grupo === "tachado") {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_tch_item", { n: m.ocorrencias, l: linhasTxt }) + " — " + t("lei_pre_tch_" + m.tipo)));
-    corpo.append(linha("lei-pre-antes", m.antes));
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
-    corpo.append(linha("lei-pre-depois", m.depois || t("lei_pre_tch_vazio")));
-  } else if (m.grupo === "grafia" || m.grupo === "letras") {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] })));
-    corpo.append(linha("lei-pre-antes", m.antes));
-    corpo.append(linha("lei-pre-depois", m.depois));
-  } else {
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_item_linha", { l: m.linhas[0] }) + " — " + t("lei_pre_rem_" + m.motivo)));
-    corpo.append(linha("lei-pre-ctx", "… " + m.contexto));
-    corpo.append(linha("lei-pre-antes", m.antes));
-    corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
-    corpo.append(linha("lei-pre-depois", m.depois));
-  }
-  lb.append(cb, corpo);
-  el.append(lb);
+  /* (19.107.0) uma linha curta do que é, os dois botões da decisão e a JANELA DO TEXTO pintada */
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-item-cab";
+  let rot;
+  if (m.grupo === "invisiveis" || m.grupo === "pagina") rot = t("lei_pre_item_linhas_n", { n: m.ocorrencias });
+  else if (m.grupo === "cabecalho") rot = t("lei_pre_item_linhas", { n: m.ocorrencias, l: linhasTxt });
+  else if (m.grupo === "tachado") rot = t("lei_pre_tch_item", { n: m.ocorrencias, l: linhasTxt }) + " — " + t("lei_pre_tch_" + m.tipo);
+  else if (m.grupo === "grafia" || m.grupo === "letras") rot = t("lei_pre_item_linha", { l: m.linhas[0] });
+  else rot = t("lei_pre_item_linha", { l: m.linhas[0] }) + " — " + t("lei_pre_rem_" + m.motivo);
+  cab.append(linha("lei-pre-ctx", rot), leiPreEscolhaEl(c, [m], leiPreRotulos(m.grupo, (m.linhas || []).length, false)));
+  el.append(cab);
+  el.append(leiPreJanelaEl(c, [m]));
   /* de ONDE vem: o trecho da colagem ao redor da primeira linha do item */
   if ((m.linhas || []).length) el.append(leiDupContextoEl(c.texto, { linha: m.linhas[0], linhaFim: m.linhas[0] }));
   return el;
@@ -7127,27 +7420,13 @@ function leiPreCadeiaEl(c, cadeia) {
   el.id = "leiPreCadeia_" + cadeia[0].id;
   const linha = (cls, txt) => { const s = document.createElement("span"); s.className = cls; s.textContent = txt; return s; };
   const ini = cadeia[0].linhas[0], fim = cadeia[cadeia.length - 1].linhas[0];
-  const lb = document.createElement("label");
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.checked = nAce === cadeia.length;
-  cb.indeterminate = nAce > 0 && nAce < cadeia.length;
-  cb.onchange = () => {
-    cadeia.forEach((m) => { c.decisoes[m.id] = cb.checked; });
-    leiPrePintar();
-    leiPreAvisar(t(cb.checked ? "lei_pre_av_sim" : "lei_pre_av_nao", { g: t("lei_pre_g_remissao"), l: leiDecRefLinhas(cadeia.map((m) => m.linhas[0])) }));
-  };
-  const corpo = document.createElement("span");
-  corpo.append(linha("lei-pre-ctx", t("lei_pre_cadeia_tit", { n: cadeia.length, a: ini, b: fim })));
-  corpo.append(linha("lei-pre-ctx", "… " + cadeia[0].contexto));
-  const antes = document.createElement("span");
-  antes.className = "lei-pre-cadeia-antes";
-  cadeia.forEach((m) => antes.append(linha("lei-pre-antes", m.antes)));
-  corpo.append(antes);
-  corpo.append(linha("lei-pre-ctx", t("lei_pre_ficara")));
-  leiPreCadeiaResultado(c, cadeia).forEach((p) => corpo.append(linha("lei-pre-depois", p)));
-  lb.append(cb, corpo);
-  el.append(lb);
+  /* (19.107.0) os dois botões decidem a lista toda; a janela mostra o artigo com os itens pintados (e "como fica") */
+  const cab = document.createElement("div");
+  cab.className = "lei-pre-item-cab";
+  cab.append(linha("lei-pre-ctx", t("lei_pre_cadeia_tit", { n: cadeia.length, a: ini, b: fim })),
+    leiPreEscolhaEl(c, cadeia, leiPreRotulos("remissao", cadeia.length, true), "remissao"));
+  el.append(cab);
+  el.append(leiPreJanelaEl(c, cadeia));
   /* item a item, para quem precisar recusar um só (recolhido; continua aberto ao repintar) */
   const det = document.createElement("details");
   det.className = "lei-pre-cadeia-itens";
@@ -7282,6 +7561,26 @@ function leiPrePintar() {
       };
       chips.append(b);
     });
+  }
+
+  /* (19.107.0) A LEGENDA DAS CORES da janela do texto: só as que aparecem nesta revisão */
+  const leg = $("leiPreLegenda");
+  if (leg) {
+    leg.innerHTML = "";
+    const tem = (gs) => c.pre.mudancas.some((m) => gs.indexOf(m.grupo) >= 0);
+    const cores = [["sai", tem(["cabecalho", "pagina", "tachado", "invisiveis", "grafia", "letras"])],
+      ["entra", tem(["grafia", "letras"]) || c.pre.mudancas.some((m) => m.grupo === "tachado" && m.cabecalhos && Object.keys(m.cabecalhos).length)],
+      ["junta", tem(["remissao"])], ["prot", ((c.pre && c.pre.blocos) || []).length > 0]].filter((x) => x[1]);
+    cores.forEach(([k]) => {
+      const it = document.createElement("span");
+      it.className = "lei-pre-leg";
+      const am = document.createElement("span");
+      am.className = "lei-pre-" + k + " lei-pre-leg-cor";
+      am.textContent = "\u00a0\u00a0\u00a0\u00a0";
+      it.append(am, document.createTextNode(" " + t("lei_pre_leg_" + k)));
+      leg.append(it);
+    });
+    leg.hidden = soNum || !cores.length;
   }
 
   const cx = $("leiPreLista");

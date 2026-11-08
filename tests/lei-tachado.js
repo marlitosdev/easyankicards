@@ -158,12 +158,19 @@ async function testes() {
     const itens = achar(grupo, (c) => cls(c, "lei-pre-item"));
     ok(!!grupo && itens.length === 4 && Array.from(api.$("leiPreLista").children)[0].id === "leiPreGrupo_tachado", "U1 o grupo aparece primeiro, com 4 itens");
     ok(/Trechos tachados no original/.test(grupo.textContent) && /Aceitando, saem da lei/.test(grupo.textContent), "U2 a tela explica o que e' e o que aceitar faz");
-    ok(/1 trecho\(s\) tachado\(s\) · linhas 3 — tachado e seguido de “Redação dada…”: é a redação antiga/.test(itens[0].textContent) && /\(a linha inteira sai\)/.test(itens[0].textContent), "U3 o item diz o que e' e que a linha inteira sai: " + itens[0].textContent.slice(0, 200));
-    ok(/Art\. 3º Tres texto novo\./.test(itens[1].textContent) && /Art\. 3º Tres texto velho texto novo\./.test(itens[1].textContent), "U4 o item parcial mostra antes e depois");
+    /* (19.107.0) a janela do texto: "marcado" pinta o riscado de vermelho; "como fica" mostra a linha com a escolha */
+    const mId = (el) => String(el.id).slice("leiPreItem_".length);
+    const vista = (el, v) => api.$("leiPreVista_" + mId(el) + "_" + v).onclick();
+    const sai = (el) => achar(el, (c) => c.className === "lei-pre-sai").map((c) => c.textContent).join(" | ");
+    ok(/1 trecho\(s\) tachado\(s\) · linhas 3 — tachado e seguido de “Redação dada…”: é a redação antiga/.test(itens[0].textContent) && sai(itens[0]).length > 0, "U3 o item diz o que e' e pinta o riscado: " + itens[0].textContent.slice(0, 200));
+    vista(itens[0], "fica");
+    ok(/✂ 1 linha\(s\) tirada\(s\)/.test(itens[0].textContent), "U3a 'como fica': a linha inteira sai: " + itens[0].textContent.slice(0, 200));
+    ok(/texto velho/.test(sai(itens[1])) && /Art\. 3º Tres texto velho texto novo\./.test(itens[1].textContent), "U4 o item parcial pinta só o trecho riscado: " + sai(itens[1]));
+    vista(itens[1], "fica");
+    ok(/Art\. 3º Tres texto novo\./.test(itens[1].textContent) && !sai(itens[1]), "U4a 'como fica' mostra a linha sem o riscado: " + itens[1].textContent.slice(0, 200));
     ok(achar(grupo, (c) => c.id === "btnLeiPreTodos_tachado").length === 1, "U5 tem 'aceitar todos' / 'recusar todos'");
     /* recusar UM item pela tela e confirmar */
-    achar(itens[1], (c) => c.type === "checkbox")[0].checked = false;
-    achar(itens[1], (c) => c.type === "checkbox")[0].onchange();
+    achar(itens[1], (c) => cls(c, "lei-pre-op-nao"))[0].onclick();
     api.leiPreConfirmar();
     ok(res && res.texto.indexOf("~~") < 0 && /Tres texto velho texto novo\./.test(res.texto) && !/antigo texto/.test(res.texto), "U6 confirmar: aceitou uns, recusou outro, nenhuma marca sobra");
     const r = api.decLer().filter((x) => x.regra === "colagem.tachado");
@@ -209,9 +216,9 @@ async function testes() {
     const api = iniciar();
     api.leiRevisarColagemAbrir({ modo: "criar", texto: T, pre: api.leiPreprocessar(T), aoConfirmar() {} });
     const itensDecisao = achar(api.$("leiPreGrupo_tachado"), (c) => cls(c, "lei-pre-item"));
-    ok(itensDecisao.length === 1 && achar(itensDecisao[0], (c) => c.type === "checkbox").length === 1, "K8 so' 1 item COM caixa de decisao no grupo tachado (o texto antigo): " + itensDecisao.length);
+    ok(itensDecisao.length === 1 && achar(itensDecisao[0], (c) => cls(c, "lei-pre-op-nao")).length === 1, "K8 so' 1 item COM decisao no grupo tachado (o texto antigo): " + itensDecisao.length);
     const blocoIdent = api.$("leiPreGrupo_identificador");
-    ok(!!blocoIdent && /Identificadores revogados mantidos \(2\)/.test(blocoIdent.textContent) && achar(blocoIdent, (c) => c.type === "checkbox").length === 0,
+    ok(!!blocoIdent && /Identificadores revogados mantidos \(2\)/.test(blocoIdent.textContent) && achar(blocoIdent, (c) => c.type === "checkbox" || cls(c, "lei-pre-op")).length === 0,
       "K8a os 2 identificadores aparecem num bloco SEPARADO, so' informativo, SEM nenhuma caixa: " + (blocoIdent && blocoIdent.textContent.slice(0, 60)));
     ok(/Tirar o número apagaria QUAL dispositivo foi revogado/.test(blocoIdent.textContent), "K8b o bloco explica por que ficam de fora da decisao");
     ok(/linha 12: Art\. 217\./.test(blocoIdent.textContent), "K8c o item do bloco mostra a linha e o texto: " + blocoIdent.textContent.match(/linha \d+: [^\n]{0,40}/g));
@@ -219,7 +226,7 @@ async function testes() {
       "K8d o registro (linha gravada ao abrir a revisao) soma os identificadores mantidos: " + api.leiRelatorioFluxo("revisar a colagem").split("\n").filter((l) => /revisão da colagem aberta/.test(l)));
     ok(/identificadores revogados mantidos \(informativo, sem decisão — nunca são removidos\): 2/.test(api.leiRelatorioFluxo("revisar a colagem")),
       "K8e com a tela AINDA ABERTA, o resumo por grupo do relatorio tambem lista os identificadores: " + api.leiRelatorioFluxo("revisar a colagem").split("\n").filter((l) => /identificador/.test(l)));
-    achar(itensDecisao[0], (c) => c.type === "checkbox")[0].checked = false; achar(itensDecisao[0], (c) => c.type === "checkbox")[0].onchange();
+    achar(itensDecisao[0], (c) => cls(c, "lei-pre-op-nao"))[0].onclick();
     api.leiPreConfirmar();
     const dr = api.decLer().filter((x) => x.regra === "colagem.tachado");
     ok(dr.length === 1, "K9 so' o item que ERA decisao entra no historico (os identificadores, que nunca foram decisao, nao entram): " + dr.length);
@@ -285,8 +292,7 @@ async function testes() {
     ok(!/lei_[a-z]+_[a-z_0-9]+/.test(texto) && !/lei_pre_[a-z_]+/.test(api.$("leiPreGrupo_tachado").textContent) && !/lei_pre_[a-z_]+/.test(api.$("leiPreGrupo_identificador").textContent),
       "T1 a tela do grupo (e a do bloco de identificadores) nao mostra nenhuma chave de traducao crua: " + (texto.match(/lei_[a-z_0-9]+/g) || []).join(","));
     /* recusar o unico item do grupo (o texto antigo) para a frase de consequencia aparecer */
-    achar(api.$("leiPreGrupo_tachado"), (c) => c.type === "checkbox")[0].checked = false;
-    achar(api.$("leiPreGrupo_tachado"), (c) => c.type === "checkbox")[0].onchange();
+    achar(api.$("leiPreGrupo_tachado"), (c) => cls(c, "lei-pre-op-nao"))[0].onclick();
     ok(/Recusando, o trecho tachado fica no texto como texto comum/.test(api.$("leiPreGrupo_tachado").textContent), "T2 a consequencia de recusar aparece no grupo");
   }
 

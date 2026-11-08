@@ -130,24 +130,23 @@ async function testes() {
   {
     ok(itens("grafia").length === 2, "G0 (a colagem de teste tem 2 itens de grafia): " + itens("grafia").length);
     /* a contagem de "alteradas agora" e' a dos que MUDARAM, nao a do grupo */
-    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].checked = false;
-    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].onchange();
+    /* (19.107.0) a caixa de marcar virou dois botões com o nome da ação ("Corrigir" / "Deixar como veio") */
+    const escolher = (it, sim) => achar(it, (c) => cls(c, sim ? "lei-pre-op-sim" : "lei-pre-op-nao"))[0].onclick();
+    escolher(itens("grafia")[0], false);
     botao("grafia", "Todos").onclick();
     ok(/2 sugestão\(ões\) aceita\(s\); alteradas agora: 1\./.test(aviso().textContent), "G1 'aceitar todos' com um item ja aceito: 2 no grupo, 1 mudou: " + aviso().textContent);
-    const it = itens("grafia")[0];
-    const cb = achar(it, (c) => c.type === "checkbox")[0];
-    cb.checked = false; cb.onchange();
-    ok(/fica como veio/.test(aviso().textContent) && /linha \d+/.test(aviso().textContent), "R7 desmarcar UM item: diz que fica como veio e qual linha: " + aviso().textContent);
+    escolher(itens("grafia")[0], false);
+    ok(/fica como veio/.test(aviso().textContent) && /linha \d+/.test(aviso().textContent), "R7 recusar UM item: diz que fica como veio e qual linha: " + aviso().textContent);
+    const opNao = achar(itens("grafia")[0], (c) => cls(c, "lei-pre-op-nao"))[0], opSim = achar(itens("grafia")[0], (c) => cls(c, "lei-pre-op-sim"))[0];
+    ok(cls(opNao, "on") && opNao.getAttribute("aria-pressed") === "true" && !cls(opSim, "on") && opSim.textContent === "Corrigir" && opNao.textContent === "Deixar como veio",
+      "R7a o botão escolhido fica ligado, com o nome da ação: " + [opSim.textContent, opNao.textContent]);
     ok(lig("grafia", "Todos") === "false" && lig("grafia", "Nenhum") === "false" && cont("grafia") === "1 de 2 aceitas",
       "E1 grupo MISTO (1 de 2): nenhum dos dois botoes fica ligado, e o contador diz quantas: " + [lig("grafia", "Todos"), lig("grafia", "Nenhum"), cont("grafia")]);
-    const cb2 = achar(itens("grafia")[0], (c) => c.type === "checkbox")[0];
-    cb2.checked = true; cb2.onchange();
-    ok(/será aplicada ao gravar/.test(aviso().textContent), "R8 marcar de volta: diz que sera aplicada: " + aviso().textContent);
-    ok(lig("grafia", "Todos") === "true" && cont("grafia") === "2 de 2 aceitas", "E2 marcar o ultimo item liga 'aceitar todos' sozinho: " + [lig("grafia", "Todos"), cont("grafia")]);
-    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].checked = false;
-    achar(itens("grafia")[0], (c) => c.type === "checkbox")[0].onchange();
-    achar(itens("grafia")[1], (c) => c.type === "checkbox")[0].checked = false;
-    achar(itens("grafia")[1], (c) => c.type === "checkbox")[0].onchange();
+    escolher(itens("grafia")[0], true);
+    ok(/será aplicada ao gravar/.test(aviso().textContent), "R8 aceitar de volta: diz que sera aplicada: " + aviso().textContent);
+    ok(lig("grafia", "Todos") === "true" && cont("grafia") === "2 de 2 aceitas", "E2 aceitar o ultimo item liga 'aceitar todos' sozinho: " + [lig("grafia", "Todos"), cont("grafia")]);
+    escolher(itens("grafia")[0], false);
+    escolher(itens("grafia")[1], false);
     ok(lig("grafia", "Nenhum") === "true" && lig("grafia", "Todos") === "false" && cont("grafia") === "0 de 2 aceitas", "E3 desmarcar o ultimo item liga 'recusar todos' sozinho: " + [lig("grafia", "Nenhum"), cont("grafia")]);
     botao("grafia", "Todos").onclick();
   }

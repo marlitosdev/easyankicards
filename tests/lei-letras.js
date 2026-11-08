@@ -77,8 +77,9 @@ async function testes() {
     "L6 o grupo na tela, como limpeza segura, com o antes e o depois");
   const item = api.$("leiPreItem_" + let_[1].id);
   const cls = (cl) => { const acc = []; const w = (e) => Array.from(e.children || []).forEach((c) => { if (c.className === cl) acc.push(c.textContent); w(c); }); w(item); return acc; };
-  ok(item && cls("lei-pre-antes")[0] === "AAPPUURRAAÇÇÃÃOO DDOO VVAALLOORR VVEENNAALL" && cls("lei-pre-depois")[0] === "APURAÇÃO DO VALOR VENAL" && !/undefined/.test(item.textContent),
-    "L6c o item mostra o antes e o depois da linha: " + (item && item.textContent));
+  /* (19.107.0) o antes e o depois estão PINTADOS na janela do texto: sai (vermelho riscado) e entra (verde) */
+  ok(item && cls("lei-pre-sai")[0] === "AAPPUURRAAÇÇÃÃOO DDOO VVAALLOORR VVEENNAALL" && cls("lei-pre-entra")[0] === "APURAÇÃO DO VALOR VENAL" && !/undefined/.test(item.textContent),
+    "L6c a janela do item pinta o que sai e o que entra: " + (item && item.textContent));
   const mIV = pre.mudancas.filter((m) => m.grupo === "anexo" && m.titulo === "ANEXO IV")[0];
   const elIV = mIV && api.$("leiPreItem_" + mIV.id);
   ok(elIV && /» \(Redação dada pela Lei Complementar 018, de 09 de outubro de 2009\) · APURAÇÃO DO VALOR VENAL/.test(elIV.textContent),
