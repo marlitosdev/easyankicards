@@ -1785,6 +1785,17 @@ dialog.lb-dlg.lb-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100
 .rs-simb{min-width:30px;height:28px;padding:0 6px;border:1px solid var(--borda);border-radius:7px;background:var(--campo);color:var(--texto);
   font:15px/1 "Cambria Math","Segoe UI Symbol",serif;cursor:pointer}
 .rs-simb:hover{border-color:var(--acao,#5b7cfa)}
+/* (19.116.0) FÓRMULAS E TABELAS NA QUESTÃO (fmtMontar, grifo.js): o escondido continua no texto, só não aparece */
+#dlgQsResponder .qs-enunciado,#dlgQsResponder .qs-op-t,#dlgQsResponder .qs-coment{white-space:pre-line}
+.qs-fmt-oc{display:none}
+.qs-tab-cx{overflow-x:auto;margin:6px 0 8px;white-space:normal;max-width:100%}
+.qs-tab{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.95em}
+.qs-tab td,.qs-tab th{border:1px solid var(--borda);padding:3px 14px;text-align:center;white-space:nowrap}
+.qs-tab th{background:var(--campo);font-weight:600}
+.qs-tab tr.qs-tab-sep{display:none}
+sup.qs-sup{font-size:.7em;line-height:0;vertical-align:super}
+.qs-tex{font-family:"Cambria Math","Segoe UI Symbol",serif}
+.qs-tex::after{content:attr(data-f)}
 @media (max-width:700px){.rs-simbolos{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.rs-simb{flex:0 0 auto}}
 .tn-camada{position:absolute;left:0;top:0;pointer-events:none;z-index:6;overflow:visible}
 .tn-camada.tn-ativa{pointer-events:auto;touch-action:none;cursor:crosshair}

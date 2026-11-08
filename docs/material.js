@@ -7252,7 +7252,7 @@ function matDuvidasAbrir() {
     bQ.onclick = async () => {
       const v = await uiTexto(t("duv_quest_tit", { t: d.trecho.slice(0, 90) }),
         jaQ ? jaQ.enunciado : "",
-        { rotulo2: t("duv_quest_gab"), valor2: jaQ ? jaQ.gabarito : "" });
+        { rotulo2: t("duv_quest_gab"), valor2: jaQ ? jaQ.gabarito : "", simbolos: true });
       if (v === null) return;
       matGravarQuestao(d.chave, d.trecho, v.a, v.b);
       matDuvidasAbrir();

@@ -196,6 +196,212 @@ function grPosicaoDe(raiz, no, desloc) {
  * questões), e montar HTML com ele daria a qualquer texto copiado a
  * chance de injetar marcação. Só nós de texto e <mark>.
  * ------------------------------------------------------------------ */
+/* =====================================================================
+ * (19.116.0) FÓRMULAS E TABELAS NA QUESTÃO
+ *
+ * O PEDIDO: enunciados como os do QConcursos — tabela-verdade, "~Q→P", (1+i)ⁿ, x̄, σ² —, e o mesmo para estatística e
+ * matemática financeira (tabela de frequências, fluxo de caixa). O texto continua sendo o guardado; aqui ele só é
+ * MOSTRADO melhor:
+ *  · linhas com "|" (com a linha "| --- |" debaixo do cabeçalho) viram uma tabela de verdade;
+ *  · "^2", "^n", "^{10}" viram expoente;
+ *  · "$…$" e "\(…\)" (LaTeX que a IA às vezes manda) viram os símbolos (¬ ∧ ∨ → ↔ ≡ Σ √ …);
+ *  · as quebras de linha do enunciado aparecem.
+ * O CUIDADO QUE MANDA EM TUDO: o grifo e o lápis guardam POSIÇÕES DE LETRA do texto. Cada caractere do texto continua
+ * no DOM, na mesma ordem — o "^", as barras "|" e a linha "---" ficam escondidos (display:none), não somem; a fórmula
+ * em LaTeX aparece por CSS (::after), sem texto a mais. As posições não mudam.
+ * Nada de innerHTML: o texto vem de fora (colado de um chat); só nós de texto e elementos montados aqui.
+ * ===================================================================== */
+const FMT_SEP_CEL = /^\s*:?-{3,}:?\s*$/;
+function fmtLinhas(txt) {
+  const out = [];
+  let i = 0;
+  const s = String(txt || "");
+  while (i <= s.length) {
+    const j = s.indexOf("\n", i);
+    if (j < 0) { out.push({ ini: i, fim: s.length, nl: false }); break; }
+    out.push({ ini: i, fim: j, nl: true });
+    i = j + 1;
+  }
+  return out;
+}
+/* as barras de uma linha: [{ini, fim}] das células e onde estão as barras */
+function fmtCelulas(s, ini, fim) {
+  const barras = [];
+  for (let k = ini; k < fim; k++) if (s[k] === "|") barras.push(k);
+  return barras;
+}
+function fmtEhLinhaDeTabela(s, l) {
+  const tx = s.slice(l.ini, l.fim).trim();
+  if (!tx || tx.indexOf("|") < 0) return false;
+  const n = (tx.match(/\|/g) || []).length;
+  return tx.charAt(0) === "|" ? n >= 2 : n >= 1;
+}
+function fmtEhSeparador(s, l) {
+  const tx = s.slice(l.ini, l.fim).trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cs = tx.split("|");
+  return cs.length >= 1 && cs.every((c) => FMT_SEP_CEL.test(c));
+}
+/* os blocos do texto: trechos comuns e tabelas (duas linhas ou mais com "|", sendo uma delas o separador "---", ou
+ * todas começando e terminando em "|") */
+function fmtBlocos(txt) {
+  const s = String(txt || "");
+  const ls = fmtLinhas(s);
+  const blocos = [];
+  let comum = 0;
+  let i = 0;
+  while (i < ls.length) {
+    if (!fmtEhLinhaDeTabela(s, ls[i])) { i++; continue; }
+    let j = i;
+    while (j < ls.length && fmtEhLinhaDeTabela(s, ls[j])) j++;
+    const grupo = ls.slice(i, j);
+    const temSep = grupo.some((l) => fmtEhSeparador(s, l));
+    const emMolde = grupo.every((l) => { const tx = s.slice(l.ini, l.fim).trim(); return tx.charAt(0) === "|" && tx.charAt(tx.length - 1) === "|"; });
+    if (grupo.length >= 2 && (temSep || emMolde)) {
+      if (grupo[0].ini > comum) blocos.push({ tipo: "txt", ini: comum, fim: grupo[0].ini });
+      const ult = grupo[grupo.length - 1];
+      const fimTab = ult.fim + (ult.nl ? 1 : 0);
+      blocos.push({ tipo: "tab", ini: grupo[0].ini, fim: fimTab, linhas: grupo });
+      comum = fimTab;
+    }
+    i = j;
+  }
+  if (comum < s.length || !blocos.length) blocos.push({ tipo: "txt", ini: comum, fim: s.length });
+  return blocos;
+}
+/* os pedaços de uma linha de texto: comum, expoente e LaTeX */
+const FMT_TEX_RE = /\$([^\s$](?:[^$\n]{0,200}?[^\s$])?)\$|\\\((.{1,200}?)\\\)/g;
+const FMT_SUP_RE = /\^(\{[^{}\n]{1,24}\}|[-−]?[0-9]+(?:[.,][0-9]+)?|[A-Za-zα-ω]{1,2}(?![A-Za-z0-9]))/g;
+function fmtPedacos(s, a, b) {
+  const trecho = s.slice(a, b);
+  const achados = [];
+  let m;
+  FMT_TEX_RE.lastIndex = 0;
+  while ((m = FMT_TEX_RE.exec(trecho))) {
+    const miolo = m[1] != null ? m[1] : m[2];
+    /* dinheiro não é fórmula: "R$1.000 e R$2.000" casaria "$1.000 e R$" — o "$" de LaTeX não vem colado numa letra, e o
+     * miolo tem cara de fórmula (um comando, "^", "_", chaves, "=") ou é uma variável curta ("$p$") */
+    const antesTex = s.charAt(a + m.index - 1);
+    if (m[1] != null && (/[A-Za-z]/.test(antesTex) || !/[\\^_{}=]|^[A-Za-z]{1,2}$/.test(miolo))) continue;
+    achados.push({ tipo: "tex", ini: a + m.index, fim: a + m.index + m[0].length, miolo });
+  }
+  FMT_SUP_RE.lastIndex = 0;
+  while ((m = FMT_SUP_RE.exec(trecho))) {
+    const ini = a + m.index, fim = ini + m[0].length;
+    /* o "^" de lógica ("p ^ q") tem espaço antes; expoente encosta na base ("x^2", "(1+i)^n") */
+    const antes = s.charAt(ini - 1);
+    if (!antes || /\s/.test(antes)) continue;
+    if (achados.some((x) => x.tipo === "tex" && ini < x.fim && fim > x.ini)) continue;
+    achados.push({ tipo: "sup", ini, fim, chaves: m[1].charAt(0) === "{" });
+  }
+  achados.sort((x, y) => x.ini - y.ini);
+  return achados;
+}
+function fmtOculto(pai, s, a, b, emitir) {
+  if (b <= a) return;
+  const sp = document.createElement("span");
+  sp.className = "qs-fmt-oc";
+  emitir(a, b, sp);
+  pai.append(sp);
+}
+function fmtTexTexto(miolo) {
+  try {
+    if (typeof matTexParaHtml === "function" && typeof matHtmlTexto === "function") {
+      const esc = typeof matEscapar === "function" ? matEscapar(miolo) : miolo;
+      return String(matHtmlTexto(matTexParaHtml(esc)) || miolo).replace(/\s+/g, " ").trim();
+    }
+  } catch (e) {}
+  return miolo;
+}
+function fmtLinhaInline(pai, s, a, b, emitir) {
+  if (b <= a) return;
+  const ps = fmtPedacos(s, a, b);
+  if (!ps.length) { emitir(a, b, pai); return; }
+  let pos = a;
+  ps.forEach((p) => {
+    if (p.ini > pos) emitir(pos, p.ini, pai);
+    if (p.tipo === "sup") {
+      fmtOculto(pai, s, p.ini, p.ini + (p.chaves ? 2 : 1), emitir);
+      const sup = document.createElement("sup");
+      sup.className = "qs-sup";
+      emitir(p.ini + (p.chaves ? 2 : 1), p.fim - (p.chaves ? 1 : 0), sup);
+      pai.append(sup);
+      if (p.chaves) fmtOculto(pai, s, p.fim - 1, p.fim, emitir);
+    } else {
+      fmtOculto(pai, s, p.ini, p.fim, emitir);
+      const f = document.createElement("span");
+      f.className = "qs-tex";
+      const tx = fmtTexTexto(p.miolo);
+      f.setAttribute("data-f", tx);
+      f.setAttribute("role", "img");
+      f.setAttribute("aria-label", tx);
+      pai.append(f);
+    }
+    pos = p.fim;
+  });
+  if (pos < b) emitir(pos, b, pai);
+}
+function fmtTabela(pai, s, bloco, emitir) {
+  const cx = document.createElement("div");
+  cx.className = "qs-tab-cx";
+  const tab = document.createElement("table");
+  tab.className = "qs-tab";
+  const corpo = document.createElement("tbody");
+  const ls = bloco.linhas;
+  const sepIdx = ls.findIndex((l) => fmtEhSeparador(s, l));
+  ls.forEach((l, li) => {
+    const tr = document.createElement("tr");
+    const fimL = l.fim + (l.nl ? 1 : 0);
+    if (li === sepIdx) {
+      tr.className = "qs-tab-sep";
+      const td = document.createElement("td");
+      fmtOculto(td, s, l.ini, fimL, emitir);
+      tr.append(td);
+      corpo.append(tr);
+      return;
+    }
+    const cab = sepIdx > 0 && li < sepIdx;
+    const barras = fmtCelulas(s, l.ini, l.fim);
+    const lead = s.slice(l.ini, barras[0]).trim() === "";
+    const trail = s.slice(barras[barras.length - 1] + 1, l.fim).trim() === "";
+    /* as células: entre barras (a primeira antes da 1ª barra, se a linha não começa em "|") */
+    const cels = [];
+    let ini = lead ? barras[0] + 1 : l.ini;
+    const bs = lead ? barras.slice(1) : barras;
+    bs.forEach((bp) => { cels.push({ ini, fim: bp }); ini = bp + 1; });
+    if (!trail) cels.push({ ini, fim: l.fim });
+    cels.forEach((c, k) => {
+      const td = document.createElement(cab ? "th" : "td");
+      if (k === 0 && lead) fmtOculto(td, s, l.ini, barras[0] + 1, emitir);
+      fmtLinhaInline(td, s, c.ini, c.fim, emitir);
+      /* a barra que fecha a célula (e, na última, o resto da linha e a quebra) fica escondida dentro dela */
+      const ultima = k === cels.length - 1;
+      const ateOnde = ultima ? fimL : c.fim + 1;
+      fmtOculto(td, s, c.fim, ateOnde, emitir);
+      tr.append(td);
+    });
+    corpo.append(tr);
+  });
+  tab.append(corpo);
+  cx.append(tab);
+  pai.append(cx);
+}
+/* monta "txt" dentro de "caixa"; emitir(ini, fim, pai) põe o texto [ini, fim) em pai (o grifo pinta as cores ali) */
+function fmtMontar(caixa, txt, emitir) {
+  const s = String(txt || "");
+  const em = emitir || ((a, b, pai) => { if (b > a) pai.append(document.createTextNode(s.slice(a, b))); });
+  const blocos = fmtBlocos(s);
+  blocos.forEach((bl) => {
+    if (bl.tipo === "tab") fmtTabela(caixa, s, bl, em);
+    else fmtLinhaInline(caixa, s, bl.ini, bl.fim, em);
+  });
+  return caixa;
+}
+/* há o que formatar? (quem não tem, continua com um nó de texto só) */
+function fmtTemAlgo(txt) {
+  const s = String(txt || "");
+  return /\||\^|\$|\\\(/.test(s) && (fmtBlocos(s).some((b) => b.tipo === "tab") || fmtPedacos(s, 0, s.length).length > 0);
+}
+
 function grPintar(caixa, qid, texto) {
   if (!caixa) return;
   caixa.textContent = "";
@@ -204,11 +410,31 @@ function grPintar(caixa, qid, texto) {
    * title da marca abaixo quebraria com "t is not a function". */
   const txt = String(texto || "");
   const marcas = grMarcasDe(qid);
+  /* (19.116.0) com fórmula ou tabela, o texto passa pelo formatador — e o grifo pinta cada pedaço por dentro dele */
+  if (fmtTemAlgo(txt)) {
+    const vet = grPintarVetor(txt.length, marcas);
+    fmtMontar(caixa, txt, (a, b, pai) => {
+      let i = a;
+      while (i < b) {
+        const cor = vet[i];
+        let j = i + 1;
+        while (j < b && vet[j] === cor) j++;
+        grPintarPedaco(pai, qid, txt, caixa, i, j, cor);
+        i = j;
+      }
+    });
+    return;
+  }
   const partes = grTrechos(grPintarVetor(txt.length, marcas));
-  partes.forEach((p) => {
+  partes.forEach((p) => grPintarPedaco(caixa, qid, txt, caixa, p.ini, p.fim, p.cor));
+}
+/* um pedaço do enunciado: texto puro, ou a marca do grifo (que se tira com um toque) */
+function grPintarPedaco(pai, qid, txt, caixa, ini, fim, cor) {
+  const p = { ini, fim, cor };
+  {
     const pedaco = txt.slice(p.ini, p.fim);
     if (!pedaco) return;
-    if (!p.cor) { caixa.append(document.createTextNode(pedaco)); return; }
+    if (!p.cor) { pai.append(document.createTextNode(pedaco)); return; }
     const m = document.createElement("mark");
     m.className = "gr-m gr-" + p.cor;
     /* UM NÓ DE TEXTO DENTRO, e não "textContent = pedaco".
@@ -229,8 +455,8 @@ function grPintar(caixa, qid, texto) {
       grPintar(caixa, qid, txt);
       try { reg("GRIFO", "grifo tirado", "questão " + (qid || "?")); } catch (e) {}
     };
-    caixa.append(m);
-  });
+    pai.append(m);
+  }
 }
 
 /* A caixa do enunciado, já pintada e ligada. Substitui plEnvolver. */

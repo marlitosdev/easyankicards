@@ -782,7 +782,7 @@ function rodar(opc) {
     GR_CORES, grCorAtual, grEscolherCor, grMarcasDe, grGuardar,
     grEsquecerTudo, grPintarVetor, grTrechos, grNormalizar,
     grAcrescentar, grTirarEm, grLimpar, grPosicaoDe, grPintar,
-    grEnvolver, grDaSelecao, grLimparTela, grContar,
+    grEnvolver, grDaSelecao, grLimparTela, grContar, fmtMontar, fmtBlocos, fmtTemAlgo, fmtPedacos, qsTabelaEmLinhas, simbLigarCampo,
     grLembrarSelecao, grSelGuardadaAtual, grEsquecerSelecao,
     qsUiFerramentas, qsUiPintarCores,
     qsFerMenu, qsFerFechar, qsFerPosicionar,

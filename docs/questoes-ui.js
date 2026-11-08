@@ -1498,7 +1498,9 @@ function qsUiPintarSessao() {
     /* A LETRA NUM CÍRCULO (o ") " fica escondido, mas o texto continua "B) ..." para quem lê o DOM) */
     const bl = document.createElement("span"); bl.className = "qs-op-l"; bl.textContent = o.letra;
     const bp = document.createElement("span"); bp.className = "qs-op-p"; bp.textContent = ") ";
-    const bt2 = document.createElement("span"); bt2.className = "qs-op-t"; bt2.textContent = String(o.txt);
+    const bt2 = document.createElement("span"); bt2.className = "qs-op-t";
+    /* (19.116.0) fórmula e tabela também nas alternativas (ver fmtMontar, grifo.js) */
+    if (typeof fmtTemAlgo === "function" && fmtTemAlgo(o.txt)) fmtMontar(bt2, String(o.txt)); else bt2.textContent = String(o.txt);
     b.append(bl, bp, bt2);
     /* TOCAR SÓ SELECIONA — quem responde de verdade é o botão grande
      * (btnQsProxima, que vira "responder" enquanto não há resposta
@@ -1879,7 +1881,17 @@ function qsUiComentario(el, q) {
   } catch (e) {}
   /* sem citação — e este é o caso comum em Português e Informática — o
    * comentário continua sendo exatamente o texto, sem nada em volta */
-  if (!cits.length) { el.textContent = txt; return el; }
+  /* (19.116.0) o texto do comentário também passa pelo formatador (fórmula, tabela, quebras de linha) */
+  const texto = (pai, a, b) => {
+    if (b <= a) return;
+    const pedaco = txt.slice(a, b);
+    if (typeof fmtTemAlgo === "function" && fmtTemAlgo(pedaco)) fmtMontar(pai, pedaco);
+    else pai.append(document.createTextNode(pedaco));
+  };
+  if (!cits.length) {
+    if (typeof fmtTemAlgo === "function" && fmtTemAlgo(txt)) { fmtMontar(el, txt); return el; }
+    el.textContent = txt; return el;
+  }
 
   /* a biblioteca é lida UMA vez por comentário, e não uma por citação:
    * leisLista() lê o armazenamento e ordena, e um comentário longo cita
@@ -1894,7 +1906,7 @@ function qsUiComentario(el, q) {
 
   let pos = 0;
   cits.forEach((c) => {
-    if (c.ini > pos) el.append(document.createTextNode(txt.slice(pos, c.ini)));
+    if (c.ini > pos) texto(el, pos, c.ini);
     if (c._jur) {
       el.append(jurCitLink(c, { disciplina: q.disciplina, topico: q.topico, aoVoltar: qsUiVoltaDe(q), onde: "questao" }));
       pos = c.fim;
@@ -1907,7 +1919,7 @@ function qsUiComentario(el, q) {
     if (nt) el.append(nt);
     pos = c.fim;
   });
-  if (pos < txt.length) el.append(document.createTextNode(txt.slice(pos)));
+  if (pos < txt.length) texto(el, pos, txt.length);
   return el;
 }
 

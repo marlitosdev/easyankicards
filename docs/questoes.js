@@ -273,6 +273,43 @@ function qsAbrirCampos(txt) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
+/* (19.116.0) A TABELA NUMA LINHA SÓ. A cópia de alguns chats junta a questão inteira numa linha, e a tabela vem
+ * "| P | Q | ~Q→P | |---|---|---| | V | V | F | | V | F | x |". O separador "---" diz quantas colunas são; com ele, as
+ * células são repartidas em linhas (a célula vazia entre duas linhas, "| |", é a emenda) e cada linha da tabela vai
+ * para a sua linha de texto. Sem o separador, nada muda. */
+function qsTabelaEmLinhas(txt) {
+  const s = String(txt || "");
+  if (s.indexOf("|") < 0 || !/-{3,}/.test(s)) return s;
+  return s.split("\n").map((linha) => linha.replace(/\|(?:[^|\n]*\|){3,}/g, (corrida, onde, tudo) => {
+    const cels = corrida.slice(1, -1).split("|");
+    const ehSep = (c) => /^\s*:?-{3,}:?\s*$/.test(c);
+    const iSep = cels.findIndex(ehSep);
+    if (iSep < 0) return corrida;
+    let n = 0;
+    while (iSep + n < cels.length && ehSep(cels[iSep + n])) n++;
+    /* o cabeçalho: as n células antes do separador (pulando a emenda vazia, se houver) */
+    let fimCab = iSep;
+    if (fimCab > 0 && !cels[fimCab - 1].trim() && fimCab - 1 >= n) fimCab--;
+    const iniCab = fimCab - n;
+    if (iniCab < 0 || n < 1) return corrida;
+    const linhas = [cels.slice(iniCab, fimCab), cels.slice(iSep, iSep + n)];
+    let atualL = [];
+    for (let k = iSep + n; k < cels.length; k++) {
+      const c = cels[k];
+      if (!atualL.length && !c.trim()) continue;          /* a emenda entre duas linhas */
+      atualL.push(c);
+      if (atualL.length === n) { linhas.push(atualL); atualL = []; }
+    }
+    if (atualL.length) return corrida;                    /* sobrou célula: não é a tabela que parece */
+    const antes = cels.slice(0, iniCab).join("|").trim();
+    const fmtL = (cs) => "| " + cs.map((c) => c.trim()).join(" | ") + " |";
+    const ok = linhas.map(fmtL).join("\n");
+    const pre = onde > 0 && !/\n$/.test(tudo.slice(0, onde)) ? "\n" : "";
+    const pos = onde + corrida.length < tudo.length ? "\n" : "";
+    return (antes ? "| " + antes + " |" : "") + pre + ok + pos;
+  })).join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+(?=\S)/g, "\n");
+}
+
 function qsLerResposta(txt, ctx) {
   const c = ctx || {};
   const achados = [];
@@ -283,6 +320,9 @@ function qsLerResposta(txt, ctx) {
 
   const fechar = () => {
     if (!atual) return;
+    /* (19.116.0) a tabela que chegou numa linha só (a cópia do chat junta tudo): uma linha por linha da tabela */
+    atual.enunciado = qsTabelaEmLinhas(atual.enunciado);
+    atual.comentario = qsTabelaEmLinhas(atual.comentario);
     /* opções escritas dentro do próprio enunciado: "… ? A) uma B) outra" */
     qsSepararOpcoesInline(atual);
     /* O CONTEÚDO MANDA, NÃO O RÓTULO.
@@ -427,9 +467,11 @@ function qsLerResposta(txt, ctx) {
       return;
     }
 
-    /* continuação de um campo nomeado que ocupou mais de uma linha */
+    /* continuação de um campo nomeado que ocupou mais de uma linha.
+     * (19.116.0) A QUEBRA DE LINHA FICA: juntar com espaço achatava a tabela-verdade ("P | Q | ~Q→P V | V | F") e os
+     * itens I, II, III do enunciado num parágrafo só. */
     if (atual && campoAberto && (campoAberto === "enunciado" || campoAberto === "comentario")) {
-      atual[campoAberto] = (atual[campoAberto] ? atual[campoAberto] + " " : "") + l;
+      atual[campoAberto] = (atual[campoAberto] ? atual[campoAberto] + "\n" : "") + l;
       return;
     }
     if (atual && atual._lendoComentario) {
@@ -446,7 +488,7 @@ function qsLerResposta(txt, ctx) {
       return;
     }
     if (atual && !atual.gabarito && !atual.opcoes.length) {
-      atual.enunciado = (atual.enunciado ? atual.enunciado + " " : "") + l;
+      atual.enunciado = (atual.enunciado ? atual.enunciado + "\n" : "") + l;
       return;
     }
     ignoradas.push({ linha: li + 1, txt: l.slice(0, 70), motivo: "fora_de_questao" });

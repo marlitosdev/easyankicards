@@ -1063,6 +1063,46 @@ function rsSimbolosMontar() {
   return fila;
 }
 
+/* (19.116.0) A FILEIRA E OS ATALHOS EM QUALQUER CAMPO DE TEXTO (o editor de questão, por exemplo): liga ou desliga.
+ * A fileira nasce logo antes do campo; o atalho só troca o que foi digitado (colar fica como está). */
+function simbLigarCampo(campo, ligar) {
+  if (!campo || !campo.parentNode) return false;
+  let fila = campo._simbFila || null;
+  if (ligar && !fila) {
+    fila = document.createElement("div");
+    fila.className = "rs-simbolos simb-campo";
+    fila.setAttribute("role", "toolbar");
+    fila.setAttribute("aria-label", t("rs_simb_aj"));
+    SIMB_FILEIRA.forEach((sb) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "rs-simb"; b.textContent = sb; b.title = t("rs_simb_inserir", { s: sb });
+      b.onmousedown = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); };
+      b.onclick = () => {
+        const a = typeof campo.selectionStart === "number" ? campo.selectionStart : campo.value.length;
+        const z = typeof campo.selectionEnd === "number" ? campo.selectionEnd : a;
+        campo.value = campo.value.slice(0, a) + sb + campo.value.slice(z);
+        try { campo.focus(); campo.setSelectionRange(a + sb.length, a + sb.length); } catch (e) {}
+      };
+      fila.append(b);
+    });
+    campo.parentNode.insertBefore(fila, campo);
+    campo._simbFila = fila;
+  }
+  if (!campo._simbOuve && campo.addEventListener) {
+    campo._simbOuve = true;
+    campo.addEventListener("input", (ev) => {
+      if (!campo._simbLigado) return;
+      const tipo = String((ev && ev.inputType) || "insertText");
+      if (!/^insert/.test(tipo) || tipo === "insertFromPaste" || tipo === "insertFromDrop") return;
+      const r = simbAutoTrocar(campo.value, campo.selectionStart, ev && ev.data ? String(ev.data).length : 1);
+      if (r.txt !== campo.value) { campo.value = r.txt; try { campo.setSelectionRange(r.pos, r.pos); } catch (e) {} }
+    });
+  }
+  campo._simbLigado = !!ligar;
+  if (fila) fila.hidden = !ligar;
+  return !!ligar;
+}
+
 /* ---------------- ligação ---------------- */
 
 /* acesso as ferramentas por nome — o teste precisa apertar a caneta

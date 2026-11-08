@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.115.0";
+const VERSAO = "19.116.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -472,6 +472,9 @@ function uiTexto(titulo, valor, dois, extra) {
     campo.value = valor || "";
     const cx2 = document.getElementById("txtLivreCaixa2");
     const campo2 = document.getElementById("txtLivreCampo2");
+    /* (19.116.0) quem escreve uma questão à mão (fórmula de lógica, de estatística, de matemática financeira) ganha a
+     * fileira de símbolos e os atalhos que viram símbolo ao digitar ("->" → "→", "^2" → "²") — ver rascunho.js */
+    try { if (typeof simbLigarCampo === "function") simbLigarCampo(campo, !!(dois && dois.simbolos)); } catch (e) {}
     if (cx2 && campo2) {
       cx2.style.display = dois ? "" : "none";
       document.getElementById("txtLivreRot2").textContent = (dois && dois.rotulo2) || "";

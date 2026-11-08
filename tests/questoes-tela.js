@@ -166,6 +166,70 @@ async function testes() {
     });
     api.setLanguage("pt");
   }
+  /* ===================================================================
+   * (19.116.0) FÓRMULAS E TABELAS NA QUESTÃO
+   * O pedido: enunciados como o da tabela-verdade do QConcursos, os símbolos do resumo, estatística e matemática
+   * financeira. O texto guardado não muda; o leitor mantém as linhas e a tela mostra tabela, expoente e fórmula —
+   * SEM mudar uma posição de letra (o grifo e o lápis dependem delas).
+   * =================================================================== */
+  {
+    const { api, janela } = rodar();
+    const doc = janela.document;
+    const todos = (el, f, out) => { out = out || []; Array.from(el.childNodes || el.children || []).filter((c) => c && c.nodeType !== 3).forEach((c) => { if (f(c)) out.push(c); todos(c, f, out); }); return out; };
+    const cls = (e) => String(e.className || (e.getAttribute && e.getAttribute("class")) || "");
+    const tag = (e) => String(e.tagName || "").toUpperCase();
+    /* a leitura: tabela em linhas, e a que chega numa linha só */
+    const multi = "[QUESTAO]\nTIPO: ME\nBANCA: FCC\nENUNCIADO: Observe a tabela verdade abaixo.\n| P | Q | ~Q → P |\n| --- | --- | --- |\n| V | V | F |\n| V | F | x |\n| F | V | y |\n| F | F | z |\nOs valores lógicos que devem substituir x, y e z são, respectivamente:\nA) V, F e F.\nB) F, V e V.\nC) V, V e F.\nGABARITO: C\nCOMENTARIO: ~Q → P só é falsa quando ~Q é V e P é F.\n[/QUESTAO]";
+    const r1 = api.qsLerResposta(multi, {});
+    const en1 = r1.achados[0] && r1.achados[0].enunciado;
+    ok(r1.achados.length === 1 && r1.achados[0].opcoes.length === 3 && /abaixo\.\n\| P \| Q \| ~Q → P \|\n\| --- \| --- \| --- \|\n\| V \| V \| F \|/.test(en1) && /\| F \| F \| z \|\nOs valores/.test(en1),
+       "F1 o leitor mantem as linhas: a tabela continua uma linha por linha: " + JSON.stringify(en1));
+    const uma = "[QUESTAO] TIPO: CE BANCA: CEBRASPE ENUNCIADO: Considere a tabela: | P | Q | P ∧ Q | |---|---|---| | V | V | V | | V | F | F | Logo, a conjunção só é verdadeira na primeira linha. GABARITO: C COMENTARIO: ok. [/QUESTAO]";
+    const en2 = (api.qsLerResposta(uma, {}).achados[0] || {}).enunciado;
+    ok(en2 === "Considere a tabela:\n| P | Q | P ∧ Q |\n| --- | --- | --- |\n| V | V | V |\n| V | F | F |\nLogo, a conjunção só é verdadeira na primeira linha.",
+       "F2 a tabela que chegou numa linha so (copia do chat) vira uma linha por linha: " + JSON.stringify(en2));
+    ok(api.qsTabelaEmLinhas("a | b sem separador | c | d") === "a | b sem separador | c | d", "F2a sem o separador '---', nada muda");
+    /* a tela: tabela de verdade, e o texto inteiro continua lá (na mesma ordem) */
+    const caixa = doc.createElement("div");
+    const el = api.fmtMontar(caixa, en1);
+    ok(el.textContent === en1, "F3 nenhuma letra some nem muda de lugar (o grifo e o lapis guardam posicoes): " + JSON.stringify(el.textContent));
+    const tabs = todos(el, (e) => tag(e) === "TABLE");
+    const ths = todos(el, (e) => tag(e) === "TH"), tds = todos(el, (e) => tag(e) === "TD" && !/qs-tab-sep/.test(cls(e.parentNode || {})));
+    ok(tabs.length === 1 && /qs-tab/.test(cls(tabs[0])) && ths.length === 3, "F3a uma tabela, com o cabecalho P, Q, ~Q → P: " + tabs.length + " · " + ths.length);
+    ok(ths.map((h) => todos(h, (x) => /qs-fmt-oc/.test(cls(x))).length).every((n) => n >= 1), "F3b as barras '|' ficam escondidas dentro das celulas");
+    ok(/~Q → P/.test(ths[2].textContent) && tds.some((d) => /^\s*x\s*\|?/.test(d.textContent)), "F3c as celulas trazem o conteudo: " + ths[2].textContent);
+    /* expoente e fórmula */
+    const s1 = "M = C(1+i)^n e VP = VF/(1+i)^{12}; x^2 + 2^10";
+    const e1 = api.fmtMontar(doc.createElement("div"), s1);
+    const sups = todos(e1, (e) => tag(e) === "SUP");
+    ok(e1.textContent === s1 && sups.map((x) => x.textContent).join(",") === "n,12,2,10", "F4 '^n', '^{12}', '^2' e '^10' viram expoente, sem perder letra: " + sups.map((x) => x.textContent).join(","));
+    ok(!api.fmtTemAlgo("p ^ q é a conjunção") && !api.fmtPedacos("p ^ q", 0, 5).length, "F4a o '^' solto (o 'e' da logica, com espaco) nao e expoente");
+    ok(!api.fmtTemAlgo("pagou R$1.000 e depois R$2.000") && !api.fmtTemAlgo("de R$ 10 a R$ 20"), "F4b dinheiro nao e formula");
+    const s2 = "A negação é $\\sim(p \\wedge q) \\equiv \\sim p \\vee \\sim q$, pela lei.";
+    const e2 = api.fmtMontar(doc.createElement("div"), s2);
+    const tx = todos(e2, (e) => /qs-tex/.test(cls(e)) && !/qs-fmt-oc/.test(cls(e)));
+    const f = tx[0] && tx[0].getAttribute("data-f");
+    ok(e2.textContent === s2 && tx.length === 1 && /∧/.test(f) && /≡/.test(f) && /∨/.test(f), "F5 LaTeX vira simbolo (por CSS, sem texto a mais): " + f);
+    ok(!api.fmtTemAlgo("Texto comum, sem nada.") && api.fmtBlocos("um\ndois").length === 1, "F6 texto comum continua um no de texto so");
+    /* o grifo POR CIMA da tabela: as posições continuam as do texto */
+    const ini = en1.indexOf("~Q → P"), fim = ini + "~Q → P".length;
+    api.grAcrescentar("qF", en1, ini, fim, "amarelo");
+    const cxG = doc.createElement("div");
+    api.grPintar(cxG, "qF", en1);
+    const marks = todos(cxG, (e) => tag(e) === "MARK");
+    ok(cxG.textContent === en1 && marks.length === 1 && marks[0].textContent === "~Q → P", "F7 o grifo pinta dentro da celula da tabela: " + (marks[0] && marks[0].textContent));
+    const noMark = marks[0] && marks[0].childNodes[0];
+    ok(noMark && api.grPosicaoDe(cxG, noMark, 0) === ini, "F7a a selecao dentro da tabela vira a posicao certa no texto: " + (noMark && api.grPosicaoDe(cxG, noMark, 0)) + " ≠ " + ini);
+    /* o pedido à IA */
+    ok(/FÓRMULAS E TABELAS/.test(api.t("qs_prompt")) && /\| --- \| --- \| --- \|/.test(api.t("qs_prompt")) && /nunca LaTeX/.test(api.t("qs_prompt")) && /FÓRMULAS E TABELAS/.test(api.t("qs_prompt_caderno")),
+       "F8 o pedido de questoes ensina simbolos e tabela em linhas (e proibe LaTeX)");
+    /* o editor de questão (dúvidas): fileira e atalhos */
+    const campo = api.$("txtLivreCampo");
+    api.simbLigarCampo(campo, true);
+    ok(campo._simbFila && campo._simbFila.hidden === false && campo._simbLigado === true, "F9 o editor de questao ganha a fileira de simbolos");
+    api.simbLigarCampo(campo, false);
+    ok(campo._simbFila.hidden === true && campo._simbLigado === false, "F9a e ela some nos outros usos da caixa de texto");
+  }
   return falhas;
 }
 
