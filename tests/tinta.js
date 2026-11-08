@@ -334,6 +334,22 @@ async function testes() {
       api.rsPrepararPara(null);
       api.tnAbrir();
       api.tnFerramenta("lapis");
+      /* (19.116.1) "a barra lateral ficou levemente cortada e a barra de rolagem incomoda": sem altura, duas colunas */
+      const bb = api.$("tnBarra"), dg = api.$("dlgQsResponder");
+      const mmAntes = janela.matchMedia;
+      janela.matchMedia = () => ({ matches: true });   /* tela larga: a barra em pé */
+      bb.scrollHeight = 900; bb.clientHeight = 600;
+      ok(api.tnBarraAjustar() === true && /tn-2col/.test(bb.className) && /tn-doca2/.test(dg.className), "B1 a barra nao cabe na altura: vira duas colunas (e a doca alarga), em vez de rolar");
+      bb.scrollHeight = 500;
+      ok(api.tnBarraAjustar() === false && !/tn-2col/.test(bb.className) && !/tn-doca2/.test(dg.className), "B1a cabe: volta a uma coluna");
+      bb.scrollHeight = 900;
+      api.tnBarraAjustar(); api.tnFechar();
+      ok(!/tn-doca2/.test(dg.className), "B1b fechar a barra devolve o espaco da doca");
+      api.tnAbrir(); bb.scrollHeight = 0; bb.clientHeight = 0; api.tnBarraAjustar();
+      janela.matchMedia = mmAntes;
+      const css = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(/\.tn-barra \.tn-g-cores \.tn-cor\{box-sizing:border-box/.test(css) && /\.tn-barra::-webkit-scrollbar\{display:none\}/.test(css) && /scrollbar-width:none/.test(css),
+         "B1c as bolinhas de cor medem com a borda dentro (duas cabem na barra) e a rolagem nao aparece");
     }
     /* caneta: a palma não risca */
     api.tnCanetaReset();

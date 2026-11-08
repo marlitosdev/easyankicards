@@ -716,7 +716,7 @@ function rodar(opc) {
     rsPintarGatilhos, rsSalvarNaQuestao, rsDaQuestao, rsAberto, rsGatilhosIniciar,
     rsVidroTrocar, rsVidroAtual: () => rsVidro, rsFolhaDaTela,
     rsNotaNova, rsInserirSimbolo, simbAutoTrocar, rsQuadroAlternar, rsNotasAtual: () => rsNotas, rsPeloLapis,
-    rsCompactar, rsLerTudo, rsGravarTudo, rsNoIdb, rsCacheForcarTeste, tnEsc, tnTeclaAnotar,
+    rsCompactar, rsLerTudo, rsGravarTudo, rsNoIdb, rsCacheForcarTeste, tnEsc, tnTeclaAnotar, tnBarraAjustar,
     tnFerramenta, tnCorEscolher, tnAbrir, tnFechar, tnQuadroAlternar, tnTextoNoQuadro, TN_CORES, tnComecar,
     rsCheiaAtual: () => rsCheia, rsPrepararPara, rsTela,
     rsEspessuraAtual: () => rsEspessura, rsFerramenta,

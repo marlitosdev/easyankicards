@@ -1092,10 +1092,11 @@ function tnPintarBarra() {
     g.classList.toggle("tn-tem", tnContar() > 0 || temQuadro);
   }
   const dlg = $("dlgQsResponder");
-  if (dlg && dlg.classList) dlg.classList.toggle("tn-doca", tnAberta);
+  if (dlg && dlg.classList) { dlg.classList.toggle("tn-doca", tnAberta); if (!tnAberta) dlg.classList.remove("tn-doca2"); }
   const b = $("tnBarra");
   if (!b) return;
   b.hidden = !tnAberta;
+  if (tnAberta) tnBarraAjustar();
   const bq = $("btnTnQuadro");
   if (bq && bq.classList) {
     let ab = false;
@@ -1142,6 +1143,23 @@ function tnQuadroAlternar() {
   const ab = rsQuadroAlternar();
   tnPintarBarra();
   return ab;
+}
+/* (19.116.1) A BARRA CABE NA ALTURA? Se não couber (janela baixa, escala alta do Windows), vira duas colunas — em vez
+ * de uma barra de rolagem dentro dela. Só na barra em pé (tela larga); no celular ela fica deitada embaixo. */
+function tnBarraAjustar() {
+  const b = $("tnBarra"), dlg = $("dlgQsResponder");
+  if (!b || !b.classList || b.hidden) return false;
+  let larga = true;
+  try { larga = !window.matchMedia || window.matchMedia("(min-width:701px)").matches; } catch (e) {}
+  b.classList.remove("tn-2col");
+  let duas = false;
+  if (larga) { try { duas = (Number(b.scrollHeight) || 0) > (Number(b.clientHeight) || 0) + 1; } catch (e) { duas = false; } }
+  b.classList.toggle("tn-2col", duas);
+  if (dlg && dlg.classList) dlg.classList.toggle("tn-doca2", duas && tnAberta);
+  return duas;
+}
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("resize", () => { try { if (tnAberta) tnBarraAjustar(); } catch (e) {} });
 }
 function tnFerramenta(f) {
   if (TN_FERRAMENTAS.indexOf(f) < 0) return false;
