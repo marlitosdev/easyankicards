@@ -11,7 +11,17 @@
  *   · OS FILTROS, cada um com quantos tópicos e quanto da prova ("nunca estudado · 130 · 79% da prova");
  *   · UMA LINHA POR DISCIPLINA, na ordem escolhida (quanto vale · mais urgente · tempo abaixo do peso · menos dominada):
  *     quanto vale, o domínio (a cor de cada nível, pelo peso), os assuntos cumpridos e o seu tempo contra o peso;
- *   · O DETALHE da disciplina abre NA MESMA TELA, com "← Todas as disciplinas" para voltar.
+ *   · O DETALHE da disciplina abre NA MESMA TELA, com "← Todas as disciplinas" para voltar;
+ *   · (19.105.0) A FILA "O QUE ESTUDAR AGORA": tópico a tópico, com o porquê de cada um e a ação que mais ajuda.
+ *
+ * A CONTA DA FILA (a mesma da ordem "mais urgente" e dos tópicos no detalhe), cada parcela à vista no item:
+ *   pontos = (peso × gravidade  [× 1,5 se o ACERTO do bloco está abaixo do mínimo e o tópico é vermelho/amarelo]
+ *             + corte)  × tempo
+ *   · peso × gravidade: a fila do Domínio, folha a folha (vermelho 3, amarelo 2, nunca estudado 2, sem medida 1,5);
+ *   · corte: o bloco com COBERTURA abaixo do mínimo — eliminatório — põe o que ainda não foi estudado dele na frente.
+ *     Vale PE_K_CORTE pontos (como 10% da prova) vezes a fração do que falta ao bloco que este tópico cobre: num bloco
+ *     pequeno, poucos tópicos tiram do corte e cada um pesa muito; num bloco grande, cada um ajuda pouco;
+ *   · tempo: a disciplina abaixo do peso no período (ou sem nenhuma hora) × 1,25; a que já passa 10 pontos do peso × 0,8.
  *
  * NADA É MEDIDO DE NOVO: a fatia vem do plano (montarPlano), as horas das horas por assunto (horMapa), as cores do
  * Domínio (domDoEdital), os cortes dos blocos do plano. O mapa completo do Domínio e as horas em colunas continuam a um
@@ -24,7 +34,12 @@ const PE_ORDENS = ["peso", "urgencia", "tempo", "dominio"];
 const PE_NIVEIS = ["verde", "amarelo", "azul", "vermelho", "cinza"];
 const PE_MIN_TEMPO = 120;          /* minutos no período abaixo dos quais "tempo × peso" não diz nada */
 const PE_CH = "eac_pe_pref";
+const PE_K_CORTE = 10;             /* tirar um bloco do corte vale como 10% da prova (a fração que o tópico cobre do que falta) */
+const PE_AC_CORTE = 1.5;           /* o vermelho/amarelo de um bloco com ACERTO abaixo do mínimo */
+const PE_TEMPO_MAIS = 1.25, PE_TEMPO_MENOS = 0.8;
+const PE_FILA_PASSO = 8;
 let peFiltro = "todos", peOrdem = "peso", pePeriodo = "14", peDisc = "", peCheia = false, peTopOrdem = "urgencia";
+let peFilaN = PE_FILA_PASSO;
 let peUltimo = null;
 
 function pePrefLer() { try { return JSON.parse(localStorage.getItem(PE_CH) || "{}") || {}; } catch (e) { return {}; } }
@@ -72,23 +87,54 @@ function peDados(fonte, opc) {
     const horasTop = new Map(h.topicos.map((tp) => [tp.nome, tp]));
     const topicos = tops.map((tp, i) => {
       const ht = horasTop.get(tp.nome) || {};
+      /* as FOLHAS do Domínio: o próprio tópico, ou os ramos dele (os pulados ficam de fora) */
+      const folhas = tp.ramos && tp.ramos.length ? tp.ramos.filter((x) => !x.pulado && PE_NIVEIS.indexOf(x.nivel) >= 0) : [tp];
+      let pior = folhas[0] || tp;
+      folhas.forEach((f) => { if (DOM_NIVEIS.indexOf(f.nivel) < DOM_NIVEIS.indexOf(pior.nivel)) pior = f; });
       return { nome: tp.nome, chave: tp.chave, nivel: tp.nivel, pesoPct: tp.pesoPct || 0, ordem: i, ramos: ht.ramos || [],
         estudoMin: ht.estudoMin || 0, revisaoMin: ht.revisaoMin || 0, feitas: ht.feitas || 0, unidades: ht.unidades || 1,
-        urgencia: (tp.pesoPct || 0) * fatorDe(tp.nivel) };
+        /* peso × gravidade, folha a folha (a mesma conta da fila agrupada do Domínio) */
+        base: folhas.reduce((a, f) => a + (f.pesoPct || 0) * fatorDe(f.nivel), 0),
+        /* o peso ainda não estudado: é ele que sobe a cobertura do bloco */
+        pesoFalta: folhas.filter((f) => f.nivel === "cinza").reduce((a, f) => a + (f.pesoPct || 0), 0),
+        /* o porquê e o alvo da ação: os da folha mais fraca */
+        motivos: pior.motivos || [], ramo: pior !== tp && pior.ramoId ? { id: pior.ramoId, nome: pior.ramoNome } : null,
+        domRamos: (tp.ramos || []).map((x) => ({ id: x.ramoId, nome: x.ramoNome })),
+        urgencia: 0, partes: null };
     });
     const tempoPct = totalMin ? (h.totalMin / totalMin) * 100 : 0;
     const bl = blocos.find((b) => (b.disciplinas || []).indexOf(h.nome) >= 0) || null;
-    const bloco = bl ? { nome: bl.nome, minPct: bl.minPct, pct: bl.pct, abaixo: !!bl.abaixo, apertado: !!bl.apertado } : null;
+    const bloco = bl ? { nome: bl.nome, minPct: bl.minPct, pct: bl.pct, abaixo: !!bl.abaixo, apertado: !!bl.apertado,
+      acerto: bl.acerto === undefined ? null : bl.acerto, acertoAbaixo: !!bl.acertoAbaixo } : null;
     const tempoConta = totalMin >= PE_MIN_TEMPO;
-    /* "mais urgente": o peso do que falta × a gravidade (os mesmos fatores do Domínio), + o risco de corte, + o tempo que
-     * falta para o peso — cada parcela à vista no detalhe */
-    const urgencia = topicos.reduce((a, tp) => a + tp.urgencia, 0)
-      + (bloco && bloco.abaixo ? h.pesoPct * 0.5 : 0)
-      + (tempoConta && tempoPct - h.pesoPct < -5 ? (h.pesoPct - tempoPct) * 0.5 : 0);
     return { nome: h.nome, vale: h.pesoPct, dist, cont, n: tops.length, topicos, feitas: h.feitas, unidades: h.unidades,
       estudoMin: h.estudoMin, revisaoMin: h.revisaoMin, totalMin: h.totalMin, tempoPct, desvio: tempoPct - h.pesoPct,
-      tempoConta, bloco, urgencia };
+      tempoConta, bloco, tempoMult: 1, urgencia: 0 };
   });
+
+  /* (19.105.0) A FILA "O QUE ESTUDAR AGORA" — a conta está no cabeçalho do arquivo. "Mais urgente" (a ordem das
+   * disciplinas) é a soma dos pontos dos tópicos dela, e os tópicos do detalhe seguem a mesma conta. */
+  const valeBloco = {};
+  disciplinas.forEach((d) => { if (d.bloco) valeBloco[d.bloco.nome] = (valeBloco[d.bloco.nome] || 0) + d.vale; });
+  const folga = typeof ED_FOLGA_MINIMO === "number" ? ED_FOLGA_MINIMO : 1.25;
+  const fila = [];
+  disciplinas.forEach((d) => {
+    const b = d.bloco;
+    /* o que falta COBRIR para o bloco sair do corte com folga, em % da prova */
+    const falta = b && b.abaixo && b.minPct ? Math.max(0, (Math.min(100, b.minPct * folga) - (b.pct || 0)) / 100) * (valeBloco[b.nome] || 0) : 0;
+    const semHora = !d.totalMin && d.vale >= 1;
+    d.tempoMult = !d.tempoConta ? 1 : (d.desvio <= -5 || semHora ? PE_TEMPO_MAIS : (d.desvio >= 10 ? PE_TEMPO_MENOS : 1));
+    d.topicos.forEach((tp) => {
+      const corte = falta > 0 && tp.pesoFalta > 0 ? PE_K_CORTE * Math.min(1, tp.pesoFalta / falta) : 0;
+      const acMult = b && b.acertoAbaixo && (tp.nivel === "vermelho" || tp.nivel === "amarelo") ? PE_AC_CORTE : 1;
+      tp.partes = { base: tp.base, corte, acMult, tempoMult: d.tempoMult };
+      tp.urgencia = (tp.base * acMult + corte) * d.tempoMult;
+      if (tp.urgencia > 0) fila.push({ d, tp });
+    });
+    d.urgencia = d.topicos.reduce((a, tp) => a + tp.urgencia, 0);
+  });
+  fila.sort((x, y) => (y.tp.urgencia - x.tp.urgencia) || (y.tp.pesoPct - x.tp.pesoPct)
+    || (x.d.nome < y.d.nome ? -1 : (x.d.nome > y.d.nome ? 1 : 0)) || (x.tp.ordem - y.tp.ordem));
   const totalTop = PE_NIVEIS.reduce((a, k) => a + contG[k], 0);
   const distG = (dm && dm.resumo && dm.resumo.distribuicao) || {};
   const pctG = (ks) => ks.reduce((a, k) => a + (distG[k] || 0), 0);
@@ -118,7 +164,7 @@ function peDados(fonte, opc) {
     const h0 = new Date(); h0.setHours(0, 0, 0, 0);
     dias = Math.round((new Date(prova + "T00:00:00") - h0) / 86400000);
   }
-  return { disciplinas, filtros, urgencias, total: hm.total, totalMin, periodo: o.periodo || "tudo",
+  return { disciplinas, filtros, urgencias, fila, total: hm.total, totalMin, periodo: o.periodo || "tudo",
     prova, previsto: !cfg.prova && !!cfg.previsto, previstoTxt: cfg.previsto || "", dias, horasSemana: minSemana / 60,
     verdePct: distG.verde || 0, base: dm ? dm.base : "" };
 }
@@ -208,7 +254,7 @@ function peUrgencias(dd) {
     if (u.tipo === "corte") {
       card(u, t("pe_u_corte_tit", { n: u.blocos.length }),
         u.blocos.map((b) => t("pe_u_corte_item", { b: b.nome, p: Math.round(b.pct), m: b.minPct })).join(" · "),
-        () => peDefinir({ ordem: "urgencia", filtro: "todos" }), t("pe_u_corte_tip"));
+        () => peDefinir({ ordem: "urgencia", filtro: "todos", foco: "fila" }), t("pe_u_corte_tip"));
     } else if (u.tipo === "tempo") {
       card(u, t("pe_u_tempo_tit"), t("pe_u_tempo_sub", { t: Math.round(u.tempo), per, d: u.disc, v: pctProva(u.vale) })
         + (u.sem.length ? " " + t("pe_u_tempo_sem", { l: u.sem.slice(0, 3).join(", ") }) : ""),
@@ -305,6 +351,120 @@ function peLista(cx, dd) {
   leg.append(lt, lv);
   cx.append(leg);
   if (dd.base) cx.append(gerEl("p", "nota pe-base", t(dd.base === "questoes" ? "dom_base_questoes" : (dd.base === "plano" ? "dom_base_plano" : (dd.base === "fase2" ? "cov_base_fase2" : "dom_base_estimado")))));
+  peFila(cx, dd);
+}
+
+/* ---------------------------------------------------------------------
+ * (19.105.0) A FILA "O QUE ESTUDAR AGORA"
+ * ------------------------------------------------------------------- */
+function peNum(v) { return (Math.round(v * 10) / 10).toFixed(1).replace(".", ","); }
+/* o porquê da COR, curto (o Domínio diz a frase inteira; aqui é um selo) */
+function peMotivoCurto(m) {
+  const c = m.cod;
+  if (c === "nunca_estudado") return t("pe_m_nunca");
+  if (c === "acerto_baixo" || c === "acerto_mediano") return t("pe_m_acerto", { pct: m.pct, n: m.n });
+  if (c === "retencao_baixa" || c === "retencao_mediana") return t("pe_m_retencao", { pct: m.pct });
+  if (c === "revisao_vencida") return t("pe_m_revisao", { dias: m.dias === null || m.dias === undefined ? "?" : m.dias });
+  if (c === "nao_medido") return t("pe_m_naomedido");
+  if (c === "inseguro") return t("pe_m_inseguro");
+  return typeof domMotivoTxt === "function" ? domMotivoTxt(m) : "";
+}
+/* os selos de um item: a cor, o corte, quanto vale e o tempo */
+function peMotivos(tp, d) {
+  const out = [];
+  const m = (tp.motivos || []).filter((x) => x && !/solid[ao]$/.test(x.cod) && x.cod !== "solido")[0];
+  const txt = m ? peMotivoCurto(m) : "";
+  if (txt) out.push({ cls: "nivel", txt });
+  const p = tp.partes || {};
+  if (p.corte > 0) out.push({ cls: "corte", txt: t("pe_mot_corte", { b: d.bloco.nome, p: Math.round(d.bloco.pct || 0), m: d.bloco.minPct }) });
+  if (p.acMult > 1) out.push({ cls: "corte", txt: t("pe_mot_acerto_corte", { b: d.bloco.nome, p: d.bloco.acerto, m: d.bloco.minPct }) });
+  out.push({ cls: "vale", txt: t("pe_mot_vale", { p: pctProva(tp.pesoPct) }) });
+  if (p.tempoMult > 1) out.push({ cls: "tempo", txt: d.totalMin ? t("pe_mot_pouco_tempo", { t: Math.round(d.tempoPct), v: pctProva(d.vale) }) : t("pe_mot_zero_tempo") });
+  if (p.tempoMult < 1) out.push({ cls: "muito", txt: t("pe_mot_muito_tempo", { t: Math.round(d.tempoPct), v: pctProva(d.vale) }) });
+  return out;
+}
+/* a conta do item, por extenso (no balão) */
+function peFilaConta(tp) {
+  const p = tp.partes || { base: 0, corte: 0, acMult: 1, tempoMult: 1 };
+  /* (peso × cor [× acerto do bloco] + corte) × tempo — com os parênteses só quando eles mudam a leitura */
+  let x = t("pe_conta_base", { b: peNum(p.base) });
+  if (p.acMult !== 1) x += t("pe_conta_ac", { m: peNum(p.acMult) });
+  if (p.corte > 0) x += t("pe_conta_corte", { c: peNum(p.corte) });
+  if (p.tempoMult !== 1) {
+    if (p.corte > 0 || p.acMult !== 1) x = "(" + x + ")";
+    x += t("pe_conta_tempo", { m: String(p.tempoMult).replace(".", ",") });
+  }
+  return t("pe_conta", { x, s: peNum(tp.urgencia) });
+}
+/* A AÇÃO QUE MAIS AJUDA NA COR (a mesma regra do Domínio): errou → refazer as erradas; estudou e não mediu → medir;
+ * não estudou → o material (começar, ou preparar o que falta); o resto → rever. Sempre fecha o painel com a volta armada. */
+function peAcaoDe(tp, d) {
+  const ramo = tp.ramo;
+  const edId = typeof editalAtual !== "undefined" ? editalAtual : "";
+  const ficha = () => edAbrirFicha(d.nome, tp.nome, { ramos: tp.domRamos || [], ramo: ramo ? ramo.id : "", editalId: edId });
+  let erradas = [];
+  if ((tp.nivel === "vermelho" || tp.nivel === "amarelo") && typeof qsFiltrar === "function") {
+    try { erradas = qsFiltrar(Object.assign({ chave: tp.chave, soErradas: true }, ramo ? { ramo: ramo.id } : {})); } catch (e) { erradas = []; }
+    /* o ramo herda o acerto do tópico: sem erradas ligadas ao ramo, valem as do tópico */
+    if (ramo && !erradas.length) { try { erradas = qsFiltrar({ chave: tp.chave, soErradas: true }); } catch (e) { erradas = []; } }
+  }
+  let mat = { vazio: true, questoes: 0 };
+  try { if (typeof domMaterialDe === "function") mat = domMaterialDe(d.nome, tp.nome, tp.chave); } catch (e) {}
+  if (erradas.length) return { cod: "erradas", txt: t("dom_ac1_erradas", { n: erradas.length }), tip: t("dom_ac1_erradas_tip"), ficha,
+    fazer: () => qsUiResponderAbrir(erradas, null, "painel-erradas:" + tp.chave + (ramo ? "#" + ramo.id : "")) };
+  if (tp.nivel === "azul") return { cod: mat.questoes ? "medir" : "criar_qs", txt: mat.questoes ? t("dom_ac1_medir", { n: mat.questoes }) : t("dom_ac1_criar_qs"),
+    tip: t("dom_ac1_medir_tip"), ficha, fazer: () => qsUiResponderDireto(d.nome, tp.nome, ramo || undefined) };
+  if (tp.nivel === "cinza") return { cod: mat.vazio ? "preparar" : "comecar", txt: t(mat.vazio ? "dom_ac1_preparar" : "dom_ac1_comecar"), tip: t("dom_ac1_ficha_tip"), ficha, fazer: ficha };
+  return { cod: "rever", txt: t("dom_ac1_rever"), tip: t("dom_ac1_ficha_tip"), ficha, fazer: ficha };
+}
+function peFilaItem(x, i) {
+  const tp = x.tp, d = x.d;
+  const it = gerEl("div", "pe-fila-it");
+  it.id = "peFi_" + i;
+  it.title = peFilaConta(tp) + (tp.ramo ? " · " + t("pe_ramo_pior", { r: tp.ramo.nome }) : "");
+  it.append(gerEl("span", "pe-fila-n", String(i + 1)), gerEl("i", "pe-dot dom-n-" + tp.nivel));
+  const txt = gerEl("div", "pe-fila-txt");
+  const nome = gerEl("div", "pe-fila-nome");
+  nome.append(gerEl("span", "pe-fila-disc", d.nome + " › "), gerEl("b", "", tp.nome));
+  if (tp.ramo) nome.append(gerEl("span", "pe-fila-disc", " › " + tp.ramo.nome));
+  txt.append(nome);
+  const mot = gerEl("div", "pe-fila-mot");
+  peMotivos(tp, d).forEach((m) => mot.append(gerEl("span", "pe-mot pe-mot-" + m.cls, m.txt)));
+  txt.append(mot);
+  it.append(txt);
+  const ac = peAcaoDe(tp, d);
+  const caixa = gerEl("span", "pe-fila-acoes");
+  const b1 = gerEl("button", "btn-min btn-min-ok pe-acao-1", ac.txt); b1.type = "button"; b1.title = ac.tip;
+  b1.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); peFechar(); ac.fazer(); };
+  caixa.append(b1);
+  /* errou ou falta medir: o material do tópico também a um toque */
+  if (ac.fazer !== ac.ficha) {
+    const b2 = gerEl("button", "btn-min", t("ed_materiais_btn")); b2.type = "button"; b2.title = t("dom_ac1_ficha_tip");
+    b2.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); peFechar(); ac.ficha(); };
+    caixa.append(b2);
+  }
+  it.append(caixa);
+  return it;
+}
+function peFila(cx, dd) {
+  const box = gerEl("div", "pe-fila");
+  box.id = "peFila";
+  box.append(gerEl("h4", "pe-fila-tit", t("pe_fila_tit")), gerEl("p", "nota pe-fila-sub", t("pe_fila_sub", { per: pePeriodoTexto(dd.periodo) })));
+  /* o filtro vale para a lista e para a fila */
+  const itens = (dd.fila || []).filter((x) => peCasa(x.tp, peFiltro));
+  if (peFiltro !== "todos") box.append(gerEl("p", "nota", t("pe_fila_filtro", { f: t("pe_f_" + peFiltro + "_nome") })));
+  const lista = gerEl("div", "pe-fila-lista");
+  lista.id = "peFilaLista";
+  itens.slice(0, peFilaN).forEach((x, i) => lista.append(peFilaItem(x, i)));
+  if (!itens.length) lista.append(gerEl("p", "nota", t(peFiltro === "todos" ? "pe_fila_vazia" : "pe_fila_vazia_filtro")));
+  box.append(lista);
+  if (itens.length > peFilaN) {
+    const mais = gerEl("button", "btn-min pe-fila-mais", t("pe_fila_mais", { n: Math.min(PE_FILA_PASSO, itens.length - peFilaN), t: itens.length }));
+    mais.type = "button"; mais.id = "btnPeFilaMais";
+    mais.onclick = () => { peFilaN += PE_FILA_PASSO; peRender(); };
+    box.append(mais);
+  }
+  cx.append(box);
 }
 
 function peDetalhe(cx, dd) {
@@ -367,6 +527,7 @@ function peDetalhe(cx, dd) {
 function peRender() {
   const cx = $("peCorpo");
   if (!cx) return null;
+  const y = cx.scrollTop || 0;
   cx.innerHTML = "";
   let dd = null;
   try { dd = peDados(peFonte(), { periodo: pePeriodo }); } catch (e) { dd = null; }
@@ -374,13 +535,14 @@ function peRender() {
   if (!dd || !dd.disciplinas.length) { cx.append(gerEl("p", "nota", t("pe_vazio"))); return dd; }
   cx.append(peKpi(dd), peUrgencias(dd));
   if (peDisc) peDetalhe(cx, dd); else peLista(cx, dd);
+  cx.scrollTop = y;
   return dd;
 }
 
 /* trocar filtro, ordem, período ou a disciplina aberta (e lembrar o que é preferência) */
 function peDefinir(m) {
   const x = m || {};
-  if (x.filtro !== undefined && PE_FILTROS.indexOf(x.filtro) >= 0) peFiltro = x.filtro;
+  if (x.filtro !== undefined && PE_FILTROS.indexOf(x.filtro) >= 0) { if (x.filtro !== peFiltro) peFilaN = PE_FILA_PASSO; peFiltro = x.filtro; }
   if (x.ordem !== undefined && PE_ORDENS.indexOf(x.ordem) >= 0) peOrdem = x.ordem;
   if (x.periodo !== undefined && PE_PERIODOS.indexOf(String(x.periodo)) >= 0) pePeriodo = String(x.periodo);
   if (x.disc !== undefined) peDisc = x.disc;
@@ -390,6 +552,8 @@ function peDefinir(m) {
   const dd = peRender();
   const c = $("peCorpo");
   if (c && (x.disc !== undefined)) c.scrollTop = 0;
+  /* o cartão do corte leva à fila */
+  if (x.foco === "fila") { const f = $("peFila"); try { if (f && f.scrollIntoView) f.scrollIntoView({ block: "start" }); } catch (e) {} }
   try { reg("PAINEL", "painel do edital", JSON.stringify(x)); } catch (e) {}
   return dd;
 }
@@ -422,7 +586,7 @@ function peAbrir(opc) {
   const o = opc || {};
   if (!o.manter) {
     const p = pePrefLer();
-    peFiltro = "todos"; peDisc = o.disc || "";
+    peFiltro = "todos"; peDisc = o.disc || ""; peFilaN = PE_FILA_PASSO;
     peOrdem = PE_ORDENS.indexOf(o.ordem || p.ordem) >= 0 ? (o.ordem || p.ordem) : "peso";
     pePeriodo = PE_PERIODOS.indexOf(String(p.periodo)) >= 0 ? String(p.periodo) : "14";
     peCheia = p.cheia === undefined ? true : !!p.cheia;

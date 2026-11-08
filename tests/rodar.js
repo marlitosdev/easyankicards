@@ -567,7 +567,7 @@ async function main() {
                     ["pré-edital com IA (base no edital anterior) e a confiança valendo: boato fora da agenda até incluir", pieT],
                     ["virada com IA: de-para, destinos sugeridos, o tópico inteiro vai junto, cabeçalho e carimbo certos, e o desfazer completo", viaT],
                     ["horas por assunto e Domínio: um 'vale X% da prova' só, meta do período, tela cheia e voltar ao painel", pvoT],
-                    ["painel do edital: urgências, filtros com % da prova, ordem, tempo × peso e o detalhe na mesma tela", pedtT],
+                    ["painel do edital: urgências, filtros com % da prova, ordem, tempo × peso, o detalhe na mesma tela e a fila \"o que estudar agora\" (corte e tempo na conta)", pedtT],
                     ["registro: gravação recusada e eventos do edital", registroT],
                     [colagem.pulado ? "colagem de HTML (PULADO: sem jsdom)"
                                     : "colagem: HTML vira marcação do app", colagem.falhas]];

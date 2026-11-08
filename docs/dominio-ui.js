@@ -356,6 +356,8 @@ function domPintar() {
   const fila = agrupar ? domFilaAgrupada(filaFolhas) : filaFolhas;
   const s = gerEl("div", "cov-bloco");
   s.append(gerEl("h4", "", t("dom_reforcar")));
+  /* (19.105.0) a ordem daqui é só peso × cor; a que junta o corte e o tempo é a do painel do edital */
+  s.append(gerEl("p", "nota", t("dom_reforcar_painel")));
   if (filaFolhas.some((f) => f.tipo === "ramo")) {
     const lg = gerEl("div", "dom-ordem dom-agrupar");
     lg.append(gerEl("span", "dom-item-rot", t("dom_agrupar_rot")));
