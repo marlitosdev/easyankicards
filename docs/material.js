@@ -4031,6 +4031,13 @@ function matFichaRamosEstado(x, ramos, edId) {
   });
   return out;
 }
+/* (19.111.0) o tamanho do resumo em poucas letras: "820 caracteres", "1,5 mil caracteres", "25 mil caracteres" */
+function matFichaTam(c) {
+  const n = Number(c) || 0;
+  if (n < 1000) return t("mat_tamanho", { c: n });
+  const k = n >= 10000 ? Math.round(n / 1000) : Math.round(n / 100) / 10;
+  return t("mat_ficha_mil_car", { n: String(k).replace(".", t("mat_ficha_dec")) });
+}
 /* o balão do botão do ramo: a cor em palavras e o que ele tem */
 function matFichaRamoDica(e) {
   const tem = [];
@@ -4050,7 +4057,10 @@ function matPintarFicha() {
   const ramos = o.ramos || [];
   const ramo = matFichaEscopo ? ramos.find((r) => r.id === matFichaEscopo) : null;
   const inf = matInfoTopico(x);
-  $("matFichaTit").textContent = (x.topico || x.chave) + (ramo ? " › " + ramo.nome : "");
+  /* (19.111.0) o título é só o tópico, numa linha (o nome inteiro no balão); o ramo escolhido aparece no alto da coluna
+   * do material — antes ele vinha no título E no botão, e o título ocupava 4 linhas */
+  $("matFichaTit").textContent = x.topico || x.chave;
+  $("matFichaTit").title = (x.topico || x.chave) + (ramo ? " › " + ramo.nome : "");
   $("matFichaSub").textContent = [x.concurso, x.disciplina].filter(Boolean).join(" › ")
     + (x.tocado ? " · " + t("mat_atualizado", { d: new Date(x.tocado).toLocaleDateString() }) : "");
   /* o escopo: "Tópico inteiro" e um botão por ramo — o mesmo lugar para os dois */
@@ -4100,6 +4110,16 @@ function matPintarFicha() {
   }
   const box = $("matFichaLista");
   box.innerHTML = "";
+  if (ramos.length) {
+    const cab = document.createElement("div");
+    cab.className = "mat-ficha-escolhido";
+    const nmE = document.createElement("b");
+    nmE.textContent = ramo ? ramo.nome : t("mat_ficha_topico_todo");
+    cab.append(nmE);
+    const info = ramo ? (ramo.peso ? t("mat_ficha_peso", { p: ramo.peso }) : "") : t("mat_ficha_n_ramos", { n: ramos.length });
+    if (info) { const sp = document.createElement("span"); sp.className = "nota"; sp.textContent = info; cab.append(sp); }
+    box.append(cab);
+  }
   const fechaE = (fn) => () => { try { dlg.close(); } catch (e) {} fn(); };
   const botao = (rot, cls, fn, dica) => {
     const b = document.createElement("button");
@@ -4135,8 +4155,8 @@ function matPintarFicha() {
   const corpoR = ramo ? matTextoDaSecao(textoR, ramo.id, ramos) : null;
   const temEsc = ramo ? !!(corpoR && corpoR.trim()) : inf.temR;
   item("resumo", ramo ? t("mat_slot_resumo_ramo") : t("mat_slot_resumo"), temEsc,
-    ramo ? (temEsc ? t("mat_ficha_resumo_ramo_tem", { c: corpoR.length }) : t("mat_ficha_resumo_ramo_falta"))
-      : (inf.temR ? t("mat_tamanho", { c: inf.chars }) + (secs.length ? " · " + t("mat_ficha_resumo_secoes", { n: secs.length }) : "") : t("mat_ficha_falta")),
+    ramo ? (temEsc ? matFichaTam(corpoR.length) : t("mat_ficha_resumo_ramo_falta"))
+      : (inf.temR ? matFichaTam(inf.chars) + (secs.length ? " · " + t("mat_ficha_resumo_secoes", { n: secs.length }) : "") : t("mat_ficha_falta")),
     temEsc
       ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler", opcEd), t("mat_slot_resumo_tip", { tp: ramo ? ramo.nome : x.topico })),
         botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t("mat_ficha_editar_tip", { tp: ramo ? ramo.nome : x.topico }))]
@@ -4155,7 +4175,7 @@ function matPintarFicha() {
     let nR = 0;
     try { nR = ((typeof ramMaterialDoTopico === "function" ? ramMaterialDoTopico(x.chave, [ramo]) : {})[ramo.id] || {}).cartoes || 0; } catch (e) { nR = 0; }
     item("cartoes", t("mat_aba_cartoes"), nR > 0,
-      nR ? t("mat_ficha_cartoes_ramo", { n: nR, t: inf.nCart }) : t("mat_ficha_falta_ramo", { t: inf.nCart }),
+      nR ? t("mat_ficha_cartoes_ramo", { n: nR, t: inf.nCart }) : (inf.nCart ? t("mat_ficha_falta_ramo", { t: inf.nCart }) : t("mat_ficha_falta")),
       nR ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: nR, tp: x.topico }))]
         : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico), t("ed_crt_novo", { n: x.topico }))]);
   } else {
@@ -4193,7 +4213,7 @@ function matPintarFicha() {
     jur.push(bs);
   }
   item("juris", t("mat_aba_juris"), nJ > 0,
-    ramo ? (nJR ? t("mat_ficha_juris_ramo", { n: nJR, t: inf.nJul }) : t("mat_ficha_juris_ramo_falta", { t: inf.nJul }))
+    ramo ? (nJR ? t("mat_ficha_juris_ramo", { n: nJR, t: inf.nJul }) : (inf.nJul ? t("mat_ficha_juris_ramo_falta", { t: inf.nJul }) : t("mat_ficha_falta")))
       : (inf.nJul ? t("mat_slot_juris_n", { n: inf.nJul }) : t("mat_ficha_falta")), jur);
   /* rodapé: registrar o estudo (deste ramo ou do tópico) e ajustar os ramos — o que antes morava no "⋮" */
   const rod = $("matFichaRodape");

@@ -585,7 +585,7 @@ function domProximoPasso(disciplina, topico, chave, edId) {
   const mat = domMaterialDe(disciplina, topico, f.chave);
   const ac = domAcaoPrincipal(f, mat, []);
   const comAcao = ["erradas", "medir", "criar_qs"].indexOf(ac.cod) >= 0;
-  return { nivel: n.nivel, edital: ed, pior: n.pior, porque: domPorque(n.motivos), acao: comAcao ? ac : null };
+  return { nivel: n.nivel, edital: ed, pior: n.pior, porque: domPorque(n.motivos), acao: comAcao ? ac : null, ramos: n.ramos || {} };
 }
 function domPassoPintar(box, disciplina, topico, chave, edId, aoAgir) {
   if (!box) return null;
@@ -600,7 +600,12 @@ function domPassoPintar(box, disciplina, topico, chave, edId, aoAgir) {
   nv.title = t("dom_passo_ver_tip");
   nv.onclick = () => { if (typeof aoAgir === "function") aoAgir(); domAbrir(p.edital, disciplina); const k = domNivelDoTopico(p.edital, disciplina, topico); if (k) domIrAoTopico(disciplina, k.chave); };
   box.append(gerEl("span", "dom-item-rot", t("dom_passo_rot")), nv);
-  const txt = (p.pior ? t("dom_grupo_pior", { r: p.pior }) + (p.porque ? " · " : "") : "") + (p.porque || "");
+  /* (19.111.0) sem repetir o que a cor já diz: "não estudado" dispensa "porque: ainda não estudado", e "ramo mais fraco"
+   * só quando os ramos NÃO estão todos na mesma cor (senão o "mais fraco" é só o primeiro da lista) */
+  const iguais = Object.keys(p.ramos || {}).every((k) => p.ramos[k] === p.nivel);
+  const pq = p.nivel === "cinza" ? "" : (p.porque || "");
+  const txt = (p.pior && !iguais ? t("dom_grupo_pior", { r: p.pior }) + (pq ? " · " : "") : "") + pq;
+  box.title = txt;
   if (txt) box.append(gerEl("span", "dom-passo-pq", txt));
   if (p.acao) {
     const b = gerEl("button", "btn-min dom-acao-1 dom-acao-" + p.acao.cod, p.acao.txt);

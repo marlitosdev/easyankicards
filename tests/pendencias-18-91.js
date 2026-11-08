@@ -68,8 +68,9 @@ async function testes() {
     ok(a.$("dlgMatFicha").open === false && a.$("dlgQsResponder").open === true && a.qsSessaoAtual().fila.length === 3, "P3b agir fecha a ficha e abre a rodada das erradas");
     a.$("dlgQsResponder").close();
     a.edAbrirFicha("Licitações", "Convênios");
-    ok(a.$("matFichaPasso").hidden === false && !achar(a.$("matFichaPasso"), (e) => cls(e, "dom-acao-1")).length && /ainda não estudado/.test(a.$("matFichaPasso").textContent),
-      "P3c não estudado: a ficha diz a cor e o motivo, sem botão (o material já está na própria ficha)");
+    ok(a.$("matFichaPasso").hidden === false && !achar(a.$("matFichaPasso"), (e) => cls(e, "dom-acao-1")).length && achar(a.$("matFichaPasso"), (e) => cls(e, "dom-nivel"))[0].textContent === a.t("dom_n_cinza")
+       && !/ainda não estudado/.test(a.$("matFichaPasso").textContent),
+      "P3c não estudado: a ficha diz a cor, sem repetir o motivo ('ainda não estudado') e sem botão: " + a.$("matFichaPasso").textContent);
     achar(a.$("matFichaPasso"), (e) => cls(e, "dom-nivel"))[0].onclick();
     ok(a.$("dlgDominio").open === true && a.$("dlgMatFicha").open === false, "P3d tocar na cor abre o Domínio no tópico");
   }

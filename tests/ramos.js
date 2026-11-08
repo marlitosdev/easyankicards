@@ -1341,7 +1341,7 @@ async function testes() {
       const fichaBts = (el) => { const acc = []; const an = (x) => Array.from(x.children || []).forEach((f) => { if (typeof f.onclick === "function") acc.push(f); an(f); }); an(el); return acc; };
       a.$("dlgMatFicha").open = false;
       chipModAgenda.onclick({ stopPropagation() {} });
-      ok(a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() === "modalidades" && /Lei 14.133 › Modalidades$/.test(a.$("matFichaTit").textContent) && !!fichaItem("cartoes") && !!fichaItem("resumo") && !achaCls(linhaP, "ed-menu-item").length,
+      ok(a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133" && /Lei 14.133 › Modalidades$/.test(a.$("matFichaTit").title) && !!fichaItem("cartoes") && !!fichaItem("resumo") && !achaCls(linhaP, "ed-menu-item").length,
          "R40w0c clicar no chip abre a FICHA do topico ja no ramo (com resumo e cartoes), sem menu escondido na linha: " + a.$("matFichaTit").textContent);
       a.$("dlgMatFicha").close();
       a.abrirRegistro(itP);
@@ -3770,9 +3770,11 @@ async function testes() {
          "T1a9 o registro e o fechar ficam juntos no rodapé fixo");
     }
     esc().find((b) => b.textContent === "Modalidades").onclick();
-    ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133 › Modalidades" && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true",
-       "T1b escolher um ramo: o titulo e o botao acompanham");
-    ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /nenhum ligado a este ramo \(o tópico tem \d+\)/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
+    const cabE = () => todosF(a.$("matFichaLista"), (e) => /(^| )mat-ficha-escolhido( |$)/.test(cl(e)))[0];
+    ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133" && a.$("matFichaTit").title === "Lei 14.133 › Modalidades"
+       && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true" && cabE() && /^Modalidades/.test(cabE().textContent),
+       "T1b escolher um ramo: o titulo fica so' no topico (o ramo no balao), o botao e o alto da coluna do material mostram o ramo: " + (cabE() && cabE().textContent));
+    ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /(nenhum ligado a este ramo \(o tópico tem [1-9]\d*\)|ainda não tem)/.test(doSlot("juris").textContent) && !/o tópico tem 0/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
        "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes, julgados) e o que e' do topico inteiro (resumo, lei)");
     const rod = () => todosF(a.$("matFichaRodape"), (e) => typeof e.onclick === "function");
     ok(a.$("matFichaRodape").hidden === false && rod().some((b) => b.textContent === "Registrar estudo de «Modalidades»") && rod().some((b) => /ed-menu-ramos/.test(cl(b))),
@@ -3912,10 +3914,14 @@ async function testes() {
     a.$("dlgMaterial").close && a.$("dlgMaterial").close();
     /* a ficha depois: o ramo tem a secao; o topico conta as secoes */
     a.edAbrirFicha("Licitações", "Lei 14.133", { ramo: "modalidades", ramos: it().ramos, item: it(), editalId: ed.id });
-    ok(!/falta/.test(cl(doSlot("resumo"))) && /caracteres nesta seção/.test(doSlot("resumo").textContent) && !!btn(doSlot("resumo"), a.t("mat_ficha_ler")) && !!btn(doSlot("resumo"), a.t("mat_ficha_editar")),
+    ok(!/falta/.test(cl(doSlot("resumo"))) && /\d+ caracteres/.test(doSlot("resumo").textContent) && !/nesta seção/.test(doSlot("resumo").textContent) && !!btn(doSlot("resumo"), a.t("mat_ficha_ler")) && !!btn(doSlot("resumo"), a.t("mat_ficha_editar")),
        "T3m a ficha do ramo com secao: tamanho, Ler e Editar");
+    ok(a.matFichaTam(820) === "820 caracteres" && a.matFichaTam(1538) === "1,5 mil caracteres" && a.matFichaTam(25232) === "25 mil caracteres" && a.matFichaTam(1000) === "1 mil caracteres",
+       "T3m2 o tamanho do resumo em poucas letras: " + [820, 1538, 25232, 1000].map(a.matFichaTam).join(" | "));
     a.matFichaEscolher("");
-    ok(/geral \+ 2 seção/.test(doSlot("resumo").textContent), "T3n no topico inteiro, a ficha diz quantas secoes de ramo o resumo tem: " + doSlot("resumo").textContent);
+    ok(/^Tópico inteiro/.test(todosF(a.$("matFichaLista"), (e) => /mat-ficha-escolhido/.test(cl(e)))[0].textContent) && /4 ramos|\d+ ramos/.test(todosF(a.$("matFichaLista"), (e) => /mat-ficha-escolhido/.test(cl(e)))[0].textContent),
+       "T3m3 no tópico inteiro, o alto da coluna diz 'Tópico inteiro' e quantos ramos");
+    ok(/ · 2 seção\(ões\) de ramo/.test(doSlot("resumo").textContent) && !/geral \+/.test(doSlot("resumo").textContent), "T3n no topico inteiro, a ficha diz quantas secoes de ramo o resumo tem: " + doSlot("resumo").textContent);
     btn(doSlot("resumo"), a.t("mat_ficha_ler")).onclick();
     ok(a.matEscopoAtual() === "*" && /Geral do tópico/.test(a.$("matLeitura").innerHTML) && /Cláusulas/.test(a.$("matLeitura").innerHTML), "T3o 'Ler' do topico inteiro mostra tudo");
     a.$("dlgMaterial").close && a.$("dlgMaterial").close();
