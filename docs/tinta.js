@@ -56,6 +56,9 @@ let tnPorQuestao = {};
 let tnHist = {};
 let tnQid = null;
 let tnCorpo = null;
+/* (19.113.0) ONDE A CAMADA MORA: a área inteira da questão (#qsCorpoLado), e não só o enunciado e as alternativas —
+ * antes o risco não começava nos botões nem no espaço vazio de baixo. tnCorpo continua sendo de onde vêm as letras. */
+let tnHost = null;
 let tnSvg = null;
 let tnAtual = null;
 let tnApagando = false;
@@ -180,6 +183,45 @@ function tnAceitaPonteiro(ev) {
   if (ev.button !== undefined && ev.button !== 0 && ev.button !== -1) return false;
   return true;
 }
+/* (19.113.0) A BORRACHA SEM TROCAR DE FERRAMENTA: a ponta de borracha da caneta (botão 5 / bit 32 de "buttons") e o
+ * botão direito do mouse apagam enquanto ficam apertados; soltou, volta o lápis. */
+function tnBorrachaDoPonteiro(ev) {
+  if (!ev) return false;
+  if (ev.pointerType === "pen") return ev.button === 5 || ((Number(ev.buttons) || 0) & 32) === 32;
+  if (ev.pointerType === "mouse") return ev.button === 2;
+  return false;
+}
+/* o elemento DEBAIXO da camada naquele ponto (a camada sai do caminho um instante) */
+function tnSobPonto(x, y) {
+  if (typeof document === "undefined" || !document.elementFromPoint) return null;
+  const cam = tnSvg;
+  const antes = cam && cam.style ? cam.style.pointerEvents : "";
+  if (cam && cam.style) cam.style.pointerEvents = "none";
+  let el = null;
+  try { el = document.elementFromPoint(x, y); } catch (e) { el = null; }
+  if (cam && cam.style) cam.style.pointerEvents = antes;
+  return el;
+}
+/* (19.113.0) O TOQUE CURTO CLICA: com a camada cobrindo a questão inteira, os botões (responder, pular, ir para) e as
+ * alternativas ficam debaixo dela. Um toque rápido e parado da caneta, do mouse ou do dedo num deles é um clique, não
+ * um ponto; arrastar continua desenhando. A palma (toque com a caneta em uso) nunca chega aqui. */
+const TN_TOQUE_MS = 350;
+const TN_TOQUE_PX = 6;
+const TN_CLICAVEL = "button, a[href], input, select, textarea, summary, label, [role=button], .qs-op";
+function tnClicavelSob(x, y) {
+  const el = tnSobPonto(x, y);
+  if (!el || !el.closest) return null;
+  const c = el.closest(TN_CLICAVEL);
+  if (!c || (c.disabled === true)) return null;
+  return c;
+}
+function tnEhToque(a, agora) {
+  if (!a || !a.pts || !a.pts.length || a.t0 === undefined) return false;
+  if (agora - a.t0 > TN_TOQUE_MS) return false;
+  const x0 = a.pts[0][0], y0 = a.pts[0][1];
+  return a.pts.every((p) => Math.abs(p[0] - x0) <= TN_TOQUE_PX && Math.abs(p[1] - y0) <= TN_TOQUE_PX);
+}
+
 /* ---------- o toque ignorado (palma, ou dedo com a caneta em uso) rola a questão ---------- */
 let tnRolando = null;
 function tnRolavel(el) {
@@ -194,7 +236,8 @@ function tnRolavel(el) {
   return (typeof document !== "undefined" && document.scrollingElement) || el || null;
 }
 function tnRolarComecar(ev) {
-  const alvo = tnRolavel(tnCorpo);
+  const sob = tnSobPonto(Number(ev.clientX) || 0, Number(ev.clientY) || 0);
+  const alvo = tnRolavel(sob && tnHost && tnHost.contains && tnHost.contains(sob) ? sob : tnCorpo);
   if (!alvo) return false;
   tnRolando = { id: ev.pointerId, y0: Number(ev.clientY) || 0, topo0: alvo.scrollTop || 0, alvo };
   try { if (tnSvg && tnSvg.setPointerCapture && ev.pointerId !== undefined) tnSvg.setPointerCapture(ev.pointerId); } catch (e) {}
@@ -253,6 +296,18 @@ const TN_GEO_NAVEGADOR = {
     for (const t of tnTextos(el)) {
       if (t === no) return soma + off;
       soma += t.length;
+    }
+    return -1;
+  },
+  /* (19.113.0) a letra SOB o ponto, só se o ponto cai mesmo na caixa dela (no vazio ao lado do texto: -1) */
+  letraSob(el, x, y) {
+    const i = this.letraEm(el, x, y);
+    if (i < 0) return -1;
+    const em = this.em(el);
+    for (const k of [i, i - 1]) {
+      if (k < 0) continue;
+      const ls = TN_GEO_NAVEGADOR.linhas(el, k, k);
+      if (ls.some((r) => x >= r.l - em * 0.3 && x <= r.r + em * 0.3 && y >= r.t - em * 0.2 && y <= r.b + em * 0.2)) return k;
     }
     return -1;
   },
@@ -393,7 +448,9 @@ function tnEsquecerTudo() { tnPorQuestao = {}; tnHist = {}; }
 function tnPonto(ev) { return [Number(ev.clientX) || 0, Number(ev.clientY) || 0]; }
 function tnComecar(ev) {
   if (!tnAberta || !tnQid || tnFerr === "mao") return false;
-  if (!tnAceitaPonteiro(ev)) {
+  const borrachaJa = tnBorrachaDoPonteiro(ev);
+  if (ev && ev.pointerType === "pen") { tnUltimaCaneta = tnRelogio(); tnCanetaVista = true; }
+  if (!borrachaJa && !tnAceitaPonteiro(ev)) {
     /* a palma (ou o dedo com a caneta em uso): não risca — rola a questão */
     if (ev && ev.pointerType === "touch") tnRolarComecar(ev);
     return false;
@@ -410,13 +467,13 @@ function tnComecar(ev) {
   } catch (e) {}
   if (ev.preventDefault) ev.preventDefault();
   const p = tnPonto(ev);
-  if (tnFerr === "borracha") {
+  if (tnFerr === "borracha" || borrachaJa) {
     tnMarcarDesfazer();
     tnApagando = true;
     tnApagarEm(p[0], p[1]);
     return true;
   }
-  tnAtual = { f: tnFerr, cor: tnCor, larg: tnLarg[tnFerr], pts: [p], id: ev.pointerId };
+  tnAtual = { f: tnFerr, cor: tnCor, larg: tnLarg[tnFerr], pts: [p], id: ev.pointerId, t0: tnRelogio() };
   tnPintar();
   return true;
 }
@@ -439,16 +496,34 @@ function tnMover(ev) {
   /* o traço em andamento muda NO LUGAR (o mesmo elemento): redesenhar tudo a cada movimento destruía o que estava sob
    * o ponteiro e custava mais a cada traço já feito */
   if (tnPathVivo && tnSvg && tnPathVivo.parentNode === tnSvg) {
-    const base = tnGeo.base(tnCorpo);
-    tnPathVivo.setAttribute("d", tnCaminho(tnAtual.pts.map((q) => [q[0] - base.x, q[1] - base.y])));
+    const base = tnGeo.base(tnHost || tnCorpo);
+    /* (19.113.0) a PREVISÃO do navegador (onde a caneta vai estar no próximo quadro) só no desenho vivo: some o atraso
+     * entre a ponta e o traço; o que fica guardado são só os pontos reais */
+    let viv = tnAtual.pts;
+    try {
+      const pr = ev.getPredictedEvents ? ev.getPredictedEvents() : null;
+      if (pr && pr.length) viv = viv.concat(pr.slice(0, 2).map(tnPonto));
+    } catch (e) {}
+    tnPathVivo.setAttribute("d", tnCaminho(viv.map((q) => [q[0] - base.x, q[1] - base.y])));
   } else tnPintarLogo();
   return true;
 }
-function tnSoltar() {
+function tnSoltar(ev) {
   if (tnApagando) { tnApagando = false; tnPintarBarra(); return true; }
   const a = tnAtual;
   tnAtual = null;
   if (!a) return false;
+  if (ev && tnEhToque(a, tnRelogio())) {
+    const alvo = tnClicavelSob(a.pts[0][0], a.pts[0][1]);
+    if (alvo) {
+      tnPintar();
+      try {
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(String(alvo.tagName || "").toUpperCase()) && alvo.focus) alvo.focus();
+        else if (alvo.click) alvo.click();
+      } catch (e) {}
+      return false;
+    }
+  }
   let pts = tnSimplificar(a.pts, 0.8);
   if (pts.length === 1) pts = [pts[0], [pts[0][0] + 0.6, pts[0][1] + 0.6]];
   const an = tnAncorar(pts[0][0], pts[0][1]);
@@ -484,6 +559,7 @@ function tnComoLinha(f, pts, an) {
   const i = Math.min(a.anc.i, b.anc.i), j = Math.max(a.anc.i, b.anc.i);
   if (j <= i) return null;
   const yMed = ys.reduce((s, v) => s + v, 0) / ys.length;
+  if (!tnSobreOTexto(an.anc.b, i, j, Math.min.apply(null, xs), Math.max.apply(null, xs), yMed, yMed, em)) return null;
   return { anc: { b: an.anc.b, i }, fim: j, dy: tnArred((yMed - a.org.y) / em), pts: [] };
 }
 /* =====================================================================
@@ -515,11 +591,12 @@ function tnComoContorno(f, pts, an) {
   for (let y = y0; y <= y1; y += passo) {
     for (let x = x0; x <= x1; x += passo) {
       if (!tnDentro([x, y], enc)) continue;
-      const k = tnGeo.letraEm(bl.el, x, y);
+      const k = tnGeo.letraSob ? tnGeo.letraSob(bl.el, x, y) : tnGeo.letraEm(bl.el, x, y);
       if (k >= 0) { if (k < i) i = k; if (k > j) j = k; }
     }
   }
   if (!(j > i)) return null;
+  if (!tnSobreOTexto(an.anc.b, i, j, x0, x1, y0, y1, em, 0.45)) return null;
   /* PALAVRAS INTEIRAS: circula-se palavra, não meia palavra — o encolhimento corta as pontas ("sprudência … Feder") */
   const tx = tnGeo.texto ? String(tnGeo.texto(bl.el) || "") : "";
   if (tx) {
@@ -529,6 +606,26 @@ function tnComoContorno(f, pts, an) {
     while (j < tx.length - 1 && /\S/.test(tx[j + 1] || "")) j++;
   }
   return { forma: "contorno", anc: { b: an.anc.b, i }, fim: j, pts: [] };
+}
+/* (19.113.0) O TRAÇO ESTÁ MESMO SOBRE AS LETRAS? O relato: "às vezes apaga se passar por certas partes da lateral". O
+ * navegador devolve a letra MAIS PRÓXIMA mesmo no vazio ao lado do texto (o resto da caixa de "Certo", a margem): o
+ * risco feito ali virava sublinhado (ou círculo) de "Certo" — sumia de onde foi feito e encolhia sob a palavra. Agora
+ * só vira marca de texto se a maior parte da largura do traço passa sobre as linhas dessas letras; senão fica como
+ * desenhado. [x0, x1] × [y0, y1] é a caixa do traço (no sublinhado, y0 = y1 = a altura média). */
+function tnSobreOTexto(bid, i, j, x0, x1, y0, y1, em, minimo) {
+  if (!tnGeo.linhas || !tnCorpo) return true;
+  const bl = tnGeo.blocos(tnCorpo).filter((b) => b.id === bid)[0];
+  if (!bl) return false;
+  const ls = tnGeo.linhas(bl.el, i, j) || [];
+  if (!ls.length) return false;
+  const larg = Math.max(1, x1 - x0);
+  let cobre = 0;
+  ls.forEach((r) => {
+    /* a faixa da linha: um pouco acima (marca-texto) e abaixo (sublinhado) das letras */
+    if (y1 < r.t - em * 0.6 || y0 > r.b + em * 0.9) return;
+    cobre += Math.max(0, Math.min(x1, r.r) - Math.max(x0, r.l));
+  });
+  return cobre >= larg * (minimo || 0.6);
 }
 /* o ponto está dentro do polígono? (raio que cruza as arestas) */
 function tnDentro(p, poli) {
@@ -609,11 +706,12 @@ function tnPintar() {
   const svg = tnSvg, corpo = tnCorpo;
   if (!svg || !corpo) return 0;
   svg.innerHTML = "";
-  const base = tnGeo.base(corpo);
+  const host = tnHost || corpo;
+  const base = tnGeo.base(host);
   /* MEDIR SEM A CAMADA: com ela dentro, scrollWidth/Height contavam o próprio SVG — e ele nunca encolhia depois que a
    * tela estreitava (o texto do celular saía cortado à direita). Zera, mede, aplica; a largura é a visível. */
   if (svg.style) { svg.style.width = "0px"; svg.style.height = "0px"; }
-  const w = corpo.clientWidth || corpo.scrollWidth || 0, h = Math.max(corpo.scrollHeight || 0, corpo.clientHeight || 0);
+  const w = host.clientWidth || host.scrollWidth || 0, h = Math.max(host.scrollHeight || 0, host.clientHeight || 0);
   svg.setAttribute("width", String(w));
   svg.setAttribute("height", String(h));
   if (svg.style) { svg.style.width = w + "px"; svg.style.height = h + "px"; }
@@ -636,14 +734,22 @@ function tnPintarClasse() {
 }
 
 /* ---------- a camada na questão (a cada repintura do corpo) ---------- */
+function tnHospedeiro(corpo) {
+  const pai = corpo && corpo.parentElement;
+  return pai && /(^| )qs-corpo-lado( |$)/.test(String(pai.className || "")) ? pai : corpo;
+}
 function tnMontar(corpo, qid) {
   tnCorpo = corpo || null;
   tnQid = qid || null;
   tnAtual = null;
   tnApagando = false;
-  if (!corpo) { tnSvg = null; return null; }
+  /* a camada antiga sai: no hospedeiro ela não some sozinha quando o corpo é repintado */
+  try { if (tnSvg && tnSvg.parentNode && tnSvg.parentNode.removeChild) tnSvg.parentNode.removeChild(tnSvg); } catch (e) {}
+  if (!corpo) { tnSvg = null; tnHost = null; return null; }
+  tnHost = tnHospedeiro(corpo);
   if (qid) { tnTrazerGuardados(qid); tnSincronizar(qid, tnQuestaoDe(qid)); }
   if (corpo.classList) corpo.classList.add("tn-com");
+  if (tnHost !== corpo && tnHost.classList) tnHost.classList.add("tn-com");
   const svg = document.createElementNS(TN_NS, "svg");
   svg.setAttribute("class", "tn-camada");
   svg.setAttribute("aria-hidden", "true");
@@ -651,7 +757,19 @@ function tnMontar(corpo, qid) {
   if (svg.addEventListener) {
     svg.addEventListener("pointerdown", (ev) => { tnComecar(ev); });
     svg.addEventListener("pointermove", (ev) => { tnMover(ev); });
-    svg.addEventListener("pointerup", (ev) => { if (tnRolando && ev && ev.pointerId === tnRolando.id) { tnRolando = null; return; } tnSoltar(); });
+    svg.addEventListener("pointerup", (ev) => { if (tnRolando && ev && ev.pointerId === tnRolando.id) { tnRolando = null; return; } tnSoltar(ev); });
+    /* o botão direito apaga (tnBorrachaDoPonteiro): o menu do navegador não abre por cima */
+    svg.addEventListener("contextmenu", (ev) => { if (tnAberta && tnFerr !== "mao" && ev.preventDefault) ev.preventDefault(); });
+    /* A RODA DO MOUSE ROLA O QUE ESTÁ DEBAIXO (o enunciado longo, o comentário): a camada fica por cima deles e, sem
+     * isto, a roda não alcançava nenhum dos dois com o lápis aberto */
+    svg.addEventListener("wheel", (ev) => {
+      const sob = tnSobPonto(Number(ev.clientX) || 0, Number(ev.clientY) || 0);
+      const alvo = tnRolavel(sob || tnCorpo);
+      if (!alvo) return;
+      const fator = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? (alvo.clientHeight || 400) : 1;
+      alvo.scrollTop = (alvo.scrollTop || 0) + (Number(ev.deltaY) || 0) * fator;
+      if (ev.preventDefault) ev.preventDefault();
+    }, { passive: false });
     svg.addEventListener("pointercancel", (ev) => {
       if (tnRolando && ev && ev.pointerId === tnRolando.id) { tnRolando = null; return; }
       /* o navegador tomou o gesto: fica no registro (com o tipo de ponteiro e quantos pontos o traço tinha) */
@@ -661,13 +779,17 @@ function tnMontar(corpo, qid) {
     /* a captura se perdeu por outro motivo (a janela trocou, o sistema tomou o gesto): termina o traço, não o deixa pendurado */
     svg.addEventListener("lostpointercapture", () => { if (tnAtual || tnApagando) tnSoltar(); });
   }
-  corpo.appendChild(svg);
+  tnHost.appendChild(svg);
   tnSvg = svg;
   tnPintarClasse();
   /* o texto refluiu (girou, mudou a letra, a caixa): redesenha a partir das letras */
   try {
     if (tnObs) tnObs.disconnect();
-    if (typeof ResizeObserver === "function") { tnObs = new ResizeObserver(() => tnPintarLogo()); tnObs.observe(corpo); }
+    if (typeof ResizeObserver === "function") {
+      tnObs = new ResizeObserver(() => tnPintarLogo());
+      tnObs.observe(corpo);
+      if (tnHost !== corpo) tnObs.observe(tnHost);
+    }
   } catch (e) {}
   tnPintar();
   /* A JANELA PODE AINDA NÃO ESTAR ABERTA (nem medida) nesta hora: com traços guardados que voltam ao abrir a questão, a
@@ -1004,6 +1126,9 @@ function tnAbrir() {
   tnBarraMontar();
   tnAberta = true;
   if (tnFerr === "borracha") tnFerr = "lapis";
+  /* (19.113.0) a camada é medida AGORA, com a janela aberta: montada antes de a janela abrir, ela nascia 0×0 e só
+   * ganhava tamanho quando o observador de tamanho reagia */
+  tnPintar();
   tnPintarClasse();
   tnPintarBarra();
   try { reg("QUESTOES", "lápis aberto", String(tnQid)); } catch (e) {}

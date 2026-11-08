@@ -1741,6 +1741,9 @@ dialog.lb-dlg.lb-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100
 /* (v19.7.0) O LÁPIS POR CIMA DA QUESTÃO: a camada cobre o corpo e rola com ele; só pega o ponteiro com uma ferramenta de
    desenho escolhida (a mão devolve o toque à página: rolar, responder, selecionar) */
 #qsSessCorpo.tn-com{position:relative}
+/* (19.113.0) a camada cobre a área inteira da questão (botões e o vazio de baixo); o rascunho fica por cima dela */
+#dlgQsResponder .qs-corpo-lado.tn-com{position:relative}
+#dlgQsResponder .qs-corpo-lado.tn-com > #rsCaixa{position:relative;z-index:7}
 .tn-camada{position:absolute;left:0;top:0;pointer-events:none;z-index:6;overflow:visible}
 .tn-camada.tn-ativa{pointer-events:auto;touch-action:none;cursor:crosshair}
 /* (v19.12.3) SEM liberar a rolagem quando há caneta: no Windows o navegador aplicava o "pan" também à caneta e

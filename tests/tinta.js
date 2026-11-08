@@ -173,6 +173,38 @@ async function testes() {
     circ(150, 112, 11.5, 8);
     ok(api.tnTracos()[1] && !api.tnTracos()[1].forma, "O6 laço pequeno continua desenho livre");
     api.tnDesfazer();
+    /* (19.113.0) "ÀS VEZES APAGA SE PASSAR POR CERTAS PARTES DA LATERAL": no vazio ao lado do texto, o navegador devolve a
+     * letra mais próxima e o risco virava sublinhado/círculo dela — sumia de onde foi feito. Só vira marca de texto
+     * quando passa SOBRE as letras. (O texto do enunciado vai até x=400.) */
+    api.tnComecar(ev(380, 118)); api.tnMover(ev(430, 119)); api.tnMover(ev(480, 118)); api.tnSoltar();
+    const lat = api.tnTracos()[1];
+    ok(lat && lat.fim === undefined && lat.pts.length >= 2, "A1 risco reto quase todo no vazio à direita: fica como desenhado (não encolhe sob a última palavra): " + JSON.stringify(lat));
+    api.tnDesfazer();
+    circ(420, 112, 40, 14);
+    const latc = api.tnTracos()[1];
+    ok(latc && !latc.forma && latc.fim === undefined && latc.pts.length > 3, "A1a laço quase todo no vazio à direita: fica como desenhado, não vira círculo da palavra vizinha");
+    api.tnDesfazer();
+    ok(api.tnSobreOTexto("en", 5, 37, 40, 300, 118, 118, 16) === true && api.tnSobreOTexto("en", 47, 49, 380, 480, 118, 118, 16) === false,
+       "A1b sobre o texto: o sublinhado de verdade passa, o do vazio não");
+    /* a borracha da caneta e o botão direito do mouse apagam com o LÁPIS escolhido */
+    ok(api.tnBorrachaDoPonteiro({ pointerType: "pen", button: 5, buttons: 32 }) && api.tnBorrachaDoPonteiro({ pointerType: "pen", button: -1, buttons: 32 })
+       && api.tnBorrachaDoPonteiro({ pointerType: "mouse", button: 2 }) && !api.tnBorrachaDoPonteiro({ pointerType: "pen", button: 0, buttons: 1 })
+       && !api.tnBorrachaDoPonteiro({ pointerType: "touch", button: 0 }), "A2 quem é borracha: a ponta de borracha da caneta e o botão direito do mouse");
+    api.tnFerramenta("lapis");
+    api.tnComecar(ev(60, 135, { pointerType: "pen", button: 5, buttons: 32 })); api.tnSoltar();
+    ok(api.tnContar() === 2 && api.tnTracos().every((x) => x.f === "lapis"), "A2a a ponta de borracha parte o traço sem trocar de ferramenta: " + api.tnContar());
+    api.tnDesfazer();
+    api.tnComecar(ev(60, 135, { button: 2 })); api.tnSoltar();
+    ok(api.tnContar() === 2, "A2b o botão direito do mouse apaga do mesmo jeito");
+    api.tnDesfazer();
+    ok(api.tnContar() === 1, "A2c desfaz");
+    api.tnCanetaReset();
+    /* o toque curto e parado é clique (no botão de baixo); arrastar é traço */
+    ok(api.tnEhToque({ pts: [[10, 10], [13, 12]], t0: 1000 }, 1200) === true && api.tnEhToque({ pts: [[10, 10], [30, 12]], t0: 1000 }, 1200) === false
+       && api.tnEhToque({ pts: [[10, 10]], t0: 1000 }, 1600) === false, "A3 toque = rápido e parado; arrasto ou demora = traço");
+    api.tnComecar(ev(40, 200)); api.tnSoltar(ev(40, 200));
+    ok(api.tnContar() === 2, "A3a toque sem botão debaixo continua sendo um ponto");
+    api.tnDesfazer();
     /* a mão não desenha */
     api.tnFerramenta("mao");
     ok(api.tnComecar(ev(10, 110)) === false && !/tn-ativa/.test(svg().getAttribute("class")), "Q5 a mão não desenha e devolve o toque à página");
