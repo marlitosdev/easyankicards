@@ -821,7 +821,8 @@ function matParaHtml(txt, prova, opc) {
   };
   const inlineFmt = (s) => s
     .replace(/\*\*([^*\n]{1,200})\*\*/g, "<b>$1</b>")
-    .replace(/(^|[\s(])_([^_\n]{1,200})_(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
+    /* (19.109.0) o itálico com "_" também vale encostado numa marca ("==!_assim_==", que é como a marca o envolve) */
+    .replace(/(^|[\s(]|==[!?\u00a7*~@]?)_([^_\n]{1,200})_(?=[\s).,;:!?]|==|$)/g, "$1<i>$2</i>")
     /* O miolo aceita QUALQUER tamanho e aceita "=" solto — só não aceita
      * "==", que é o fecho. Antes o limite era 300 caracteres e o miolo
      * proibia "=": um trecho grande marcado aparecia com os "==" literais
@@ -2139,9 +2140,10 @@ function matGuardarOffset(sel, painelId) {
     if (!achou) return;
     matSelOffset = antes.length;
 
-    const alvo = matNormalizar(matSelGuardada);
+    /* (19.109.0) o texto da tela e a seleção já são o texto visível: só os espaços se normalizam (como no mapa) */
+    const alvo = matAlvoDaSelecao(matSelGuardada);
     if (alvo.length >= 3) {
-      const antesN = matNormalizar(antes);
+      const antesN = matNormVisivel(antes);
       let k = 0;
       for (let i = antesN.indexOf(alvo); i >= 0; i = antesN.indexOf(alvo, i + 1)) k++;
       matSelOrdinal = k;
@@ -2263,60 +2265,171 @@ function matLembrarSelecao(painelId) {
  * para cada caractere visível, de onde ele veio. Assim a busca acontece no
  * texto que a pessoa realmente leu, e a marca é gravada na posição certa
  * do arquivo. */
-function matMapear(src) {
-  /* Este mapa PRECISA espelhar matParaHtml linha a linha. Na primeira
-   * versão ele cuidava só de "**", "==" e "__" — e a leitura também remove
-   * "## " de título, "- " e "* " de lista, o "_" de itálico, e apaga "---"
-   * inteiro. Cada um desses era um jeito de a seleção não existir no
-   * texto-fonte, com o app respondendo "não encontrei esse trecho". */
+/* (19.109.0) O MAPA USA AS REGRAS DA LEITURA, NA MESMA ORDEM.
+ * A versão anterior era uma cópia à mão de matParaHtml — e ficou para trás: não conhecia o *itálico* de um asterisco
+ * (o Gemini escreve assim: "*Regra:* … o conectivo *"e"*"), os sufixos das marcas de prova, pegadinha, lei e nota
+ * ("==*", "==~", "==§", "==@"), as linhas de dica, questão e gabarito (">", "?>", ">>"), a lista "1)" que a leitura
+ * mostra "1." e as fórmulas ("$\sim p$" aparece "∼p"). Cada uma era um jeito de a seleção não existir no texto-fonte —
+ * "Não encontrei esse trecho no texto guardado".
+ * Agora cada linha passa pelas MESMAS expressões da leitura (matParaHtml), na mesma ordem, trocando os marcadores por
+ * um caractere de máscara do mesmo tamanho: o que sobra é exatamente o que se vê, e cada caractere sabe de onde veio.
+ * Devolve também, em posições da fonte: as fórmulas (a marca não as corta ao meio), os PARES de negrito e itálico (a
+ * borda da marca não os parte), as marcas que já existem (marca não se aninha) e o "1. " das listas (a marca não começa
+ * nele, senão a linha deixa de ser lista).
+ *   opc.lei: a lei seca é mostrada sem o pontilhado ("....." vira "…") */
+function matHtmlTexto(html) {
+  return String(html == null ? "" : html).replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+}
+/* as marcas na ordem em que a leitura as troca (o sufixo decide o tipo; "==" sozinho é o destaque) */
+const MAT_MAPA_MARCAS = [["==!", /==!((?:[^=\n]|=(?!=))+)==/g], ["==?", /==\?((?:[^=\n]|=(?!=))+)==/g],
+  ["==\u00a7", /==\u00a7((?:[^=\n]|=(?!=))+)==/g], ["==*", /==\*(?!\*)((?:[^=\n]|=(?!=))+)==/g],
+  ["==~", /==~((?:[^=\n]|=(?!=))+)==/g], ["==@", /==@((?:[^=\n]|=(?!=))+)==/g], ["==", /==((?:[^=\n]|=(?!=))+)==/g]];
+/* o corpo de UMA linha com os marcadores trocados por "\u0003" e as fórmulas por "\u0004" (mesmo tamanho) */
+function matMascaraLinha(corpo, opc) {
+  let w = String(corpo);
+  const formulas = [], pares = [], marcas = [];
+  if (opc && opc.lei) {
+    w = w.replace(/\.{5,}/g, (m0, off) => { formulas.push({ a: off, b: off + m0.length, txt: "…" }); return "\u0004".repeat(m0.length); });
+  }
+  w = w.replace(new RegExp(MAT_TEX_INLINE.source, "g"), (m0, a, b, c, off) => {
+    if (c && !matTexTemCara(c)) return m0;
+    let txt;
+    try { txt = matHtmlTexto(matTexParaHtml(a || b || c)); } catch (e) { txt = a || b || c; }
+    formulas.push({ a: off, b: off + m0.length, txt });
+    return "\u0004".repeat(m0.length);
+  });
+  w = w.replace(/\*\*([^*\n]{1,200})\*\*/g, (m0, x, off) => {
+    pares.push({ a: off, b: off + 2 + x.length, len: 2 });
+    return "\u0003\u0003" + x + "\u0003\u0003";
+  });
+  w = w.replace(/(^|[\s(]|==[!?\u00a7*~@]?)_([^_\n]{1,200})_(?=[\s).,;:!?]|==|$)/g, (m0, pre, x, off) => {
+    const a = off + pre.length;
+    pares.push({ a, b: a + 1 + x.length, len: 1 });
+    return pre + "\u0003" + x + "\u0003";
+  });
+  MAT_MAPA_MARCAS.forEach(([abre, re]) => {
+    w = w.replace(new RegExp(re.source, "g"), (m0, x, off) => {
+      marcas.push({ a: off, b: off + m0.length, abre });
+      return "\u0003".repeat(abre.length) + x + "\u0003\u0003";
+    });
+  });
+  w = w.replace(new RegExp(MAT_ITALICO_AST.source, "g"), (m0, pre, x, off) => {
+    const a = off + pre.length;
+    pares.push({ a, b: a + 1 + x.length, len: 1 });
+    return pre + "\u0003" + x + "\u0003";
+  });
+  return { w, formulas, pares, marcas };
+}
+function matMapear(src, opc) {
   const plano = [], mapa = [];
+  const formulas = [], pares = [], marcas = [], prefixos = [];
   let pos = 0;
   const empurra = (c, idx) => { plano.push(c); mapa.push(idx); };
   const espaco = (idx) => {
     if (plano.length && plano[plano.length - 1] !== " ") empurra(" ", idx);
   };
+  /* o texto que a fórmula mostra: o primeiro caractere aponta para o começo dela, o último para o fim */
+  const formula = (txt, a, b) => {
+    const t2 = String(txt).replace(/\s+/g, " ").trim();
+    for (let j = 0; j < t2.length; j++) {
+      if (t2[j] === " ") espaco(a);
+      else empurra(t2[j], j === t2.length - 1 ? b - 1 : a);
+    }
+  };
 
   String(src).split(/\r?\n/).forEach((linha) => {
     const ini = pos;
     pos += linha.length + 1;              /* +1 do \n */
-
     const s = linha.trim();
     const recuo = linha.length - linha.replace(/^\s+/, "").length;
     let i = ini + recuo;
+    if (!s || /^-{3,}$/.test(s)) { espaco(i); return; }
 
-    /* linha divisória some por inteiro da leitura */
-    if (/^-{3,}$/.test(s)) { espaco(i); return; }
-    if (!s) { espaco(i); return; }
-
-    /* prefixos que a leitura consome */
-    const pref = s.match(/^(#{1,6}\s+|[-*]\s+)/);
-    let corpo = s;
-    if (pref) { corpo = s.slice(pref[0].length); i += pref[0].length; }
-
+    /* os prefixos que a leitura consome, na ordem em que ela os testa */
+    const tit = s.match(/^#{1,6}\s+/);
+    const bul = !tit && s.match(/^[-*]\s+/);
+    const num = !tit && !bul && s.match(/^(\d+)([.)])\s+/);
+    const outro = !tit && !bul && !num && (s.match(/^\?>\s?/) || s.match(/^>>\s?/) || s.match(/^>~?\s?/));
     espaco(i);
+    let corpo = s;
+    if (num) {
+      /* a leitura mostra "1." (também para "1)"): os dígitos e o ponto vêm da fonte */
+      for (let k = 0; k < num[1].length; k++) empurra(num[1][k], i + k);
+      empurra(".", i + num[1].length);
+      espaco(i + num[1].length + 1);
+      prefixos.push({ a: i, b: i + num[0].length });
+      corpo = s.slice(num[0].length); i += num[0].length;
+    } else if (tit || bul || outro) {
+      const p = tit || bul || outro;
+      corpo = s.slice(p[0].length); i += p[0].length;
+    } else {
+      /* "$$ … $$" sozinha na linha: a fórmula em destaque */
+      const bt = s.match(/^\$\$([\s\S]+?)\$\$$|^\\\[([\s\S]+?)\\\]$/);
+      if (bt) {
+        let txt;
+        try { txt = matHtmlTexto(matTexParaHtml((bt[1] || bt[2]).trim())); } catch (e) { txt = s; }
+        formulas.push({ a: i, b: i + s.length });
+        formula(txt, i, i + s.length);
+        return;
+      }
+    }
+    const mk = matMascaraLinha(corpo, opc);
+    mk.formulas.forEach((f) => formulas.push({ a: i + f.a, b: i + f.b }));
+    mk.pares.forEach((p) => pares.push({ a: i + p.a, b: i + p.b, len: p.len }));
+    mk.marcas.forEach((m) => marcas.push({ a: i + m.a, b: i + m.b, abre: m.abre }));
     let k = 0;
     while (k < corpo.length) {
-      const resto = corpo.slice(k);
-      /* marcadores em linha, na MESMA ordem em que matParaHtml os consome */
-      const mk = resto.match(/^(\*\*|==[!?]?|__)/);
-      if (mk) { k += mk[0].length; i += mk[0].length; continue; }
-      /* itálico com um "_" só: a leitura exige borda de palavra dos dois
-       * lados, então aqui a regra é a mesma — senão "_" de nome_de_arquivo
-       * seria comido e o mapa sairia torto */
-      if (corpo[k] === "_"
-          && (k === 0 || /[\s(]/.test(corpo[k - 1]))
-          && /^_[^_\n]{1,200}_(?=[\s).,;:!?]|$)/.test(resto)) {
-        k++; i++; continue;
+      const c = mk.w[k];
+      if (c === "\u0003") { k++; continue; }
+      if (c === "\u0004") {
+        const f = mk.formulas.find((x) => x.a === k);
+        if (f) { formula(f.txt, i + f.a, i + f.b); k = f.b; continue; }
+        k++; continue;
       }
-      if (corpo[k] === "_" && k > 0 && /[^\s]/.test(corpo[k - 1])
-          && /^_(?=[\s).,;:!?]|$)/.test(resto)) { k++; i++; continue; }
-
-      const c = corpo[k];
-      if (/\s/.test(c)) { espaco(i); k++; i++; continue; }
-      empurra(c, i); k++; i++;
+      if (/\s/.test(corpo[k])) espaco(i + k); else empurra(corpo[k], i + k);
+      k++;
     }
   });
-  return { plano: plano.join(""), mapa };
+  return { plano: plano.join(""), mapa, formulas, pares, marcas, prefixos };
+}
+
+/* o texto sem "*", "_" e "=" (e com os espaços que sobram juntados), com o índice de cada caractere no original */
+function matSemSinais(s) {
+  const out = [], idx = [];
+  const x = String(s == null ? "" : s);
+  for (let k = 0; k < x.length; k++) {
+    const c = x[k];
+    if (c === "*" || c === "_" || c === "=") continue;
+    if (c === " " && (!out.length || out[out.length - 1] === " ")) continue;
+    out.push(c); idx.push(k);
+  }
+  return { txt: out.join(""), idx };
+}
+
+/* o texto VISÍVEL normalizado: é o que a seleção traz (a leitura já tirou os marcadores) e o que o mapa monta */
+/* a SELEÇÃO passa pelo mesmo mapa: a que vem da tela já é visível e fica igual; a que traz os marcadores crus
+ * ("**Questão 2:** …", copiada do modo editar ou passada por quem chama) perde os marcadores, como a leitura faria */
+function matAlvoDaSelecao(s) { return matNormVisivel(matMapear(String(s == null ? "" : s)).plano); }
+function matNormVisivel(s) {
+  return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+}
+
+/* A BORDA DA MARCA NÃO PARTE UM PAR: se só a abertura (ou só o fecho) de um negrito ou itálico ficou dentro da faixa,
+ * a faixa cresce até o outro — "*Regra:* Nega…" selecionado a partir de "Regra" leva o asterisco de abertura junto */
+function matEquilibrarPares(f, pares) {
+  let { ini, fim } = f;
+  for (let volta = 0; volta < 8; volta++) {
+    let mudou = false;
+    (pares || []).forEach((p) => {
+      const abreDentro = p.a >= ini && p.a < fim, fechaDentro = p.b >= ini && p.b < fim;
+      if (abreDentro === fechaDentro) return;
+      const a = Math.min(ini, p.a), b = Math.max(fim, p.b + p.len);
+      if (a !== ini || b !== fim) { ini = a; fim = b; mudou = true; }
+    });
+    if (!mudou) break;
+  }
+  return { ini, fim };
 }
 
 /* A borda da marca não pode partir um negrito ao meio.
@@ -2337,13 +2450,14 @@ function matTirarMarca() {
   matLembrarSelecao();
   const ta = $("matTexto");
   const txt = ta.value;
-  const alvo = matNormalizar(matSelGuardada);
+  const alvo = matAlvoDaSelecao(matSelGuardada);
 
   /* todas as marcas do texto, com onde começam e terminam */
   const re = new RegExp("==" + MAT_SUF + "((?:[^=\\n]|=(?!=))+)==", "g");
   let achou = null, mm;
   while ((mm = re.exec(txt)) !== null) {
-    const dentro = matNormalizar(mm[1]);
+    /* (19.109.0) o que a marca MOSTRA (sem os asteriscos do itálico, sem a fórmula crua) */
+    const dentro = matNormVisivel(matMapear(mm[1]).plano);
     if (alvo && (dentro.indexOf(alvo) >= 0 || alvo.indexOf(dentro) >= 0)) { achou = mm; break; }
     if (!alvo && ta.selectionStart >= mm.index
         && ta.selectionStart <= mm.index + mm[0].length) { achou = mm; break; }
@@ -2677,7 +2791,7 @@ function matRecusa(motivo, trecho, plano) {
   matReg("marca", "recusada: " + motivo, t30);
   if (motivo === "nao_achou" && plano) {
     /* a pista que faltava: o que o app procurou e o que ele tinha */
-    matReg("marca", "procurei: " + matNormalizar(trecho).slice(0, 60),
+    matReg("marca", "procurei: " + matNormVisivel(trecho).slice(0, 60),
            "no texto de " + plano.length + " caracteres");
   }
   uiAlert(t(motivo === "curta" ? "mat_marca_curta"
@@ -2773,13 +2887,22 @@ function matMarcarSelecao(tipo, onde) {
   const naLei = onde === "lei";
   matLembrarSelecao(naLei ? "leiLeitura" : "matLeitura");
   const trecho = matSelGuardada;
-  if (matNormalizar(trecho).length < 3) { matRecusa("curta", trecho); return false; }
+  if (matAlvoDaSelecao(trecho).length < 3) { matRecusa("curta", trecho); return false; }
   const ta = $(naLei ? "leiTexto" : "matTexto");
   if (!ta) return false;
   const marca = MAT_MARCAS[tipo] || "==";
 
-  const { plano, mapa } = matMapear(ta.value);
-  const alvo = matNormalizar(trecho);
+  const { plano, mapa, formulas, pares, marcas, prefixos } = matMapear(ta.value, naLei ? { lei: true } : null);
+  /* a seleção da tela já é o texto visível; a que traz marcadores soltos ("Questão 2:** …", copiada do modo editar)
+   * cai na normalização antiga, que os tira todos — só quando a primeira não acha nada */
+  let alvo = [matAlvoDaSelecao(trecho), matNormalizar(trecho)].find((x) => x.length >= 3 && plano.indexOf(x) >= 0) || matAlvoDaSelecao(trecho);
+  /* ÚLTIMA TENTATIVA: um "**" ou "==" SEM PAR (sobra de marcação antiga) aparece cru na leitura, e quem seleciona por
+   * cima dele nem sempre o leva junto. Sem "*", "_" e "=" dos dois lados, o trecho se acha; a posição volta pelo índice. */
+  let ondeBusca = plano, de = null;
+  if (plano.indexOf(alvo) < 0) {
+    const sp = matSemSinais(plano), sa = matSemSinais(alvo).txt.trim();
+    if (sa.length >= 3 && sp.txt.indexOf(sa) >= 0) { ondeBusca = sp.txt; de = sp.idx; alvo = sa; }
+  }
 
   /* TODAS as ocorrências, não só a primeira.
    * Era plano.indexOf(alvo): selecionar "transparência" numa linha quando a
@@ -2787,15 +2910,39 @@ function matMarcarSelecao(tipo, onde) {
    * ocorrência de cima, ver o "==" e responder "já marcado" — recusando um
    * trecho que estava livre. */
   const ocorrencias = [];
-  for (let k = plano.indexOf(alvo); k >= 0; k = plano.indexOf(alvo, k + 1))
+  for (let k = ondeBusca.indexOf(alvo); k >= 0; k = ondeBusca.indexOf(alvo, k + 1))
     ocorrencias.push(k);
   if (!ocorrencias.length) { matRecusa("nao_achou", trecho, plano); return false; }
 
-  const jaMarcada = (p) => {
-    const i0 = mapa[p];
-    return new RegExp("==" + MAT_SUF + "$")
-      .test(ta.value.slice(Math.max(0, i0 - 3), i0));
+  /* (19.109.0) A FAIXA DA FONTE de uma ocorrência — sem cortar uma fórmula ao meio — e o que dela está LIVRE.
+   * Marca não se aninha (o "==" de dentro fecharia a de fora): a parte que já tem marca fica como está, e só o resto
+   * recebe a nova. "Já marcado" é quando não sobra nada livre. */
+  const src0 = ta.value;
+  const faixa = (p) => {
+    const pa = de ? de[p] : p, pb = de ? de[p + alvo.length - 1] : p + alvo.length - 1;
+    let a = mapa[pa], b = mapa[pb] + 1;
+    formulas.forEach((f) => { if (f.a < b && f.b > a) { a = Math.min(a, f.a); b = Math.max(b, f.b); } });
+    return { a, b };
   };
+  const livres = (fx) => {
+    let partes = [[fx.a, fx.b]];
+    marcas.forEach((m) => {
+      const nx = [];
+      partes.forEach(([a, b]) => {
+        if (m.b <= a || m.a >= b) { nx.push([a, b]); return; }
+        if (m.a > a) nx.push([a, m.a]);
+        if (m.b < b) nx.push([m.b, b]);
+      });
+      partes = nx;
+    });
+    /* sem os espaços das pontas: a parte livre entre duas marcas não encosta nelas */
+    return partes.map(([a, b]) => {
+      while (a < b && /\s/.test(src0[a])) a++;
+      while (b > a && /\s/.test(src0[b - 1])) b--;
+      return [a, b];
+    }).filter(([a, b]) => b > a && matTemConteudo(src0.slice(a, b)));
+  };
+  const jaMarcada = (p) => !livres(faixa(p)).length;
   /* =================================================================
    * QUAL DAS OCORRÊNCIAS — POR ORDEM, NÃO POR ESTIMATIVA
    *
@@ -2823,7 +2970,9 @@ function matMarcarSelecao(tipo, onde) {
   if (escolhida < 0) { matRecusa("ja_marcado", trecho); return false; }
   const pos = escolhida;
 
-  const ini0 = mapa[pos], fim0 = mapa[pos + alvo.length - 1] + 1;
+  const fx0 = faixa(pos);
+  const partesLivres = livres(fx0);
+  const parcial = partesLivres.length !== 1 || partesLivres[0][0] !== fx0.a || partesLivres[0][1] !== fx0.b;
   /* A checagem de "já marcado" mudou de lugar: agora ela decide QUAL
    * ocorrência usar, em vez de recusar tudo por causa da primeira. Esta
    * linha também tinha um resquício: a regex /==[!?]?$/ não conhecia os
@@ -2838,13 +2987,15 @@ function matMarcarSelecao(tipo, onde) {
    * vez dava paridade certa no total e errada em cada linha: a soma de dois
    * negritos ímpares é par. */
   const pedacos = [];
-  let p = ini0;
-  while (p < fim0) {
-    const nl = ta.value.indexOf("\n", p);
-    const q = nl < 0 || nl >= fim0 ? fim0 : nl;
-    if (q > p) pedacos.push([p, q]);
-    p = q + 1;
-  }
+  partesLivres.forEach(([ini0, fim0]) => {
+    let p = ini0;
+    while (p < fim0) {
+      const nl = ta.value.indexOf("\n", p);
+      const q = nl < 0 || nl >= fim0 ? fim0 : nl;
+      if (q > p) pedacos.push([p, q]);
+      p = q + 1;
+    }
+  });
   /* "==*" GRUDADO EM "**" NÃO É MARCA NENHUMA.
    *
    * O sufixo de "caiu na prova" é um asterisco, e a regra que o
@@ -2863,16 +3014,32 @@ function matMarcarSelecao(tipo, onde) {
    * O conserto certo é menor: separar os dois com um espaço. O "*" do
    * sufixo deixa de ter outro "*" atrás, o negrito continua exatamente
    * como estava, e nada mais no texto muda. */
-  const semColisao = (txt) => (marca.slice(-1) === "*" && txt.slice(0, 1) === "*")
-    ? " " + txt : txt;
+  /* (19.109.0) E NÃO SÓ O ASTERISCO: o destaque ("==", sem sufixo) seguido de um texto que começa com "~", "*", "!",
+   * "?", "§" ou "@" vira OUTRA marca — "==~(p ∧ q)…" é lida como pegadinha, "==*Regra:*…" como prova. O mesmo
+   * espaço separa. E um "=" na ponta do texto encostaria no "==" da marca. */
+  const semColisao = (txt) => {
+    let x = txt;
+    if ((marca === "==" && /^[!?\u00a7*~@=]/.test(x)) || (marca.slice(-1) === "*" && x.slice(0, 1) === "*") || /^=/.test(x)) x = " " + x;
+    if (/=$/.test(x)) x += " ";
+    return x;
+  };
 
   let saida = "", cursor = 0, marcados = 0;
-  pedacos.forEach(([a0, b0]) => {
-    const f = matEquilibrar(ta.value, a0, b0);
+  pedacos.forEach(([a00, b0]) => {
+    /* a marca não começa no "1. " da lista: a linha deixaria de ser lista */
+    let a0 = a00;
+    prefixos.forEach((x) => { if (a0 >= x.a && a0 < x.b) a0 = x.b; });
+    if (b0 <= a0) return;
+    let f = matEquilibrarPares(matEquilibrar(ta.value, a0, b0), pares);
+    /* crescer para equilibrar não pode invadir uma marca que já existe */
+    if (marcas.some((m) => m.a < f.fim && m.b > f.ini)) f = { ini: a0, fim: b0 };
     const txt = ta.value.slice(f.ini, f.fim);
     if (!matTemConteudo(txt)) return;      /* linha em branco ou só marcação */
     if (f.ini < cursor) return;            /* já coberto pelo pedaço anterior */
-    saida += ta.value.slice(cursor, f.ini) + marca + semColisao(txt) + "==";
+    /* marca encostada em outra ("…====…") não se lê: um espaço entre elas */
+    const colaAntes = ta.value.slice(Math.max(0, f.ini - 2), f.ini) === "==";
+    const colaDepois = ta.value.slice(f.fim, f.fim + 2) === "==";
+    saida += ta.value.slice(cursor, f.ini) + (colaAntes ? " " : "") + marca + semColisao(txt) + "==" + (colaDepois ? " " : "");
     cursor = f.fim;
     marcados++;
   });
@@ -2884,16 +3051,16 @@ function matMarcarSelecao(tipo, onde) {
   matSelGuardada = "";
   matReg("marca", "marcado (" + tipo + ")" + (naLei ? " na lei" : ""),
     trecho.slice(0, 60)
-    + " · ocorrência " + (ocorrencias.indexOf(pos) + 1) + " de " + ocorrencias.length);
+    + " · ocorrência " + (ocorrencias.indexOf(pos) + 1) + " de " + ocorrencias.length + (parcial ? " · só a parte livre" : ""));
   if (naLei) {
     leiSujo = true;
     leiTrocarModo("ler");
-    if ($("leiEstado")) $("leiEstado").textContent = t("mat_marcado_nao_salvo");
+    if ($("leiEstado")) $("leiEstado").textContent = t(parcial ? "mat_marcado_parcial" : "mat_marcado_nao_salvo");
     return true;
   }
   matSujo = true;
   matTrocarModo("ler");
-  $("matEstado").textContent = t("mat_marcado_nao_salvo");
+  $("matEstado").textContent = t(parcial ? "mat_marcado_parcial" : "mat_marcado_nao_salvo");
   return true;
 }
 

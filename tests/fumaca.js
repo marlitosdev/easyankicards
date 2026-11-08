@@ -1110,7 +1110,7 @@ function rodar(opc) {
     get jurModoAtual() { return jurModo; },
     matAtualAtual, matSelGuardadaAtual,
     matGuardarOffset, matPainelDaSelecao, matEhCromo,
-    matSelOrdinalAtual: () => matSelOrdinal,
+    matSelOrdinalAtual: () => matSelOrdinal, matSelOrdinalPor: (v) => { matSelOrdinal = v; }, matTexParaHtml, matHtmlTexto, matAlvoDaSelecao, matSemSinais, matEquilibrarPares,
     matSelOffsetAtual: () => matSelOffset,
     vkChavePintar, vkRevMedir, vkRevVerLog, vkOferece, vkVinculoUtil,
     vkAbrirPar, vkFaixaReuso, VK_REUSO_ALTA, VK_REUSO_MEDIA,
