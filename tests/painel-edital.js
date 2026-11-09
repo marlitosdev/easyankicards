@@ -28,7 +28,8 @@ async function testes() {
   const ok = (c, m) => { n++; if (!c) falhas.push(m); };
   const todos = (el, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((f) => { acc.push(f); todos(f, acc); }); return acc; };
   const cls = (e, c) => new RegExp("(^| )" + c + "( |$)").test(e.className || "");
-  const d = (k) => { const x = new Date(); x.setDate(x.getDate() + k); return x.toISOString().slice(0, 10); };
+  /* a data LOCAL (toISOString é UTC: depois das 21h no Brasil já era o dia seguinte e a conta dava 41 dias) */
+  const d = (k) => { const x = new Date(); x.setDate(x.getDate() + k); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
   const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
   const { api } = rodar();
   api.matIniciar(); api.edIniciar(); api.hubIniciar();

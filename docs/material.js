@@ -1809,12 +1809,19 @@ function matCitIr(c, botao) {
 
 function citIr(c, botao, base) {
   const ctx = citCtxDe(base);          /* de novo: uma lei pode ter sido vinculada desde o desenho */
+  /* (19.117.1) e o trecho também: vinculado depois do desenho, o toque vale pelo vínculo de agora */
+  try {
+    if (typeof citComVinculo === "function") {
+      c = citComVinculo(c, ctx.disciplina && ctx.topico ? matChave(ctx.disciplina, ctx.topico) : (ctx.chave || ""));
+    }
+  } catch (e) {}
   const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
   if (alvo.lei && typeof leiCitacaoPreviewAbrir === "function") {
     leiCitacaoPreviewAbrir(c, "", { lei: alvo.lei,
       ctx: { disciplina: ctx.disciplina, topico: ctx.topico, aoVoltar: ctx.aoVoltar } });
-    try { reg("MATERIAL", "citação " + (ctx.onde === "cartao" ? "do cartão" : "do resumo") + " aberta na prévia",
-      alvo.lei.nome + " · art. " + (c.numCru || c.num || "—")); } catch (e) {}
+    try { reg(ctx.onde === "questao" ? "QUESTOES" : "MATERIAL",
+      "citação " + (ctx.onde === "cartao" ? "do cartão" : ctx.onde === "questao" ? "da dica da questão" : "do resumo") + " aberta na prévia",
+      alvo.lei.nome + " · art. " + (c.numCru || c.num || "—") + (c.permanente ? " · vínculo seu" : "")); } catch (e) {}
     return;
   }
   /* sem lei certa: a mesma conversa das questões (escolher, vincular, colar) */

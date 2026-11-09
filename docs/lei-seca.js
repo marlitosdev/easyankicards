@@ -4693,6 +4693,21 @@ function citVinculosAplicar(texto, cits, chave) {
   return saida.sort((x, y) => x.ini - y.ini);
 }
 
+/* (19.117.1) A CITAÇÃO DESENHADA ANTES DO VÍNCULO. Um link fica na tela com o que se sabia quando foi desenhado; se a
+ * pessoa vinculou aquele mesmo trecho depois (noutro toque, noutra tela), o toque no link antigo tem de valer pelo
+ * vínculo de agora — e não repetir a pergunta que acabou de ser respondida. Só troca quando o vínculo cobre a citação
+ * inteira; o "desligado" não entra aqui (quem desligou não toca num link que sumiu). */
+function citComVinculo(c, chave) {
+  if (!c || c.permanente || c._jur || !c.texto) return c;
+  let vs = [];
+  try {
+    const n = String(c.texto).length;
+    vs = citVinculosAplicar(c.texto, [], chave).filter((x) => x.permanente && x.ini === 0 && x.fim === n);
+  } catch (e) { vs = []; }
+  if (!vs.length) return c;
+  return Object.assign({}, c, vs[vs.length - 1], { ini: c.ini, fim: c.fim, texto: c.texto });
+}
+
 /* A LEI QUE A FRASE JÁ DISSE (v18.26.0).
  * "… sanção de ato ilícito (art. 3º do CTN), a multa é obrigação principal
  * (art. 113, § 1º)." — a segunda citação não repete a lei, mas quem lê sabe

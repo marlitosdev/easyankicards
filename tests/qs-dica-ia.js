@@ -117,6 +117,43 @@ async function testes() {
     ok(api.qsUiCitBase(q).chave === api.matChave("D", "T") && api.qsUiCitBase(q).onde === "questao", "L1a a citação sabe o tópico da questão");
   }
 
+  /* ---- 3b (19.117.1): o vínculo feito NA DICA, com a questão aberta, passa a valer na hora ----
+   * O relato: "tentei gravar um vínculo de lei na dica de uma questão que errei mas não está efetivando". O registro:
+   * "vínculo criado pelo menu de escolha (permanente) art. 86 → Lei 4.320/1964" e, no toque seguinte no mesmo
+   * "art. 86", de novo "citação não resolvida". A dica não era redesenhada com a questão aberta (a volta só repintava
+   * com a janela fechada) e o toque no link antigo resolvia a citação antiga, sem a lei. */
+  {
+    const api = montar(1);
+    const ch = api.matChave("D", "T");
+    api.leiGuardar({ id: "cf", nome: "Constituição Federal de 1988", especie: "Constituição", texto: "Art. 1º A República.\nArt. 2º Os Poderes.", topicos: [ch] });
+    api.leiGuardar({ id: "l4320", nome: "Lei 4.320/1964", especie: "Lei", numero: "4320", ano: "1964",
+      texto: "Art. 86. A escrituração sintética das operações financeiras e patrimoniais efetuar-se-á pelo método das partidas dobradas.\nArt. 100. As alterações da situação líquida patrimonial.", topicos: [] });
+    const q = api.qsTodas()[0];
+    api.qsGravarDica(q.id, "O fundamento: partidas dobradas da Lei nº 4.320/1964 (art. 86 e art. 100).");
+    api.qsUiResponderDoTopico();
+    responder(api, api.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
+    const link86 = () => {
+      const cx = api.$("qsSessCorpo").querySelector(".qs-minha-dica");
+      return cx ? cx.querySelectorAll("button").filter((b) => b.textContent === "art. 86")[0] : null;
+    };
+    const antigo = link86();
+    ok(antigo && /qs-lei-link-sem/.test(antigo.className), "V0 sem vínculo, o 'art. 86' da dica não tem lei: " + (antigo && antigo.className));
+    /* o que o menu de escolha grava, e a volta que ele chama */
+    ok(!!api.citVinculoSalvar({ trecho: "art. 86", leiId: "l4320", artigos: [{ num: "86", numCru: "86" }], chave: ch }), "V0a vínculo gravado");
+    api.qsUiCitBase(q).aoVoltar();
+    const novo = link86();
+    ok(novo && !/qs-lei-link-sem/.test(novo.className) && /qs-lei-link-perm/.test(novo.className),
+      "V1 com a questão aberta, a dica é redesenhada e o 'art. 86' passa a levar à lei: " + (novo && novo.className));
+    /* o link que ficou na tela de antes (outra volta, outra tela) também resolve: confere o vínculo na hora do toque */
+    antigo.onclick({});
+    ok(api.$("dlgLeiCitaPreview").open === true && /4\.320/.test(api.$("leiCitaPreviewTitulo").textContent || ""),
+      "V2 o toque num link desenhado antes do vínculo abre a lei vinculada, não a pergunta de novo: " + api.$("leiCitaPreviewTitulo").textContent);
+    api.$("dlgLeiCitaPreview").close && api.$("dlgLeiCitaPreview").close();
+    /* o vínculo é do tópico: a mesma citação noutro tópico continua sem lei */
+    const c0 = api.citVinculosAplicar("ver art. 86", [], api.matChave("D", "Outro")).filter((c) => c.permanente);
+    ok(c0.length === 0, "V3 o vínculo 'só neste tópico' não vale noutro tópico");
+  }
+
   /* ---- as cores do aviso voltam ao padrão depois de uma pergunta de escolha ---- */
   {
     const { api } = rodar();

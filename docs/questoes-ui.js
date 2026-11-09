@@ -2020,6 +2020,8 @@ function qsUiLeiIr(c, q, botao) {
     lista = (typeof leisLista === "function") ? leisLista() : [];
     doTopico = (typeof leisDoTopico === "function" && ch) ? leisDoTopico(ch) : [];
   } catch (e) {}
+  /* (19.117.1) o link pode ter sido desenhado antes do vínculo deste trecho: vale o vínculo de agora */
+  try { if (typeof citComVinculo === "function") c = citComVinculo(c, ch); } catch (e) {}
   const alvo = qsUiLeiAlvo(c, lista, doTopico);
 
   /* a volta é a mesma dos outros dois botões: a gaveta sobe por cima e,
@@ -4915,7 +4917,19 @@ function qsUiIniciar() {
 function qsUiCitBase(q) {
   const ch = (typeof matChave === "function" && q && q.disciplina && q.topico) ? matChave(q.disciplina, q.topico) : "";
   return { disciplina: (q && q.disciplina) || "", topico: (q && q.topico) || "", chave: ch, onde: "questao",
-    aoVoltar: () => { try { const d = $("dlgQsResponder"); if (d && !d.open && qsSessaoAtual()) qsUiVoltarASessao(); } catch (e) {} } };
+    /* (19.117.1) COM A QUESTÃO ABERTA TAMBÉM REPINTA. Só repintava com a janela fechada: o vínculo feito na dica (menu
+     * de escolha, prévia por cima da questão) ficava gravado e a dica continuava com o link antigo, sem lei — tocar de
+     * novo trazia a mesma pergunta ("não está efetivando"). A rolagem fica onde estava. */
+    aoVoltar: () => {
+      try {
+        const d = $("dlgQsResponder");
+        if (d && d.open && qsSessaoAtual()) {
+          const rol = ["qsSessCorpo", "qsCorpoLado"].map((id) => [$(id), $(id) ? $(id).scrollTop : 0]);
+          qsUiPintarSessao();
+          rol.forEach(([el, y]) => { try { if (el && y) el.scrollTop = y; } catch (e) {} });
+        } else if (d && !d.open && qsSessaoAtual()) qsUiVoltarASessao();
+      } catch (e) {}
+    } };
 }
 
 /* (v19.4.0) o segundo botão da caixa da dica: o pedido para uma IA comentar a questão */
