@@ -5456,6 +5456,21 @@ function qsUiIrmaLinha(q) {
     if (ag.adiante > 0) lin.append(bt(t("qs_irma_desfazer"), "", () => { qsIrmaDesfazer(q.id); qsUiPintarSessao(); }));
     return lin;
   }
+  /* (19.118.1) a melhor irmã já vem daqui a pouco: dizer, em vez de oferecer agendar o que não muda nada */
+  const jaVem = qsIrmaJaVem(irmas);
+  if (jaVem) {
+    tx.textContent = t("qs_irma_ja_vem", { a: jaVem.artigo, n: jaVem.adiante });
+    lin.append(tx);
+    if (jaVem.adiante > 1) {
+      lin.append(bt(t("qs_irma_agora"), t("qs_irma_agora_tip"), () => {
+        const r = qsAgendarIrma(1);
+        try { matReg("questao", "questão irmã agora", r ? r.artigo : ""); } catch (e) {}
+        qsAndar(1);
+        qsUiPintarSessao();
+      }));
+    }
+    return lin;
+  }
   tx.textContent = t("qs_irma_ha", { n: irmas.length, a: irmas[0].artigo });
   lin.append(tx,
     bt(t("qs_irma_depois", { n: QS_IRMA_PASSO }), t("qs_irma_depois_tip"), () => {

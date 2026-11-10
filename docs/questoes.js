@@ -1296,6 +1296,85 @@ function qsLeiCurta(leiId) {
   return String(l.nome || "").slice(0, 40);
 }
 function qsRotuloArtigo(a) { return "art. " + a.numCru + (qsLeiCurta(a.leiId) ? " " + t("qs_irma_da") + " " + qsLeiCurta(a.leiId) : ""); }
+/* (19.118.1) O ASSUNTO PARECIDO, quando não há lei em comum.
+ * A rodada real do PCASP: 12 de 13 questões citam "MCASP, Aula 06, p. 16" — não é lei, não há artigo — e todas são do
+ * mesmo ramo. A regra do "mesmo ramo" empatava todas, e a irmã era sempre a mesma (a primeira do banco), errasse-se a
+ * da Equação 4 ou a do 5º nível. Agora, sem artigo, a irmã é a questão do mesmo tópico que mais divide os TERMOS do
+ * enunciado e do comentário ("dotação", "classe 5", "despesa orçamentária"), pesados pela raridade no tópico: o que
+ * toda questão do tópico diz ("PCASP", "MCASP") não conta. O rótulo diz quais termos ligaram as duas. */
+const QS_PARADAS = new Set(("para pela pelo pelos pelas como mais menos sobre entre ainda pois porque quando onde qual quais cujo cuja cujos cujas "
+  + "este esta estes estas esse essa esses essas isso isto aquele aquela aquilo seus suas nossa nosso dele dela deles delas "
+  + "numa numas nuns umas sendo serao seria seriam sera deve devem pode podem poderá podera conforme acordo segundo item itens "
+  + "afirmativa assertiva questao questoes certo errado correta correto corretas corretos incorreta incorreto julgue julgar material "
+  + "aula pagina paginas exemplo forma caso casos assim tambem apenas todo toda todos todas cada outro outra outros outras mesmo mesma "
+  + "mesmos mesmas haver havera sobre desde ante apos ate contra perante tais tanto quanto muito muita muitos muitas seja sejam "
+  + "estar esta estao estava foram fora sera ser sao nao sim pelo pela demais exclusivamente exatamente expressamente sempre nunca "
+  + "regra regras geral dado dados enunciado comentario gabarito alternativa alternativas resposta somente quanto ainda "
+  + "aplicado aplicada setor publico publica ambito respectiva respectivo respectivas respectivos apresenta apresentam pertence "
+  + "pertencem possibilidade valida valido entendimento opcao opcoes anterior posterior seguinte seguintes preconizado preconizada "
+  + "estabelecido estabelecida previsto prevista utilizacao utilizado utilizada relativo relativa relativos relativas referente "
+  + "referentes considerado considerada considera consideram trata tratam refere referem dispoe dispoem determina determinam "
+  + "elas eles dentro fora acima abaixo antes depois logo entao enquanto").split(/\s+/));
+/* no RÓTULO, só o que parece assunto: palavra com jeito de verbo ou particípio ("registram", "aplicado") liga as duas
+ * questões na conta, mas não diz a ninguém qual é o ponto */
+function qsTermoDeRotulo(vis) {
+  const n = qsSemAcento(vis);
+  return /\d/.test(n) || !/(?:am|em|ar|er|ir|ou|ava|avam|ando|endo|indo|ado|ados|ada|adas|ido|idos|ida|idas)$/.test(n);
+}
+const qsMemoTermos = new Map();
+function qsSemAcento(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function qsTermosDaQuestao(q) {
+  const txt = [q.enunciado, q.comentario].filter(Boolean).join(" \n ");
+  const marca = txt.length;
+  const ja = qsMemoTermos.get(q.id);
+  if (ja && ja.marca === marca) return ja.termos;
+  const pal = String(txt).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const termos = new Map();
+  const num = (w) => /^\d{1,3}[oaº]?$/.test(w);
+  const base = (w) => { const n = qsSemAcento(w); return n.length >= 6 && /s$/.test(n) ? n.slice(0, -1) : n; };
+  const ok = (w) => { const n = qsSemAcento(w); return n.length >= 4 && !/^\d+$/.test(n) && !QS_PARADAS.has(n); };
+  pal.forEach((w, k) => {
+    if (ok(w) && !termos.has(base(w))) termos.set(base(w), w);
+    /* "classe 5", "5º nível": a palavra com o número ao lado vira um termo só */
+    const v = pal[k + 1];
+    if (v && ok(w) && num(v)) { const n = v.replace(/[oaº]$/, ""); const tk = base(w) + " " + n; if (!termos.has(tk)) termos.set(tk, w + " " + n); }
+    /* número ANTES da palavra só quando é ordinal ("5º nível"): "1 Ativo + 2 Passivo" juntaria o número errado */
+    if (v && /^\d{1,3}[oaº]$/.test(w) && ok(v)) { const n = w.replace(/[oaº]$/, ""); const tk = base(v) + " " + n; if (!termos.has(tk)) termos.set(tk, w + " " + v); }
+  });
+  qsMemoTermos.set(q.id, { marca, termos });
+  return termos;
+}
+/* as do mesmo tópico, ordenadas pela parecença com q: [{ q, sim, termos (os que ligam, os mais raros primeiro) }] */
+function qsParecidasNoTopico(q, cands) {
+  const doTopico = (x) => x.chave === q.chave || (typeof qsChaveNormal === "function" && qsChaveNormal(x.chave) === qsChaveNormal(q.chave));
+  const pool = (cands || []).filter(doTopico);
+  if (!pool.length) return [];
+  const docs = [q].concat(pool).map(qsTermosDaQuestao);
+  const N = docs.length;
+  const df = new Map();
+  docs.forEach((d) => d.forEach((_, k) => df.set(k, (df.get(k) || 0) + 1)));
+  /* termo que está em mais da metade do tópico não distingue nada */
+  const idf = (k) => { const n = df.get(k) || 0; return n > Math.max(2, N * 0.5) ? 0 : Math.log((N + 1) / n); };
+  const massa = (d) => { let s = 0; d.forEach((_, k) => { s += idf(k); }); return s; };
+  const mq = massa(docs[0]);
+  if (!mq) return [];
+  const out = [];
+  pool.forEach((x, i) => {
+    const d = docs[i + 1];
+    const comuns = [];
+    let s = 0;
+    docs[0].forEach((vis, k) => { if (d.has(k) && idf(k) > 0) { s += idf(k); comuns.push([k, vis, idf(k)]); } });
+    const mx = massa(d);
+    if (comuns.length < 2 || !mx) return;
+    const sim = s / Math.sqrt(mq * mx);
+    if (sim < 0.08) return;
+    comuns.sort((a, b) => (/ /.test(b[0]) ? 1 : 0) - (/ /.test(a[0]) ? 1 : 0) || b[2] - a[2] || b[0].length - a[0].length);
+    const rot = comuns.filter((c) => qsTermoDeRotulo(c[1]));
+    out.push({ q: x, sim, termos: (rot.length ? rot : comuns).map((c) => c[1]) });
+  });
+  return out.sort((a, b) => b.sim - a.sim);
+}
+
 /* as irmãs de q no banco, da mais próxima à mais distante: [{ q, artigo (o rótulo), pontos }] */
 function qsIrmasDe(q, banco, opc) {
   const o = opc || {};
@@ -1321,6 +1400,16 @@ function qsIrmasDe(q, banco, opc) {
       out.push({ q: x, artigo: qsRotuloArtigo(comum), pontos });
     });
   }
+  /* (19.118.1) sem artigo em comum: o assunto parecido, no mesmo tópico */
+  if (!out.length) {
+    let par = [];
+    try { par = qsParecidasNoTopico(q, bs); } catch (e) { par = []; }
+    par.forEach((p) => {
+      const ts = p.q.tentativas || [];
+      const bonus = (!ts.length ? 3 : qsPedeRevisao(ts[ts.length - 1]) ? 2 : 0) + (q.ramo && p.q.ramo === q.ramo ? 1 : 0);
+      out.push({ q: p.q, artigo: t("qs_irma_assunto", { t: p.termos.slice(0, 2).join(" · ") }), pontos: Math.round(p.sim * 100) + bonus, assunto: true });
+    });
+  }
   if (!out.length && q.ramo) {
     bs.filter((x) => x.ramo === q.ramo && (x.chave === q.chave || (typeof qsChaveNormal === "function" && qsChaveNormal(x.chave) === qsChaveNormal(q.chave))))
       .forEach((x) => {
@@ -1335,7 +1424,20 @@ function qsIrmasDaAtual() {
   const q = qsAtual();
   if (!q || !qsSessao) return [];
   const fora = new Set(qsSessao.respondidas.map((r) => r.id));
+  /* (19.118.1) UMA IRMÃ POR ERRO: a que já foi agendada para OUTRA questão não é oferecida de novo — agendá-la outra
+   * vez trocava a origem dela e a primeira questão perdia o selo e o "desfazer" (as duas erradas da rodada do PCASP
+   * recebiam a mesma irmã) */
+  Object.keys(qsSessao.irmas || {}).forEach((id) => { if (qsSessao.irmas[id].origem !== q.id) fora.add(id); });
   return qsIrmasDe(q, qsBanco, { excluir: fora });
+}
+
+/* (19.118.1) a melhor irmã JÁ VEM logo adiante nesta rodada? então não há o que agendar: diz quando ela vem */
+function qsIrmaJaVem(irmas) {
+  if (!qsSessao || !irmas || !irmas.length) return null;
+  const top = irmas[0];
+  const pos = qsSessao.fila.findIndex((x, k) => k > qsSessao.i && x.id === top.q.id);
+  const adiante = pos - qsSessao.i;
+  return pos > 0 && adiante <= QS_IRMA_PASSO ? { id: top.q.id, artigo: top.artigo, adiante } : null;
 }
 /* AGENDAR: a melhor irmã vira a "passo"-ésima questão a partir da atual (1 = a próxima); se já estava mais adiante, muda de lugar */
 function qsAgendarIrma(passo, gravar) {

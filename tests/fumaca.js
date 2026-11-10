@@ -691,7 +691,7 @@ function rodar(opc) {
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico, matFichaRamosEstado, domNiveisDosRamos, matFichaTam, matFichaTecla, matFichaProximoRamo, matFichaOrdemRamos, matFichaRamoLembrado,
     leiIrDominio, leiIrCalor, leiIrDados, leiNuncaVistos, leiNuncaVistosPrioritarios, leiFilaNVIniciar, leiFilaNVProximo, leiFilaNVSair, leiFilaNVAtual: () => leiFilaNV, leiArtigoVistoMarcar, leiQuestoesDoArtigo,
-    qsArtigosDaQuestao, qsIrmasDe, qsIrmasDaAtual, qsAgendarIrma, qsIrmaAgendadaDe, qsIrmaDesfazer, qsUiIrmaLinha, QS_IRMA_PASSO, qsSessaoRetomar, qsSessaoLer,
+    qsArtigosDaQuestao, qsTermosDaQuestao, qsParecidasNoTopico, qsIrmaJaVem, qsIrmasDe, qsIrmasDaAtual, qsAgendarIrma, qsIrmaAgendadaDe, qsIrmaDesfazer, qsUiIrmaLinha, QS_IRMA_PASSO, qsSessaoRetomar, qsSessaoLer,
     qsValorAcerto, qsPedeRevisao, qsMarcarChute, QS_PESO_CHUTE, qsUiChuteAlternar, qsUiPintarChute, qsChuteAtual: () => qsChute,
     leiResolverCitacao, leiAlteradorasDe, leiTemArtigo, leiAlteradaPor, leiChaveDeEspecieNumero,
     matRolLer, matRolDe, matRolGuardar, matRolMedir, matRolAplicar, matRolEscopoChave, matRolManter, MAT_ROL_CHAVE,

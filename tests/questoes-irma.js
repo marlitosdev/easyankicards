@@ -126,6 +126,55 @@ async function testes() {
     botao(linha(a), a.t("qs_irma_depois", { n: 5 })).onclick();
     ok(s.fila.filter((x) => x.id === "q2").length === 1 && s.fila[s.i + 5].id === "q2", "R7 a irmã que já estava no fim da fila muda de lugar, sem duplicar");
   }
+  /* ---- (19.118.1) SEM LEI: o assunto parecido; uma irmã por erro; a que já vem ----
+   * A rodada real do PCASP: as questões citam "MCASP, Aula 06" (não é lei) e são todas do mesmo ramo — a irmã era
+   * sempre a mesma, sem relação com o erro, e duas erradas recebiam a mesma (a primeira perdia o selo). */
+  {
+    const { api: a } = rodar();
+    a.matIniciar(); a.leiIniciar(); a.qsUiIniciar();
+    const ch = a.matChave("Contabilidade Pública", "PCASP");
+    const Q = (id, en, com) => ({ id, tipo: "ce", enunciado: en, gabarito: "C", comentario: com, disciplina: "Contabilidade Pública", topico: "PCASP", chave: ch, ramo: "naturezas", tentativas: [] });
+    const qs = [
+      Q("p1", "Pela regra de integridade, os lançamentos pelo método das partidas dobradas fecham na mesma natureza de informação.", "Os lançamentos contábeis seguem as partidas dobradas dentro da mesma natureza (MCASP, Aula 06, p. 14)."),
+      Q("o1", "A dotação orçamentária inicial é registrada na classe 5 e a execução na classe 6.", "A dotação fica na classe 5; a despesa empenhada, na classe 6 (Aula 06, p. 17)."),
+      Q("x1", "O 5º nível (subtítulo) é usado nas contas das classes 1 a 4 da natureza patrimonial.", "O subtítulo do 5º nível identifica o consolidado (Aula 06, p. 11)."),
+      Q("p2", "Um lançamento que debita conta patrimonial e credita conta orçamentária fere as partidas dobradas.", "As partidas dobradas exigem lançamentos dentro da mesma natureza (Aula 06, p. 27)."),
+      Q("o2", "A conferência da fixação da despesa usa a dotação da classe 5 e a movimentação de créditos da classe 6.", "Dotação orçamentária (classe 5) e a execução (classe 6): Equação 4 (Aula 06, p. 17)."),
+      Q("x2", "As contas de controle das classes 7 e 8 registram atos potenciais.", "Atos potenciais e controles específicos nas classes 7 e 8 (Aula 06, p. 6)."),
+      Q("x3", "A classe 2 se desdobra em passivo circulante, não circulante e patrimônio líquido.", "Passivo circulante, não circulante e PL (Aula 06, p. 9)."),
+    ];
+    qs.forEach((q) => a.qsTodas().push(q));
+    const porId = (id) => a.qsTodas().find((x) => x.id === id);
+    const ir1 = a.qsIrmasDe(porId("p1"), a.qsTodas());
+    ok(ir1[0] && ir1[0].q.id === "p2" && /assunto parecido/.test(ir1[0].artigo) && /lançamentos|partidas/.test(ir1[0].artigo),
+      "A1 sem lei, a irmã é a de assunto parecido (partidas dobradas), não a primeira do ramo: " + JSON.stringify(ir1.slice(0, 2).map((x) => [x.q.id, x.pontos, x.artigo])));
+    const ir2 = a.qsIrmasDe(porId("o1"), a.qsTodas());
+    ok(ir2[0] && ir2[0].q.id === "o2" && /classe 5|classe 6|dotação/.test(ir2[0].artigo),
+      "A1a e a da dotação (classe 5/6) é a outra da dotação: " + JSON.stringify(ir2.slice(0, 2).map((x) => [x.q.id, x.pontos, x.artigo])));
+    /* sem nenhum termo em comum, continua valendo o mesmo ramo */
+    const s1 = { id: "s1", enunciado: "Zebra amarela.", comentario: "", chave: ch, ramo: "naturezas", tentativas: [] };
+    const s2 = { id: "s2", enunciado: "Girafa azul.", comentario: "", chave: ch, ramo: "naturezas", tentativas: [] };
+    ok(a.qsIrmasDe(s1, [s1, s2])[0].artigo === a.t("qs_irma_ramo"), "A1b sem termo em comum, o mesmo ramo continua valendo");
+
+    /* na rodada: duas erradas cujo melhor par é a mesma questão */
+    const ordem = ["p1", "x1", "x2", "x3", "o1", "p2", "o2"];
+    a.qsUiResponderAbrir(ordem.map(porId), "aba", "irma-assunto");
+    const s = a.qsSessaoAtual();
+    s.fila.splice(0, s.fila.length, ...ordem.map(porId));
+    s.i = 0;
+    a.qsUiPintarSessao();
+    responder(a, false);                             /* errou p1: a melhor irmã (p2) já vem daqui a 5 */
+    const l1 = linha(a);
+    ok(l1 && l1.textContent.indexOf("já vem nesta rodada, daqui a 5") >= 0 && !botao(l1, a.t("qs_irma_depois", { n: 5 })),
+      "A3 a melhor irmã já vem daqui a 5: a linha diz isso, sem oferecer agendar o que não muda nada: " + (l1 && l1.textContent));
+    botao(l1, a.t("qs_irma_agora")).onclick();       /* traz agora: p2 vira a próxima, com selo */
+    ok(a.qsAtual().id === "p2" && a.qsSessaoAtual().irmas.p2.origem === "p1", "A3a 'fazer agora' traz a irmã e guarda de onde veio");
+    /* p2 é irmã de p1; errar p2 não pode roubar a irmã de outra — e a irmã de p1 não pode ser tomada por outra errada */
+    a.qsSessaoAtual().irmas.o2 = { origem: "p1", artigo: "teste" };
+    responder(a, false);
+    const ofe = a.qsIrmasDaAtual().map((x) => x.q.id);
+    ok(ofe.indexOf("o2") < 0, "A2 a irmã já agendada para OUTRA questão não é oferecida de novo (não troca a origem): " + ofe.join());
+  }
   return falhas;
 }
 
