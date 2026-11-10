@@ -905,7 +905,7 @@ function rodar(opc) {
     cmDefeitosDoCartao, cmMelAbrir, cmMelConferir, cmMelAplicar, cmMelIniciar, mcEstudarDireto, mcCartoesSalvos, mcEstMostraAtual: () => mcEstMostra,
     qsUiVoltarASessao,
     qsAndar, qsSessaoAtual, qsJaRespondida, qsSessaoRegistrada, qsPosicao,
-    qsSessaoRetomavel, qsSessaoRetomar, qsSessaoAcrescentar, qsSessaoApagar,
+    qsSessaoRetomavel, qsSessaoRetomar, qsSessaoAcrescentar, qsSessaoApagar, qsSessaoRecuperavel, qsSessaoJuntarRecuperadas, qsMesmasQuestoes, qhMarcar, qhDaRodada,
     qsEmbaralharRestantes, qsPular, qsPendentes, qsSessaoLer,
     qsDefeitos, QS_DEFEITOS, qsSubstituir,
     qsUiMelhorarAbrir, qsUiMelhorarConferir, qsUiMelhorarAplicar,

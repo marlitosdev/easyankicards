@@ -150,6 +150,33 @@ function qhResumo(dias) {
   };
 }
 
+/* (19.117.2) MARCAS NO BLOCO: "registrada" (a hora já foi para o diário), "descartada" (a pessoa recomeçou de propósito),
+ * "recuperada" (as respostas dele foram juntadas a outra rodada). Quem procura rodada para recuperar pula as três. */
+function qhMarcar(id, marca, gravar) {
+  qhCarregar();
+  const item = qhLista.filter((x) => x.id === id)[0];
+  if (!item) return false;
+  item[marca] = new Date().toISOString();
+  qhGravar(gravar);
+  return true;
+}
+
+/* o bloco que nasceu junto com a rodada (o mesmo instante, com folga de segundos) */
+function qhDaRodada(comecou) {
+  const t0 = new Date(comecou || 0).getTime();
+  if (!t0) return null;
+  const l = qhLista.length ? qhLista : qhCarregar();
+  return l.filter((x) => Math.abs(new Date(x.q).getTime() - t0) < 5000)[0] || null;
+}
+
+/* RETOMAR DEPOIS DE RECARREGAR: o bloco em andamento vivia só na memória e o F5 o esquecia — o placar do histórico
+ * parava no que era antes da recarga. Religa o bloco da rodada retomada. */
+function qhReligar(comecou) {
+  const b = qhDaRodada(comecou);
+  if (b) qhAtual = b.id;
+  return b;
+}
+
 function qhApagar(id, gravar) {
   const antes = qhLista.length;
   qhLista = qhLista.filter((x) => x.id !== id);
@@ -169,6 +196,6 @@ function qhLimpar(gravar) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     QH_CHAVE, qhCarregar, qhTodos, qhIniciar, qhAtualizar, qhEmAndamento,
-    qhResumo, qhApagar, qhLimpar, qhRotulo,
+    qhResumo, qhApagar, qhLimpar, qhRotulo, qhMarcar, qhDaRodada, qhReligar,
   };
 }

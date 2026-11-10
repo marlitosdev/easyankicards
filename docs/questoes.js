@@ -1442,9 +1442,20 @@ function qsSessaoApagar(gravar) {
  *
  * "terminada" diz qual das duas coisas a tela deve oferecer.
  * ===================================================================== */
-function qsSessaoRetomavel(escopo, lerLoja) {
+/* (19.117.2) A MESMA RODADA, POR OUTRA PORTA. O escopo diz por onde se entrou ("o tópico", "o recorte do tópico",
+ * "a agenda"); as mesmas 13 questões abertas por outra porta tinham outro escopo — a rodada pela metade (7 de 13) não
+ * era oferecida e a nova era gravada POR CIMA dela, sem perguntar. Agora as mesmas questões são a mesma rodada. */
+function qsMesmasQuestoes(a, b) {
+  const x = (a || []).slice().sort(), y = (b || []).slice().sort();
+  return x.length > 0 && x.length === y.length && x.every((id, i) => id === y[i]);
+}
+function qsSessaoDoEscopo(s, escopo, ids) {
+  return !!s && (!escopo || s.escopo === escopo || qsMesmasQuestoes(s.ids, ids));
+}
+
+function qsSessaoRetomavel(escopo, lerLoja, ids) {
   const s = qsSessaoLer(lerLoja);
-  if (!s || (escopo && s.escopo !== escopo)) return null;
+  if (!qsSessaoDoEscopo(s, escopo, ids)) return null;
   const vivas = s.ids.filter((id) => qsBanco.some((x) => x.id === id));
   if (!vivas.length) return null;
   const feitas = (s.respondidas || []).filter((r) => vivas.indexOf(r.id) >= 0);
@@ -1474,6 +1485,11 @@ function qsSessaoRegistrada(gravar) {
    * a memória é a fonte da gravação, então ela tem de ser a primeira a
    * saber. */
   if (qsSessao) qsSessao.registrada = true;
+  /* (19.117.2) o bloco do histórico também: rodada registrada não é oferecida para recuperar */
+  try {
+    const b = typeof qhDaRodada === "function" && qsSessao ? qhDaRodada(qsSessao.comecou) : null;
+    if (b) qhMarcar(b.id, "registrada", gravar);
+  } catch (e) {}
   const s = qsSessaoLer();
   if (!s) return !!qsSessao;
   s.registrada = true;
@@ -1483,9 +1499,9 @@ function qsSessaoRegistrada(gravar) {
   return true;
 }
 
-function qsSessaoRetomar(escopo, lerLoja, gravar) {
+function qsSessaoRetomar(escopo, lerLoja, gravar, ids) {
   const s = qsSessaoLer(lerLoja);
-  if (!s || (escopo && s.escopo !== escopo)) return null;
+  if (!qsSessaoDoEscopo(s, escopo, ids)) return null;
   const fila = s.ids.map((id) => qsBanco.filter((x) => x.id === id)[0])
     .filter(Boolean);
   if (!fila.length) return null;
@@ -1503,7 +1519,69 @@ function qsSessaoRetomar(escopo, lerLoja, gravar) {
   const proxima = fila.findIndex((x) => !feito[x.id]);
   if (proxima >= 0) qsSessao.i = proxima;
   qsSessaoGravar(gravar);
+  try { if (typeof qhReligar === "function") qhReligar(qsSessao.comecou); } catch (e) {}
   return qsSessao;
+}
+
+/* (19.117.2) A RODADA QUE FOI SUBSTITUÍDA, REFEITA PELO HISTÓRICO.
+ * Cada resposta fica na própria questão (tentativas) e cada rodada deixa um bloco no histórico (eac_qs_hist) com as
+ * questões e o instante em que começou. Quando uma rodada nova toma o lugar de outra pela metade, as respostas da
+ * velha são as tentativas daquelas questões entre o começo dela e o começo da rodada seguinte. Só oferece o bloco:
+ * das mesmas questões, não terminado, com respostas, dos últimos 7 dias, e não registrado, descartado nem já
+ * recuperado. Não devolve as que a rodada de agora já tem. */
+function qsSessaoRecuperavel(ids, atual) {
+  if (typeof qhLerGravado !== "function" || !ids || !ids.length) return null;
+  const hist = qhLerGravado();
+  const tAtual = atual && atual.comecou ? new Date(atual.comecou).getTime() : 0;
+  const jaTem = {};
+  ((atual && atual.respondidas) || []).forEach((r) => { jaTem[r.id] = 1; });
+  const corte = Date.now() - 7 * 86400000;
+  const cands = hist.filter((b) => !b.fim && !b.registrada && !b.descartada && !b.recuperada && (b.feitas || 0) > 0
+      && qsMesmasQuestoes(b.ids, ids) && new Date(b.q).getTime() >= corte
+      && (!tAtual || Math.abs(new Date(b.q).getTime() - tAtual) >= 5000))
+    .sort((a, b) => String(b.q).localeCompare(String(a.q)));
+  for (const b of cands) {
+    const ini = new Date(b.q).getTime();
+    /* a janela acaba quando outra rodada com alguma destas questões começou */
+    const depois = hist.filter((x) => new Date(x.q).getTime() > ini + 1000 && (x.ids || []).some((id) => ids.indexOf(id) >= 0))
+      .map((x) => new Date(x.q).getTime());
+    const fim = depois.length ? Math.min.apply(null, depois) : Date.now() + 1;
+    const respondidas = [];
+    ids.forEach((id) => {
+      if (jaTem[id]) return;
+      const q = qsBanco.filter((x) => x.id === id)[0];
+      if (!q) return;
+      const tt = (q.tentativas || []).filter((t) => { const m = new Date(t.q).getTime(); return m >= ini && m < fim; });
+      if (!tt.length) return;
+      const t0 = tt[0];
+      const r = { id, resp: t0.resp, acertou: !!t0.acertou, em: new Date(t0.q).getTime() };
+      if (t0.chute) r.chute = true;
+      respondidas.push(r);
+    });
+    if (respondidas.length) {
+      return { bloco: b.id, quando: b.q, respondidas,
+               feitas: respondidas.length, certas: respondidas.filter((r) => r.acertou).length };
+    }
+  }
+  return null;
+}
+
+/* junta as respostas recuperadas à rodada de agora (que já tem de estar aberta) e marca o bloco velho */
+function qsSessaoJuntarRecuperadas(rec, gravar) {
+  if (!qsSessao || !rec || !rec.respondidas) return 0;
+  const tem = {};
+  qsSessao.respondidas.forEach((r) => { tem[r.id] = 1; });
+  const novas = rec.respondidas.filter((r) => !tem[r.id] && qsSessao.fila.some((q) => q.id === r.id));
+  novas.forEach((r) => qsSessao.respondidas.push(Object.assign({}, r, { recuperada: true })));
+  qsSessao.respondidas.sort((a, b) => (a.em || 0) - (b.em || 0));
+  const feito = {};
+  qsSessao.respondidas.forEach((r) => { feito[r.id] = 1; });
+  const prox = qsSessao.fila.findIndex((q) => !feito[q.id]);
+  qsSessao.i = prox >= 0 ? prox : qsSessao.fila.length;
+  qsSessaoGravar(gravar);
+  try { if (typeof qhMarcar === "function") qhMarcar(rec.bloco, "recuperada", gravar); } catch (e) {}
+  try { if (typeof qhAtualizar === "function") qhAtualizar(qsPlacar(), { gravar }); } catch (e) {}
+  return novas.length;
 }
 
 /* Acrescenta ao FIM as que ainda não estão na fila. É o que permite criar

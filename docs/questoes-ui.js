@@ -1042,9 +1042,39 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
   if (!lista || !lista.length) { uiAlert(t("qs_nenhuma_para_responder")); return; }
   qsUiVoltarPara = deOnde || null;
   const esc = escopo || ("de:" + (deOnde || "aba"));
+  /* (19.117.2) as mesmas questões são a mesma rodada, venha por onde vier */
+  const ids = lista.map((q) => q.id);
 
-  const retomavel = qsSessaoRetomavel(esc);
+  const retomavel = qsSessaoRetomavel(esc, undefined, ids);
   let retomou = false;
+  /* (19.117.2) A RODADA SUBSTITUÍDA: respostas destas mesmas questões, de uma rodada que outra tomou o lugar */
+  let rec = null;
+  try { rec = qsSessaoRecuperavel(ids, retomavel ? qsSessaoLer() : null); } catch (e) { rec = null; }
+  if (rec) {
+    const base = retomavel ? retomavel.feitas : 0;
+    const dRec = { r: rec.feitas, c: rec.certas, d: new Date(rec.quando).toLocaleDateString(),
+      h: new Date(rec.quando).toLocaleTimeString().slice(0, 5), f: base + rec.feitas, n: ids.length };
+    const r = await uiEscolha(t("qs_recup_perg", dRec), [
+      { valor: "juntar", rot: t("qs_recup_sim", dRec), classe: "btn-verde" },
+      { valor: "ignorar", rot: t("qs_recup_nao") },
+      { valor: "sair", rot: t("cancel_btn") },
+    ]);
+    if (r === "sair" || r === null) return;
+    if (r === "juntar") {
+      if (!(retomavel && qsSessaoRetomar(esc, undefined, undefined, ids))) {
+        qsSessaoIniciar(lista, { embaralhar: true, escopo: esc });
+        try { qhIniciar(lista, { origem: deOnde || "aba", escopo: esc, filtro: qsUiFiltroDoEscopo(esc, deOnde) }); } catch (e) {}
+      }
+      const n = qsSessaoJuntarRecuperadas(rec);
+      try { reg("QUESTOES", "rodada substituída recuperada pelo histórico", n + " resposta(s) de " + rec.quando + " · agora " + qsPlacar().feitas + "/" + qsPlacar().total); } catch (e) {}
+      qsSessaoAcrescentar(lista);
+      qsUiPintarSessao();
+      abrirModal("dlgQsResponder");
+      return;
+    }
+    try { qhMarcar(rec.bloco, "descartada"); } catch (e) {}
+    try { reg("QUESTOES", "rodada substituída: recuperação recusada", rec.feitas + " resposta(s) de " + rec.quando); } catch (e) {}
+  }
   if (retomavel) {
     /* O ESCOPO PEDIDO E O ESCOPO ENCONTRADO, lado a lado. Sem isto, um
      * "continuar de onde parei" que aparece no lugar errado (relatado
@@ -1086,7 +1116,7 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
       }
       if (r === "sair" || r === null) return;
       if (r === "registrar") {
-        if (qsSessaoRetomar(esc)) {
+        if (qsSessaoRetomar(esc, undefined, undefined, ids)) {
           abrirModal("dlgQsResponder");
           qsUiPintarSessao();
           qsUiRegistrarEstudo();
@@ -1100,6 +1130,7 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
             dados.f + " de " + dados.n + " · " + dados.c + " certas");
       } catch (e) {}
       try { qsSessaoApagar(); } catch (e) {}
+      try { const b = qhDaRodada(retomavel.comecou); if (b) qhMarcar(b.id, "descartada"); } catch (e) {}
     } else {
       let r;
       for (;;) {
@@ -1111,7 +1142,9 @@ async function qsUiResponderAbrir(lista, deOnde, escopo) {
         if (r !== "recomecar" || await confirmarDescarte()) break;
       }
       if (r === "sair" || r === null) return;
-      if (r === "continuar") retomou = !!qsSessaoRetomar(esc);
+      if (r === "continuar") retomou = !!qsSessaoRetomar(esc, undefined, undefined, ids);
+      /* recomeçar de propósito: o bloco da rodada descartada não volta a ser oferecido para recuperar */
+      else { try { const b = qhDaRodada(retomavel.comecou); if (b) qhMarcar(b.id, "descartada"); } catch (e) {} }
     }
   }
   if (!retomou) {

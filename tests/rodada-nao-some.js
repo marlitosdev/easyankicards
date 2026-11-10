@@ -656,9 +656,23 @@ async function testes() {
     api.qsSessaoIniciar(api.qsBancoAtual(), { escopo: "topico:x" });
     api.qsResponder("C");
 
-    api.qsUiResponderAbrir(api.qsBancoAtual(), "aba", "topico:y");
+    /* (19.117.2) OUTRA LISTA de questões: o chip de um tópico (30) não oferece a rodada de outro lugar (301) */
+    api.qsUiResponderAbrir(api.qsBancoAtual().slice(1), "aba", "topico:y");
     ok(!/rodada retomavel encontrada/.test(api.registroTexto()),
        "R15b escopos diferentes geraram um log de colisão que não existiu");
+    api._uiFechar && api._uiFechar("sair");
+  }
+  {
+    /* (19.117.2) AS MESMAS QUESTÕES por outro caminho SÃO a mesma rodada: oferecer era o que faltava — sem isso, a
+     * rodada pela metade era gravada por cima, sem pergunta (o "perdi tudo" depois do F5) */
+    const { api } = rodar();
+    montar(api);
+    api.qsSessaoIniciar(api.qsBancoAtual(), { escopo: "topico:x" });
+    api.qsResponder("C");
+    api.qsUiResponderAbrir(api.qsBancoAtual(), "aba", "topico:y");
+    ok(/pedido=topico:y/.test(api.registroTexto()) && /encontrado=topico:x/.test(api.registroTexto()),
+       "R15c as mesmas questões por outro caminho oferecem a rodada (e o registro mostra os dois escopos)");
+    api._uiFechar("sair");
   }
 
   return Object.assign(falhas, { quantas: n });

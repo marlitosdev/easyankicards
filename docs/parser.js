@@ -135,16 +135,34 @@ function looksLikeTags(raw) {
   return s.indexOf(",") >= 0;
 }
 
+/* a linha logo abaixo de uma explicação que ainda é explicação: não é cartão, título, metadado nem pergunta solta
+ * ("Pergunta?" seguida da resposta na linha de baixo é o par que agruparLinhas monta sozinho) */
+function ehContinuacaoDeMais(s) {
+  return !!s && !s.startsWith("@") && !s.startsWith("+") && !(/^\*\s+\S/).test(s) && !s.startsWith("[MC]")
+    && !hasDelim(s) && !CLOZE_START_RE.test(s) && !/\?\s*$/.test(s);
+}
+
 function agruparLinhas(rawText) {
   const blocos = [];   // itens: {linha, texto, par?, titulo?, more?}
   let atual = null;
   let pendenteTitulo = null;   // "@" visto antes do cartão
   let pendenteMore = null;     // "+" visto antes do cartão
+  /* (19.117.2) A EXPLICAÇÃO EM VÁRIAS LINHAS. A IA escreve "* Esquema — Classes de controle:" e, nas linhas de baixo,
+   * "• Classe 7: …", "• Classe 8: …". Só a primeira linha virava explicação; as outras ficavam soltas e eram
+   * recusadas como "sem o delimitador '::'" — o motivo certo era "continuação da explicação". Agora a linha que vem
+   * LOGO ABAIXO de um "+"/"*" (sem linha em branco no meio) e não é cartão continua a mesma explicação, em linha nova. */
+  let maisAberto = null;       // a dona da explicação aberta (o bloco, ou "pendente")
   const linhas = rawText.split(/\r?\n/);
   for (let i = 0; i < linhas.length; i++) {
     const s = linhas[i].trim();
-    if (!s) { atual = null; continue; }
+    if (!s) { atual = null; maisAberto = null; continue; }
     if (s.startsWith("#")) continue;
+    if (maisAberto && ehContinuacaoDeMais(s)) {
+      if (maisAberto === "pendente") pendenteMore = (pendenteMore ? pendenteMore + "<br>" : "") + s;
+      else maisAberto.more = (maisAberto.more ? maisAberto.more + "<br>" : "") + s;
+      continue;
+    }
+    maisAberto = null;
     /* Linha começando com "+" = explicação extra ("Saiba mais") do cartão
        anterior. No Anki vira um link que o aluno clica para expandir. */
     /* Linhas de METADADO: "@" título e "+" explicação.
@@ -199,6 +217,7 @@ function agruparLinhas(rawText) {
       // sem cartão anterior, guarda para o próximo (explicação escrita acima)
       if (dono) dono.more = dono.more ? dono.more + "<br>" + txt : txt;
       else pendenteMore = pendenteMore ? pendenteMore + "<br>" + txt : txt;
+      maisAberto = dono || "pendente";
       continue;
     }
     if (atual !== null && clozeAberto(atual.texto)) {
@@ -698,12 +717,16 @@ function _ehLinhaCartao(s) {
 }
 
 function temOrfaosExplicacao(raw) {
-  let cartaoAntes = false;
+  let cartaoAntes = false, mais = false;
   for (const linha of raw.split(/\r?\n/)) {
     const s = linha.trim();
-    if (!s) continue;
+    if (!s) { mais = false; continue; }
+    /* (19.117.2) logo abaixo de um "+"/"*": já é a explicação (agruparLinhas), não órfã */
+    if (mais && ehContinuacaoDeMais(s)) continue;
+    mais = false;
     if (s.startsWith("@") || _ehLinhaCartao(s)) { cartaoAntes = true; continue; }
-    if (s.startsWith("#") || s.startsWith("+") || (/^\*\s+\S/).test(s)) continue;
+    if (s.startsWith("+") || (/^\*\s+\S/).test(s)) { mais = true; continue; }
+    if (s.startsWith("#")) continue;
     // linha sem "::"/cloze, não é metadado: se veio depois de um cartão, é órfã
     if (cartaoAntes && splitLine(s).length === 1 && !CLOZE_START_RE.test(s)) return true;
   }
@@ -712,12 +735,15 @@ function temOrfaosExplicacao(raw) {
 
 /* Transforma cada linha órfã (após um cartão) em explicação "+" dele. */
 function corrigirOrfaosExplicacao(raw) {
-  let cartaoAntes = false;
+  let cartaoAntes = false, mais = false;
   return raw.split(/\r?\n/).map((linha) => {
     const s = linha.trim();
-    if (!s) return linha;
+    if (!s) { mais = false; return linha; }
+    if (mais && ehContinuacaoDeMais(s)) return linha;
+    mais = false;
     if (s.startsWith("@") || _ehLinhaCartao(s)) { cartaoAntes = true; return linha; }
-    if (s.startsWith("#") || s.startsWith("+") || (/^\*\s+\S/).test(s)) return linha;
+    if (s.startsWith("+") || (/^\*\s+\S/).test(s)) { mais = true; return linha; }
+    if (s.startsWith("#")) return linha;
     if (cartaoAntes && splitLine(s).length === 1 && !CLOZE_START_RE.test(s))
       return "+ " + s;                 // órfã vira explicação do cartão anterior
     return linha;

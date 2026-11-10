@@ -287,6 +287,39 @@ async function testes() {
        "C5f o botao de prompt de correcao nao esta na caixa dos avisos");
   }
 
+  /* (19.117.2) A EXPLICAÇÃO EM VÁRIAS LINHAS — o lote real do PCASP: "* Esquema — …:" e, logo abaixo, os itens "• …".
+   * Antes: 3 avisos "sem o delimitador '::'" e os itens fora do cartão. */
+  {
+    const { api } = rodar();
+    const T = [
+      "@ MCASP > PCASP > Natureza de Informação de Controle",
+      "Qual é a finalidade? :: Registra os atos potenciais, classes 7 e 8. :: disc_X top_Y de_questao",
+      "",
+      "* Esquema — Classes de Controle no PCASP:",
+      "• Classe 7: Controles Devedores (saldo típico devedor).",
+      "• Classe 8: Controles Credores (saldo típico credor).",
+      "Abrangem atos com reflexos patrimoniais futuros.",
+      "",
+      "@ MCASP > PCASP > Estrutura",
+      "Certo ou errado: Restos a Pagar é controle? :: ERRADO — classe 6. :: disc_X top_Y de_questao",
+      "* Alerta de Pegadinha:",
+      "• Execução de Restos a Pagar → Classe 6.",
+      "",
+      "Linha solta depois da linha em branco",
+    ].join("\n");
+    const r = api.parseText(T, []);
+    ok(r.cards.length === 2, "M1 os dois cartões lidos: " + r.cards.length);
+    ok(r.cards[0].more === "Esquema — Classes de Controle no PCASP:<br>• Classe 7: Controles Devedores (saldo típico devedor).<br>• Classe 8: Controles Credores (saldo típico credor).<br>Abrangem atos com reflexos patrimoniais futuros.",
+       "M1a as linhas de baixo continuam a explicação, cada uma na sua linha: " + r.cards[0].more);
+    ok(r.cards[1].more === "Alerta de Pegadinha:<br>• Execução de Restos a Pagar → Classe 6." && /ERRADO — classe 6\./.test(r.cards[1].back),
+       "M1b colada no cartão (sem linha em branco), a explicação não entra na resposta: " + r.cards[1].more + " | " + r.cards[1].back);
+    ok(r.warnings.length === 1 && /Linha 14/.test(r.warnings[0]), "M1c depois da linha em branco, a linha solta continua avisada: " + r.warnings.join(" | "));
+    /* um cartão logo abaixo da explicação continua sendo cartão; "Pergunta?" + resposta também */
+    const r2 = api.parseText("A? :: B. :: t_x\n* Nota.\nC? :: D. :: t_x\n* Outra.\nE qual é?\nResposta F.", []);
+    ok(r2.cards.length === 2 && r2.cards[0].more === "Nota." && r2.cards[1].more === "Outra.",
+       "M2 cartão e par pergunta/resposta abaixo de uma explicação não viram explicação: " + JSON.stringify(r2.cards.map((c) => [c.front, c.more])));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

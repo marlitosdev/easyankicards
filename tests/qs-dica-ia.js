@@ -15,8 +15,10 @@ async function testes() {
   const ok = (c, m) => { if (!c) falhas.push(m); };
   const tique = async (n) => { for (let i = 0; i < (n || 4); i++) await Promise.resolve(); };
   const responder = (api, op) => { if (!op) return; op.onclick(); api.$("btnQsProxima").onclick(); };
+  let jan = null;
   const montar = (n) => {
-    const { api } = rodar();
+    const { api, janela } = rodar();
+    jan = janela;
     api.matIniciar(); api.qsUiIniciar(); api.leiIniciar && api.leiIniciar();
     const ch = api.matChave("D", "T");
     api.matGravar(ch, "x", { disciplina: "D", topico: "T" });
@@ -152,6 +154,60 @@ async function testes() {
     /* o vínculo é do tópico: a mesma citação noutro tópico continua sem lei */
     const c0 = api.citVinculosAplicar("ver art. 86", [], api.matChave("D", "Outro")).filter((c) => c.permanente);
     ok(c0.length === 0, "V3 o vínculo 'só neste tópico' não vale noutro tópico");
+  }
+
+  /* ---- (19.117.2) A RODADA SUBSTITUÍDA ----
+   * O relato: "pressionei F5 sem querer e perdi todo o progresso de questões que havia respondido". O backup mostrou:
+   * as mesmas 13 questões abertas por outro caminho (o tópico inteiro, não o recorte) — outro escopo, nenhuma
+   * pergunta, e a rodada nova gravada POR CIMA da que tinha 7 de 13. */
+  {
+    const api = montar(13);
+    const lista = api.qsTodas().slice();
+    const A = "topico:d›t#recorte", B = "topico:d›t";
+    const passar = (n) => {
+      for (let k = 0; k < n; k++) {
+        responder(api, api.$("qsSessCorpo").querySelectorAll(".qs-op")[0]);
+        api.$("btnQsProxima").onclick();
+      }
+    };
+    api.qsUiResponderAbrir(lista, "aba", A);
+    await tique();
+    passar(3);
+    ok(api.qsPlacar().feitas === 3, "S0 três respondidas pelo recorte: " + api.qsPlacar().feitas);
+    /* recarregou (a sessão em memória some) e abriu pelo tópico inteiro */
+    api.$("dlgQsResponder").close();
+    const p = api.qsUiResponderAbrir(lista, "aba", B);
+    await tique();
+    ok(/pela metade: 3 de 13/.test(api.$("uiModalMsg").textContent || ""), "S1 as mesmas questões por outro caminho oferecem continuar: " + String(api.$("uiModalMsg").textContent).slice(0, 90));
+    api._uiFechar("continuar");
+    await p;
+    ok(api.qsPlacar().feitas === 3 && api.qsSessaoAtual().escopo === A, "S1a continuou a mesma rodada (3 de 13)");
+    api.$("dlgQsResponder").close();
+
+    /* o estado que a versão anterior deixou: uma rodada nova, vazia, gravada por cima (outro escopo) */
+    const ag = Date.now();
+    api.qsSessaoIniciar(lista, { escopo: B });
+    api.qhIniciar(lista, { escopo: B });
+    const iso = (ms) => new Date(ms).toISOString();
+    const h = JSON.parse(jan.localStorage.getItem("eac_qs_hist"));
+    const velho = h.filter((x) => x.escopo === A)[0], novo = h.filter((x) => x.escopo === B)[0];
+    velho.q = iso(ag - 3 * 3600000); novo.q = iso(ag - 3600000);
+    jan.localStorage.setItem("eac_qs_hist", JSON.stringify(h));
+    api.qhCarregar();
+    const s = JSON.parse(jan.localStorage.getItem("eac_qs_sessao"));
+    s.comecou = novo.q;
+    jan.localStorage.setItem("eac_qs_sessao", JSON.stringify(s));
+    api.qsTodas().forEach((q) => (q.tentativas || []).forEach((t) => { t.q = iso(ag - 2 * 3600000); }));
+    const rec = api.qsSessaoRecuperavel(lista.map((q) => q.id), null);
+    ok(rec && rec.feitas === 3 && rec.bloco === velho.id, "S2 as respostas da rodada substituída são refeitas pelo histórico: " + JSON.stringify(rec && [rec.feitas, rec.certas]));
+    const p2 = api.qsUiResponderAbrir(lista, "aba", A);
+    await tique();
+    ok(/Achei 3 resposta/.test(api.$("uiModalMsg").textContent || ""), "S3 ao abrir, a recuperação é oferecida: " + String(api.$("uiModalMsg").textContent).slice(0, 90));
+    api._uiFechar("juntar");
+    await p2;
+    ok(api.qsPlacar().feitas === 3 && api.$("dlgQsResponder").open === true, "S3a juntou: a rodada volta com 3 de 13 e abre na próxima: " + api.qsPlacar().feitas);
+    ok(JSON.parse(jan.localStorage.getItem("eac_qs_hist")).filter((x) => x.id === velho.id)[0].recuperada, "S3b o bloco velho fica marcado: não é oferecido de novo");
+    ok(api.qsSessaoRecuperavel(lista.map((q) => q.id), api.qsSessaoAtual()) === null, "S3c nada mais a recuperar");
   }
 
   /* ---- as cores do aviso voltam ao padrão depois de uma pergunta de escolha ---- */
