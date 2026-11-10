@@ -649,7 +649,7 @@ function rodar(opc) {
     _uiFechar, uiEscolha, uiAlert, uiConfirm, uiEscolhaLimpar, parseText, looksLikeTags, parseTags, matTirarMarca, matPorMarcador, matIrMarcador,
     matRepararChaves, matPintarMarcador,
     matModoAtual: () => matModo, matTrocarModo,
-    matCartoesIniciar, matCartoesAbrir, matCartoesPrompt, matCartoesConferir,
+    matCartoesIniciar, matCartoesAbrir, matCartoesPrompt, matCartoesConferir, mcVirarExplicacao, mcIrParaLinha, mcMotivoCurto,
     matCartoesSalvar, matCartoesVer, matEtiquetasTopico, matContarCartoes, parseAtual, gruposDuplicados, recortarDuplicados, renderRecortes,
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,

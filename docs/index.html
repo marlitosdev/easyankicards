@@ -3372,21 +3372,48 @@ mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
    é a informação que se procura quando o número de avisos não é zero, e
    embaixo da lista de cartões ela ficaria fora da tela justamente nos
    casos grandes, que são os que mais avisam. */
-.mc-recusadas{margin:8px 0;padding:8px 10px;border-radius:8px;
+/* (19.118.0) MENOS TEXTO, MAIS HIERARQUIA. O relato: "geram cansaço visual de tanto texto". Antes: a frase do
+   motivo em vermelho e negrito repetia o número da linha e o texto; a ajuda era a maior letra da tela; os três botões
+   espalhados pela largura. Agora: título forte com a contagem, botões juntos (o principal preenchido), ajuda pequena,
+   avisos iguais agrupados, a cor só no selo, o texto uma vez (duas linhas, "ver mais"), e tocar leva à linha. */
+.mc-recusadas{margin:8px 0;padding:10px 12px;border-radius:10px;font-size:13px;
   border:1px solid var(--borda);background:var(--panel)}
-.mc-recusadas-cab{display:flex;gap:8px;align-items:center;
-  justify-content:space-between;font-size:12px}
-.mc-recusadas-lista{list-style:none;margin:6px 0 0;padding:0}
-.mc-recusada{padding:5px 0;border-top:1px solid var(--borda);font-size:11px}
-.mc-recusada:first-child{border-top:0}
-.mc-recusada-cab{font-weight:700;line-height:1.4}
+.mc-recusadas-cab{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap}
+.mc-recusadas-tit{font-size:14px;flex:1 1 auto;min-width:0}
+.mc-recusadas-n{color:var(--sutil);font-weight:600}
+.mc-recusadas-botoes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mc-recusadas-botoes .btn-min{font-size:12px;padding:4px 10px}
+#btnMcConsertar{background:var(--ok,#2e7d4f);color:#fff;border-color:transparent;font-weight:700}
+.mc-recusadas-ajuda{margin:4px 0 0;font-size:12px;color:var(--sutil);line-height:1.4;max-width:70ch}
+.mc-recusadas-lista{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mc-grupo{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:12.5px;font-weight:600}
+.mc-grupo-tit{flex:1 1 auto;min-width:0}
+.mc-recusada{padding:7px 9px;border-radius:8px;font-size:13px;cursor:pointer;
+  background:color-mix(in srgb, var(--borda) 18%, transparent);max-width:80ch}
+.mc-recusada:hover,.mc-recusada:focus-visible{background:color-mix(in srgb, var(--borda) 32%, transparent)}
+.mc-recusada:focus-visible{outline:2px solid var(--atencao);outline-offset:1px}
+.mc-recusada.mc-no-grupo{margin-left:10px}
+.mc-recusada-cab{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;line-height:1.4}
 /* recusada e a-conferir NÃO podem ter a mesma cor: uma não virou cartão,
    a outra virou e só precisa de um olhar. Iguais, a pessoa apaga o que
-   estava bom. */
-.mc-recusada-recusada .mc-recusada-cab{color:var(--erro)}
-.mc-recusada-suspeito .mc-recusada-cab{color:var(--atencao)}
-.mc-recusada-txt{color:var(--sutil);margin-top:2px;line-height:1.4;
-  word-break:break-word}
+   estava bom. A cor fica no selo. */
+.mc-selo{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;
+  border:1px solid currentColor}
+.mc-selo-recusada{color:var(--erro)}
+.mc-selo-suspeito{color:var(--atencao)}
+.mc-motivo{font-weight:600}
+.mc-recusada-txt{color:var(--sutil);margin-top:3px;line-height:1.45;word-break:break-word}
+.mc-recusada-txt.mc-curto{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mc-recusada-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.mc-rec-bt{font-size:11.5px;padding:2px 9px}
+.mc-rec-bt-forte{font-weight:700}
+.mc-rec-bt-link{border:0;background:none;padding:0;margin-top:2px;font-size:11.5px;color:var(--link,var(--sutil));text-decoration:underline}
+/* a linha de status: contadores curtos; amarelo só com aviso */
+.mc-status{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px;font-size:12.5px}
+.mc-chip{padding:2px 9px;border-radius:999px;border:1px solid var(--borda);white-space:nowrap}
+.mc-chip-ok{color:var(--texto)}
+.mc-chip-av{color:var(--atencao);border-color:currentColor;font-weight:700}
+.mc-chip-rep{color:var(--sutil)}
 .mat-info-bt{border-radius:999px;width:22px;height:22px;padding:0;
   font-weight:800;line-height:1}
 /* MENU DE TRÊS PONTOS por linha. `position:relative` no contêiner e
@@ -12424,7 +12451,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
        descobrir qual. -->
   <div id="mcRecusadas" class="mc-recusadas" hidden>
     <div class="mc-recusadas-cab">
-      <b data-i18n="mc_avisos_titulo"></b>
+      <b class="mc-recusadas-tit"><span data-i18n="mc_avisos_titulo"></span> <span id="mcRecusadasN" class="mc-recusadas-n"></span></b>
+      <div class="mc-recusadas-botoes">
       <!-- OS DOIS CAMINHOS DE CONSERTO, no lugar onde o problema aparece.
            O primeiro é o do próprio app: a mesma cadeia de correções
            seguras da bancada de cartões. O segundo é o da IA, para o que
@@ -12435,8 +12463,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         title="Copia um prompt com as linhas problemáticas numeradas, para a IA devolver o texto corrigido."></button>
       <button class="btn-min" id="btnMcLog" data-i18n="ger_log_btn"
         title="Abre o registro da geração: o mesmo que está aqui, mais o histórico das outras vezes e os erros."></button>
+      </div>
     </div>
-    <p class="nota" data-i18n="mc_avisos_ajuda"></p>
+    <p class="mc-recusadas-ajuda" data-i18n="mc_avisos_ajuda"></p>
     <ul id="mcRecusadasLista" class="mc-recusadas-lista"></ul>
   </div>
   <div id="mcPreview" class="mc-preview"></div>

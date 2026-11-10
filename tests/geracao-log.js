@@ -304,6 +304,46 @@ async function testes() {
        "G10e nao deu para voltar a registrar depois do arquivo corrompido");
   }
 
+  /* ---- G9 (19.118.0): menos texto — avisos iguais agrupados, motivo curto, ação por linha ----
+   * O relato: "a forma como as informações são dispostas geram cansaço visual de tanto texto". */
+  {
+    const { api } = rodar();
+    abrirCartoes(api);
+    api.$("mcTexto").value = [
+      "Pergunta um? :: Resposta um. :: t_x",
+      "",
+      "• item solto um",
+      "",
+      "Pergunta dois? :: Resposta dois. :: t_x",
+      "",
+      "• item solto dois",
+      "",
+      "• item solto tres",
+    ].join("\n");
+    const r = api.matCartoesConferir();
+    ok(r.cards.length === 2 && r.avisos.length === 3, "G9-pre 2 cartões e 3 avisos: " + r.cards.length + "/" + r.avisos.length);
+    const grupos = acharClasse(api.$("mcRecusadasLista"), "mc-grupo", []);
+    ok(grupos.length === 1 && /3 linhas: parece continuação da explicação acima/.test(grupos[0].textContent),
+      "G9 os três avisos iguais viram UM grupo com o motivo curto: " + grupos.map((g) => g.textContent).join(" | "));
+    const itens = acharClasse(api.$("mcRecusadasLista"), "mc-recusada", []);
+    ok(itens.length === 3 && itens.every((li) => !/delimitador|Conteúdo/.test(li.textContent)),
+      "G9a cada linha mostra só o selo e o texto, sem repetir o motivo: " + itens.map((li) => li.textContent).join(" | "));
+    ok(/linha 3/.test(itens[0].textContent) && /item solto um/.test(itens[0].textContent), "G9b o selo diz a linha e o texto aparece uma vez");
+    ok(/^⚠ 3 aviso/.test(acharClasse(api.$("mcAviso"), "mc-chip-av", [])[0].textContent), "G9c a linha de status tem o contador de avisos em destaque");
+    /* ir para a linha: seleciona a linha no campo */
+    const ta = api.$("mcTexto");
+    ta.setSelectionRange = function (a, b) { this._sel = [a, b]; };
+    ok(api.mcIrParaLinha(7) === true && ta.value.slice(ta._sel[0], ta._sel[1]) === "• item solto dois", "G9d 'ir para a linha' seleciona a linha certa no campo: " + JSON.stringify(ta._sel));
+    /* o botão do grupo: as três viram explicação do cartão de cima, de uma vez */
+    const bt = acharClasse(grupos[0], "mc-rec-bt", [])[0];
+    ok(bt && /as 3/.test(bt.textContent), "G9e o grupo tem 'virar explicação (as 3)'");
+    bt.onclick({});
+    const r2 = api.matCartoesLer();
+    ok(r2.avisos.length === 0 && r2.cards[0].more === "• item solto um" && r2.cards[1].more === "• item solto dois<br>• item solto tres",
+      "G9f viraram o 'saiba mais' do cartão de cima, sem aviso: " + JSON.stringify(r2.cards.map((c) => c.more)));
+    ok(api.$("mcRecusadas").hidden === true && /✓ 0 aviso/.test(api.$("mcAviso").textContent), "G9g sem aviso, a caixa some e o status diz ✓ 0 aviso(s): " + api.$("mcAviso").textContent);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

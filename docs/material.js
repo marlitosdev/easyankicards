@@ -5125,6 +5125,60 @@ function matCartoesLer() {
 /* As linhas recusadas viram uma lista com número, motivo e o texto que
  * foi jogado fora. O texto inteiro importa: sem ele, "linha 1 sem ::"
  * obriga a pessoa a contar linhas no campo acima para achar o culpado. */
+/* (19.118.0) O MOTIVO EM POUCAS PALAVRAS. A frase do leitor ("Linha 5: sem o delimitador '::' — ignorada. Conteúdo:
+ * '…'") repetia o número da linha e o texto, que a tela já mostra ao lado — e descrevia o sintoma, não a causa. A frase
+ * inteira continua no registro; aqui fica o que a pessoa precisa para decidir. */
+function mcMotivoCurto(x) {
+  const m = String((x && x.motivo) || "");
+  if (x && x.tipo === "recusada") {
+    if (typeof ehLinhaContinuacao === "function" && ehLinhaContinuacao(x.txt)) return t("mc_mot_continua");
+    if (/'::'/.test(m)) return t("mc_mot_sem_delim");
+    return m.replace(/^\s*(?:Linha|Line)\s+\d+\s*:\s*/i, "").replace(/\s*(?:Conteúdo|Content)\s*:[\s\S]*$/i, "").trim() || m;
+  }
+  return m;
+}
+
+/* virar explicação: a linha recusada ganha o "+" e passa a ser o "saiba mais" do cartão de cima (as linhas coladas
+ * logo abaixo dela vão junto — o leitor já as junta à explicação) */
+function mcVirarExplicacao(linhas) {
+  const ta = $("mcTexto");
+  if (!ta || !linhas || !linhas.length) return 0;
+  const ls = String(ta.value).split("\n");
+  let n = 0;
+  linhas.forEach((l) => {
+    const k = l - 1;
+    if (k < 0 || k >= ls.length) return;
+    const s = ls[k].trim();
+    if (!s || /^[+@#]/.test(s) || /^\*\s/.test(s)) return;
+    ls[k] = "+ " + s;
+    n++;
+  });
+  if (!n) return 0;
+  ta.value = ls.join("\n");
+  mcUltimaLeitura = "";
+  try { gerReg("cartoes", "leitura", "linha(s) viraram explicação do cartão de cima", "linha(s) " + linhas.join(", "), { topico: (matAtual && matAtual.topico) || "" }); } catch (e) {}
+  matCartoesConferir();
+  return n;
+}
+
+/* tocar no aviso leva à linha no campo, selecionada — sem contar linhas à mão */
+function mcIrParaLinha(n) {
+  const ta = $("mcTexto");
+  if (!ta || !n) return false;
+  const ls = String(ta.value).split("\n");
+  if (n > ls.length) return false;
+  let a = 0;
+  for (let i = 0; i < n - 1; i++) a += ls[i].length + 1;
+  try { ta.focus(); } catch (e) {}
+  try { ta.setSelectionRange(a, a + ls[n - 1].length); } catch (e) {}
+  try {
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+    ta.scrollTop = Math.max(0, (n - 3) * lh);
+    if (ta.scrollIntoView) ta.scrollIntoView({ block: "center", behavior: "smooth" });
+  } catch (e) {}
+  return true;
+}
+
 function matCartoesPintarRecusadas(r) {
   const cx = $("mcRecusadas"), ul = $("mcRecusadasLista");
   if (!cx || !ul) return [];
@@ -5139,28 +5193,115 @@ function matCartoesPintarRecusadas(r) {
     itens.push({ tipo: "suspeito", linha: sp.linha || 0,
                  motivo: sp.motivos.join(" · "), txt: sp.txt || "" });
   });
+  if ($("mcRecusadasN")) $("mcRecusadasN").textContent = itens.length ? "(" + itens.length + ")" : "";
   if (!itens.length) { cx.hidden = true; return itens; }
   cx.hidden = false;
+  /* há cartão ACIMA da linha? só então "virar explicação do cartão de cima" faz sentido */
+  const linhasDeCartao = (r.cards || []).map((c) => c.line || 0);
+  const temCartaoAntes = (l) => linhasDeCartao.some((c) => c && c < l);
   itens.forEach((x) => {
-    const li = document.createElement("li");
-    li.className = "mc-recusada mc-recusada-" + x.tipo;
-    const cab = document.createElement("div");
-    cab.className = "mc-recusada-cab";
-    /* RECUSADA e A CONFERIR são coisas diferentes e precisam parecer
-     * diferentes: uma não virou cartão, a outra virou e pode estar
-     * torta. Numa lista só, a pessoa apaga o que estava bom. */
-    cab.textContent = t(x.tipo === "recusada" ? "mc_rec_rot" : "mc_susp_rot",
-      { l: x.linha || "?" }) + " " + x.motivo;
-    li.append(cab);
-    if (x.txt) {
-      const tx = document.createElement("div");
-      tx.className = "mc-recusada-txt";
-      tx.textContent = x.txt;
-      li.append(tx);
+    x.curto = mcMotivoCurto(x);
+    x.explicacao = x.tipo === "recusada" && temCartaoAntes(x.linha);
+  });
+  /* (19.118.0) AGRUPADAS PELA CAUSA: três avisos iguais em vermelho cansavam e escondiam que era UM problema só */
+  const grupos = [];
+  itens.forEach((x) => {
+    const k = x.tipo + "|" + x.curto;
+    let g = grupos.filter((y) => y.k === k)[0];
+    if (!g) { g = { k, tipo: x.tipo, curto: x.curto, itens: [] }; grupos.push(g); }
+    g.itens.push(x);
+  });
+  const botao = (rot, tip, fn, cls) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn-min mc-rec-bt" + (cls ? " " + cls : "");
+    b.textContent = rot;
+    if (tip) b.title = tip;
+    b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); fn(); };
+    return b;
+  };
+  grupos.forEach((g) => {
+    const emGrupo = g.itens.length > 1;
+    if (emGrupo) {
+      const gh = document.createElement("li");
+      gh.className = "mc-grupo mc-grupo-" + g.tipo;
+      const gt = document.createElement("span");
+      gt.className = "mc-grupo-tit";
+      gt.textContent = t("mc_grupo_tit", { n: g.itens.length, m: g.curto });
+      gh.append(gt);
+      const comCima = g.itens.filter((x) => x.explicacao).map((x) => x.linha);
+      if (comCima.length > 1) {
+        gh.append(botao(t("mc_virar_exp_n", { n: comCima.length }), t("mc_virar_exp_aj"), () => mcVirarExplicacao(comCima), "mc-rec-bt-forte"));
+      }
+      ul.append(gh);
     }
-    ul.append(li);
+    g.itens.forEach((x) => {
+      const li = document.createElement("li");
+      li.className = "mc-recusada mc-recusada-" + x.tipo + (emGrupo ? " mc-no-grupo" : "");
+      li.title = t("mc_ir_linha_aj");
+      /* tocar (ou Enter, no teclado) leva à linha: um botão "ir para a linha" em cada item era mais texto repetido */
+      li.tabIndex = 0;
+      li.onclick = () => mcIrParaLinha(x.linha);
+      li.onkeydown = (ev) => {
+        if (ev && (ev.key === "Enter" || ev.key === " ") && ev.target === li) { ev.preventDefault(); mcIrParaLinha(x.linha); }
+      };
+      const cab = document.createElement("div");
+      cab.className = "mc-recusada-cab";
+      /* RECUSADA e A CONFERIR são coisas diferentes e precisam parecer
+       * diferentes: uma não virou cartão, a outra virou e pode estar
+       * torta. Numa lista só, a pessoa apaga o que estava bom.
+       * (19.118.0) A cor fica no SELO, não na frase inteira. */
+      const selo = document.createElement("span");
+      selo.className = "mc-selo mc-selo-" + x.tipo;
+      selo.textContent = t(x.tipo === "recusada" ? "mc_selo_rec" : "mc_selo_susp", { l: x.linha || "?" });
+      cab.append(selo);
+      if (!emGrupo) {
+        const mo = document.createElement("span");
+        mo.className = "mc-motivo";
+        mo.textContent = x.curto;
+        cab.append(mo);
+      }
+      li.append(cab);
+      if (x.txt) {
+        const tx = document.createElement("div");
+        tx.className = "mc-recusada-txt";
+        tx.textContent = x.txt;
+        li.append(tx);
+        if (x.txt.length > 140) {
+          tx.classList.add("mc-curto");
+          const mais = botao(t("mc_ver_mais"), "", () => {
+            const curto = tx.classList.toggle("mc-curto");
+            mais.textContent = t(curto ? "mc_ver_mais" : "mc_ver_menos");
+          }, "mc-rec-bt-link");
+          li.append(mais);
+        }
+      }
+      if (x.explicacao) {
+        const ac = document.createElement("div");
+        ac.className = "mc-recusada-acoes";
+        ac.append(botao(t("mc_virar_exp"), t("mc_virar_exp_aj"), () => mcVirarExplicacao([x.linha])));
+        li.append(ac);
+      }
+      ul.append(li);
+    });
   });
   return itens;
+}
+
+/* (19.118.0) A LINHA DE STATUS: contadores curtos, no lugar da faixa amarela de frase inteira — amarelo só quando há
+ * aviso. O texto continua dizendo "N cartão(ões)" e "N aviso(s)". */
+function mcPintarStatus(av, n, a, rep) {
+  av.className = "mc-status" + (a ? " mc-status-av" : "");
+  av.textContent = "";
+  const chip = (txt, cls) => {
+    const s = document.createElement("span");
+    s.className = "mc-chip " + cls;
+    s.textContent = txt;
+    av.append(s);
+  };
+  chip(t("mc_chip_lidos", { n }), "mc-chip-ok");
+  chip(t(a ? "mc_chip_avisos" : "mc_chip_sem_aviso", { a }), a ? "mc-chip-av" : "mc-chip-ok");
+  if (rep) chip(t("mc_chip_rep", { r: rep }), "mc-chip-rep");
 }
 
 /* A CONFERÊNCIA RODA A CADA TECLA DIGITADA — está no "input" do campo.
@@ -5308,6 +5449,7 @@ function matCartoesConferir() {
   const recusadas = matCartoesPintarRecusadas(r);
   if (!r.cards.length) {
     av.hidden = !$("mcTexto").value.trim();
+    av.className = "ed-nao-cabe";
     av.textContent = t("mc_nada_lido");
     matCartoesRegistrarLeitura(r, recusadas);
     return r;
@@ -5315,8 +5457,7 @@ function matCartoesConferir() {
   av.hidden = false;
   /* a contagem agora soma as duas coisas que a lista embaixo mostra —
    * antes contava só os avisos do parser e escondia os cartões tortos */
-  av.textContent = t("mc_lidos", { n: r.cards.length,
-    a: recusadas.length, r: r.repetidos });
+  mcPintarStatus(av, r.cards.length, recusadas.length, r.repetidos);
   matCartoesRegistrarLeitura(r, recusadas);
 
   const concurso = (matResumos[matAtual.chave] || {}).concurso
@@ -5489,6 +5630,17 @@ function matCartoesIniciar() {
     };
   }
   if ($("mcTexto")) $("mcTexto").addEventListener("input", matCartoesConferir);
+  /* (19.118.0) COLAR DEIXA RASTRO: os mesmos avisos voltando depois de um conserto não diziam se o texto tinha sido
+   * colado de novo — agora o registro da geração diz */
+  if ($("mcTexto")) $("mcTexto").addEventListener("paste", () => {
+    setTimeout(() => {
+      try {
+        const v = String($("mcTexto").value || "");
+        gerReg("cartoes", "leitura", "texto colado no campo", v.length + " caracteres · " + v.split("\n").length + " linha(s)",
+          { topico: (matAtual && matAtual.topico) || "" });
+      } catch (e) {}
+    }, 0);
+  });
   mcEstudoIniciar();
 }
 
