@@ -6336,6 +6336,29 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
 .qs-pdf-msg{margin:6px 0 0;color:var(--ok,var(--acao));line-height:1.45}
+/* (19.123.0) PREPARAR O TÓPICO — no padrão de design (DESIGN.md) */
+dialog.prep-dlg{max-width:860px}
+.prep-sub{margin:var(--esp-1) 0 0;font-size:var(--fs-2);color:var(--sutil);line-height:1.4}
+.prep-corpo{padding:var(--esp-3) var(--esp-4) var(--esp-4);max-height:72vh;overflow:auto;display:flex;flex-direction:column;gap:var(--esp-3)}
+.prep-passo{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-3);background:var(--campo)}
+.prep-passo-tit{display:flex;align-items:center;gap:var(--esp-2);font-size:var(--fs-3);font-weight:var(--peso-f);margin-bottom:var(--esp-2)}
+.prep-n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:var(--r-pilula);
+  background:var(--acao);color:#fff;font-size:var(--fs-2);font-weight:var(--peso-f)}
+.prep-linha{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-4);align-items:center;font-size:var(--fs-3);margin-bottom:var(--esp-2)}
+.prep-linha label{display:inline-flex;align-items:center;gap:var(--esp-1);cursor:pointer}
+.prep-rot{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m);flex:1 1 100%}
+.prep-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin-top:var(--esp-2)}
+.prep-ta{width:100%;min-height:0;font-size:var(--fs-2);line-height:1.45;border:1px solid var(--borda);border-radius:8px;padding:var(--esp-2);
+  font-family:ui-monospace,Consolas,monospace;color:var(--texto);background:var(--panel)}
+.prep-ta-pedido{margin-top:var(--esp-2);color:var(--sutil)}
+.prep-conf{margin-top:var(--esp-2)}
+.prep-cob-tit{margin-top:var(--esp-3);font-size:var(--fs-2);font-weight:var(--peso-m);color:var(--sutil)}
+.prep-falta{color:var(--atencao);font-weight:var(--peso-f)}
+.prep-novo{margin-left:var(--esp-2)}
+.prep-aviso{margin:var(--esp-2) 0 0;font-size:var(--fs-2);color:var(--atencao);line-height:1.45;max-width:72ch}
+.prep-ok{margin:var(--esp-2) 0 0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
+.prep-msg{margin:0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
+.mat-ficha-prep{margin:0 0 var(--esp-2)}
 /* (19.122.0) O LIVRO DE FATOS — no padrão de design (DESIGN.md): só variáveis da tabela */
 dialog.fatos-dlg{max-width:880px}
 .fatos-entrada{display:flex;gap:var(--esp-2) var(--esp-3);align-items:center;flex-wrap:wrap;margin:0 0 var(--esp-3)}
@@ -8606,6 +8629,10 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <!-- T1: o mesmo caminho para o tópico inteiro e para cada ramo -->
   <!-- (v18.91.0) o próximo passo pelo Domínio dos assuntos -->
   <div id="matFichaPasso" class="dom-passo" role="status" hidden></div>
+  <!-- (19.123.0) PREPARAR O TÓPICO: resumo, questões e cartões de todos os ramos num pedido só (preparar.js) -->
+  <div class="mat-ficha-prep">
+    <button type="button" class="btn-min btn-min-ok" id="btnMatFichaPreparar" data-i18n="prep_btn" data-i18n-title="prep_btn_tip"></button>
+  </div>
   <!-- (19.110.0) duas colunas: os ramos (com a cor e o que cada um tem) e o material do escolhido; cada uma rola sozinha -->
   <div id="matFichaCorpo" class="mat-ficha-corpo">
     <div id="matFichaEscopo" class="mat-ficha-escopo" role="group" data-i18n-title="mat_ficha_esc_rot" hidden></div>
@@ -9920,6 +9947,55 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 
 <!-- LER EM TELA CHEIA: o gabarito comentado e a sua dica, num painel só para ler — letra grande e ajustável, X no canto e um
      botão grande para voltar à questão no mesmo ponto. -->
+<!-- (19.123.0) PREPARAR O TÓPICO: um pedido, uma resposta, uma conferência, um gravar (preparar.js) -->
+<dialog id="dlgPreparar" class="ui-modal diag-modal prep-dlg">
+  <div class="fatos-cab">
+    <div>
+      <h3 id="prepTit"></h3>
+      <p class="prep-sub" id="prepSub"></p>
+    </div>
+    <button type="button" class="qs-x" id="btnPrepX" aria-label="Fechar">✕</button>
+  </div>
+  <div class="prep-corpo">
+    <section class="prep-passo">
+      <div class="prep-passo-tit"><span class="prep-n">1</span> <span data-i18n="prep_passo1"></span></div>
+      <div class="prep-linha">
+        <span class="prep-rot" data-i18n="prep_partes_rot"></span>
+        <label><input type="checkbox" id="prepPResumo"> <span data-i18n="prep_parte_resumo"></span></label>
+        <label><input type="checkbox" id="prepPQuestoes"> <span data-i18n="prep_parte_questoes"></span></label>
+        <label><input type="checkbox" id="prepPCartoes"> <span data-i18n="prep_parte_cartoes"></span></label>
+      </div>
+      <div class="prep-linha">
+        <span class="prep-rot" data-i18n="prep_fonte_rot"></span>
+        <label><input type="radio" name="prepFonte" id="prepFonte_resumo"> <span data-i18n="prep_fonte_resumo"></span></label>
+        <label><input type="radio" name="prepFonte" id="prepFonte_anexo"> <span data-i18n="prep_fonte_anexo"></span></label>
+        <label><input type="radio" name="prepFonte" id="prepFonte_caderno"> <span data-i18n="prep_fonte_caderno"></span></label>
+      </div>
+      <div class="prep-acoes">
+        <button type="button" class="btn btn-azul" id="btnPrepCopiar" data-i18n="prep_copiar" data-i18n-title="prep_copiar_tip"></button>
+        <button type="button" class="btn-quieto" id="btnPrepVer" data-i18n="prep_ver"></button>
+      </div>
+      <textarea id="prepPedidoTxt" class="prep-ta prep-ta-pedido" rows="6" readonly hidden aria-label="Pedido para a IA"></textarea>
+    </section>
+    <section class="prep-passo">
+      <div class="prep-passo-tit"><span class="prep-n">2</span> <span data-i18n="prep_passo2"></span></div>
+      <textarea id="prepResposta" class="prep-ta" rows="6" data-i18n-ph="prep_resposta_ph"></textarea>
+      <div class="prep-acoes">
+        <button type="button" class="btn-min" id="btnPrepColar" data-i18n="prep_colar" data-i18n-title="prep_colar_tip"></button>
+        <button type="button" class="btn-min" id="btnPrepConferir" data-i18n="prep_conferir"></button>
+        <button type="button" class="btn-min btn-min-ok" id="btnPrepContinuar" data-i18n="prep_continuar" data-i18n-title="prep_continuar_tip" hidden></button>
+      </div>
+      <div id="prepConf" class="prep-conf"></div>
+    </section>
+    <p class="prep-msg" id="prepMsg" role="status" aria-live="polite" hidden></p>
+  </div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn-quieto" id="btnPrepDesfazer" data-i18n="prep_desfazer" data-i18n-title="prep_desfazer_tip" hidden></button>
+    <button type="button" class="btn-min" id="btnPrepFechar" data-i18n="help_close"></button>
+    <button type="button" class="btn btn-azul" id="btnPrepGravar" data-i18n="prep_gravar" disabled></button>
+  </div>
+</dialog>
+
 <!-- (19.122.0) O LIVRO DE FATOS: o que foi respondido e revisado, por tópico e por período -->
 <dialog id="dlgFatos" class="ui-modal diag-modal fatos-dlg">
   <div class="fatos-cab">
@@ -13044,6 +13120,7 @@ window.__sqlPromise = initSqlJs({
 <script src="questoes.js"></script>
 <script src="questoes-pdf.js"></script>
 <script src="fatos.js"></script>
+<script src="preparar.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>

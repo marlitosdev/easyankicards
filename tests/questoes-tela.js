@@ -445,6 +445,102 @@ async function testes() {
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "T9 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
   }
+
+  /* ===================================================================
+   * (19.123.0) PREPARAR O TÓPICO — um pedido, uma resposta, uma conferência, um gravar
+   * O relato: "passo 30% do meu tempo para criar o material de estudo. Criando questões, criando resumo, criando
+   * cartões". Eram três criações por ramo, cada uma com a sua ida e volta à IA.
+   * =================================================================== */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.qsUiIniciar();
+    const ch = api.matChave("Tributário", "Crédito tributário");
+    api.matGravar(ch, "", { disciplina: "Tributário", topico: "Crédito tributário" });
+    const ramos = [{ id: api.edRamoId("Suspensão da exigibilidade"), nome: "Suspensão da exigibilidade", nota: "art. 151" }, { id: api.edRamoId("Extinção do crédito"), nome: "Extinção do crédito" }];
+    const ctx = { disciplina: "Tributário", topico: "Crédito tributário", chave: ch, editalId: "", concurso: "ISS Teste", ramos };
+    /* o pedido único */
+    const tags = ["disc_Tributario", "top_Credito_tributario"];
+    const ped = api.prepPedido({ disciplina: "Tributário", topico: "Crédito tributário", concurso: "ISS Teste", ramos, partes: { resumo: true, questoes: true, cartoes: true }, fonte: "anexo", tags });
+    ok(/RESPONDA SÓ COM OS BLOCOS/.test(ped) && /\[RESUMO\]/.test(ped) && /\[QUESTOES\]/.test(ped) && /\[CARTOES\]/.test(ped) && !/\[RAMOS\]/.test(ped),
+      "Q1 o pedido único pede os três blocos (e não pede ramos quando o tópico já tem)");
+    ok(/- Suspensão da exigibilidade — art\. 151/.test(ped) && /- Extinção do crédito/.test(ped) && /disc_Tributario top_Credito_tributario/.test(ped) && /material que estou enviando junto/.test(ped) && /FALTA:/.test(ped),
+      "Q1a leva os ramos (com a nota), as etiquetas dos cartões, a fonte escolhida e a regra do FALTA");
+    const ped2 = api.prepPedido({ disciplina: "D", topico: "T", ramos: [], partes: { questoes: true }, fonte: "resumo", texto: "O TEXTO DO RESUMO", tags: [] });
+    ok(/\[RAMOS\]/.test(ped2) && /ainda não foi dividido/.test(ped2) && !/\[CARTOES\]/.test(ped2) && !/\[RESUMO\]\n# Resumo geral/.test(ped2) && /TEXTO:\nO TEXTO DO RESUMO$/.test(ped2),
+      "Q1b sem ramos, pede a divisão; só as partes marcadas; com o resumo como fonte, o texto vai no fim");
+    /* a resposta única */
+    const RESP = [
+      "[RESUMO]", "# Resumo geral", "O crédito nasce com o lançamento.", "## Ramo — Suspensão da exigibilidade", "Moratória e depósito suspendem (art. 151, I e II, do CTN).",
+      "## Ramo — Extinção do crédito", "Pagamento extingue (art. 156, I, do CTN).", "[/RESUMO]",
+      "[QUESTOES]",
+      "[QUESTAO]", "TIPO: CE", "RAMO: Suspensão da exigibilidade", "BANCA:", "ENUNCIADO: A moratória suspende a exigibilidade do crédito tributário.", "GABARITO: C", "COMENTARIO: Art. 151, I, do CTN.", "[/QUESTAO]",
+      "[QUESTAO]", "TIPO: ME", "RAMO: Suspensão da exigibilidade", "ENUNCIADO: Suspende a exigibilidade do crédito:", "A) o pagamento", "B) o depósito do montante integral", "C) a remissão", "GABARITO: B", "COMENTARIO: Art. 151, II, do CTN.", "[/QUESTAO]",
+      "[QUESTAO]", "TIPO: CE", "ENUNCIADO: Questão sem gabarito para ficar de fora.", "COMENTARIO: nada.", "[/QUESTAO]",
+      "[/QUESTOES]",
+      "[CARTOES]", "## Ramo — Suspensão da exigibilidade", "O que suspende a exigibilidade? :: Moratória, depósito integral, reclamações e recursos, liminar e parcelamento. :: disc_Tributario",
+      "+ Literalidade — art. 151 do CTN", "", "Certo ou errado: o depósito parcial suspende? :: ERRADO — só o montante integral. :: disc_Tributario",
+      "## Ramo — Extinção do crédito", "O que extingue o crédito? :: Pagamento, compensação, transação e remissão, entre outros. :: disc_Tributario", "[/CARTOES]",
+      "FALTA: questões do ramo Extinção do crédito",
+    ].join("\n");
+    const l = api.prepLerResposta(RESP, ctx, { resumo: true, questoes: true, cartoes: true });
+    const n = api.prepContagem(l);
+    ok(n.questoes === 2 && n.cartoes === 3 && n.resumo === 3 && n.avisos === 1 && l.falta.length === 1,
+      "Q2 a resposta única é separada pelos blocos e lida pelos leitores de sempre: " + JSON.stringify(n) + " · falta " + JSON.stringify(l.falta));
+    ok(l.questoes.achados.every((q) => q.ramo === ramos[0].id) && l.questoes.achados[1].opcoes.length === 3 && l.cartoes.cartoes[0].card.more && l.cartoes.cartoes[2].ramoId === ramos[1].id,
+      "Q2a cada questão e cada cartão chega ligado ao ramo; o '+' fica no cartão dele");
+    const cob = l.cobertura;
+    ok(cob.length === 2 && cob[0].resumo && cob[0].questoes === 2 && cob[0].cartoes === 2 && cob[1].resumo && cob[1].questoes === 0 && cob[1].cartoes === 1,
+      "Q3 a cobertura é medida pelo app, ramo a ramo (o segundo ramo ficou sem questão): " + JSON.stringify(cob));
+    const cont = api.prepPedidoContinuar(ctx, cob, { resumo: true, questoes: true, cartoes: true });
+    ok(/SOMENTE o que falta/.test(cont) && /- Extinção do crédito: as questões/.test(cont) && !/Suspensão/.test(cont), "Q3a o pedido da continuação traz só o que falta: " + cont.split("\n").slice(1, 3).join(" | "));
+    ok(api.prepLerResposta(ped, ctx).ehPedido === true && api.prepLerResposta("", ctx).vazio === true, "Q3b o pedido colado no lugar da resposta é reconhecido; vazio é vazio");
+    /* gravar tudo, de uma vez */
+    const rec = api.prepGravar(l, ctx, {});
+    const reg0 = api.matObter(ch);
+    const qs = api.qsTodas().filter((q) => q.chave === ch);
+    ok(qs.length === 2 && qs.every((q) => q.ramo === ramos[0].id && q.lote === rec.questoes.lote), "Q4 as questões entram com o ramo e a marca da criação");
+    ok(api.matContarCartoes(ch) === 3 && new RegExp("ram_" + ramos[0].id).test(reg0.cartoes) && new RegExp("ram_" + ramos[1].id).test(reg0.cartoes) && /disc_Tributario/.test(reg0.cartoes) && /\+ Literalidade — art\. 151 do CTN/.test(reg0.cartoes),
+      "Q4a os cartões entram com as etiquetas do tópico e a do ramo, e o 'saiba mais' junto: " + String(reg0.cartoes).split("\n")[0]);
+    ok(/O crédito nasce com o lançamento/.test(reg0.texto) && /## Ramo — Suspensão da exigibilidade\nMoratória/.test(reg0.texto) && /## Ramo — Extinção do crédito\nPagamento/.test(reg0.texto),
+      "Q4b o resumo entra em seções por ramo: " + String(reg0.texto).slice(0, 90).replace(/\n/g, " ⏎ "));
+    /* preparar de novo o mesmo: nada dobra */
+    const l2 = api.prepLerResposta(RESP, ctx, { resumo: false, questoes: true, cartoes: true });
+    ok(l2.cartoes.cartoes.length === 0 && l2.cartoes.repetidos === 3 && l2.resumo === null, "Q5 os cartões que já existem ficam de fora (e a parte desmarcada não é lida): " + l2.cartoes.repetidos);
+    /* o que o ramo JÁ TEM conta na cobertura: o segundo ramo tem 1 cartão de antes e nenhuma questão */
+    ok(l2.cobertura[0].tinhaQ === 2 && l2.cobertura[0].tinhaC === 2 && l2.cobertura[1].tinhaQ === 0 && l2.cobertura[1].tinhaC === 1,
+      "Q5b a cobertura conta o que cada ramo já tinha: " + JSON.stringify(l2.cobertura.map((x) => [x.tinhaQ, x.tinhaC])));
+    const cont2 = api.prepPedidoContinuar(ctx, l2.cobertura, { questoes: true, cartoes: true });
+    ok(/- Extinção do crédito: as questões$/m.test(cont2) && !/Suspensão/.test(cont2) && !/os cartões/.test(cont2), "Q5c e o pedido do que falta não repete o que o ramo já tem: " + cont2.split("\n").slice(1, 3).join(" | "));
+    const rec2 = api.prepGravar(l2, ctx, {});
+    ok(rec2.questoes.novas === 0 && rec2.questoes.repetidas === 2 && api.qsTodas().filter((q) => q.chave === ch).length === 2, "Q5a as questões repetidas também não dobram");
+    /* desfazer */
+    ok(api.prepDesfazer(rec) === true && api.qsTodas().filter((q) => q.chave === ch).length === 0 && api.matContarCartoes(ch) === 0 && !String((api.matObter(ch) || {}).texto || "").trim(),
+      "Q6 desfazer tira as questões e os cartões e devolve o resumo como estava");
+    /* sem ramos: a IA sugere; sem edital aberto, o material entra no tópico inteiro */
+    const ctx0 = Object.assign({}, ctx, { ramos: [] });
+    const l3 = api.prepLerResposta("[RAMOS]\n- Lançamento\n- Garantias\n[/RAMOS]\n[QUESTOES]\n[QUESTAO]\nTIPO: CE\nRAMO: Lançamento\nENUNCIADO: O lançamento é atividade vinculada e obrigatória.\nGABARITO: C\nCOMENTARIO: Art. 142 do CTN.\n[/QUESTAO]\n[/QUESTOES]", ctx0, { questoes: true });
+    ok(l3.ramosNovos.length === 2 && l3.questoes.achados[0].ramo === api.edRamoId("Lançamento") && l3.cobertura.length === 2 && l3.cobertura[0].novo === true && l3.cobertura[1].questoes === 0,
+      "Q7 os ramos sugeridos entram na cobertura e as questões já apontam para eles: " + JSON.stringify(l3.cobertura));
+    const rec3 = api.prepGravar(l3, ctx0, {});
+    ok(rec3.ramos === 0 && api.qsTodas().filter((q) => q.chave === ch)[0].ramo === undefined, "Q7a sem edital aberto os ramos não são criados, e a questão não fica presa a um ramo que não existe");
+    /* a tela */
+    ok(api.prepAbrir(ctx) === true && api.$("dlgPreparar").open === true && /Preparar o tópico: Crédito tributário/.test(api.$("prepTit").textContent) && api.$("btnPrepGravar").disabled === true,
+      "Q8 a janela abre no tópico, com o gravar desligado até haver o que gravar");
+    ok(api.$("prepPResumo").checked === true && api.$("prepFonte_resumo").disabled === true && api.$("prepFonte_anexo").checked === true, "Q8a sem resumo, ele é pedido e a fonte é o material enviado junto");
+    api.$("prepResposta").value = RESP;
+    api.prepConferir();
+    ok(api.$("btnPrepGravar").disabled === false && /2 questões · 3 cartões · 3 partes de resumo/.test(api.$("btnPrepGravar").textContent) && api.$("btnPrepContinuar").hidden === false,
+      "Q8b conferida, o botão diz o que vai gravar e o pedido do que falta aparece: " + api.$("btnPrepGravar").textContent);
+    await api.prepAplicar();
+    ok(/Gravado: 2 questão\(ões\) e 3 cartão\(ões\), resumo acrescentado/.test(api.$("prepMsg").textContent) && api.$("btnPrepDesfazer").hidden === false && api.$("prepResposta").value === "",
+      "Q8c gravar tudo de uma vez diz o que entrou e deixa o desfazer à mão: " + api.$("prepMsg").textContent);
+    ok(typeof api.$("btnMatFichaPreparar").onclick === "function", "Q8d a ficha do tópico tem o botão 'preparar o tópico' ligado");
+    ["prep_btn", "prep_titulo", "prep_p_intro", "prep_p_blocos", "prep_p_b_resumo", "prep_p_b_questoes", "prep_p_b_cartoes", "prep_p_cobertura", "prep_p_continuar", "prep_cob_tit", "prep_gravado", "prep_c_sem_blocos"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "Q9 falta " + k + " em " + lg); }));
+    api.setLanguage("en");
+    ok(api.prepLerResposta(api.prepPedido({ disciplina: "D", topico: "T", ramos: [], partes: { questoes: true }, fonte: "anexo", tags: [] }), ctx).ehPedido === true, "Q9a o pedido em inglês também é reconhecido como pedido");
+    api.setLanguage("pt");
+  }
   return falhas;
 }
 

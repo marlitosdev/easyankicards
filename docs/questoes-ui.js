@@ -4740,6 +4740,8 @@ function qsUiIniciar() {
   /* (19.122.0) o livro de fatos: a tela e, em segundo plano, a carga e o histórico que já existe (fatos.js) */
   try { if (typeof fatosUiIniciar === "function") fatosUiIniciar(); } catch (e) {}
   try { if (typeof fatosIniciar === "function") fatosIniciar(); } catch (e) {}
+  /* (19.123.0) preparar o tópico: um pedido, uma resposta, uma conferência (preparar.js) */
+  try { if (typeof prepIniciar === "function") prepIniciar(); } catch (e) {}
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
   ["qsFonteResumo", "qsFonteOutro", "qsFonteCaderno"].forEach((id) => {

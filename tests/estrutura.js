@@ -1161,14 +1161,15 @@ function testeI18nGerenciadorPacote() {
  * de letra, raio de canto ou cor escritos à mão que ainda não existam — usa as variáveis da tabela (--fs-*, --r-*,
  * as cores por nome). Os limites são a contagem de hoje: DIMINUEM a cada limpeza, nunca aumentam.
  * ===================================================================== */
-const DESIGN_LIMITES = { letra: 35, canto: 34, cor: 153 };
+const DESIGN_LIMITES = { letra: 35, canto: 33, cor: 153 };
 function testePadraoDeDesign() {
   const falhas = [];
   const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
   const css = html.slice(html.indexOf("<style"), html.lastIndexOf("</style>"));
   const distintos = (re, f) => new Set([...css.matchAll(re)].map((m) => (f ? f(m[1] || m[0]) : (m[1] || m[0])).trim()));
   const letra = distintos(/font-size:\s*([0-9.]+(?:px|em|rem|%))/g);
-  const canto = distintos(/border-radius:\s*([^;}]+)/g);
+  /* o que já usa as variáveis da tabela (var(--r-m)…) É o padrão: não conta como valor solto */
+  const canto = new Set([...distintos(/border-radius:\s*([^;}]+)/g)].filter((v) => !/^var\(--r-[a-z]+\)$/.test(v)));
   const cor = distintos(/#[0-9a-fA-F]{3,8}\b/g, (x) => x.toLowerCase());
   const guia = "use as variáveis do padrão (DESIGN.md) em vez de um valor novo";
   if (letra.size > DESIGN_LIMITES.letra) falhas.push("D1 tamanho de letra novo fora do padrão (" + letra.size + " > " + DESIGN_LIMITES.letra + "): " + guia + " — --fs-1 a --fs-6");
