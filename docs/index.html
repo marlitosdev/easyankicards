@@ -50,6 +50,27 @@
      certo para cada tema vem junto. */
   --ok:#15803d; --atencao:#b45309; --erro:#b3261e; --info:#2563eb;
   --acao:#1d4ed8;
+
+  /* ===== PADRÃO DE DESIGN (19.121.0) — o guia está em DESIGN.md =====
+     AS MEDIDAS DO APP, NUM LUGAR SÓ. O CSS tinha 35 tamanhos de letra, 33 raios de canto e 153 cores escritas à mão:
+     cada tela nova escolhia os seus, e o conjunto parecia montado aos pedaços. Daqui em diante, estilo novo usa
+     ESTES nomes (tests/estrutura.js recusa valor novo fora da tabela). Os valores valem nos três temas. */
+  /* letra: 6 degraus */
+  --fs-1:11px; --fs-2:12px; --fs-3:13px; --fs-4:15px; --fs-5:18px; --fs-6:22px;
+  /* peso: normal · meio (rótulos, botões) · forte (títulos). Nada de 800/900 em texto corrido. */
+  --peso-n:400; --peso-m:600; --peso-f:700;
+  /* cantos: pequeno (selos, campos) · médio (botões, cartões) · grande (janelas) · pílula */
+  --r-p:6px; --r-m:10px; --r-g:14px; --r-pilula:999px;
+  /* espaços: múltiplos de 4 */
+  --esp-1:4px; --esp-2:8px; --esp-3:12px; --esp-4:16px; --esp-5:24px; --esp-6:32px;
+  /* altura dos controles: compacto · padrão · de toque */
+  --h-p:28px; --h-m:36px; --h-g:44px;
+  /* relevo: dois níveis (o que está na página · o que flutua) */
+  --sombra-1:0 1px 2px rgba(0,0,0,.16); --sombra-2:0 10px 30px rgba(0,0,0,.28);
+  /* movimento: um tempo só */
+  --mov:.12s;
+  /* o anel de foco, igual em tudo o que recebe teclado */
+  --anel:0 0 0 3px color-mix(in srgb, var(--acao) 38%, transparent);
 }
 /* Temas explícitos (selecionáveis) — vencem o modo automático do sistema */
 :root[data-theme="light"]{ --bg:#f5f6f8; --panel:#fff; --texto:#1a1a2e; --sutil:#5b6472;
@@ -94,7 +115,8 @@
   :root:not([data-theme]) .chip-ops .certa{ color:var(--ok) }
 }
 *{box-sizing:border-box} html,body{margin:0;padding:0}
-body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);
+body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif;
+     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:var(--bg);
      color:var(--texto);padding-bottom:84px}
 header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--panel);
        box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
@@ -373,6 +395,50 @@ dialog textarea,dialog input[type=text]{width:100%;border:1px solid var(--borda)
 /* TODO botão mostra que foi apertado (só filtro e sombra interna: NÃO mexe em transform, que vários botões usam para se posicionar) */
 button:not(:disabled):active{filter:brightness(.85);box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
 button:focus-visible{outline:2px solid var(--acao,#3b82f6);outline-offset:2px}
+
+/* ===== PADRÃO DE DESIGN (19.121.0): OS BOTÕES =====
+   TRÊS BOTÕES, UM DESENHO. O pedido: "botões com design mais profissional" e um padrão que valha sempre.
+   · PRIMÁRIO (.btn + cor): a ação principal da tela — cheio, com um brilho leve no alto e sombra curta; UM por grupo.
+   · SECUNDÁRIO (.btn-min): tudo o que acompanha — contorno fino sobre o fundo do campo.
+   · QUIETO (.btn-quieto): ação de apoio dentro de uma linha — sem contorno, só o texto; aparece ao passar.
+   O mesmo canto, o mesmo peso de letra, o mesmo tempo de transição e o mesmo anel de foco nos três. Quem precisa de
+   outro tamanho usa .btn-p (compacto) ou .btn-g (de toque) — não um padding próprio. */
+.btn{border:1px solid rgba(0,0,0,.22);border-radius:var(--r-m);font-weight:var(--peso-m);letter-spacing:.1px;
+  background-image:linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,0) 60%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16), var(--sombra-1);
+  transition:filter var(--mov), box-shadow var(--mov), transform var(--mov), background-color var(--mov), border-color var(--mov)}
+.btn:hover:not(:disabled){filter:brightness(1.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 10px rgba(0,0,0,.26)}
+.btn-verde:hover:not(:disabled),.btn-azul:hover:not(:disabled),.btn-roxo:hover:not(:disabled),.btn-ciano:hover:not(:disabled){
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 4px 16px color-mix(in srgb, var(--acao) 55%, transparent)}
+.btn:active:not(:disabled){transform:translateY(1px);filter:brightness(.96);box-shadow:inset 0 1px 2px rgba(0,0,0,.28)}
+.btn:disabled{opacity:.45;background-image:none}
+.btn-min{border-radius:8px;font-weight:var(--peso-m);font-size:var(--fs-2);line-height:1.3;
+  border-color:color-mix(in srgb, var(--borda) 72%, transparent);
+  background:color-mix(in srgb, var(--texto) 4%, var(--campo));
+  box-shadow:0 1px 1px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.05);
+  transition:background-color var(--mov), border-color var(--mov), box-shadow var(--mov), color var(--mov)}
+.btn-min:hover:not(:disabled){border-color:color-mix(in srgb, var(--texto) 42%, var(--borda));
+  background:color-mix(in srgb, var(--texto) 7%, var(--campo))}
+.btn-min:active:not(:disabled){background:color-mix(in srgb, var(--texto) 12%, var(--campo));box-shadow:none}
+.btn-min-ok:hover:not(:disabled){border-color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, var(--campo))}
+.btn-min-perigo:hover:not(:disabled){border-color:var(--erro);background:color-mix(in srgb, var(--erro) 12%, var(--campo))}
+/* o quieto: para "ver mais", "desfazer", ações de linha */
+.btn-quieto{border:1px solid transparent;border-radius:8px;background:transparent;color:var(--sutil);cursor:pointer;
+  font:inherit;font-size:var(--fs-2);font-weight:var(--peso-m);padding:4px 8px;line-height:1.3;
+  transition:background-color var(--mov), color var(--mov)}
+.btn-quieto:hover:not(:disabled){background:color-mix(in srgb, var(--texto) 9%, transparent);color:var(--texto)}
+/* os tamanhos */
+.btn-p{padding:4px 10px;font-size:var(--fs-2);min-height:var(--h-p)}
+.btn-g{padding:11px 20px;font-size:var(--fs-4);min-height:var(--h-g)}
+/* o apertar de qualquer botão: mais leve (era um escurecimento de 15% com sombra funda) */
+button:not(:disabled):active{filter:brightness(.94);box-shadow:inset 0 1px 3px rgba(0,0,0,.22)}
+/* o foco pelo teclado: o mesmo anel em botão, campo e lista */
+button:focus-visible{outline:2px solid var(--acao);outline-offset:2px;box-shadow:var(--anel)}
+input[type=text]:focus-visible,input[type=number]:focus-visible,textarea:focus-visible,select:focus-visible{
+  outline:none;border-color:var(--acao);box-shadow:var(--anel)}
+/* as janelas: borda fina, relevo de quem flutua, fundo de trás desfocado */
+dialog{border:1px solid color-mix(in srgb, var(--borda) 70%, transparent);box-shadow:var(--sombra-2)}
+dialog::backdrop{background:rgba(8,10,16,.55);backdrop-filter:blur(3px)}
 .btn-min.btn-azul{background:var(--azul,#2563eb);border-color:transparent;color:#fff}
 .btn-min.btn-cinza{background:var(--campo);color:var(--texto)}
 /* ---- painel de foco ---- */

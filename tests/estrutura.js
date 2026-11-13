@@ -1154,7 +1154,37 @@ function testeI18nGerenciadorPacote() {
   return falhas;
 }
 
-module.exports = { testes: () => [...testes(), ...testeSW(), ...testeDialogos(),
+/* =====================================================================
+ * O PADRÃO DE DESIGN (19.121.0) — DESIGN.md
+ * O pedido: "criar design padrão para a estética total do aplicativo para que o design que for sendo construído
+ * siga o mesmo padrão sempre". O que faz um padrão valer SEMPRE é um teste: aqui, estilo novo não pode trazer tamanho
+ * de letra, raio de canto ou cor escritos à mão que ainda não existam — usa as variáveis da tabela (--fs-*, --r-*,
+ * as cores por nome). Os limites são a contagem de hoje: DIMINUEM a cada limpeza, nunca aumentam.
+ * ===================================================================== */
+const DESIGN_LIMITES = { letra: 35, canto: 34, cor: 153 };
+function testePadraoDeDesign() {
+  const falhas = [];
+  const html = fs.readFileSync(path.join(RAIZ, "docs", "index.html"), "utf8");
+  const css = html.slice(html.indexOf("<style"), html.lastIndexOf("</style>"));
+  const distintos = (re, f) => new Set([...css.matchAll(re)].map((m) => (f ? f(m[1] || m[0]) : (m[1] || m[0])).trim()));
+  const letra = distintos(/font-size:\s*([0-9.]+(?:px|em|rem|%))/g);
+  const canto = distintos(/border-radius:\s*([^;}]+)/g);
+  const cor = distintos(/#[0-9a-fA-F]{3,8}\b/g, (x) => x.toLowerCase());
+  const guia = "use as variáveis do padrão (DESIGN.md) em vez de um valor novo";
+  if (letra.size > DESIGN_LIMITES.letra) falhas.push("D1 tamanho de letra novo fora do padrão (" + letra.size + " > " + DESIGN_LIMITES.letra + "): " + guia + " — --fs-1 a --fs-6");
+  if (canto.size > DESIGN_LIMITES.canto) falhas.push("D2 raio de canto novo fora do padrão (" + canto.size + " > " + DESIGN_LIMITES.canto + "): " + guia + " — --r-p, --r-m, --r-g, --r-pilula");
+  if (cor.size > DESIGN_LIMITES.cor) falhas.push("D3 cor nova escrita à mão (" + cor.size + " > " + DESIGN_LIMITES.cor + "): " + guia + " — --texto, --sutil, --borda, --acao, --ok, --atencao, --erro, --info");
+  /* a tabela existe, e os três botões também */
+  ["--fs-1", "--fs-6", "--peso-m", "--r-p", "--r-m", "--r-g", "--r-pilula", "--esp-1", "--esp-6", "--h-p", "--h-m", "--h-g", "--sombra-1", "--sombra-2", "--mov", "--anel"]
+    .forEach((v) => { if (!new RegExp(v.replace(/-/g, "\-") + "\s*:").test(css)) falhas.push("D4 falta a variável " + v + " da tabela de medidas"); });
+  [".btn-quieto{", ".btn-p{", ".btn-g{", ".btn-min{", ".btn{"].forEach((c) => { if (css.indexOf(c) < 0) falhas.push("D5 falta a regra " + c + " do padrão de botões"); });
+  let guiaTxt = "";
+  try { guiaTxt = fs.readFileSync(path.join(RAIZ, "DESIGN.md"), "utf8"); } catch (e) { guiaTxt = ""; }
+  if (!/--fs-1/.test(guiaTxt) || !/btn-quieto/.test(guiaTxt) || !/Antes de entregar/.test(guiaTxt)) falhas.push("D6 o guia DESIGN.md não existe ou não traz a tabela, os botões e a lista de conferência");
+  return falhas;
+}
+
+module.exports = { testes: () => [...testes(), ...testeSW(), ...testeDialogos(), ...testePadraoDeDesign(),
                                   ...testeHidden(), ...testeCliquesOrfaos(),
                                   ...testeContraste(), ...testeI18n(),
                                   ...testeI18nRepetidas(), ...testeI18nGerenciadorPacote(),
