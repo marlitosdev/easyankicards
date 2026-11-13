@@ -291,6 +291,15 @@ function estcNota(n) {
   if (!antes) estcDia.novos = (estcDia.novos || 0) + 1;
   estcRegs[u.id] = agdResponder(antes, n, Date.now());
   estcSalvarAgenda();
+  /* (19.122.0) a revisão entra no livro de fatos: antes ela só mudava a próxima data e não deixava rastro */
+  try {
+    if (typeof fatoGravar === "function") {
+      const ch = (u.nota && u.nota.chave) || "";
+      const m = (typeof matResumos !== "undefined" && matResumos && matResumos[ch]) || {};
+      const f = fatoDeCartao(u, n, Date.now(), { chave: ch, disciplina: m.disciplina, topico: m.topico });
+      if (f && fatoGravar(f)) estcUltima.fato = f.id;
+    }
+  } catch (e) {}
   estcProxima();
   estcPintar();
 }
@@ -300,6 +309,8 @@ function estcNota(n) {
 function estcDesfazerNota() {
   if (!estcUltima) return;
   const { id, antes, diaNovosAntes, esc } = estcUltima;
+  /* a nota dada por engano sai do livro de fatos junto */
+  try { if (estcUltima.fato && typeof fatoApagar === "function") fatoApagar(estcUltima.fato); } catch (e) {}
   estcUltima = null;
   if (antes) estcRegs[id] = antes; else delete estcRegs[id];
   estcDia.novos = diaNovosAntes;

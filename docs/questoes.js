@@ -1780,6 +1780,8 @@ function qsResponder(escolha, gravar, opc) {
   qsSessao.respondidas.push(rr);
   qsSalvar(gravar);
   qsSessaoGravar(gravar);
+  /* (19.122.0) o fato entra no livro: vale mesmo que a questão seja apagada depois (fatos.js) */
+  try { if (typeof fatoGravar === "function") fatoGravar(fatoDeResposta(q, tent)); } catch (e) {}
   /* o bloco em andamento acompanha a cada resposta: assim uma rodada
    * abandonada guarda o que chegou a ser feito, em vez de ficar zerada */
   try {
@@ -1798,6 +1800,8 @@ function qsMarcarChute(sim, gravar) {
   [ult, r].forEach((x) => { if (!x) return; if (sim) x.chute = true; else delete x.chute; });
   qsSalvar(gravar);
   qsSessaoGravar(gravar);
+  /* o mesmo fato, corrigido (a mesma identidade: não vira dois) */
+  try { if (ult && typeof fatoGravar === "function") fatoGravar(fatoDeResposta(q, ult)); } catch (e) {}
   try { if (typeof qhAtualizar === "function") qhAtualizar(qsPlacar(), { gravar }); } catch (e) {}
   return !!sim;
 }

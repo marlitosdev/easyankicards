@@ -74,6 +74,8 @@ const BK_CHAVES = {
    * perda, porque a tela depois parece apenas "vazia", não quebrada. */
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
              "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei", "eac_lixeira",
+             /* (19.122.0) o livro de fatos (fatos.js): cada resposta e cada revisão de cartão; mora no IndexedDB */
+             "eac_fatos",
              "eac_decisoes", "eac_decisoes_resumo",
              /* (v19.8.0) as marcas do lápis: moram no IndexedDB e só entram com a opção ligada (tnParaBackup) */
              "eac_tinta",
@@ -147,6 +149,7 @@ function bkAguardarGravacoes() {
   try { if (typeof _matGravando !== "undefined" && _matGravando) p.push(_matGravando); } catch (e) {}
   try { if (typeof _cmReciboGravando !== "undefined" && _cmReciboGravando) p.push(_cmReciboGravando); } catch (e) {}
   try { if (typeof _rsGravando !== "undefined" && _rsGravando) p.push(_rsGravando); } catch (e) {}
+  try { if (typeof _fatosGravando !== "undefined" && _fatosGravando) p.push(_fatosGravando); } catch (e) {}
   return Promise.all(p).then(() => p.length, () => p.length);
 }
 
@@ -160,7 +163,8 @@ function montarBackup() {
         : k === "eac_resumos" ? (typeof matParaBackup === "function" ? matParaBackup() : bkLer(k))
         : k === "eac_cm_recibo" ? (typeof cmReciboParaBackup === "function" ? cmReciboParaBackup() : bkLer(k))
         : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null)
-        : k === "eac_rascunhos" ? (typeof rsNoIdb === "function" && rsNoIdb() ? JSON.stringify(rsLerTudo()) : bkLer(k)) : bkLer(k);
+        : k === "eac_rascunhos" ? (typeof rsNoIdb === "function" && rsNoIdb() ? JSON.stringify(rsLerTudo()) : bkLer(k))
+        : k === "eac_fatos" ? (typeof fatosParaBackup === "function" ? fatosParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -324,6 +328,9 @@ const BK_ESPECIAIS = {
   /* (19.115.0) os rascunhos, quando já moram no IndexedDB (rascunho.js); antes disso, são uma chave comum */
   eac_rascunhos: { pode: () => typeof rsNoIdb === "function" && rsNoIdb(), ler: () => JSON.stringify(rsLerTudo()), vazio: () => ({}), serve: bkEhObjeto,
     gravar: (o) => bkExigir(rsGravarTudo(o), "eac_rascunhos") },
+  /* (19.122.0) o livro de fatos nunca vai ao localStorage; restaurar troca o livro pelo do arquivo */
+  eac_fatos: { pode: () => typeof fatosSuportado === "function" && fatosSuportado(), ler: () => fatosParaBackup(), vazio: () => [], serve: Array.isArray,
+    gravar: (o) => { fatosDefinirTudo(o); } },
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },
 };

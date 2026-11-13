@@ -359,6 +359,92 @@ async function testes() {
     ok(/3 questão\(ões\) lida\(s\) em 6 página\(s\)/.test(api.qsPdfFrase(r.resumo)) && /2 com o gabarito conferido/.test(api.qsPdfFrase(r.resumo)) && /a conferir.*nº 2/.test(api.qsPdfFrase(r.resumo)) && /marca do comprador/.test(api.qsPdfFrase(r.resumo)),
       "P7a a frase da tela diz quantas, quantas conferidas, quais a conferir e que a marca saiu: " + api.qsPdfFrase(r.resumo));
   }
+
+  /* ===================================================================
+   * (19.122.0) O LIVRO DE FATOS
+   * O pedido: "uma forma mais potente de gerar e armazenar dados". Cada resposta e cada revisão de cartão entra uma
+   * vez e nunca sai — nem quando a questão é apagada. Um registro por fato; o mesmo fato escrito de novo não duplica.
+   * =================================================================== */
+  {
+    const { api } = rodar();
+    /* a loja de mentira (o "disco"): o que está nela sobrevive a recarregar */
+    const disco = new Map();
+    const antigo = { id: "q|velha|2026-09-01T10:00:00.000Z", k: "q", t: "2026-09-01T10:00:00.000Z", d: "2026-09-01", ch: "d›t", disc: "D", top: "T", qid: "velha", ok: true, resp: "C", gab: "C", tipo: "ce" };
+    disco.set(antigo.id, antigo);
+    const loja = {
+      lerTudo: () => Promise.resolve([...disco.values()]),
+      por: (l) => { l.forEach((f) => disco.set(f.id, JSON.parse(JSON.stringify(f)))); return Promise.resolve(true); },
+      apagar: (ids) => { ids.forEach((id) => disco.delete(id)); return Promise.resolve(true); },
+      limpar: () => { disco.clear(); return Promise.resolve(true); },
+    };
+    api.fatosLojaDefinir(loja);
+    api.matIniciar(); api.qsUiIniciar();
+    await api.fatosPronto();
+    ok(api.fatosTotal() === 1 && api.fatosLista()[0].qid === "velha", "T1 o livro guardado chega à memória ao abrir (a resposta de uma questão que já não existe continua lá): " + api.fatosTotal());
+    const ch = api.matChave("D", "T");
+    api.matGravar(ch, "x", { disciplina: "D", topico: "T" });
+    const bloco = (k) => "[QUESTAO]\nTIPO: CE\nENUNCIADO: Afirmacao numero " + k + " sobre o assunto, com texto suficiente para valer.\nGABARITO: C\nCOMENTARIO: ok " + k + ".\n[/QUESTAO]";
+    api.qsAplicar(api.qsLerResposta([1, 2, 3].map(bloco).join("\n"), { disciplina: "D", topico: "T", chave: ch }).achados);
+    const lista = api.qsTodas().slice();
+    api.qsSessaoIniciar(lista, { escopo: "fatos" });
+    const q1 = api.qsAtual();
+    api.qsResponder("C");
+    await api.fatosGravandoAtual();
+    const f1 = api.fatosLista({ tipo: "q" }).filter((f) => f.qid === q1.id)[0];
+    ok(f1 && f1.ok === true && f1.top === "T" && f1.disc === "D" && f1.gab === "C" && /^\d{4}-\d{2}-\d{2}$/.test(f1.d) && disco.has(f1.id),
+      "T2 responder grava o fato na memória e no disco, com tópico, dia e resultado: " + JSON.stringify(f1));
+    api.qsMarcarChute(true);
+    await api.fatosGravandoAtual();
+    ok(api.fatosTotal() === 2 && api.fatosLista().filter((f) => f.qid === q1.id).length === 1 && disco.get(f1.id).chute === true,
+      "T2a marcar 'foi chute' corrige o MESMO fato (não vira dois): " + api.fatosTotal());
+    /* apagar a questão não apaga o fato */
+    api.qsApagarVarias([q1.id]);
+    ok(api.fatosLista().some((f) => f.qid === q1.id) && api.qsTodas().every((q) => q.id !== q1.id), "T3 a questão apagada sai do banco e o fato dela fica");
+    /* o histórico que já existe: as tentativas guardadas nas questões viram fatos, uma vez só */
+    const q2 = api.qsTodas()[0];
+    q2.tentativas = [{ q: "2026-10-05T12:00:00.000Z", resp: "E", acertou: false }, { q: "2026-10-06T12:00:00.000Z", resp: "C", acertou: true, chute: true }];
+    ok(api.fatosRetroativo() === 2 && api.fatosRetroativo() === 0, "T4 o histórico antigo entra uma vez; rodar de novo não duplica");
+    await api.fatosGravandoAtual();
+    ok(disco.size === api.fatosTotal() && api.fatosTotal() === 4, "T4a o disco tem os mesmos fatos da memória: " + disco.size + " / " + api.fatosTotal());
+    /* as contas: acerto no chute vale 1/4; por tópico; os minutos vêm do diário */
+    const todos = api.fatosLista();
+    const r = api.fatosResumo(todos);
+    ok(r.respostas === 4 && r.certas === 3 && r.chutes === 2 && r.pct === Math.round(((1 + 0.25 + 0.25) / 4) * 100) && r.desde === "2026-09-01",
+      "T5 o resumo: 4 respostas, 3 certas (2 no chute, que valem 1/4): " + JSON.stringify(r));
+    const mins = api.fatosMinutosDoDiario([{ d: "2026-10-05", c: ch, m: 40, a: "feito" }, { d: "2026-10-06", c: ch, m: 20, a: "pendente" }, { d: "2026-08-01", c: ch, m: 99, a: "feito" }], "2026-09-01", "");
+    const pt = api.fatosPorTopico(todos, mins);
+    ok(pt.length === 1 && pt[0].top === "T" && pt[0].respostas === 4 && pt[0].minutos === 40 && pt[0].ultimo >= "2026-10-06",
+      "T5a por tópico, com o tempo do diário no período ('pendente' e o que é de antes ficam de fora): " + JSON.stringify(pt));
+    ok(api.fatosLista({ de: "2026-10-01", ate: "2026-10-05" }).length === 1 && api.fatosLista({ chave: "outro›topico" }).length === 0, "T5b o filtro por período e por tópico");
+    /* a revisão de cartão */
+    const fc = api.fatoDeCartao({ id: "g1#c1" }, 3, Date.parse("2026-11-01T15:00:00Z"), { chave: ch, disciplina: "D", topico: "T" });
+    ok(fc.k === "c" && fc.nota === 3 && fc.ok === true && fc.top === "T" && api.fatoGravar(fc) && api.fatosResumo(api.fatosLista()).cartoes === 1, "T6 a revisão de um cartão é um fato (nota 3 = bom)");
+    ok(api.fatoApagar(fc.id) === true && api.fatosResumo(api.fatosLista()).cartoes === 0, "T6a a nota dada por engano sai do livro no 'desfazer'");
+    /* o backup leva o livro e o traz de volta */
+    const bk = api.montarBackup();
+    ok(typeof bk.dados.material.eac_fatos === "string" && JSON.parse(bk.dados.material.eac_fatos).length === 4, "T7 o backup leva o livro de fatos (4 fatos)");
+    api.fatosDefinirTudo([]);
+    await api.fatosGravandoAtual();
+    ok(api.fatosTotal() === 0 && disco.size === 0, "T7-pre livro esvaziado para o teste");
+    api.fatosDefinirTudo(JSON.parse(bk.dados.material.eac_fatos));
+    await api.fatosGravandoAtual();
+    ok(api.fatosTotal() === 4 && disco.size === 4 && api.fatosLista()[0].qid === "velha", "T7a restaurar traz o livro inteiro de volta, na memória e no disco");
+    /* a tela */
+    api.fatosUiPeriodoDefinir(0);
+    api.fatosUiPintar();
+    const txt = api.$("fatosCorpo").textContent || "";
+    const achaTxt = (el, acc) => { Array.from(el.children || []).forEach((c) => { acc.push(c.textContent || ""); achaTxt(c, acc); }); return acc; };
+    const tudo = achaTxt(api.$("fatosCorpo"), []).join(" | ");
+    ok(/De onde vêm os números: 4 resposta/.test(tudo) && /4 resposta\(s\)/.test(tudo) && /38% de acerto/.test(tudo) && /menos de 5 respostas|T/.test(tudo),
+      "T8 a tela diz de onde vêm os números antes dos números, e mostra o período: " + (txt || tudo).slice(0, 200));
+    const csv = api.fatosUiCsv().split("\n");
+    ok(csv.length === 2 && /^disciplina;topico;respostas/.test(csv[0]) && /"D";"T";4;3;2;38;0;/.test(csv[1]), "T8a a tabela copiada para planilha: " + csv[1]);
+    api.fatosUiResumoLinha();
+    ok(/4 resposta\(s\) e 0 revisão/.test(api.$("fatosResumoLinha").textContent), "T8b a linha ao lado do botão resume o livro: " + api.$("fatosResumoLinha").textContent);
+    ["fatos_btn", "fatos_titulo", "fatos_fonte", "fatos_limite", "fatos_pouco", "fatos_csv", "fatos_sem_espaco", "idb_gaveta_fatos", "fatos_c_acerto", "fatos_h_ultimo"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "T9 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
   return falhas;
 }
 

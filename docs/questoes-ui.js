@@ -4737,6 +4737,9 @@ function qsUiIniciar() {
   }
   /* (19.120.0) as questões prontas de um PDF (questoes-pdf.js) */
   try { if (typeof qsUiPdfIniciar === "function") qsUiPdfIniciar(); } catch (e) {}
+  /* (19.122.0) o livro de fatos: a tela e, em segundo plano, a carga e o histórico que já existe (fatos.js) */
+  try { if (typeof fatosUiIniciar === "function") fatosUiIniciar(); } catch (e) {}
+  try { if (typeof fatosIniciar === "function") fatosIniciar(); } catch (e) {}
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
   ["qsFonteResumo", "qsFonteOutro", "qsFonteCaderno"].forEach((id) => {

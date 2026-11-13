@@ -6336,6 +6336,27 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
 .qs-pdf-msg{margin:6px 0 0;color:var(--ok,var(--acao));line-height:1.45}
+/* (19.122.0) O LIVRO DE FATOS — no padrão de design (DESIGN.md): só variáveis da tabela */
+dialog.fatos-dlg{max-width:880px}
+.fatos-entrada{display:flex;gap:var(--esp-2) var(--esp-3);align-items:center;flex-wrap:wrap;margin:0 0 var(--esp-3)}
+.fatos-linha{font-size:var(--fs-2);color:var(--sutil)}
+.fatos-cab{display:flex;justify-content:space-between;align-items:center;gap:var(--esp-3);padding:var(--esp-4) var(--esp-4) 0}
+.fatos-cab h3{margin:0;font-size:var(--fs-5);font-weight:var(--peso-f)}
+.fatos-corpo{padding:var(--esp-3) var(--esp-4) var(--esp-4);max-height:70vh;overflow:auto}
+.fatos-fonte{margin:0 0 var(--esp-3);font-size:var(--fs-2);color:var(--sutil);line-height:1.45;max-width:72ch}
+.fatos-periodos{display:flex;gap:var(--esp-2);flex-wrap:wrap;margin-bottom:var(--esp-2)}
+.fatos-per-on{border-color:var(--acao);color:var(--info);font-weight:var(--peso-f)}
+.fatos-rol{overflow-x:auto;margin-top:var(--esp-3)}
+.fatos-tab{width:100%;border-collapse:collapse;font-size:var(--fs-3)}
+.fatos-tab th{text-align:left;font-size:var(--fs-1);font-weight:var(--peso-m);color:var(--sutil);padding:var(--esp-1) var(--esp-2);
+  border-bottom:1px solid var(--borda);white-space:nowrap}
+.fatos-tab td{padding:var(--esp-2);border-bottom:1px solid color-mix(in srgb, var(--borda) 45%, transparent);vertical-align:top}
+.fatos-num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fatos-tab th.fatos-num{text-align:right}
+.fatos-top{font-weight:var(--peso-m);line-height:1.3}
+.fatos-disc{font-size:var(--fs-1);color:var(--sutil)}
+.fatos-pouco{color:var(--sutil)}
+.fatos-limite{margin:var(--esp-3) 0 0;font-size:var(--fs-1);color:var(--sutil);line-height:1.45;max-width:72ch}
 .qs-pdf-msg.qs-pdf-erro{color:var(--atencao)}
 /* DATA E NOME: obrigatórios, com o erro escrito debaixo do campo */
 /* PLANO COM PROBLEMAS DE LEITURA: a faixa que avisa que os números abaixo são provisórios */
@@ -7984,6 +8005,11 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 <section id="secQuestoes" data-modo="questoes" hidden>
   <h2 data-i18n="qs_titulo"></h2>
   <p class="nota" data-i18n="qs_ajuda"></p>
+  <!-- (19.122.0) O LIVRO DE FATOS: cada resposta e cada revisão de cartão, para sempre (fatos.js) -->
+  <div class="fatos-entrada">
+    <button type="button" class="btn-min" id="btnFatosAbrir" data-i18n="fatos_btn" data-i18n-title="fatos_btn_tip"></button>
+    <span class="fatos-linha" id="fatosResumoLinha"></span>
+  </div>
   <div id="qsDesfazer" class="qs-desfazer" hidden>
     <span id="qsDesfazerTxt"></span>
     <button class="btn-min" id="btnQsDesfazer" data-i18n="qs_desfazer"
@@ -9894,6 +9920,19 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 
 <!-- LER EM TELA CHEIA: o gabarito comentado e a sua dica, num painel só para ler — letra grande e ajustável, X no canto e um
      botão grande para voltar à questão no mesmo ponto. -->
+<!-- (19.122.0) O LIVRO DE FATOS: o que foi respondido e revisado, por tópico e por período -->
+<dialog id="dlgFatos" class="ui-modal diag-modal fatos-dlg">
+  <div class="fatos-cab">
+    <h3 data-i18n="fatos_titulo"></h3>
+    <button type="button" class="qs-x" id="btnFatosX" aria-label="Fechar">✕</button>
+  </div>
+  <div class="fatos-corpo" id="fatosCorpo"></div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn-min" id="btnFatosCsv" data-i18n="fatos_csv" data-i18n-title="fatos_csv_tip"></button>
+    <button type="button" class="btn btn-azul" id="btnFatosFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
+
 <dialog id="dlgQsLer" class="ui-modal qs-ler">
   <div class="qs-ler-cab">
     <div class="qs-ler-tit"><h3 id="qsLerTit"></h3><p class="nota" id="qsLerSub"></p></div>
@@ -13004,6 +13043,7 @@ window.__sqlPromise = initSqlJs({
 <script src="idb-questoes.js"></script>
 <script src="questoes.js"></script>
 <script src="questoes-pdf.js"></script>
+<script src="fatos.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>
