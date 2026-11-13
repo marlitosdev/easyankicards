@@ -12,7 +12,7 @@ const path = require("path");
 const RAIZ = path.join(__dirname, "..");
 const ARQUIVOS = ["i18n.js", "parser.js", "anki.js", "app.js", "idb-guarda.js",
                   "backup.js", "backup-ui.js", "backup-auto.js", "idb-resumos.js", "idb-recibo.js", "material.js",
-                  "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "lei-nova.js", "lei-pdf.js", "idb-questoes.js", "questoes.js", "questoes-pdf.js", "fatos.js", "preparar.js", "rascunho.js", "copiar-questao.js", "grifo.js", "tinta.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "edital-vert-ui.js", "dominio-evolucao.js", "banca-alvo.js", "cartoes-lei.js", "horas-assunto.js", "painel-edital.js", "ramos.js", "resumo-ia.js", "resumo-paragrafo.js", "resumo-lidas.js", "pacote.js",
+                  "cartao-melhorar.js", "idb-leis.js", "lei-seca.js", "lei-ui.js", "lei-nova.js", "lei-pdf.js", "idb-questoes.js", "questoes.js", "questoes-pdf.js", "fatos.js", "cobertura-fonte.js", "preparar.js", "rascunho.js", "copiar-questao.js", "grifo.js", "tinta.js", "geracao-log.js", "registro-tudo.js", "idb-decisoes.js", "decisoes.js", "lixeira.js", "cartao-qualidade.js", "cartao-elevar.js", "gerenciador.js", "agendador-cartoes.js", "estudo-cartoes.js", "cobertura-cartoes.js", "dominio-assunto.js", "dominio-ui.js", "edital-vert-ui.js", "dominio-evolucao.js", "banca-alvo.js", "cartoes-lei.js", "horas-assunto.js", "painel-edital.js", "ramos.js", "resumo-ia.js", "resumo-paragrafo.js", "resumo-lidas.js", "pacote.js",
   "dificuldade.js",
   "plano-log.js", "questoes-hist.js", "questoes-ui.js",
                   "fora-da-agenda.js", "edital.js", "edital-vert.js", "editais.js", "vinculos.js", "vizinhos.js", "idb-juris.js", "juris.js", "juris-catalogo.js", "juris-ia.js", "ia-consumo.js", "juris-ui.js", "pastas.js", "pre-edital.js", "prompts-cartao.js", "cartoes-material.js", "edital-hub.js", "edital-ui.js", "edital-pontua.js", "discursivas.js", "modos.js"];
@@ -691,6 +691,8 @@ function rodar(opc) {
     matAgrupado, matTiposDe, matAlternarLei, matRender,
     matAbrirFicha, matFichaEscopoAtual, matFichaEscolher, edAbrirFicha, matInfoTopico, matFichaRamosEstado, domNiveisDosRamos, matFichaTam, matFichaTecla, matFichaProximoRamo, matFichaOrdemRamos, matFichaRamoLembrado,
     leiIrDominio, leiIrCalor, leiIrDados, leiNuncaVistos, leiNuncaVistosPrioritarios, leiFilaNVIniciar, leiFilaNVProximo, leiFilaNVSair, leiFilaNVAtual: () => leiFilaNV, leiArtigoVistoMarcar, leiQuestoesDoArtigo,
+    cfEhTitulo, cfTrechosDeTexto, cfTrechosDePaginas, cfImpressao, cfCobertura, cfItensDoTopico, cfItensDaResposta, cfFonteDe, cfFonteGuardar, cfFonteEsquecer, cfFonteDePdf, cfRotulo, cfLinhasDoQueFalta, qsTermosDeTexto,
+    prepPintarFonteCob, prepFonteDoResumo, prepCobFonteAtual: () => prepCobFonte,
     prepPedido, prepPedidoContinuar, prepBloco, prepLerCartoes, prepLerResposta, prepContagem, prepGravar, prepDesfazer, prepAbrir, prepConferir, prepAplicar, prepFonteLer, prepFonteGravar,
     prepLidoAtual: () => prepLido, prepReciboAtual: () => prepRecibo, prepCtxAtual: () => prepCtx,
     fatosSuportado, fatosLojaDefinir, fatosCarregar, fatosPronto, fatoGravar, fatosGravarVarios, fatoApagar, fatosLista, fatosTotal, fatoDeResposta, fatoDeCartao,

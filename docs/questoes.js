@@ -1328,7 +1328,13 @@ function qsTermosDaQuestao(q) {
   const marca = txt.length;
   const ja = qsMemoTermos.get(q.id);
   if (ja && ja.marca === marca) return ja.termos;
-  const pal = String(txt).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const termos = qsTermosDeTexto(txt);
+  qsMemoTermos.set(q.id, { marca, termos });
+  return termos;
+}
+/* (19.124.0) as palavras de um TEXTO qualquer — a mesma leitura, para medir a cobertura contra a fonte (cobertura-fonte.js) */
+function qsTermosDeTexto(txt) {
+  const pal = String(txt || "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
   const termos = new Map();
   const num = (w) => /^\d{1,3}[oaº]?$/.test(w);
   const base = (w) => { const n = qsSemAcento(w); return n.length >= 6 && /s$/.test(n) ? n.slice(0, -1) : n; };
@@ -1341,7 +1347,6 @@ function qsTermosDaQuestao(q) {
     /* número ANTES da palavra só quando é ordinal ("5º nível"): "1 Ativo + 2 Passivo" juntaria o número errado */
     if (v && /^\d{1,3}[oaº]$/.test(w) && ok(v)) { const n = w.replace(/[oaº]$/, ""); const tk = base(v) + " " + n; if (!termos.has(tk)) termos.set(tk, w + " " + v); }
   });
-  qsMemoTermos.set(q.id, { marca, termos });
   return termos;
 }
 /* as do mesmo tópico, ordenadas pela parecença com q: [{ q, sim, termos (os que ligam, os mais raros primeiro) }] */

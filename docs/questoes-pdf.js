@@ -53,6 +53,7 @@ function qsPdfLimpar(paginas) {
   const repetida = (l) => (conta.get(chave(l)) || 0) >= minimo || /^=+\s*[0-9a-z]{3,16}\s*=+$/i.test(l);
   const soNumero = (l) => /^\d{1,4}$/.test(l);
   const linhas = [];
+  const porPagina = [];      /* (19.124.0) as mesmas linhas limpas, página a página (cobertura-fonte.js) */
   let cabecalhos = 0;
   semMarca.forEach((p) => {
     /* a linha repetida sai ONDE ESTIVER: numa página do PDF real o bloco de cabeçalho e rodapé vem no meio do texto
@@ -63,9 +64,11 @@ function qsPdfLimpar(paginas) {
     for (let k = p.length - 2; k >= 0; k--) if (!fora[k] && soNumero(p[k]) && fora[k + 1]) fora[k] = true;
     for (let i = 0; i < p.length && (fora[i] || soNumero(p[i])); i++) fora[i] = true;
     for (let j = p.length - 1; j >= 0 && (fora[j] || soNumero(p[j])); j--) fora[j] = true;
-    p.forEach((l, k) => { if (fora[k]) cabecalhos++; else linhas.push(l); });
+    const desta = [];
+    p.forEach((l, k) => { if (fora[k]) cabecalhos++; else { linhas.push(l); desta.push(l); } });
+    porPagina.push(desta);
   });
-  return { linhas, marcas, cabecalhos, paginas: pgs.length };
+  return { linhas, porPagina, marcas, cabecalhos, paginas: pgs.length };
 }
 
 const QS_PDF_INICIO_RE = /^(?:quest[ãa]o\s+)?(\d{1,3})\s*[.)\-–:]?\s*\(([^)]{2,140})\)\s*(.*)$/i;

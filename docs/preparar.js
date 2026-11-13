@@ -75,9 +75,11 @@ function prepPedido(o) {
 }
 
 /* o pedido da CONTINUAÇÃO: só o que a cobertura mostrou que falta */
-function prepPedidoContinuar(ctx, cobertura, partes) {
+function prepPedidoContinuar(ctx, cobertura, partes, cobFonte) {
   const p = partes || {};
   const linhas = [];
+  /* (19.124.0) os trechos da FONTE que nenhum item do tópico cobre: com o título, a página e as palavras deles */
+  const trechos = typeof cfLinhasDoQueFalta === "function" ? cfLinhasDoQueFalta(cobFonte, 20) : [];
   (cobertura || []).forEach((c) => {
     const falta = [];
     if (p.resumo && !c.resumo) falta.push(t("prep_f_resumo"));
@@ -85,8 +87,11 @@ function prepPedidoContinuar(ctx, cobertura, partes) {
     if (p.cartoes && !(c.cartoes + (c.tinhaC || 0))) falta.push(t("prep_f_cartoes"));
     if (falta.length) linhas.push("- " + c.nome + ": " + falta.join(", "));
   });
-  if (!linhas.length) return "";
-  return t("prep_p_continuar", { tp: (ctx && ctx.topico) || "?", lista: linhas.join("\n") });
+  if (!linhas.length && !trechos.length) return "";
+  const partesTxt = [];
+  if (linhas.length) partesTxt.push(linhas.join("\n"));
+  if (trechos.length) partesTxt.push(t("prep_p_cont_trechos", { n: cobFonte.faltam.length }) + "\n" + trechos.join("\n"));
+  return t("prep_p_continuar", { tp: (ctx && ctx.topico) || "?", lista: partesTxt.join("\n\n") });
 }
 
 /* o conteúdo de um bloco "[NOME] … [/NOME]"; sem o fecho, vai até o próximo bloco conhecido (ou o fim) */
@@ -315,6 +320,7 @@ function prepPintarConferencia() {
   const b = $("btnPrepGravar");
   if (b) b.disabled = true;
   if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = true;
+  if ($("prepFonteCob")) $("prepFonteCob").textContent = "";
   if (!l || l.vazio) return;
   if (l.ehPedido) { cx.append(prepEl("p", "prep-aviso", t("prep_c_eh_pedido"))); return; }
   const n = prepContagem(l);
@@ -357,6 +363,8 @@ function prepPintarConferencia() {
       if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = false;
     } else cx.append(prepEl("p", "prep-ok", t("prep_cob_ok")));
   }
+  /* (19.124.0) a cobertura contra a FONTE, contando o que o tópico já tem e o que veio nesta resposta */
+  try { if (prepPintarFonteCob(l) && $("btnPrepContinuar")) $("btnPrepContinuar").hidden = false; } catch (e) {}
   if (l.falta.length) cx.append(prepEl("p", "prep-aviso", t("prep_c_falta", { f: l.falta.join("; ") })));
   if (l.ramosNovos.length && !(prepCtx && prepCtx.editalId)) cx.append(prepEl("p", "prep-aviso", t("prep_c_ramos_sem_edital")));
 
@@ -379,6 +387,66 @@ function prepPintarConferencia() {
   }
   if (b) b.disabled = !(n.questoes || n.cartoes || n.resumo || n.ramos);
   if (b) b.textContent = t("prep_gravar_n", { q: n.questoes, c: n.cartoes, r: n.resumo });
+}
+
+/* (19.124.0) A FONTE DO TÓPICO e a cobertura dela. Devolve true quando há trecho sem cobertura. */
+let prepCobFonte = null;
+function prepPintarFonteCob(lido) {
+  const cx = $("prepFonteCob"), st = $("prepFonteSt");
+  prepCobFonte = null;
+  if (!cx || !prepCtx || typeof cfFonteDe !== "function") return false;
+  cx.textContent = "";
+  const fonte = cfFonteDe(prepCtx.chave);
+  if (st) st.textContent = fonte ? t("cf_st_tem", { n: fonte.nome || t("cf_sem_nome"), k: fonte.trechos.length, d: String(fonte.quando || "").slice(0, 10).split("-").reverse().join("/") }) : t("cf_st_sem");
+  if ($("btnPrepFonteTirar")) $("btnPrepFonteTirar").hidden = !fonte;
+  if (!fonte) return false;
+  const cob = cfCobertura(fonte, cfItensDoTopico(prepCtx.chave).concat(cfItensDaResposta(lido)));
+  prepCobFonte = cob;
+  cx.append(prepEl("div", "prep-cob-tit", t("cf_tit")));
+  const chips = prepEl("div", "mc-status");
+  chips.append(prepEl("span", "mc-chip " + (cob.faltam.length ? "mc-chip-av" : "mc-chip-ok"), t("cf_chip", { c: cob.cobertos, n: cob.total, p: cob.pct })));
+  cx.append(chips);
+  if (!cob.faltam.length) { cx.append(prepEl("p", "prep-ok", t("cf_ok"))); return false; }
+  const ul = prepEl("ul", "cf-lista");
+  cob.faltam.slice(0, 12).forEach((x) => {
+    const li = prepEl("li", "cf-item");
+    li.append(prepEl("span", "cf-rot", cfRotulo(x)), prepEl("span", "cf-ini", x.ini + "…"));
+    ul.append(li);
+  });
+  cx.append(ul);
+  if (cob.faltam.length > 12) cx.append(prepEl("p", "fatos-limite", t("cf_mais", { n: cob.faltam.length - 12 })));
+  cx.append(prepEl("p", "fatos-limite", t("cf_limite")));
+  return true;
+}
+/* a fonte escolhida: o PDF da aula (lido aqui mesmo) ou o resumo do tópico */
+async function prepFonteDoPdf(arquivo) {
+  if (!prepCtx || !arquivo) return null;
+  const dizer = (s) => { $("prepMsg").textContent = s; $("prepMsg").hidden = !s; };
+  dizer(t("qs_pdf_lendo", { p: 0, n: "…" }));
+  let bytes;
+  try { bytes = new Uint8Array(await arquivo.arrayBuffer()); } catch (e) { dizer(t("qs_pdf_m_pdf_invalido")); return null; }
+  const r = await cfFonteDePdf(bytes, arquivo.name || "PDF", { onProgresso: (p, n) => dizer(t("qs_pdf_lendo", { p, n })) });
+  if (!r.fonte || r.motivo) { dizer(t(r.motivo === "sem_trechos" ? "cf_sem_trechos" : "qs_pdf_m_" + r.motivo)); return null; }
+  cfFonteGuardar(prepCtx.chave, r.fonte, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
+  dizer(t("cf_guardada", { n: r.fonte.nome, k: r.fonte.trechos.length, p: r.paginas }));
+  prepPintarConferenciaOuFonte();
+  return r.fonte;
+}
+function prepFonteDoResumo() {
+  if (!prepCtx) return null;
+  const txt = String(((typeof matObter === "function" && matObter(prepCtx.chave)) || {}).texto || "");
+  const fonte = cfImpressao(cfTrechosDeTexto(txt), t("cf_nome_resumo"));
+  if (!fonte.trechos.length) { $("prepMsg").textContent = t("cf_sem_trechos"); $("prepMsg").hidden = false; return null; }
+  cfFonteGuardar(prepCtx.chave, fonte, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
+  $("prepMsg").textContent = t("cf_guardada", { n: fonte.nome, k: fonte.trechos.length, p: "—" }); $("prepMsg").hidden = false;
+  prepPintarConferenciaOuFonte();
+  return fonte;
+}
+/* repinta o que estiver na tela: a conferência (se há resposta) ou só a cobertura da fonte */
+function prepPintarConferenciaOuFonte() {
+  if (prepLido && !prepLido.vazio) { prepPintarConferencia(); return; }
+  const falta = prepPintarFonteCob(null);
+  if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = !falta;
 }
 
 function prepConferir() {
@@ -414,6 +482,7 @@ function prepPintar() {
   if ($("btnPrepDesfazer")) $("btnPrepDesfazer").hidden = true;
   prepLido = null;
   prepPintarConferencia();
+  prepPintarConferenciaOuFonte();
 }
 
 function prepCopiar(texto, chaveMsg) {
@@ -457,6 +526,7 @@ async function prepAplicar() {
   } catch (e) {}
   try { if (typeof hubPintarAgenda === "function") hubPintarAgenda(); } catch (e) {}
   prepPintarCabecalho();
+  prepPintarConferenciaOuFonte();
   return r;
 }
 function prepPintarCabecalho() {
@@ -504,10 +574,14 @@ function prepIniciar() {
   });
   liga("btnPrepConferir", () => prepConferir());
   liga("btnPrepContinuar", () => {
-    if (!prepLido) return;
-    const txt = prepPedidoContinuar(prepCtx, prepLido.cobertura, prepPartes());
+    const txt = prepPedidoContinuar(prepCtx, prepLido ? prepLido.cobertura : [], prepPartes(), prepCobFonte);
     if (txt) prepCopiar(txt, "prep_copiado_cont");
   });
+  /* (19.124.0) a fonte para medir a cobertura */
+  liga("btnPrepFontePdf", () => { const a = $("prepFonteArq"); if (a) { try { a.value = ""; } catch (e) {} a.click(); } });
+  if ($("prepFonteArq")) $("prepFonteArq").onchange = () => { const f = $("prepFonteArq").files && $("prepFonteArq").files[0]; if (f) prepFonteDoPdf(f); };
+  liga("btnPrepFonteResumo", () => prepFonteDoResumo());
+  liga("btnPrepFonteTirar", () => { if (prepCtx) { cfFonteEsquecer(prepCtx.chave); prepPintarConferenciaOuFonte(); } });
   liga("btnPrepGravar", () => prepAplicar());
   liga("btnPrepDesfazer", () => {
     if (!prepRecibo) return;

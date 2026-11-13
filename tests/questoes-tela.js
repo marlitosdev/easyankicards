@@ -541,6 +541,80 @@ async function testes() {
     ok(api.prepLerResposta(api.prepPedido({ disciplina: "D", topico: "T", ramos: [], partes: { questoes: true }, fonte: "anexo", tags: [] }), ctx).ehPedido === true, "Q9a o pedido em inglês também é reconhecido como pedido");
     api.setLanguage("pt");
   }
+
+  /* ===================================================================
+   * (19.124.0) A COBERTURA MEDIDA CONTRA A FONTE
+   * O relato: "a ideia [dos ramos] foi forçar a IA a cobrir todo o conteúdo (…) mudar o prompt por si só não pareceu
+   * ser suficiente". Quem confere a cobertura é o app, comparando o que o tópico tem com os trechos da própria fonte.
+   * =================================================================== */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.qsUiIniciar();
+    ok(api.cfEhTitulo("DO PROCESSO LEGISLATIVO") && api.cfEhTitulo("2.1 Do veto e da sanção") && api.cfEhTitulo("## Emendas à Lei Orgânica") && api.cfEhTitulo("CAPÍTULO III")
+      && !api.cfEhTitulo("O veto será apreciado em trinta dias.") && !api.cfEhTitulo("STF") && !api.cfEhTitulo("1. Qual é o prazo do veto?"),
+      "C1 título é a linha curta, sem ponto final, em maiúsculas ou numerada — frase e pergunta não são");
+    /* as páginas de uma aula inventada: três assuntos, e a parte de questões no fim (que não é teoria a cobrir) */
+    const P1 = ["Aula de Teste", "1) Do veto ........................ 2", "DO VETO E DA SANÇÃO",
+      "O Prefeito pode vetar o projeto de lei, no todo ou em parte, no prazo de quinze dias úteis contados do recebimento.",
+      "O veto parcial abrange o texto integral de artigo, parágrafo, inciso ou alínea.",
+      "A Câmara aprecia o veto em trinta dias, e a rejeição exige maioria absoluta dos Vereadores em votação nominal."];
+    const P2 = ["DAS EMENDAS À LEI ORGÂNICA",
+      "A Lei Orgânica pode ser emendada mediante proposta de um terço dos Vereadores ou do Prefeito.",
+      "A proposta é discutida e votada em dois turnos, com interstício mínimo de dez dias, e aprovada por dois terços.",
+      "A matéria de proposta rejeitada não pode ser reapresentada na mesma sessão legislativa."];
+    const P3 = ["DAS COMISSÕES ESPECIAIS DE INQUÉRITO",
+      "As comissões de inquérito são criadas por requerimento de um terço dos membros para apurar fato determinado por prazo certo.",
+      "Suas conclusões são encaminhadas ao Ministério Público para a responsabilização civil ou criminal dos infratores.",
+      "QUESTÕES COMENTADAS", "1. (Inédita) Uma questão sobre precatórios e empréstimos compulsórios que não é teoria."];
+    const tr = api.cfTrechosDePaginas([P1, P2, P3]);
+    ok(tr.length === 3 && tr[0].titulo === "DO VETO E DA SANÇÃO" && tr[0].pagina === 1 && tr[1].pagina === 2 && tr[2].titulo === "DAS COMISSÕES ESPECIAIS DE INQUÉRITO",
+      "C2 a fonte é dividida pelos títulos, com a página de cada trecho: " + JSON.stringify(tr.map((x) => [x.titulo, x.pagina])));
+    ok(tr.every((x) => !/precatórios|\.{6,}|Aula de Teste/.test(x.texto)) , "C2a o sumário e a parte de questões da aula não entram como trecho a cobrir");
+    const fonte = api.cfImpressao(tr, "aula.pdf");
+    ok(fonte.trechos.length === 3 && fonte.trechos.every((x) => x.k.length >= 3 && x.ini.length > 20) && fonte.trechos[0].k.indexOf("veto") >= 0 && !/Prefeito pode vetar o projeto de lei, no todo ou em parte, no prazo de quinze dias úteis contados do recebimento\. O veto parcial/.test(JSON.stringify(fonte).slice(600)),
+      "C3 a impressão guarda título, página, começo e as palavras do trecho: " + JSON.stringify(fonte.trechos.map((x) => x.k.slice(0, 4))));
+    /* o que o tópico tem: uma questão do veto e um cartão das emendas; nada das comissões */
+    const itens = ["O veto do Prefeito deve ser apreciado pela Câmara em trinta dias, e a rejeição exige maioria absoluta em votação nominal.",
+      "Como se emenda a Lei Orgânica? Proposta de um terço dos Vereadores, dois turnos com interstício de dez dias e aprovação por dois terços."];
+    const cob = api.cfCobertura(fonte, itens);
+    ok(cob.total === 3 && cob.cobertos === 2 && cob.pct === 67 && cob.faltam.length === 1 && /COMISSÕES/.test(cob.faltam[0].t),
+      "C4 a cobertura é medida trecho a trecho: veto e emendas cobertos, comissões sem nenhum item: " + JSON.stringify(cob.lista.map((x) => [x.t.slice(0, 12), x.melhor, x.pede, x.coberto])));
+    ok(api.cfRotulo(cob.faltam[0]) === "pág. 3 — DAS COMISSÕES ESPECIAIS DE INQUÉRITO" && api.cfCobertura(fonte, []).cobertos === 0, "C4a o trecho que falta diz a página e o título; sem item nenhum, nada está coberto");
+    const linhas = api.cfLinhasDoQueFalta(cob, 20);
+    ok(linhas.length === 1 && /^- pág\. 3 — DAS COMISSÕES ESPECIAIS DE INQUÉRITO: /.test(linhas[0]) && /inquérito|requerimento|comissões/i.test(linhas[0]), "C4b a linha do pedido traz as palavras do trecho: " + linhas[0]);
+    /* o texto corrido (o resumo) também vira trechos */
+    const trT = api.cfTrechosDeTexto("# Resumo geral\nO crédito tributário nasce com o lançamento e tem garantias e privilégios próprios previstos no código.\n\n## Ramo — Moratória\nA moratória suspende a exigibilidade e pode ser geral ou individual, concedida por lei ou por despacho da autoridade.\n\n## Ramo — Remissão\nA remissão extingue o crédito e exige lei específica, atendendo à situação econômica do sujeito passivo.");
+    ok(trT.length === 3 && trT[1].titulo === "Ramo — Moratória" && /despacho/.test(trT[1].texto), "C5 o resumo também é dividido pelos títulos: " + JSON.stringify(trT.map((x) => x.titulo)));
+    /* guardada com o tópico; não some quando o resumo fica vazio */
+    const ch = api.matChave("D", "Processo legislativo");
+    ok(api.cfFonteGuardar(ch, fonte, { disciplina: "D", topico: "Processo legislativo" }) === true && api.cfFonteDe(ch).trechos.length === 3 && api.matObter(ch).topico === "Processo legislativo",
+      "C6 a impressão fica guardada com o material do tópico");
+    api.matGravar(ch, "", { disciplina: "D", topico: "Processo legislativo" });
+    ok(api.cfFonteDe(ch) && api.cfFonteDe(ch).nome === "aula.pdf", "C6a esvaziar o resumo não apaga a fonte guardada");
+    /* no preparar o tópico: a cobertura aparece e o pedido do que falta leva os trechos */
+    const ctx = { disciplina: "D", topico: "Processo legislativo", chave: ch, editalId: "", concurso: "", ramos: [] };
+    api.qsAplicar(api.qsLerResposta("[QUESTAO]\nTIPO: CE\nENUNCIADO: O veto do Prefeito é apreciado pela Câmara em trinta dias, com rejeição por maioria absoluta em votação nominal.\nGABARITO: C\nCOMENTARIO: Veto: quinze dias úteis para vetar.\n[/QUESTAO]", { disciplina: "D", topico: "Processo legislativo", chave: ch }).achados);
+    api.prepAbrir(ctx);
+    ok(/Fonte: aula\.pdf · 3 trecho/.test(api.$("prepFonteSt").textContent) && api.prepCobFonteAtual() && api.prepCobFonteAtual().cobertos === 1 && api.$("btnPrepContinuar").hidden === false,
+      "C7 ao abrir, a cobertura da fonte já conta o que o tópico tem (1 de 3) e o pedido do que falta fica à mão: " + JSON.stringify(api.prepCobFonteAtual() && [api.prepCobFonteAtual().cobertos, api.prepCobFonteAtual().total]));
+    const cont = api.prepPedidoContinuar(ctx, [], { questoes: true, cartoes: true }, api.prepCobFonteAtual());
+    ok(/TRECHOS DA FONTE AINDA SEM QUESTÃO NEM CARTÃO \(2\)/.test(cont) && /pág\. 2 — DAS EMENDAS/.test(cont) && /pág\. 3 — DAS COMISSÕES/.test(cont) && !/DO VETO/.test(cont) && /RESPONDA SÓ COM OS BLOCOS/.test(cont),
+      "C7a o pedido do que falta lista os trechos sem cobertura, com página e título: " + cont.split("\n").slice(2, 5).join(" | "));
+    /* a resposta que cobre as emendas: a cobertura sobe na conferência, antes de gravar */
+    api.$("prepResposta").value = "[CARTOES]\nComo se emenda a Lei Orgânica? :: Proposta de um terço dos Vereadores, dois turnos com interstício de dez dias e aprovação por dois terços. :: t_x\n[/CARTOES]";
+    api.prepConferir();
+    ok(api.prepCobFonteAtual().cobertos === 2 && api.prepCobFonteAtual().faltam.length === 1, "C8 o que veio na resposta entra na conta antes de gravar: " + api.prepCobFonteAtual().cobertos + " de 3");
+    /* o resumo como fonte, e tirar a fonte */
+    api.matGravar(ch, "# Resumo geral\nO processo legislativo municipal compreende emendas, leis complementares e ordinárias.\n\n## Do veto\nO veto é apreciado em trinta dias pela Câmara, com rejeição por maioria absoluta em votação nominal dos Vereadores.", { disciplina: "D", topico: "Processo legislativo" });
+    ok(api.prepFonteDoResumo() && api.cfFonteDe(ch).nome === "resumo do tópico", "C9 o resumo do tópico pode ser a fonte");
+    ok(api.cfFonteEsquecer(ch) === true && api.cfFonteDe(ch) === null, "C9a tirar a fonte apaga só a impressão");
+    /* a limpeza do PDF devolve as linhas também por página */
+    const lp = api.qsPdfLimpar([["a b c d e f", "linha um da página um"], ["a b c d e f", "linha um da página dois"], ["a b c d e f", "linha da três"]]);
+    ok(Array.isArray(lp.porPagina) && lp.porPagina.length === 3 && lp.porPagina[1][0] === "linha um da página dois", "C10 as linhas limpas do PDF vêm também por página");
+    ["cf_passo", "cf_st_sem", "cf_st_tem", "cf_bt_pdf", "cf_tit", "cf_chip", "cf_ok", "cf_limite", "cf_guardada", "prep_p_cont_trechos"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "C11 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
   return falhas;
 }
 

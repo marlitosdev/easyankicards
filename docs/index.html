@@ -6359,6 +6359,12 @@ dialog.prep-dlg{max-width:860px}
 .prep-ok{margin:var(--esp-2) 0 0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
 .prep-msg{margin:0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
 .mat-ficha-prep{margin:0 0 var(--esp-2)}
+/* (19.124.0) a cobertura contra a fonte: os trechos sem nenhum item */
+.cf-lista{list-style:none;margin:var(--esp-2) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--esp-1)}
+.cf-item{display:flex;flex-direction:column;gap:2px;padding:var(--esp-2);border-radius:8px;
+  background:color-mix(in srgb, var(--borda) 18%, transparent);max-width:80ch}
+.cf-rot{font-size:var(--fs-3);font-weight:var(--peso-m)}
+.cf-ini{font-size:var(--fs-2);color:var(--sutil);line-height:1.4}
 /* (19.122.0) O LIVRO DE FATOS — no padrão de design (DESIGN.md): só variáveis da tabela */
 dialog.fatos-dlg{max-width:880px}
 .fatos-entrada{display:flex;gap:var(--esp-2) var(--esp-3);align-items:center;flex-wrap:wrap;margin:0 0 var(--esp-3)}
@@ -9987,6 +9993,18 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       </div>
       <div id="prepConf" class="prep-conf"></div>
     </section>
+    <!-- (19.124.0) A FONTE: o app lê a aula (ou o resumo) e mede, trecho a trecho, o que ficou sem questão nem cartão -->
+    <section class="prep-passo">
+      <div class="prep-passo-tit"><span class="prep-n">✓</span> <span data-i18n="cf_passo"></span></div>
+      <p class="prep-sub" id="prepFonteSt"></p>
+      <div class="prep-acoes">
+        <button type="button" class="btn-min" id="btnPrepFontePdf" data-i18n="cf_bt_pdf" data-i18n-title="cf_bt_pdf_tip"></button>
+        <button type="button" class="btn-min" id="btnPrepFonteResumo" data-i18n="cf_bt_resumo" data-i18n-title="cf_bt_resumo_tip"></button>
+        <button type="button" class="btn-quieto" id="btnPrepFonteTirar" data-i18n="cf_bt_tirar" hidden></button>
+        <input type="file" id="prepFonteArq" accept=".pdf,application/pdf" hidden>
+      </div>
+      <div id="prepFonteCob" class="prep-conf"></div>
+    </section>
     <p class="prep-msg" id="prepMsg" role="status" aria-live="polite" hidden></p>
   </div>
   <div class="dlg-rodape">
@@ -13120,6 +13138,7 @@ window.__sqlPromise = initSqlJs({
 <script src="questoes.js"></script>
 <script src="questoes-pdf.js"></script>
 <script src="fatos.js"></script>
+<script src="cobertura-fonte.js"></script>
 <script src="preparar.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>

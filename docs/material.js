@@ -134,7 +134,8 @@ function matGravar(chave, texto, meta) {
    * Texto vazio apagava o registro inteiro — e com ele os CARTÕES, que
    * moram no mesmo registro e não têm nada a ver com o texto do resumo. */
   if (!limpo) {
-    if (!String(antigo.cartoes || "").trim()) {
+    /* (19.124.0) a impressão da fonte (fonteCob) também é coisa do tópico: com ela, o registro fica */
+    if (!String(antigo.cartoes || "").trim() && !antigo.fonteCob) {
       delete matResumos[chave]; matSalvar(); return null;
     }
     matResumos[chave] = Object.assign({}, antigo, { texto: "",
