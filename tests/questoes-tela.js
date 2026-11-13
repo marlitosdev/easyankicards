@@ -277,6 +277,88 @@ async function testes() {
     ok(api.qsUiRefazerLote(g) === true && api.$("dlgQsCriar").open === true, "L5 refazer abre a criacao de questoes no mesmo topico");
     api.$("dlgQsCriar").close && api.$("dlgQsCriar").close();
   }
+
+  /* ===================================================================
+   * (19.120.0) QUESTÕES PRONTAS, DIRETO DO PDF
+   * O pedido: "ajudar o usuário a extrair questões de um PDF (…) para estudar questões já prontas".
+   * O texto abaixo é INVENTADO, no formato medido numa aula real: cabeçalho do curso em toda página (com o número da
+   * página enfiado no meio do texto), a marca do comprador (CPF e nome — aqui, fictícios), a questão cortada pela
+   * virada de página, as questões repetidas na "Lista de questões" e a tabela de gabarito no fim.
+   * =================================================================== */
+  {
+    const { api } = rodar();
+    /* o rodapé real tem seis linhas: curso, site, marca, o número da página, o total e um código */
+    const cab = (n) => ["Curso de Teste (Auditor) Noções de Tudo - 2026 (Pó" + n + "s-Edital)", "www.exemplo.com.br", "00000000000 - Fulano de Tal da Silva", String(60 + n), "85", "==1c0de==", "Equipe Exemplo", "Aula 01 - Somente em PDF"];
+    const pg = (n, linhas) => cab(n).slice(6).concat(linhas, cab(n).slice(0, 6));
+    const Q1 = ["1.\u200b (Questão Inédita) Sobre a organização do Município de Exemplo, assinale a alternativa", "correta:",
+      "a) O Município não tem autonomia", "legislativa.", "b) O Município tem auto-organização, autogoverno e autoadministração."];
+    const Q1b = ["c) A competência legislativa municipal é residual.", "d\u200b ) Compete ao Município legislar sobre trânsito.", "e) A Lei Orgânica é votada em turno único."];
+    const Q2 = ["2. (FGV/2023/Prefeitura de Exemplo) Compete à Câmara Municipal:", "a) sancionar leis.", "b) vetar leis.", "c) criar comissões de inquérito.", "d) nomear secretários.", "e) executar o orçamento."];
+    const Q3 = ["3. (CEBRASPE/2024/Exemplo) O controle externo do Município é exercido pela Câmara Municipal com", "o auxílio do Tribunal de Contas dos Municípios."];
+    const paginas = [
+      pg(1, ["TEORIA", "Os Municípios são entes federativos.", "1. Auto-organização: elaboram a Lei Orgânica."]),
+      pg(2, ["QUESTÕES COMENTADAS"].concat(Q1)),
+      /* nesta página o bloco de cabeçalho e rodapé vem NO MEIO do texto, como numa página do PDF real */
+      Q1b.concat(["Comentários:", "A letra A está errada. O Município também legisla."], cab(3).slice(6), cab(3).slice(0, 6),
+        ["A letra B está correta. São as três aptidões da", "==1c0de==", "autonomia.", "A letra C está errada."]),
+      pg(4, Q2.concat(["Comentários", "A Câmara fiscaliza. Gabarito: letra C.", "As demais são atribuições do Prefeito."],
+        Q3, ["Comentários:", "Em Pernambuco não há Tribunal de Contas dos Municípios.", "Gabarito: Errado"])),
+      pg(5, ["LISTA DE QUESTÕES"].concat(Q1, Q1b, Q2, Q3)),
+      pg(6, ["GABARITO", "1. B 3. E", "2. D"]),
+    ];
+    const L = api.qsPdfLimpar(paginas);
+    ok(L.marcas === 6 && L.linhas.every((l) => !/\d{11}/.test(l) && !/Fulano/.test(l)), "P1 a marca do comprador (CPF e nome) sai de todas as páginas: " + L.marcas);
+    ok(L.linhas.every((l) => !/Pó\d*s-Edital|exemplo\.com\.br|Equipe Exemplo|Somente em PDF|^\d+$|==/.test(l)) && L.linhas.indexOf("TEORIA") >= 0,
+      "P1a cabeçalho e rodapé repetidos saem (mesmo com o número da página no meio do texto); o conteúdo fica: " + L.cabecalhos);
+    const r = api.qsPdfExtrair(paginas);
+    ok(r.questoes.length === 3 && r.questoes.map((q) => q.n).join() === "1,2,3", "P2 três questões (as da 'Lista de questões' não duplicam; o '1. Auto-organização' da teoria não é questão): " + r.questoes.map((q) => q.n).join());
+    const q1 = r.questoes[0], q2 = r.questoes[1], q3 = r.questoes[2];
+    ok(q1.opcoes.length === 5 && q1.opcoes[0].txt === "O Município não tem autonomia legislativa." && q1.opcoes[3].letra === "D" && /trânsito/.test(q1.opcoes[3].txt),
+      "P2a as cinco alternativas, com a linha quebrada junta e a virada de página no meio: " + JSON.stringify(q1.opcoes.map((o) => o.letra + ":" + o.txt.slice(0, 18))));
+    ok(q1.situacao === "conferido" && q1.gabarito === "B" && q1.gabTabela === "B" && q1.gabComentario === "B", "P3 gabarito conferido nos dois lugares (tabela B = 'A letra B está correta')");
+    ok(q2.situacao === "diverge" && q2.gabarito === "D" && q2.gabComentario === "C" && q2.origem === "FGV/2023/Prefeitura de Exemplo", "P3a tabela D × comentário C: sai marcada 'a conferir', com a banca lida do parêntese: " + [q2.situacao, q2.gabarito, q2.gabComentario, q2.origem].join(" | "));
+    ok(q3.tipo === "ce" && q3.gabarito === "E" && q3.situacao === "conferido" && !q3.opcoes.length, "P3b certo/errado: 'Gabarito: Errado' = E da tabela");
+    ok(r.resumo.achadas === 3 && r.resumo.conferidas === 2 && r.resumo.divergem.join() === "2" && r.resumo.semGabarito.length === 0 && r.resumo.marcas === 6, "P3c o resumo conta: " + JSON.stringify(r.resumo));
+    /* o texto é o que a criação de questões já lê */
+    const lido = api.qsLerResposta(r.texto, { disciplina: "D", topico: "T", chave: api.matChave("D", "T") });
+    ok(lido.achados.length === 3 && lido.ignoradas.length === 0, "P4 o texto gerado é lido inteiro pela criação de questões, sem linha recusada: " + lido.achados.length + " · " + JSON.stringify(lido.ignoradas));
+    const a1 = lido.achados[0], a2 = lido.achados[1], a3 = lido.achados[2];
+    ok(a1.tipo === "me" && a1.gabarito === "B" && a1.opcoes.length === 5 && /assinale a alternativa correta:$/.test(a1.enunciado) && a1.banca === "Questão Inédita" && /A letra B está correta\. São as três aptidões da autonomia\./.test(a1.comentario),
+      "P4a a questão 1 chega inteira (enunciado, 5 alternativas, gabarito B, banca e comentário): " + JSON.stringify([a1.tipo, a1.gabarito, a1.opcoes.length, a1.banca, a1.enunciado.slice(-30)]));
+    ok(a2.gabarito === "D" && /A conferir: a tabela de gabarito do PDF diz D e o comentário indica C/.test(a2.comentario) && /Gabarito — letra C/.test(a2.comentario),
+      "P4b a divergente avisa no comentário, e o 'Gabarito:' do texto não vira campo (não troca a resposta): " + a2.gabarito + " | " + a2.comentario.slice(0, 120));
+    ok(a3.tipo === "ce" && a3.gabarito === "E" && /Tribunal de Contas dos Municípios\.$/.test(a3.enunciado), "P4c a de certo/errado chega com o enunciado junto e gabarito E");
+    ok(!/\d{11}|Fulano/.test(r.texto), "P4d nada da marca do comprador no texto que vai para a caixa");
+    /* sem gabarito em lugar nenhum: fica de fora e o resumo diz qual */
+    const r2 = api.qsPdfExtrair([["QUESTÕES COMENTADAS", "7. (Banca X) Enunciado de teste sem resposta em parte alguma do arquivo.", "a) um", "b) dois", "Comentários:", "Nada aqui decide."]]);
+    ok(r2.resumo.semGabarito.join() === "7" && api.qsLerResposta(r2.texto, {}).achados.length === 0, "P5 questão sem gabarito: o resumo diz o número e ela não entra");
+    ok(api.qsPdfExtrair([["Só teoria.", "1. Um item de lista.", "2. Outro item."]]).questoes.length === 0, "P5a texto sem questões: nenhuma inventada");
+    /* o mesmo enunciado abrindo questões DIFERENTES (a aula real tem três "…assinale a alternativa correta:" iguais) */
+    const iguais = api.qsPdfExtrair([["QUESTÕES COMENTADAS",
+      "13. (Inédita) Sobre o processo legislativo, assinale a alternativa correta:", "a) Primeira.", "b) Segunda.", "Comentários:", "A letra A está correta.",
+      "14. (Inédita) Sobre o processo legislativo, assinale a alternativa correta:", "a) Terceira.", "b) Quarta.", "Comentários:", "A letra B está correta.",
+      "LISTA DE QUESTÕES",
+      "13. (Inédita) Sobre o processo legislativo, assinale a alternativa correta:", "a) Primeira.", "b) Segunda.",
+      "14. (Inédita) Sobre o processo legislativo, assinale a alternativa correta:", "a) Terceira.", "b) Quarta.",
+      "GABARITO", "13. A 14. B"]]);
+    ok(iguais.questoes.length === 2 && iguais.questoes.map((q) => q.n + q.gabarito + q.situacao).join() === "13Aconferido,14Bconferido",
+      "P5b enunciados iguais com alternativas diferentes são questões diferentes; a cópia da lista continua juntando: " + iguais.questoes.map((q) => q.n + q.gabarito + q.situacao).join());
+    /* a tela: o arquivo escolhido enche a caixa, diz o que leu e confere */
+    api.matIniciar(); api.qsUiIniciar();
+    ok(typeof api.$("btnQsPdf").onclick === "function", "P6 o botão 'importar de PDF' está ligado");
+    api.$("qsCriarResposta").value = "";
+    const falsoLib = { getDocument: () => ({ promise: Promise.resolve({ numPages: paginas.length,
+      getPage: (n) => Promise.resolve({ getTextContent: () => Promise.resolve({ items: paginas[n - 1].map((s2, k) => ({ str: s2, transform: [1, 0, 0, 10, 0, 800 - k * 14], width: 100, height: 10, hasEOL: true })) }) }) }) }) };
+    const lidoPdf = await api.qsPdfPaginas(new Uint8Array([1, 2, 3]), { pdfjsLib: falsoLib });
+    ok(lidoPdf.paginas.length === 6 && lidoPdf.paginas[1].indexOf("QUESTÕES COMENTADAS") >= 0, "P6a as páginas do PDF viram linhas de texto pelo leitor das leis");
+    ok((await api.qsPdfPaginas(new Uint8Array([1]), { pdfjsLib: { getDocument: () => ({ promise: Promise.resolve({ numPages: 2, getPage: () => Promise.resolve({ getTextContent: () => Promise.resolve({ items: [] }) }) }) }) } })).motivo === "pdf_sem_texto",
+      "P6b PDF de imagem (sem texto): diz o motivo em vez de devolver nada");
+    ["qs_pdf_btn", "qs_pdf_btn_tip", "qs_pdf_lidas", "qs_pdf_conferidas", "qs_pdf_divergem", "qs_pdf_sem_gab", "qs_pdf_marca", "qs_pdf_nenhuma", "qs_pdf_m_pdf_sem_leitor", "qs_pdf_m_pdf_invalido", "qs_pdf_m_pdf_sem_texto", "qs_pdf_diverge_com", "qs_pdf_lendo", "qs_pdf_so_tabela", "qs_pdf_so_coment"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "P7 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    ok(/3 questão\(ões\) lida\(s\) em 6 página\(s\)/.test(api.qsPdfFrase(r.resumo)) && /2 com o gabarito conferido/.test(api.qsPdfFrase(r.resumo)) && /a conferir.*nº 2/.test(api.qsPdfFrase(r.resumo)) && /marca do comprador/.test(api.qsPdfFrase(r.resumo)),
+      "P7a a frase da tela diz quantas, quantas conferidas, quais a conferir e que a marca saiu: " + api.qsPdfFrase(r.resumo));
+  }
   return falhas;
 }
 

@@ -6269,6 +6269,8 @@ main.bancada-ampla #editor,main.bancada-ampla #editorHl{min-height:62vh}
 .ednovo-passo-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--acao);color:#fff;font-size:12px}
 .ednovo-passo .ednovo-ramos{justify-content:flex-start;margin:2px 0 6px}
 .ednovo-prompt-msg{margin:6px 0 0;color:var(--ok,var(--acao))}
+.qs-pdf-msg{margin:6px 0 0;color:var(--ok,var(--acao));line-height:1.45}
+.qs-pdf-msg.qs-pdf-erro{color:var(--atencao)}
 /* DATA E NOME: obrigatórios, com o erro escrito debaixo do campo */
 /* PLANO COM PROBLEMAS DE LEITURA: a faixa que avisa que os números abaixo são provisórios */
 .ed-aviso-leitura{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:8px 0;padding:8px 12px;border-radius:10px;border:1px solid var(--atencao);background:color-mix(in srgb,var(--atencao) 14%,transparent)}
@@ -9770,10 +9772,15 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <div class="qs-criar-acoes">
         <button type="button" class="btn-min" id="btnQsColar" data-i18n="qs_colar_btn"
           title="Traz o que você copiou da IA direto para a caixa acima e já confere."></button>
+        <!-- (19.120.0) QUESTÕES PRONTAS DO PDF: lê a aula em PDF (enunciado, alternativas, comentário e a tabela de
+             gabarito), sem IA, e põe na caixa acima no formato de sempre. Nada é gravado antes de confirmar. -->
+        <button type="button" class="btn-min" id="btnQsPdf" data-i18n="qs_pdf_btn" data-i18n-title="qs_pdf_btn_tip"></button>
+        <input type="file" id="qsPdfArquivo" accept=".pdf,application/pdf" hidden>
         <button type="button" class="btn-min" id="btnQsConferir" data-i18n="qs_conferir"
           title="Lê o que você colou — resposta da IA ou um texto de questões já pronto — e junta às questões já achadas no texto."></button>
         <button type="button" class="btn-min btn-min-ok" id="btnQsCriarNovosRamos" hidden data-i18n-title="qs_criar_novos_ramos_tip"></button>
       </div>
+      <p class="nota qs-pdf-msg" id="qsPdfMsg" role="status" aria-live="polite" hidden></p>
     </div>
   </details>
   </div>
@@ -12930,6 +12937,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-pdf.js"></script>
 <script src="idb-questoes.js"></script>
 <script src="questoes.js"></script>
+<script src="questoes-pdf.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>

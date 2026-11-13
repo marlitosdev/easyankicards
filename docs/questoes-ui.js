@@ -4735,6 +4735,8 @@ function qsUiIniciar() {
       qsUiConferir();
     };
   }
+  /* (19.120.0) as questões prontas de um PDF (questoes-pdf.js) */
+  try { if (typeof qsUiPdfIniciar === "function") qsUiPdfIniciar(); } catch (e) {}
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
   if ($("btnQsCriarFechar")) $("btnQsCriarFechar").onclick = () => $("dlgQsCriar").close();
   ["qsFonteResumo", "qsFonteOutro", "qsFonteCaderno"].forEach((id) => {
