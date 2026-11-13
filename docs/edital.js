@@ -2583,6 +2583,40 @@ function edPrevistoPorDia(linhas) {
   (linhas || []).forEach((i) => { if (i && i.dia) out[i.dia] = (out[i.dia] || 0) + (Number(edMinSemana(i)) || 0); });
   return out;
 }
+/* (19.119.0) A COTA DE CADA DIA, no lugar do "previsto" que saía do sorteio de dias.
+ * A agenda tinha DOIS modelos brigando: a meta de horas da semana (um orçamento flexível: "faltam 22h50, 4h34 por dia
+ * nos dias que restam") e um dia fixo em cada tópico ("seg · 30min"), que ninguém escolheu — saía de uma divisão — e
+ * que ficava velho no dia seguinte (na quarta, a lista ainda dizia "seg"). O dia era invenção do app, como a hora de
+ * início que já tinha saído. Fica um modelo só, o da meta:
+ *   · dia de estudo que já passou: a parte dele na meta (meta ÷ dias de estudo) — é contra ela que o ✓ se mede;
+ *   · hoje e os dias que restam: o que falta dividido por eles (o que não foi feito antes se redistribui sozinho).
+ * Devolve { seg: minutos, … } no formato que edSemanaDeEstudo recebe. */
+function edCotasDaSemana(hoje, diasDeEstudo, diario, metaMin) {
+  const S = edSemanaDeEstudo(hoje, diasDeEstudo, diario, {}, metaMin);
+  const estudo = S.dias.filter((d) => d.estudo);
+  const out = {};
+  if (!estudo.length || !S.metaMin) return out;
+  const parte = Math.round(S.metaMin / estudo.length);
+  const feitoAntes = S.dias.filter((d) => d.iso < hoje).reduce((a, d) => a + d.feitoMin, 0);
+  const restam = estudo.filter((d) => d.iso >= hoje);
+  const cota = restam.length ? Math.ceil(Math.max(0, S.metaMin - feitoAntes) / restam.length) : 0;
+  estudo.forEach((d) => { out[d.cod] = d.iso < hoje ? parte : cota; });
+  return out;
+}
+/* quantos tópicos do começo da lista (que já vem na ordem de prioridade) cabem no que falta da cota de hoje: pelo menos
+ * um quando há cota, e o seguinte só entra se couber (folga de 10 min) — ou se, sem ele, o dia ficaria com menos de 70%
+ * da cota (um tópico grande começa hoje e continua amanhã, em vez de deixar horas da cota sem destino) */
+function edCabemHoje(linhas, cotaMin) {
+  if (!(cotaMin > 0)) return 0;
+  let n = 0, soma = 0;
+  for (const i of (linhas || [])) {
+    const m = Number(edMinSemana(i)) || 0;
+    if (n && soma + m > cotaMin + 10 && soma >= cotaMin * 0.7) break;
+    soma += m; n++;
+    if (soma >= cotaMin) break;
+  }
+  return n;
+}
 function edSemanaDeEstudo(hoje, diasDeEstudo, diario, previstoPorDia, metaMin) {
   const sem = edSemanaCalendario(hoje);
   const estudo = edDiasDeEstudo(diasDeEstudo);

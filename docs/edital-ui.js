@@ -817,7 +817,9 @@ function edLinhaTopico(i, semDisciplina) {
   /* SÓ O DIA. O horário de início era invenção do app: ninguém estuda às
    * 05:40 porque uma conta de divisão disse isso, e o número dava ao plano
    * uma precisão que ele não tem. O que serve é o dia e quanto tempo. */
-  min.textContent = (i.dia ? i.dia + " · " : "") + horasTexto(edMinSemana(i));
+  /* (19.119.0) NEM O DIA. "seg · 30min" era o mesmo defeito do horário: um dia que ninguém escolheu, e que ficava velho
+   * no dia seguinte. A linha diz quanto; o QUANDO é a ordem da lista e os grupos "Hoje" / "Depois, nesta semana". */
+  min.textContent = horasTexto(edMinSemana(i));
   /* (v18.92.0) só parte dos ramos coube nesta semana: diz quantos e quanto o tópico pede ao todo */
   if (i.ramosSemana && i.ramosSemana.length) {
     const pend = (i.ramos || []).filter((r) => !r.feito && !r.pulado).length;

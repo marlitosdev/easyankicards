@@ -37,8 +37,11 @@ function hubSemanaDeEstudo(hoje) {
   if (!hubUltimaAgenda && typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
   const a = hubUltimaAgenda || { previsto: {}, metaMin: 0, dias: hubPref("dias", 5) };
   const diario = (typeof edDiario !== "undefined" && edDiario) || [];
-  return edSemanaDeEstudo(hoje || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10)),
-    hubPref("dias", a.dias), diario, a.previsto, a.metaMin);
+  const h = hoje || (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10));
+  /* (19.119.0) a cota de cada dia é calculada NA HORA, com o diário de agora: guardada do desenho da agenda, ela não
+   * acompanhava um registro novo (o que se estuda hoje muda o que falta para os dias que restam) */
+  const dias = hubPref("dias", a.dias);
+  return edSemanaDeEstudo(h, dias, diario, a.metaMin ? edCotasDaSemana(h, dias, diario, a.metaMin) : a.previsto, a.metaMin);
 }
 
 function minutosDaSemana() {
@@ -627,10 +630,12 @@ function hubPintarAgenda() {
    * mudança para o topo tinha quebrado, porque o agendamento morava dentro
    * do painel antigo. Os dois números vêm da preferência de estudo, não do
    * edital: a semana é uma só, mesmo com três concursos. */
-  agendar(linhas, { dias: hubPref("dias", 5), inicio: hubPref("inicio", "19:00") });
-  hubUltimaAgenda = { previsto: edPrevistoPorDia(linhas), metaMin: planejadoMin, dias: hubPref("dias", 5) };
+  /* (19.119.0) SEM DIA FIXO POR TÓPICO: cada dia tem uma COTA (a meta da semana repartida pelos dias de estudo; o que
+   * falta se redistribui pelos dias que restam) e a lista, na ordem de prioridade, diz o que cabe HOJE. */
+  const hojeHub = typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10);
+  hubUltimaAgenda = { previsto: {}, metaMin: planejadoMin, dias: hubPref("dias", 5) };
+  const SS = hubSemanaDeEstudo(hojeHub);
   if (typeof edSemanaCelulas === "function") {
-    const SS = hubSemanaDeEstudo();
     celsSemana.append(edSemanaCelulas(SS, (d) => diarioIrParaDia(d.iso)));
     /* A FRASE DO QUE FALTA ENTRA NA LINHA DO MEDIDOR (curta: "2h52/dia nos 7 dias que restam"); a longa, com os dias,
      * fica no balão. Era mais uma linha inteira entre os dias e a lista. */
@@ -641,8 +646,32 @@ function hubPintarAgenda() {
     }
   }
 
-  const mostrar = hubAgendaAberta ? linhas : linhas.slice(0, HUB_AGENDA_CURTA);
-  mostrar.forEach((i) => {
+  /* OS GRUPOS: "Hoje" (o que cabe no que falta da cota de hoje) e "Depois, nesta semana". Em dia de folga, ou com a
+   * cota de hoje já cumprida, a lista é uma só — e o cabeçalho diz por quê. */
+  const diaHoje = SS.dias.filter((d) => d.estado === "hoje")[0] || null;
+  const cotaHoje = diaHoje && diaHoje.estudo ? Math.max(0, diaHoje.previstoMin - diaHoje.feitoMin) : 0;
+  const nHoje = edCabemHoje(linhas, cotaHoje);
+  const somaDe = (a) => a.reduce((s2, i) => s2 + edMinSemana(i), 0);
+  const grupo = (tit, res, cls) => {
+    const g = document.createElement("div");
+    g.className = "ed-ag-grupo" + (cls ? " " + cls : "");
+    const a = document.createElement("b"); a.textContent = tit;
+    const r = document.createElement("span"); r.textContent = res;
+    g.append(a, r);
+    g.title = t("hub_grupo_tip");
+    return g;
+  };
+  const mostrar = hubAgendaAberta ? linhas : linhas.slice(0, Math.max(HUB_AGENDA_CURTA, nHoje));
+  mostrar.forEach((i, k) => {
+    if (k === 0 && nHoje) {
+      cx.append(grupo(t("hub_grupo_hoje"), t(diaHoje.feitoMin ? "hub_grupo_hoje_falta" : "hub_grupo_hoje_res",
+        { n: nHoje, h: horasTexto(somaDe(linhas.slice(0, nHoje))), c: horasTexto(cotaHoje) }), "ed-ag-grupo-hoje"));
+    } else if (k === 0) {
+      cx.append(grupo(t("hub_grupo_semana"), t(!diaHoje || !diaHoje.estudo ? "hub_grupo_folga" : SS.faltaMin <= 0 ? "hub_grupo_meta_ok" : "hub_grupo_cota_ok")));
+    }
+    if (nHoje && k === nHoje) {
+      cx.append(grupo(t("hub_grupo_depois"), t("hub_grupo_depois_res", { n: linhas.length - nHoje, h: horasTexto(somaDe(linhas.slice(nHoje))) })));
+    }
     const li = edLinhaTopico(i);
     /* o selo do concurso: a linha precisa dizer de qual prova ela é, senão
      * com dois editais abertos a agenda não informa nada */
@@ -714,11 +743,15 @@ function hubPintarAgenda() {
     cx.append(li);
   });
 
-  if (linhas.length > HUB_AGENDA_CURTA) {
+  /* com a lista recolhida no fim do "Hoje", o grupo seguinte ainda se anuncia: quantos e quanto tempo vêm depois */
+  if (nHoje && mostrar.length <= nHoje && linhas.length > nHoje) {
+    cx.append(grupo(t("hub_grupo_depois"), t("hub_grupo_depois_res", { n: linhas.length - nHoje, h: horasTexto(somaDe(linhas.slice(nHoje))) })));
+  }
+  if (linhas.length > Math.max(HUB_AGENDA_CURTA, nHoje)) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "btn-min ed-abrir";
     b.textContent = hubAgendaAberta ? t("ed_agenda_menos")
-      : t("ed_agenda_mais", { n: linhas.length - HUB_AGENDA_CURTA });
+      : t("ed_agenda_mais", { n: linhas.length - Math.max(HUB_AGENDA_CURTA, nHoje) });
     b.onclick = () => { hubAgendaAberta = !hubAgendaAberta; hubPintarAgenda(); };
     cx.append(b);
   }

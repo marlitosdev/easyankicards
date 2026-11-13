@@ -28,7 +28,7 @@ function carregar() {
   const api = new Function("localStorage", "reg", "guardar", src + `
     return { edCarregarLista, edSalvarLista, edCriar, edApagar, edDuplicar,
              edAbrir, edAberto, edAgrupados, edSituacao, edUrgencia,
-             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edAchadosDeRevisao, edAchadosParaIA, edResumoAchados, edFixDe, edUnirRepetidas, edTirarPrompt, tirarNumeracaoEdital, normalizarMarcadores, edMapaDeCalor, edNivelDeCalor, edNivelHoras, edMetasDasSemanas, edMapaLeitura, edSemanaDeEstudo, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
+             edTopicosAtivos, lerEdital, montarPlano, agendar, edQualidadeLeitura, edOptativas, edEscolhasPendentes, edDefinirEscolha, edLerEscolhas, edEscolhasTexto, edParaTexto, diagnosticoPlano, edAchadosDeRevisao, edAchadosParaIA, edResumoAchados, edFixDe, edUnirRepetidas, edTirarPrompt, tirarNumeracaoEdital, normalizarMarcadores, edMapaDeCalor, edNivelDeCalor, edNivelHoras, edMetasDasSemanas, edMapaLeitura, edSemanaDeEstudo, edCotasDaSemana, edCabemHoje, edDiasDeEstudo, edPrevistoPorDia, edCompararColagem, acompanhamento, projetarCobertura, comparativoEditais, edIncluirDisciplina, edExcluirDisciplina, edRedistribuir,
              get editais(){ return editais; },
              get gravou(){ return gravou; } };`)(localStorage, () => {}, guardar);
   return { api, loja };
@@ -253,6 +253,24 @@ function testes() {
     ok(api.edSemanaDeEstudo(HOJE, 5, diario, prev, 0).pct === null && api.edSemanaDeEstudo(HOJE, 5, diario, prev, 0).metaMin === 0, "S4b meta 0 não divide: pct nulo");
     const comFolga = api.edSemanaDeEstudo(HOJE, 5, diario, Object.assign({ sáb: 60 }, prev));
     ok(comFolga.dias[5].previstoMin === 0 && comFolga.metaMin === 300, "S4c o que a agenda pôs num dia FORA dos dias de estudo não vira meta (sábado com 5 dias)");
+    /* (19.119.0) A COTA DE CADA DIA, no lugar do dia fixo em cada tópico ("seg · 30min"): os dias passados ficam com a
+     * parte deles na meta; hoje e os que restam repartem o que falta — o que não foi feito se redistribui sozinho */
+    {
+      const cotas = api.edCotasDaSemana(HOJE, 5, diario, 300);
+      /* meta 5h em 5 dias = 1h por dia; até quarta foram 1h30 (seg 1h, qua 30min): faltam 3h30 para quinta e sexta */
+      ok(cotas.seg === 60 && cotas.ter === 60 && cotas.qua === 60 && cotas.qui === 105 && cotas.sex === 105 && cotas["sáb"] === undefined,
+        "S4d a cota: 1h nos dias que passaram; 1h45 hoje e amanhã (o que faltou se redistribui); sábado é folga: " + JSON.stringify(cotas));
+      const SC = api.edSemanaDeEstudo(HOJE, 5, diario, cotas, 300);
+      ok(SC.metaMin === 300 && SC.dias[3].previstoMin === 105 && SC.dias[5].previstoMin === 0, "S4e a semana com as cotas mantém a meta de 5h e mostra a cota de hoje");
+      ok(JSON.stringify(api.edCotasDaSemana("2026-10-03", 5, diario, 300)) === JSON.stringify({ seg: 60, ter: 60, qua: 60, qui: 60, sex: 60 }),
+        "S4f sem dia de estudo restante, não há cota a redistribuir: cada dia fica com a sua parte");
+      ok(Object.keys(api.edCotasDaSemana(HOJE, 5, diario, 0)).length === 0, "S4g sem meta não há cota");
+      /* o que cabe hoje: a lista já vem na ordem de prioridade */
+      const L = [{ minutos: 30 }, { minutos: 60 }, { minutos: 30 }, { minutos: 120 }];
+      ok(api.edCabemHoje(L, 105) === 2 && api.edCabemHoje(L, 120) === 3 && api.edCabemHoje(L, 0) === 0,
+        "S4h cabem hoje: 30+60 em 1h45 (o de 30 seguinte passaria da folga); 30+60+30 em 2h; cota zero, nenhum: " + [api.edCabemHoje(L, 105), api.edCabemHoje(L, 120), api.edCabemHoje(L, 0)].join());
+      ok(api.edCabemHoje([{ minutos: 120 }, { minutos: 30 }], 45) === 1, "S4i o primeiro tópico entra mesmo maior que a cota: sempre há por onde começar");
+    }
     /* fim de semana */
     const sab = api.edSemanaDeEstudo("2026-10-03", 5, diario, prev);
     ok(sab.restantes.length === 0 && sab.diasRestantes === 0 && sab.porDiaNecessario === null && sab.faltaMin === 165 && sab.dias[5].estado === "hoje", "S5 sábado com 5 dias: não há dia de estudo restante, e nada por dia (null, não divisão por zero)");

@@ -2534,7 +2534,18 @@ async function testes() {
             ok(api.minutosDaSemana() === 60, "DS1 o medidor da agenda conta de segunda a domingo: o domingo anterior, a segunda seguinte e o 'desmarcou' ficam de fora (veio " + api.minutosDaSemana() + ")");
             const SS = api.hubSemanaDeEstudo(hojeL);
             ok(SS.dias.length === 7 && SS.feitoMin === 60 && SS.dias[0].cod === "seg" && SS.diasDeEstudo.join() === api.edDiasDeEstudo(5).join(), "DS2 a semana do diário usa o diário e os dias de estudo da agenda: " + SS.feitoMin + " " + SS.diasDeEstudo.join());
-            ok(SS.metaMin > 0 && SS.metaMin === SS.dias.reduce((a, d) => a + d.previstoMin, 0) && SS.dias.every((d) => d.estudo || d.previstoMin === 0), "DS3 a meta é a soma do previsto da agenda, e só os dias de estudo têm previsto");
+            /* (19.119.0) o "previsto" de cada dia é a COTA: a parte do dia na meta (dias passados) e o que falta repartido
+             * pelos dias que restam (hoje em diante) — não mais o que um sorteio de dias punha em cada um */
+            {
+              const estudoL = SS.dias.filter((d) => d.estudo);
+              const antes = SS.dias.filter((d) => d.iso < hojeL).reduce((a, d) => a + d.feitoMin, 0);
+              const restamL = estudoL.filter((d) => d.iso >= hojeL);
+              const cotaL = restamL.length ? Math.ceil(Math.max(0, SS.metaMin - antes) / restamL.length) : 0;
+              ok(SS.metaMin > 0 && SS.dias.every((d) => d.estudo || d.previstoMin === 0)
+                && restamL.every((d) => d.previstoMin === cotaL)
+                && estudoL.filter((d) => d.iso < hojeL).every((d) => d.previstoMin === Math.round(SS.metaMin / estudoL.length)),
+                "DS3 cada dia de estudo tem a sua cota (o que falta repartido pelos dias que restam), e só os dias de estudo têm cota: " + JSON.stringify(SS.dias.map((d) => [d.cod, d.previstoMin])) + " meta " + SS.metaMin);
+            }
             api.loja.setItem("eac_estudo_dias", "6");
             ok(api.hubSemanaDeEstudo(hojeL).diasDeEstudo.join() === api.edDiasDeEstudo(6).join(), "DS4 mudar 'dias/semana' na agenda muda os dias de estudo da semana do diário (6 = com sábado)");
             api.loja.removeItem("eac_estudo_dias");
