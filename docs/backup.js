@@ -235,6 +235,22 @@ function resumirBackup(dados) {
 
 function resumoAtual() { return resumirBackup(montarBackup().dados); }
 
+/* =====================================================================
+ * (19.129.0) O REGISTRO VAI JUNTO NO ARQUIVO
+ *
+ * No incidente de 14/11/2026 a cópia "encolheu" mostrava O QUE tinha sumido, e nada sobre COMO: o registro de eventos
+ * ficava só no aparelho. Agora cada arquivo de backup leva o registro daquele momento, em "registro" — FORA de
+ * "dados": não entra na impressão que decide se algo mudou (senão toda tentativa viraria gravação), não aparece na
+ * conferência e NUNCA é restaurado (o registro é a memória deste aparelho; restaurar não pode reescrevê-la).
+ * ===================================================================== */
+function bkComRegistro(bk) {
+  try {
+    if (bk && typeof registro !== "undefined" && Array.isArray(registro))
+      bk.registro = { ate: new Date().toISOString(), n: registro.length, eventos: registro.slice() };
+  } catch (e) {}
+  return bk;
+}
+
 /* Compara o backup com o que está no app AGORA. É o que a tela mostra antes
  * de perguntar "substituir?" — sem isto o usuário decide no escuro. */
 /* o nome de cada linha da conferência (também usado pelo backup automático para dizer o que encolheu) */

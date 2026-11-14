@@ -31,6 +31,9 @@
 const BKA_CHAVE = "eac_bk_auto";
 const BKA_APARELHO = "eac_aparelho";
 const BKA_DIAS = 7;
+/* (19.129.0) além das diárias: uma cópia por semana e uma por mês — perda pequena notada tarde ainda tem cópia boa */
+const BKA_SEMANAS = 4;
+const BKA_MESES = 6;
 const BKA_INTERVALO = 30 * 60 * 1000;
 const BKA_PRIMEIRA = 5 * 60 * 1000;
 const BKA_PAUSA_SAIR = 2 * 60 * 1000;
@@ -158,8 +161,42 @@ async function bkaListar() {
   for await (const [nome, h] of bkaPasta.entries()) if (h && h.kind !== "directory") out.push([nome, h]);
   return out;
 }
-/* a rotação: arquivos automáticos DESTE aparelho; os diários além dos 7 dias mais recentes e os "encolheu" com mais
- * de 7 dias. Nada de outro aparelho, nada que não tenha o nome do automático. */
+/* =====================================================================
+ * (19.129.0) RETENÇÃO EM DEGRAUS
+ *
+ * Só as 7 diárias ficavam. Uma perda que o "encolheu" não vê (pequena, ou de conteúdo) e que a pessoa só nota na
+ * segunda semana já não tinha cópia boa na pasta. Agora ficam:
+ *  · as 7 cópias diárias mais recentes;
+ *  · das mais velhas que essas, a MAIS NOVA de cada semana (segunda a domingo), para as 4 semanas mais recentes;
+ *  · e, do que ainda sobrar, a MAIS NOVA de cada mês, para os 6 meses mais recentes.
+ * São no máximo 17 arquivos deste aparelho (7 + 4 + 6). A cópia que vira semanal ou mensal é a que já estava na pasta — ninguém
+ * regrava arquivo velho. "dias" = ["AAAAMMDD", …] em qualquer ordem; devolve o conjunto dos que FICAM.
+ * ===================================================================== */
+function bkaSemanaDe(dia) {
+  const d = new Date(Number(dia.slice(0, 4)), Number(dia.slice(4, 6)) - 1, Number(dia.slice(6, 8)));
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));     /* a segunda-feira da semana */
+  return bkaDia(d);
+}
+function bkaQuaisFicam(dias) {
+  const L = [...new Set(dias || [])].sort().reverse();
+  const fica = new Set(L.slice(0, BKA_DIAS));
+  const resto = L.slice(BKA_DIAS);
+  const semanas = new Set(), meses = new Set(), depoisDasSemanas = [];
+  resto.forEach((d) => {
+    const s = bkaSemanaDe(d);
+    /* os outros dias de uma semana já guardada saem: a mensal só olha para o que é MAIS VELHO que as semanais */
+    if (semanas.has(s)) return;
+    if (semanas.size < BKA_SEMANAS) { semanas.add(s); fica.add(d); } else depoisDasSemanas.push(d);
+  });
+  depoisDasSemanas.forEach((d) => {
+    const m = d.slice(0, 6);
+    if (meses.has(m)) return;
+    if (meses.size < BKA_MESES) { meses.add(m); fica.add(d); }
+  });
+  return fica;
+}
+/* a rotação: arquivos automáticos DESTE aparelho; os diários que a retenção em degraus não guarda e os "encolheu" com
+ * mais de 7 dias. Nada de outro aparelho, nada que não tenha o nome do automático. */
 async function bkaRodar(agora) {
   const meu = bkaSlug(bkaAparelho());
   const limite = bkaDia(new Date(agora.getTime() - BKA_DIAS * 86400000));
@@ -170,8 +207,8 @@ async function bkaRodar(agora) {
     if (m.encolheu) { if (m.dia <= limite) apagar.push(nome); }
     else diarios.push([m.dia, nome]);
   }
-  diarios.sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
-  diarios.slice(BKA_DIAS).forEach(([, nome]) => apagar.push(nome));
+  const fica = bkaQuaisFicam(diarios.map((x) => x[0]));
+  diarios.forEach(([d, nome]) => { if (!fica.has(d)) apagar.push(nome); });
   for (const nome of apagar) { try { await bkaPasta.removeEntry(nome); } catch (e) {} }
   return apagar;
 }
@@ -223,7 +260,7 @@ async function bkaGravarDeVerdade(motivo, o) {
   const aparelho = bkaAparelho();
   try {
     const gz = bkPodeCompactar();
-    const texto = JSON.stringify(bk, null, 1);
+    const texto = JSON.stringify(typeof bkComRegistro === "function" ? bkComRegistro(bk) : bk, null, 1);
     const dados = gz ? await bkGzip(texto) : texto;
     const enc = o.aceitarEncolhido ? [] : bkaEncolheu(bkaReferencia(est), bk.resumo);
     if (enc.length) {
@@ -292,7 +329,7 @@ async function bkaProcurarMaisNovo() {
   } catch (e) { melhor = null; }
   if (melhor) {
     let mudou = true;
-    try { mudou = !est.ultimo || est.ultimo.hash !== bkaHash(JSON.stringify(montarBackup().dados)); } catch (e) {}
+    try { mudou = !est.ultimo || est.ultimo.hash !== bkaImpressao(montarBackup().dados); } catch (e) {}
     melhor.localMudou = mudou;
   }
   bkaMaisNovo = melhor;

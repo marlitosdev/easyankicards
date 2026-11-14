@@ -181,7 +181,7 @@ function bkEntregarDownload(emb) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-function bkTextoJson() { return JSON.stringify(montarBackup(), null, 1); }
+function bkTextoJson() { return JSON.stringify(bkComRegistro(montarBackup()), null, 1); }
 
 /* =====================================================================
  * O QUE ESTE NAVEGADOR SABE FAZER

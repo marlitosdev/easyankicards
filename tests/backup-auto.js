@@ -146,8 +146,34 @@ async function testes() {
       await api.bkaGravarAgora("periódico");
     }
     const meus = [...P.arqs.keys()].filter((n) => /auto-pc-da-sala/.test(n)).sort();
-    ok(meus.length === 7 && meus[0] === "easyankicards-auto-pc-da-sala-20261027.json.gz" && meus[6] === "easyankicards-auto-pc-da-sala-20261102.json.gz",
-      "S-B ficam os 7 dias mais recentes deste aparelho (saíram 25 e 26/10): " + meus.join(" "));
+    /* (19.129.0) retenção em degraus: as 7 diárias (27/10 a 02/11) e, das mais velhas, a mais nova de cada semana —
+     * 26/10 (segunda, a semana de 26/10) e 25/10 (domingo, a semana anterior) ficam como semanais */
+    ok(meus.length === 9 && meus[0] === "easyankicards-auto-pc-da-sala-20261025.json.gz" && meus[8] === "easyankicards-auto-pc-da-sala-20261102.json.gz",
+      "S-B ficam as 7 diárias e as duas semanais (25 e 26/10): " + meus.join(" "));
+    {
+      /* 120 dias seguidos, até 14/11/2026 */
+      const dias = [];
+      for (let k = 0; k < 120; k++) { const d = new Date(2026, 10, 14 - k); dias.push(d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0")); }
+      const f = [...api.bkaQuaisFicam(dias)].sort().reverse();
+      ok(f.length === 15 && f.slice(0, 7).join() === "20261114,20261113,20261112,20261111,20261110,20261109,20261108",
+        "S-B3 de 120 dias ficam 15 (7 diárias + 4 semanais + os 4 meses que existem): " + f.join(" "));
+      ok(f.slice(7, 11).join() === "20261107,20261101,20261025,20261018", "S-B4 depois, a mais nova de cada uma das 4 semanas anteriores: " + f.slice(7, 11).join());
+      ok(f.slice(11).join() === "20261011,20260930,20260831,20260731", "S-B5 e, do que é mais velho que as semanais, a mais nova de cada mês: " + f.slice(11).join());
+      const ano = [];
+      for (let k = 0; k < 400; k++) { const d = new Date(2026, 10, 14 - k); ano.push(d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0")); }
+      ok([...api.bkaQuaisFicam(ano)].length === 17, "S-B5a com mais de um ano de cópias, ficam 17 (7 + 4 + 6): " + [...api.bkaQuaisFicam(ano)].length);
+      ok(api.bkaSemanaDe("20261114") === "20261109" && api.bkaSemanaDe("20261109") === "20261109" && api.bkaSemanaDe("20261108") === "20261102", "S-B6 a semana vai de segunda a domingo");
+      ok([...api.bkaQuaisFicam(["20261114", "20261113"])].length === 2 && [...api.bkaQuaisFicam([])].length === 0, "S-B7 com poucos arquivos, nada sai");
+    }
+    {
+      /* o registro vai no arquivo, fora de "dados" — e não muda a impressão */
+      const ultimo = P.conteudo("easyankicards-auto-pc-da-sala-20261102.json.gz");
+      ok(ultimo.registro && Array.isArray(ultimo.registro.eventos) && ultimo.registro.eventos.length > 0 && !("registro" in ultimo.dados) && !JSON.stringify(ultimo.dados).includes("automático gravado"),
+        "S-B8 o arquivo leva o registro do momento, fora dos dados: " + (ultimo.registro && ultimo.registro.n));
+      const b1 = api.montarBackup(), i1 = api.bkaImpressao(b1.dados);
+      api.bkComRegistro(b1);
+      ok(api.bkaImpressao(b1.dados) === i1 && api.validarBackup(b1) === null, "S-B9 o registro não entra na impressão dos dados, e o arquivo continua válido");
+    }
     ok(P.arqs.has("easyankicards-20261001-1000.json.gz") && P.arqs.has("easyankicards-auto-notebook-20260901.json.gz") && P.arqs.has("outra-coisa.txt"),
       "S-B2 a rotação não toca no backup manual, no do outro aparelho, nem em outro arquivo");
   }
