@@ -263,13 +263,67 @@ async function testes() {
     ok(!api.$("leiPreSeguras") && api.$("leiPreGrupo_grafia"), "T4 sem nada para conferir, sem bloco recolhido: os grupos à vista");
   }
 
+  /* ---- S (v19.132.0): os números com letra, como o app leu — à vista, com "ver no texto" e troca
+   * na hora. O caso real: Lei 6.830, "Art. 3º - A Dívida Ativa…" virava o fantasma "3º-A", e a tela
+   * não dava nem a conferência nem a escolha ---- */
+  {
+    const { api } = rodar();
+    const lin = [];
+    for (let i = 1; i <= 10; i++) lin.push(i === 3 ? "Art. 3º - A Dívida Ativa regularmente inscrita goza da presunção de certeza e liquidez." : "Art. " + i + ". Texto do artigo " + i + ".");
+    const tx = lin.join("\n");
+    let confirmado = null;
+    api.leiRevisarColagemAbrir({ modo: "criar", texto: tx, pre: api.leiPreprocessar(tx), aoConfirmar: (res) => { confirmado = res; } });
+    ok(/Numeração em sequência \(10 artigos\)/.test(api.$("leiPreNumeracao").textContent),
+      "S1 a numeração fecha (1 a 10): sem fantasma nem ponto para conferir: " + api.$("leiPreNumeracao").textContent.slice(0, 90));
+    const ps = api.$("leiPreSufixos");
+    ok(ps && !ps.hidden && /como o app leu \(1\)/.test(ps.textContent), "S2 o bloco dos números com letra aparece, com a conta: " + (ps ? ps.textContent.slice(0, 90) : "?"));
+    const item = api.$("leiPreSuf_3");
+    ok(item && /o app lê como Art\. 3º — a letra “A” é o começo do texto/.test(item.textContent), "S3 o item diz como foi lido: " + (item ? item.textContent.slice(0, 130) : "?"));
+    const bSem = api.$("leiPreSuf_3_sem"), bCom = api.$("leiPreSuf_3_com");
+    ok(bSem && bCom && /(^| )on( |$)/.test(bSem.className) && !/(^| )on( |$)/.test(bCom.className) && bSem.textContent === "Art. 3º" && bCom.textContent === "Art. 3º-A",
+      "S3a os dois botões, ligado no que o app leu: " + (bSem ? bSem.textContent + " / " + bCom.textContent : "?"));
+    const detS = achar(item, (c) => /lei-dup-ctx-det/.test(c.className || ""))[0];
+    ok(!!detS, "S3b com o 'ver no texto'");
+    if (detS && detS.encher) detS.encher();
+    ok(detS && /Art\. 3º - A Dívida Ativa/.test(detS.textContent), "S3c e ele mostra a linha do texto: " + (detS ? detS.textContent.slice(0, 160) : "?"));
+    bCom.onclick();
+    const item2 = api.$("leiPreSuf_3");
+    ok(item2 && /o app lê como Art\. 3º-A — a letra “A” ficou no número/.test(item2.textContent) && /(^| )on( |$)/.test(api.$("leiPreSuf_3_com").className),
+      "S4 trocar para 'com a letra' na hora: " + (item2 ? item2.textContent.slice(0, 130) : "?"));
+    ok(!/ ok/.test(api.$("leiPreNumeracao").className) && /3º-A/.test(api.$("leiPreNumeracao").textContent),
+      "S4a e a numeração se refaz junto — o 3º-A fora da sequência vira ponto para conferir: " + api.$("leiPreNumeracao").textContent.slice(0, 120));
+    api.$("leiPreSuf_3_sem").onclick();
+    ok(/Numeração em sequência \(10 artigos\)/.test(api.$("leiPreNumeracao").textContent), "S4b desfazer volta à sequência limpa");
+    api.$("leiPreSuf_3_com").onclick();
+    api.leiPreConfirmar();
+    ok(confirmado && confirmado.ajustesRecusados && confirmado.ajustesRecusados["sufixo:3:3º-A"] === true,
+      "S5 a escolha vai para a criação da lei: " + JSON.stringify(confirmado && confirmado.ajustesRecusados));
+  }
+  {
+    /* cada ponto da numeração tem o "ver no texto" — antes era só a frase */
+    const { api } = rodar();
+    const lin = [];
+    for (let i = 1; i <= 9; i++) lin.push("Art. " + i + ". Texto " + i + ".");
+    lin.splice(5, 0, "Art. 40 - A isenção geral se aplica nos termos desta lei.");
+    const tx = lin.join("\n");
+    api.leiRevisarColagemAbrir({ modo: "criar", texto: tx, pre: api.leiPreprocessar(tx), aoConfirmar: () => {} });
+    const pn = api.$("leiPreNumeracao");
+    const lis = achar(pn, (c) => String(c.tag || c.tagName).toLowerCase() === "li");
+    ok(!pn.hidden && lis.length >= 1 && /40/.test(pn.textContent), "S6 o ponto do 40 fora do lugar aparece: " + pn.textContent.slice(0, 140));
+    const det = achar(lis[0], (c) => /lei-dup-ctx-det/.test(c.className || ""))[0];
+    ok(!!det, "S6a com o 'ver no texto' no ponto");
+    if (det && det.encher) det.encher();
+    ok(det && /Art\. 40 - A isenção/.test(det.textContent), "S6b e ele mostra a linha do texto: " + (det ? det.textContent.slice(0, 160) : "?"));
+  }
+
   /* ---- textos ---- */
   {
     const { api } = rodar();
     ["lei_pre_grav_apaga", "lei_pre_grav_estrutura", "lei_pre_grav_segura", "lei_pre_resumo_rever", "lei_pre_seguras", "lei_pre_curto_tachado", "lei_pre_curto_invisiveis",
       "lei_pre_curto_cabecalho", "lei_pre_curto_pagina", "lei_pre_curto_grafia", "lei_pre_curto_remissao", "lei_pre_curto_anexo", "lei_como_tit", "lei_como_ok", "lei_como_n",
       "lei_como_artigos", "lei_como_livros", "lei_como_titulos", "lei_como_capitulos", "lei_como_secoes", "lei_como_anexos", "lei_como_gigante", "lei_como_longo", "lei_como_anexo_rep",
-      "lei_como_anexo_falta", "lei_como_espacado", "lei_como_num"].forEach((k) =>
+      "lei_como_anexo_falta", "lei_como_espacado", "lei_como_num",
+      "lei_pre_suf_tit", "lei_pre_suf_expl", "lei_pre_suf_sem", "lei_pre_suf_com", "lei_pre_suf_btn", "lei_pre_suf_aviso"].forEach((k) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "X falta " + k + " em " + l); }));
     api.setLanguage("pt");
   }

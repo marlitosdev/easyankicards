@@ -364,15 +364,50 @@ async function testes() {
   }
 
   /* ==============================================================
+   * M: O SUFIXO MANTIDO — a escolha vale nos DOIS sentidos (v19.132.0)
+   * "Art. 18 - A Para fins…": o leitor MANTÉM o 18-A. Se errou, a pessoa manda ler sem a letra.
+   * ============================================================== */
+  {
+    const ML = ["Art. 1º. Primeiro.", "Art. 18 - A Para fins desta lei, entende-se.", "Art. 19. Último."].join("\n");
+    /* o parser */
+    const r = p.leiLerLei(ML);
+    const suf = r.ajustes.filter((x) => x.tipo === "sufixo")[0];
+    ok(r.ajustes.length === 1 && suf && suf.manteve === true && suf.de === "18-A" && suf.para === "18" && suf.letra === "A" && suf.id === "sufixo:2:18-A" && suf.recusado === false,
+      "M1 o 'manteve a letra' vira ajuste, com os dois números: " + JSON.stringify(suf));
+    ok(p.leiLerLei(ML, { recusados: { "sufixo:2:18-A": true } }).artigos.map((a) => a.num).join(",") === "1,18,19", "M1a recusado, a leitura e' sem a letra");
+    /* a lei guardada e o mapa */
+    const api = rodar().api;
+    api.matIniciar(); api.leiIniciar();
+    const l = api.leiGuardar({ id: "lei_man", nome: "Lei Mantida", texto: ML });
+    api.leiAbrir("Direito", "Testes", l.id);
+    api.leiMapaAbrir();
+    const it = () => achar(api.$("leiMapaAjustes"), (c) => cls(c, "lei-aj-item"))[0];
+    const bt = () => achar(it(), (c) => cls(c, "lei-aj-alt"))[0];
+    ok(it() && /Art\. 18-A lido com a letra “A” no número/.test(it().children[0].textContent) && bt().textContent === "ler sem a letra",
+      "M2 o mapa diz como foi lido e oferece ler sem a letra: " + (it() ? it().children[0].textContent : "?"));
+    bt().onclick();
+    let lei = api.leiDe("lei_man");
+    ok(lei.ajustesRecusados["sufixo:2:18-A"] === true && lei.texto === ML && api.leiArtigosEfetivos(lei).map((a) => a.num).join(",") === "1,18,19",
+      "M3 'ler sem a letra' grava na lei, sem mexer no texto, e o leitor lê o 18: " + api.leiArtigosEfetivos(lei).map((a) => a.num));
+    ok(/Art\. 18-A lido como Art\. 18: a letra “A” virou começo do texto/.test(it().children[0].textContent) && bt().textContent === "ler com a letra",
+      "M3a e o item se repinta no sentido contrário: " + it().children[0].textContent);
+    bt().onclick();
+    lei = api.leiDe("lei_man");
+    ok(!lei.ajustesRecusados["sufixo:2:18-A"] && api.leiArtigosEfetivos(lei).map((a) => a.num).join(",") === "1,18-A,19",
+      "M4 'ler com a letra' volta ao 18-A: " + api.leiArtigosEfetivos(lei).map((a) => a.num));
+  }
+
+  /* ==============================================================
    * T: HTML, CSS E TEXTOS
    * ============================================================== */
   {
     const pos = (s) => html.indexOf(s);
     ok(pos('id="leiMapaConferir"') < pos('id="leiMapaAjustes"') && pos('id="leiMapaAjustes"') < pos('class="lei-mapa-como"'), "T1 o espaco dos ajustes fica depois da conferencia e antes da ajuda");
     ok(/\.lei-aj-grupo\{[^}]*border/.test(html) && /\.lei-aj-recusado>\.nota\{color:#f59e0b\}/.test(html) && /\.dec-b-automatico/.test(html), "T2 CSS do grupo, do item recusado e do selo 'automatico'");
-    const chaves = ["aj_titulo", "aj_expl", "aj_manter", "aj_usar", "aj_manter_todos", "aj_usar_todos", "aj_mais", "dec_area_ajuste", "dec_d_automatico"]
+    const chaves = ["aj_titulo", "aj_expl", "aj_manter", "aj_usar", "aj_manter_todos", "aj_usar_todos", "aj_mais", "dec_area_ajuste", "dec_d_automatico", "aj_man_sem", "aj_man_com"]
       .concat(["nota", "link", "ordinal", "sufixo", "fora"].flatMap((k) => ["aj_t_" + k, "aj_p_" + k, "aj_r_" + k, "dec_r_ajuste_" + k]))
-      .concat(["nota", "link", "ordinal", "sufixo"].map((k) => "aj_r_" + k + "_orig"));
+      .concat(["nota", "link", "ordinal", "sufixo"].map((k) => "aj_r_" + k + "_orig"))
+      .concat(["aj_r_sufixo_man", "aj_r_sufixo_man_orig"]);
     const conta = (k) => (i18n.match(new RegExp("\\n  \"" + k + "\": ", "g")) || []).length;
     const semPar = chaves.filter((k) => conta(k) !== 2);
     ok(semPar.length === 0, "T3 todas as chaves existem em portugues E em ingles: " + semPar.join(","));

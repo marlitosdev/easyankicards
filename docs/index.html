@@ -1579,6 +1579,10 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-pre-anexo{background:rgba(37,99,235,.14);color:var(--azul-txt,#2563eb);border-radius:3px;padding:0 2px}
 .lei-pre-jan-sep{display:block;color:var(--azul-txt,#2563eb);font-size:11.5px;padding-left:42px;border-top:1px dashed var(--azul-txt,#2563eb);margin:2px 0}
 .lei-pre-seq{display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 5px}
+/* (v19.132.0) os números com letra no texto, como o app leu */
+.lei-pre-suf{border:1px solid var(--borda);border-left:4px solid var(--atencao,#e8940a);border-radius:10px;padding:9px 11px;background:var(--panel);margin-top:10px}
+.lei-pre-suf-item{padding:7px 0;border-top:1px dashed var(--borda)}
+.lei-pre-suf-item:first-of-type{border-top:0}
 .lei-pre-seq-n{font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--campo);border:1px solid var(--borda);color:var(--texto)}
 .lei-pre-seq-n.mal.grave{background:rgba(229,72,77,.16);border-color:var(--erro);color:var(--erro);font-weight:700}
 .lei-pre-seq-n.mal.leve{background:rgba(232,148,10,.16);border-color:var(--atencao);color:var(--atencao);font-weight:700}
@@ -11427,6 +11431,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
        repetido ou faltando…) — é no resultado que o erro aparece. (19.108.0) A numeração vem logo abaixo dele. -->
   <div id="leiPreComo" class="lei-pre-como" hidden></div>
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
+  <!-- (v19.132.0) os números com letra no texto ("Art. 3º - A Dívida…"), como o app leu e a troca na hora -->
+  <div id="leiPreSufixos" class="lei-pre-suf" hidden></div>
   <div id="leiPreLista" class="lei-dup-lista"></div>
   <p class="nota" id="leiPreFim"></p>
   <div class="dlg-rodape">

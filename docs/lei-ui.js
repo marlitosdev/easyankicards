@@ -4480,7 +4480,7 @@ let leiAjAbertos = {};        /* os grupos abertos: sobrevivem a repintar */
 
 /* a frase de um ajuste; `a.recusado` diz se a frase é a do original mantido */
 function leiAjusteFrase(a) {
-  return t("aj_r_" + a.tipo + (a.recusado && !a.informativo ? "_orig" : ""), { r: a.rotulo || (a.tipo === "citacao" ? t("dec_linha", { l: a.linha }) : a.rotulo),
+  return t("aj_r_" + a.tipo + (a.manteve ? "_man" : "") + (a.recusado && !a.informativo ? "_orig" : ""), { r: a.rotulo || (a.tipo === "citacao" ? t("dec_linha", { l: a.linha }) : a.rotulo),
     lei: a.alvo || t("lei_cit_lei_outra"), nota: a.nota, nome: a.nome,
     link: a.link, de: a.de, para: a.para, letra: a.letra, n: a.n, antes: String(a.antes || "").slice(0, 120) });
 }
@@ -4558,7 +4558,8 @@ function leiAjusteItemEl(l, a) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "btn-min lei-aj-alt";
-    b.textContent = t(a.recusado ? "aj_usar" : "aj_manter");
+    /* (v19.132.0) o sufixo MANTIDO: os botões dizem a leitura ("ler sem a letra" ⇄ "ler com a letra") */
+    b.textContent = t(a.manteve ? (a.recusado ? "aj_man_com" : "aj_man_sem") : (a.recusado ? "aj_usar" : "aj_manter"));
     b.onclick = () => leiAjusteDecidir(l.id, [a.id], !a.recusado);
     acoes.append(b);
   }
@@ -4779,7 +4780,7 @@ function leiGravar(opc) {
           modo: "criar", texto: txt, pre: an.pre,
           aoConfirmar: (res) => {
             $("leiTexto").value = res.texto;
-            leiGravar({ separado: true, limpo: true, anexos: res.anexos });
+            leiGravar({ separado: true, limpo: true, anexos: res.anexos, ajustesRecusados: res.ajustesRecusados });
           },
         });
         return "pendente";
@@ -4792,7 +4793,7 @@ function leiGravar(opc) {
         aoConfirmar: (res) => {
           $("leiTexto").value = res.texto;
           leiGravar({ separado: true, limpo: true, conferido: true,
-            anexos: opc && opc.anexos, alteracoes: res.alteracoes,
+            anexos: opc && opc.anexos, alteracoes: res.alteracoes, ajustesRecusados: opc && opc.ajustesRecusados,
             repetidosOk: res.resumo.filter((r) => r.acao === "todas" && !r.auto).map((r) => r.num) });
         },
       });
@@ -4834,6 +4835,7 @@ function leiGravar(opc) {
       nome, texto: txt, topicos: [leiAtual.chave],
       consultadaEm: leisHojeISO() },
       ente ? { ente } : {},
+      (opc && opc.ajustesRecusados && Object.keys(opc.ajustesRecusados).length) ? { ajustesRecusados: opc.ajustesRecusados } : {},
       Object.keys(alteracoes).length ? { alteracoes } : {},
       (opc && opc.repetidosOk && opc.repetidosOk.length) ? { repetidosOk: opc.repetidosOk } : {},
       (opc && opc.anexos && opc.anexos.length) ? { anexos: opc.anexos } : {},
@@ -5599,7 +5601,9 @@ function leiRelatorioFluxo(tela, opc) {
      * mudam a estrutura — o resto (a lista técnica) vem depois */
     try {
       const resR = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
-      const artsR = leiArtigos(resR.texto);
+      /* (v19.132.0) a mesma leitura da tela: com as escolhas dos números com letra */
+      const lidaR = leiLerLei(resR.texto, { recusados: c.ajRec });
+      const artsR = lidaR.artigos;
       const comoR = leiComoConferencias(c, resR, artsR);
       p.push("  PONTOS PARA CONFERIR (" + comoR.conferir.length + "):" + (comoR.conferir.length ? "" : " nenhum"));
       comoR.conferir.forEach((q) => p.push("    " + (q.gravidade === "grave" ? "✖ GRAVE" : q.gravidade === "aviso" ? "⚠ AVISO" : "· leve") + " — " + leiComoTexto(q)));
@@ -5616,6 +5620,17 @@ function leiRelatorioFluxo(tela, opc) {
         const numR = leiNumeracao(artsR);
         leiNumeracaoLinhas(numR.problemas).slice(0, 12).forEach((q) => p.push("    numeração [" + q.gravidade + "]: " + q.texto));
         if (numR.problemas.length > 12) p.push("    …e mais " + (numR.problemas.length - 12) + " ponto(s) de numeração");
+      }
+      /* (v19.132.0) os números com letra no texto: como o app leu cada um e o que a pessoa trocou */
+      const sufR = (lidaR.ajustes || []).filter((a) => a.tipo === "sufixo");
+      if (sufR.length) {
+        p.push("  números com letra — como o app leu (" + sufR.length + "):");
+        sufR.slice(0, 30).forEach((a) => {
+          const lidoCom = a.manteve ? !a.recusado : !!a.recusado;
+          p.push("    linha " + a.linha + " · Art. " + a.de + " → lido como Art. " + (lidoCom ? a.de : a.para)
+            + (a.recusado ? " (trocado por você)" : "") + " · " + cortar(a.antes, 90));
+        });
+        if (sufR.length > 30) p.push("    …e mais " + (sufR.length - 30));
       }
     } catch (e) { p.push("  (conferência indisponível: " + (e && e.message) + ")"); }
     /* (19.107.0) a janela do texto de cada sugestão, com as mesmas marcas da tela */
@@ -6788,7 +6803,7 @@ function leiNumeracaoLinhas(problemas) {
 }
 
 function leiRevisarColagemAbrir(ctx) {
-  leiPreCtx = Object.assign({ modo: "criar", decisoes: {} }, ctx);
+  leiPreCtx = Object.assign({ modo: "criar", decisoes: {}, ajRec: {} }, ctx);
   if (leiPreCtx.modo === "criar" && typeof leiNovaEtapa === "function") leiNovaEtapa("limpeza");
   leiPreAvisar("");
   leiPreCtx.texto = String(leiPreCtx.texto == null ? "" : leiPreCtx.texto).replace(/\r\n?/g, "\n");
@@ -7292,6 +7307,44 @@ function leiPreSeqEl(arts, q) {
   return box;
 }
 
+/* (v19.132.0) COMO O APP LEU os números com letra no texto ("Art. 3º - A Dívida…" virou o art. 3º;
+ * "Art. 18 - A Para fins…" ficou o 18-A): cada um com o "ver no texto" e a troca na hora. A escolha
+ * fica em c.ajRec e nasce gravada na lei (ajustesRecusados) — vale no leitor e no mapa depois. */
+function leiPreSufixosEl(c, res, sufixos) {
+  const box = leiPreEl("div", "lei-pre-suf-box");
+  box.append(leiPreEl("div", "lei-pre-cab", t("lei_pre_suf_tit", { n: sufixos.length })));
+  box.append(leiPreEl("p", "nota", t("lei_pre_suf_expl")));
+  sufixos.slice(0, 60).forEach((a) => {
+    const item = leiPreEl("div", "lei-pre-suf-item");
+    item.id = "leiPreSuf_" + a.linha;
+    const lidoCom = a.manteve ? !a.recusado : !!a.recusado;
+    item.append(leiPreEl("div", "nota", t(lidoCom ? "lei_pre_suf_com" : "lei_pre_suf_sem",
+      { l: a.linha, de: a.de, para: a.para, letra: a.letra })));
+    const caixa = leiPreEl("span", "lei-pre-escolha");
+    caixa.setAttribute("role", "group");
+    [["sem", false], ["com", true]].forEach(([k, com]) => {
+      const b = leiPreEl("button", "btn-min lei-pre-op lei-pre-suf-op" + (com === lidoCom ? " on" : ""),
+        t("lei_pre_suf_btn", { n: com ? a.de : a.para }));
+      b.type = "button";
+      b.id = item.id + (com ? "_com" : "_sem");
+      b.setAttribute("aria-pressed", com === lidoCom ? "true" : "false");
+      b.onclick = () => {
+        if (com === lidoCom) return;
+        c.ajRec = c.ajRec || {};
+        if (a.recusado) delete c.ajRec[a.id]; else c.ajRec[a.id] = true;
+        leiPrePintar();
+        leiPreAvisar(t("lei_pre_suf_aviso", { n: com ? a.de : a.para }));
+      };
+      caixa.append(b);
+    });
+    item.append(caixa);
+    item.append(leiDupContextoEl(res.texto, { linha: a.linha, linhaFim: a.linhaFim || a.linha }));
+    box.append(item);
+  });
+  if (sufixos.length > 60) box.append(leiPreEl("p", "nota", t("lei_num_mais", { n: sufixos.length - 60 })));
+  return box;
+}
+
 /* OS DOIS BOTÕES DA DECISÃO, com o nome da ação ("Tirar as 3" / "Manter"): o ligado fica cheio e com o visto */
 function leiPreRotulos(g, n, cadeia) {
   if (cadeia) return { sim: t("lei_pre_op_sim_cadeia", { n }), nao: t("lei_pre_op_nao_cadeia") };
@@ -7709,7 +7762,10 @@ function leiPrePintar() {
   $("btnLeiPreOriginal").hidden = soNum;
   /* o texto como ficaria com as escolhas de agora: o "como vai ficar", os avisos e a numeração saem dele */
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
-  const arts = leiArtigos(res.texto);
+  /* (v19.132.0) a leitura respeita as escolhas dos números com letra (o bloco "como o app leu"),
+   * e os ajustes dela são o que aquele bloco mostra */
+  const lida = leiLerLei(res.texto, { recusados: c.ajRec });
+  const arts = lida.artigos;
   const como = leiPreComoPintar(c, res, arts);
   /* (19.108.0) OS TRÊS NÚMEROS no lugar do parágrafo, da linha do contador e dos atalhos */
   leiPreNumsPintar(c, { soNum, nRever, rever, seguras, aceitas, como });
@@ -7783,6 +7839,8 @@ function leiPrePintar() {
         li.className = p.gravidade;
         li.textContent = p.texto;
         li.append(leiPreSeqEl(arts, q));
+        /* (v19.132.0) VER NO TEXTO: o ponto apontado com as linhas em volta — antes só havia a frase */
+        li.append(leiDupContextoEl(res.texto, { linha: q.linha, linhaFim: q.linhaFim || q.linha }));
         ul.append(li);
       });
       if (ord.length > 12) {
@@ -7792,6 +7850,17 @@ function leiPrePintar() {
       }
       pn.append(ul);
     }
+  }
+
+  /* (v19.132.0) OS NÚMEROS COM LETRA NO TEXTO, como o app leu — com a troca na hora. Só na criação:
+   * a escolha nasce junto com a lei (ajustesRecusados); na atualização, a mesma conferência fica
+   * no mapa da lei ("o que o app ajustou ao ler") depois de gravar. */
+  const ps = $("leiPreSufixos");
+  if (ps) {
+    ps.innerHTML = "";
+    const sufixos = c.modo === "criar" ? (lida.ajustes || []).filter((a) => a.tipo === "sufixo") : [];
+    ps.hidden = !sufixos.length;
+    if (sufixos.length) ps.append(leiPreSufixosEl(c, res, sufixos));
   }
 
   const r = res.resumo;
@@ -7930,12 +7999,15 @@ function leiPreConfirmar() {
   leiDecColagem(c, false);
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
   const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
+  /* (v19.132.0) as escolhas dos números com letra nascem junto com a lei (modo criar) */
+  const ajRec = c.modo === "criar" && c.ajRec && Object.keys(c.ajRec).length ? Object.assign({}, c.ajRec) : null;
+  if (ajRec) res.ajustesRecusados = ajRec;
   leiPreCtx = null;
   $("dlgLeiPre").close();
   leiPreAvisar("");
   try {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: escolhas confirmadas",
-      JSON.stringify(res.resumo));
+      JSON.stringify(res.resumo) + (ajRec ? " · números com letra trocados: " + Object.keys(ajRec).join(", ") : ""));
   } catch (e) {}
   /* (v18.66.0) no registro: grupo a grupo, quantas sugestões e quantas a pessoa aceitou */
   try {

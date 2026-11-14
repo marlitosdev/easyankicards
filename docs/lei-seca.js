@@ -50,6 +50,9 @@ const LEIS_CHAVE = "eac_leis";
  * outros dois. O 2º sufixo só vale COLADO e sem letra depois: "Art. 359-M - A pena…" continua sendo texto. */
 const LEI_RE_ARTIGO =
   /^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?(?:\s*[-–]\s*[A-Z])?(?:[-–][A-Z](?![A-Za-zÀ-ú]))?)\s*[.\-–—)]?\s*/i;
+/* o mesmo cabeçalho SEM a letra depois do número: para onde o leitor vai quando decide que a letra
+ * é a primeira palavra do texto ("Art. 3º - A Dívida…" → art. 3º) */
+const LEI_RE_ARTIGO_SEM_SUFIXO = /^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?)\s*[.\-–—)]?\s*/i;
 
 /* CABEÇALHO DE DIVISÃO (título, capítulo, seção…).
  * Serve para dois fins: partir a lei em blocos de leitura e dizer, ao
@@ -154,6 +157,17 @@ function leiLerFaixaRevogada(linha) {
  * da numeração. O sufixo de verdade vem colado ("Art. 178-A") ou, com espaços, seguido de outro
  * começo de frase (maiúscula, número, aspas) ou do fim da linha. Letra minúscula, ou letra seguida
  * de palavra em minúscula, é o artigo/pronome "a": fica no texto. */
+/* (v19.132.0) MAIÚSCULA NÃO BASTA: "Art. 3º - A Dívida Ativa…" (Lei 6.830), "Art. 33 - O Juízo…",
+ * "Art. 39 - A Fazenda…" — a palavra depois da letra vem maiúscula e mesmo assim a letra é o
+ * artigo "a"/"o". Antes o leitor criava os artigos fantasmas 3-A, 33-O, 37-O e 39-A — e só o
+ * 3º-A aparecia na crítica (os outros vinham "em sequência" e passavam em silêncio).
+ * A letra espaçada só é do número quando a palavra seguinte NÃO PODE seguir o artigo "a":
+ * preposição, conjunção ou advérbio ("Art. 18 - A Para fins…" é o 18-A, porque "a para" não
+ * existe). Se é uma palavra que segue o artigo ("Dívida", "Juízo", "Fazenda", "União"), a letra
+ * fica no texto. Errar para o lado do texto faz o número repetir (a conferência de repetidos
+ * avisa); errar para o lado da letra cria um artigo fantasma em sequência, que ninguém aponta. */
+const LEI_RE_SEM_ARTIGO =
+  /^(para|com|sem|sob|sobre|contra|entre|mediante|conforme|consoante|perante|segundo|em|de|do|da|dos|das|por|pelo|pela|pelos|pelas|ate|apos|desde|se|como|quando|onde|enquanto|e|ou|mas|nem|salvo|exceto|senao|pois|portanto|contudo|todavia|logo|ja|tambem|ainda)$/;
 function leiCasarArtigo(linha) {
   const s = String(linha == null ? "" : linha);
   const a = s.match(LEI_RE_ARTIGO);
@@ -163,9 +177,14 @@ function leiCasarArtigo(linha) {
   if (!/\s[-–]|[-–]\s/.test(a[1])) return a;             /* colado ("178-A"): sufixo de verdade */
   const resto = s.slice(a[0].length);
   const proxima = (resto.match(/^\s*(\S)/) || [])[1] || "";
-  const minuscula = suf[1] !== suf[1].toUpperCase() || (proxima && proxima !== proxima.toUpperCase());
-  if (!minuscula) return a;
-  return s.match(/^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°ª])?)\s*[.\-–—)]?\s*/i) || a;
+  let letraNoTexto = suf[1] !== suf[1].toUpperCase() || (proxima && proxima !== proxima.toUpperCase());
+  if (!letraNoTexto && /[A-Za-zÀ-ú]/.test(proxima)) {
+    const palavra = (resto.match(/^\s*([A-Za-zÀ-ú]+)/) || [])[1] || "";
+    const plana = palavra.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (!LEI_RE_SEM_ARTIGO.test(plana)) letraNoTexto = true;
+  }
+  if (!letraNoTexto) return a;
+  return s.match(LEI_RE_ARTIGO_SEM_SUFIXO) || a;
 }
 
 /* Separa o NOME de uma divisão das notas de alteração que vêm coladas nele. */
@@ -341,6 +360,17 @@ function leiLerLei(texto, opc) {
         ajustes.push({ id: idS, tipo: "sufixo", linha: i + 1, linhaFim: i + 1, antes: cortaAj(linha, 200),
           de: leiNumCruLimpo(brutoArt[1]), para: leiNumCruLimpo(a[1]), letra: String(brutoArt[1]).slice(-1), recusado: recS });
         if (recS) a = brutoArt;
+      } else if (brutoArt && /[-–]\s*[A-Za-z]$/.test(brutoArt[1]) && /\s[-–]|[-–]\s/.test(brutoArt[1])) {
+        /* (v19.132.0) MANTEVE a letra espaçada ("Art. 18 - A Para fins…" → 18-A): também é uma escolha
+         * do leitor — antes era silenciosa e, quando errada, não havia o que desfazer. Fica à vista
+         * igual à outra; recusar aqui é ler SEM a letra ("o A é o começo do texto"). */
+        const idS = "sufixo:" + (i + 1) + ":" + leiNumCruLimpo(brutoArt[1]);
+        const recS = !!rec[idS];
+        const semS = linha.match(LEI_RE_ARTIGO_SEM_SUFIXO);
+        ajustes.push({ id: idS, tipo: "sufixo", linha: i + 1, linhaFim: i + 1, antes: cortaAj(linha, 200),
+          de: leiNumCruLimpo(brutoArt[1]), para: semS ? leiNumCruLimpo(semS[1]) : "", letra: String(brutoArt[1]).slice(-1),
+          manteve: true, recusado: recS });
+        if (recS && semS) a = semS;
       }
       const cruBruto = String(a[1]).replace(/\s+/g, "");
       let cruArt = leiNumCruLimpo(a[1]);

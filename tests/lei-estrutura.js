@@ -44,6 +44,37 @@ async function testes() {
     const nm = p.leiNumeracao(p.leiArtigos(seq.join("\n")));
     ok(nm.problemas.length === 0, "A3 a sequência 170-185 (com o 178 escrito assim) nao tem problema: " + JSON.stringify(nm.problemas));
   }
+  {
+    /* (v19.132.0) a letra espaçada seguida de palavra que PODE seguir o artigo "a"/"o" é o começo
+     * do texto — o caso real da Lei 6.830: "Art. 3º - A Dívida Ativa…" virava o fantasma "3º-A"
+     * (apontado), e "Art. 33 - O Juízo…"/"Art. 39 - A Fazenda…" viravam "33-O"/"39-A" EM SILÊNCIO */
+    const t2 = ["Art. 1º. Alfa.", "Art. 2º. Beta.", "Art. 3º - A Dívida Ativa regularmente inscrita goza de presunção.",
+      "Art. 4º. Gama.", "Art. 8º - A Em caso de dívida, o valor é apurado.", "Art. 9º - A fim de evitar, dispõe.",
+      "Art. 10 - A não ser que haja, vale.", "Art. 18 - A Para fins desta lei.", "Art. 33 - O Juízo decidirá.",
+      "Art. 39 - A Fazenda Pública cobrará."].join("\n");
+    const arts2 = p.leiArtigos(t2);
+    ok(arts2.map((a) => a.num).join(",") === "1,2,3,4,8º-A,9,10,18-A,33,39", "A4 a letra que pode seguir o artigo 'a' fica no texto: " + nums(t2));
+    ok(arts2[2].corpo.indexOf("A Dívida Ativa") === 0 && arts2[8].corpo.indexOf("O Juízo") === 0 && arts2[9].corpo.indexOf("A Fazenda") === 0,
+      "A4a e ela volta para o corpo: " + arts2[2].corpo.slice(0, 16) + " | " + arts2[8].corpo.slice(0, 10) + " | " + arts2[9].corpo.slice(0, 10));
+    ok(arts2[7].num === "18-A" && arts2[7].corpo.indexOf("Para fins") === 0, "A4b 'Art. 18 - A Para fins…' continua 18-A ('a para' nao existe): " + arts2[7].num + "/" + arts2[7].corpo.slice(0, 12));
+    /* a numeração da Lei 6.830 (1 a 42, com o 3º nesse formato) fecha sem problema */
+    const seq2 = [];
+    for (let i = 1; i <= 42; i++) seq2.push(i === 3 ? "Art. 3º - A Dívida Ativa regularmente inscrita goza da presunção de certeza." : "Art. " + i + ". Texto " + i + ".");
+    const nm2 = p.leiNumeracao(p.leiArtigos(seq2.join("\n")));
+    ok(nm2.problemas.length === 0, "A5 a sequência 1-42 com o 'Art. 3º - A Dívida…' nao tem problema: " + JSON.stringify(nm2.problemas));
+    /* o "manteve a letra" também é um ajuste registrado — e dá para ler sem a letra */
+    const lida2 = p.leiLerLei(t2);
+    const man = lida2.ajustes.filter((x) => x.tipo === "sufixo" && x.manteve);
+    ok(man.length === 2 && man.map((x) => x.de).join(",") === "8º-A,18-A" && man.every((x) => x.recusado === false && x.para.length < x.de.length),
+      "A6 os dois 'manteve' registrados (8º-A e 18-A): " + JSON.stringify(man));
+    ok(lida2.ajustes.filter((x) => x.tipo === "sufixo" && !x.manteve).length === 5, "A6a e os cinco 'tirou a letra' (3º, 9º, 10, 33, 39): " + lida2.ajustes.map((x) => x.id).join(" | "));
+    const rec2 = {}; rec2[man[1].id] = true;
+    const lida3 = p.leiLerLei(t2, { recusados: rec2 });
+    const nums3 = lida3.artigos.map((a) => a.num).join(",");
+    ok(nums3 === "1,2,3,4,8º-A,9,10,18,33,39", "A7 recusar o 'manteve' relê sem a letra: " + nums3);
+    const a18 = lida3.artigos.find((a) => a.num === "18");
+    ok(a18 && a18.corpo.indexOf("A Para fins") === 0, "A7a e o 'A' volta para o corpo: " + (a18 ? a18.corpo.slice(0, 20) : "?"));
+  }
 
   /* ==============================================================
    * D: AS DIVISÕES
