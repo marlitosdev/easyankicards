@@ -168,6 +168,43 @@ function leiLerFaixaRevogada(linha) {
  * avisa); errar para o lado da letra cria um artigo fantasma em sequência, que ninguém aponta. */
 const LEI_RE_SEM_ARTIGO =
   /^(para|com|sem|sob|sobre|contra|entre|mediante|conforme|consoante|perante|segundo|em|de|do|da|dos|das|por|pelo|pela|pelos|pelas|ate|apos|desde|se|como|quando|onde|enquanto|e|ou|mas|nem|salvo|exceto|senao|pois|portanto|contudo|todavia|logo|ja|tambem|ainda)$/;
+/* =====================================================================
+ * (19.134.0) QUANDO A LETRA DEPOIS DO NÚMERO NÃO É DÚVIDA
+ *
+ * A 19.132.0 pôs à vista cada "número com letra" que o leitor decidiu — e, na Lei 6.830, a tela passou a listar 40
+ * artigos para conferir: TODOS os que vêm no estilo "Art. 2º - Constitui…", inclusive aqueles em que a "letra" é só a
+ * primeira letra de uma palavra. Conferência que pergunta tudo não confere nada. Cada ajuste "sufixo" em que o leitor
+ * tirou a letra ganha `semDuvida` quando:
+ *  1. a letra é o começo de uma PALAVRA ("- Constitui", "- Em", "- Não", "- Os"): sufixo de artigo é uma letra sozinha;
+ *  2. a letra está sozinha ("- A Dívida", "- O Juízo"), mas o traço depois do número é o ESTILO da lei (a maioria dos
+ *     artigos vem assim, e são pelo menos 5) e não existe outro artigo com o mesmo número — um 3º-A de verdade vem
+ *     depois de um 3º.
+ * O que o leitor MANTEVE com letra ("Art. 18 - A Para fins…" → 18-A) e o que a pessoa trocou nunca são "sem dúvida".
+ * O ajuste continua existindo (o mapa da lei mostra todos); só a revisão da colagem deixa de perguntar por estes.
+ * ===================================================================== */
+const LEI_RE_TRACO_ESTILO = /^[\s>*]*Art(?:\.|igo)?\s*\d{1,4}\s*[ºo°ª]?\s*[-–]\s+\S/i;
+const LEI_RE_LETRA_EM_PALAVRA = /^[\s>*]*Art(?:\.|igo)?\s*\d{1,4}\s*[ºo°ª]?\s*[-–]\s*[A-Za-zÀ-ú]{2}/i;
+function leiSufixosSemDuvida(ajustes, artigos, linhas) {
+  const sufs = (ajustes || []).filter((a) => a && a.tipo === "sufixo");
+  if (!sufs.length) return 0;
+  const arts = artigos || [];
+  const noEstilo = arts.filter((a) => LEI_RE_TRACO_ESTILO.test(String((linhas || [])[a.linha - 1] || ""))).length;
+  const estilo = noEstilo >= 5 && noEstilo >= arts.length * 0.6;
+  const vezes = {};
+  arts.forEach((a) => { vezes[a.num] = (vezes[a.num] || 0) + 1; });
+  let n = 0;
+  sufs.forEach((a) => {
+    a.semDuvida = false;
+    if (a.manteve || a.recusado) return;
+    const crua = String((linhas || [])[a.linha - 1] || a.antes || "");
+    const base = leiNumNormal(a.para);
+    if (LEI_RE_LETRA_EM_PALAVRA.test(crua)) a.semDuvida = true;
+    else if (estilo && (vezes[base] || 0) <= 1) a.semDuvida = true;
+    if (a.semDuvida) n++;
+  });
+  return n;
+}
+
 function leiCasarArtigo(linha) {
   const s = String(linha == null ? "" : linha);
   const a = s.match(LEI_RE_ARTIGO);
@@ -424,6 +461,7 @@ function leiLerLei(texto, opc) {
       rotulo: b.rotulo, alvo: b.alvo ? b.alvo.curto : "", n: b.n, recusado: !!b.recusado });
   });
   ajustes.sort((x, y) => x.linha - y.linha);
+  leiSufixosSemDuvida(ajustes, artigos, linhas);
 
   return {
     ajustes,

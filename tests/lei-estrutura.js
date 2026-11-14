@@ -76,6 +76,41 @@ async function testes() {
     ok(a18 && a18.corpo.indexOf("A Para fins") === 0, "A7a e o 'A' volta para o corpo: " + (a18 ? a18.corpo.slice(0, 20) : "?"));
   }
 
+  /* ---- A8 (19.134.0): quando a letra depois do número NÃO é dúvida. A Lei 6.830 inteira vem como "Art. 2º -
+   * Constitui…": a revisão listava 40 artigos para conferir, e nenhum tinha dúvida de verdade ---- */
+  {
+    const L6830 = ["Art. 1º - A execução judicial para cobrança da Dívida Ativa será regida por esta Lei.",
+      "Art. 2º - Constitui Dívida Ativa da Fazenda Pública aquela definida como tributária ou não tributária.",
+      "Art. 3º - A Dívida Ativa regularmente inscrita goza da presunção de certeza e liquidez.",
+      "Art. 4º - A execução fiscal poderá ser promovida contra:",
+      "Art. 5º - A competência para processar e julgar a execução exclui a de qualquer outro Juízo.",
+      "Art. 7º - O despacho do Juiz que deferir a inicial importa em ordem para:",
+      "Art. 9º - Em garantia da execução, o executado poderá:",
+      "Art. 10 - Não ocorrendo o pagamento, a penhora poderá recair em qualquer bem do executado.",
+      "Art. 26 - Se, antes da decisão de primeira instância, a inscrição for cancelada, a execução será extinta."].join("\n");
+    const l8 = p.leiLerLei(L6830);
+    const s8 = l8.ajustes.filter((x) => x.tipo === "sufixo");
+    ok(l8.artigos.map((a) => a.num).join(",") === "1,2,3,4,5,7,9,10,26" && s8.length === 9, "A8 a lei no estilo 'Art. N - Texto': nove artigos, nove leituras 'sem a letra': " + l8.artigos.map((a) => a.num).join(","));
+    ok(s8.every((x) => x.semDuvida === true), "A8a NENHUMA é dúvida — nem 'Constitui'/'Em'/'Não' (a letra é o começo de uma palavra), nem 'A Dívida'/'O despacho' (o traço é o estilo da lei): "
+      + s8.filter((x) => !x.semDuvida).map((x) => x.id).join(" | "));
+    /* uma lei comum, com UM artigo no traço: aí é dúvida, e a tela pergunta */
+    const umSo = ["Art. 1. Alfa.", "Art. 2. Beta.", "Art. 3º - A Dívida Ativa goza de presunção.", "Art. 4. Gama.", "Art. 5. Delta.", "Art. 6. Épsilon."].join("\n");
+    const s9 = p.leiLerLei(umSo).ajustes.filter((x) => x.tipo === "sufixo");
+    ok(s9.length === 1 && s9[0].semDuvida === false, "A8b um artigo só com 'N - A Palavra' numa lei de ponto: continua sendo dúvida");
+    /* letra que é começo de palavra nunca é dúvida, mesmo sozinha na lei */
+    const palavra = ["Art. 1. Alfa.", "Art. 2 - Constitui dívida ativa.", "Art. 3. Gama."].join("\n");
+    const s10 = p.leiLerLei(palavra).ajustes.filter((x) => x.tipo === "sufixo");
+    ok(s10.length === 1 && s10[0].semDuvida === true, "A8c '- Constitui': a letra é o começo de uma palavra, sem dúvida");
+    /* o estilo não cobre o número que aparece DUAS vezes (aí pode ser o N-A de verdade), nem o que o leitor manteve */
+    const duas = L6830 + "\nArt. 26 - A Fazenda pode desistir.\nArt. 18 - A Para fins da incidência do imposto.";
+    const s11 = p.leiLerLei(duas).ajustes.filter((x) => x.tipo === "sufixo");
+    const do26 = s11.filter((x) => x.para === "26"), man = s11.filter((x) => x.manteve);
+    ok(do26.length === 2 && do26.some((x) => x.semDuvida === false) && man.length === 1 && man[0].semDuvida === false,
+       "A8d número repetido ('26' duas vezes: um pode ser o 26-A) e letra MANTIDA ('18 - A Para') continuam para conferir: " + JSON.stringify(s11.filter((x) => !x.semDuvida).map((x) => x.id)));
+    const trocado = p.leiLerLei(L6830, { recusados: { [s8[2].id]: true } }).ajustes.filter((x) => x.id === s8[2].id)[0];
+    ok(trocado.recusado === true && trocado.semDuvida === false, "A8e o que a pessoa trocou fica à vista");
+  }
+
   /* ==============================================================
    * D: AS DIVISÕES
    * ============================================================== */

@@ -5623,14 +5623,17 @@ function leiRelatorioFluxo(tela, opc) {
       }
       /* (v19.132.0) os números com letra no texto: como o app leu cada um e o que a pessoa trocou */
       const sufR = (lidaR.ajustes || []).filter((a) => a.tipo === "sufixo");
-      if (sufR.length) {
-        p.push("  números com letra — como o app leu (" + sufR.length + "):");
-        sufR.slice(0, 30).forEach((a) => {
+      const sufCertos = sufR.filter((a) => a.semDuvida);
+      const sufDuv = sufR.filter((a) => !a.semDuvida);
+      if (sufCertos.length) p.push("  números com traço antes do texto, lidos sem dúvida: " + sufCertos.length + " (ex.: linha " + sufCertos[0].linha + " · " + cortar(sufCertos[0].antes, 60) + ")");
+      if (sufDuv.length) {
+        p.push("  números com letra — para conferir (" + sufDuv.length + "):");
+        sufDuv.slice(0, 30).forEach((a) => {
           const lidoCom = a.manteve ? !a.recusado : !!a.recusado;
           p.push("    linha " + a.linha + " · Art. " + a.de + " → lido como Art. " + (lidoCom ? a.de : a.para)
             + (a.recusado ? " (trocado por você)" : "") + " · " + cortar(a.antes, 90));
         });
-        if (sufR.length > 30) p.push("    …e mais " + (sufR.length - 30));
+        if (sufDuv.length > 30) p.push("    …e mais " + (sufDuv.length - 30));
       }
     } catch (e) { p.push("  (conferência indisponível: " + (e && e.message) + ")"); }
     /* (19.107.0) a janela do texto de cada sugestão, com as mesmas marcas da tela */
@@ -7310,11 +7313,26 @@ function leiPreSeqEl(arts, q) {
 /* (v19.132.0) COMO O APP LEU os números com letra no texto ("Art. 3º - A Dívida…" virou o art. 3º;
  * "Art. 18 - A Para fins…" ficou o 18-A): cada um com o "ver no texto" e a troca na hora. A escolha
  * fica em c.ajRec e nasce gravada na lei (ajustesRecusados) — vale no leitor e no mapa depois. */
-function leiPreSufixosEl(c, res, sufixos) {
-  const box = leiPreEl("div", "lei-pre-suf-box");
-  box.append(leiPreEl("div", "lei-pre-cab", t("lei_pre_suf_tit", { n: sufixos.length })));
-  box.append(leiPreEl("p", "nota", t("lei_pre_suf_expl")));
-  sufixos.slice(0, 60).forEach((a) => {
+function leiPreSufixosEl(c, res, todos) {
+  /* (19.134.0) SÓ O QUE É DÚVIDA fica na lista. Na Lei 6.830 eram 40 itens para conferir — todos os artigos no estilo
+   * "Art. 2º - Constitui…", nenhum com dúvida de verdade (leiSufixosSemDuvida). Esses viram uma linha, recolhida. */
+  const sufixos = todos.filter((a) => !a.semDuvida);
+  const certos = todos.filter((a) => a.semDuvida);
+  const box = leiPreEl("div", "lei-pre-suf-box" + (sufixos.length ? "" : " lei-pre-suf-calmo"));
+  if (sufixos.length) {
+    box.append(leiPreEl("div", "lei-pre-cab", t("lei_pre_suf_tit", { n: sufixos.length })));
+    box.append(leiPreEl("p", "nota", t("lei_pre_suf_expl")));
+  }
+  const lista = sufixos.length ? box : null;
+  let dentro = null;
+  if (certos.length) {
+    const det = leiPreEl("details", "lei-pre-suf-certos");
+    det.id = "leiPreSufCertos";
+    det.append(leiPreEl("summary", "", "✓ " + t("lei_pre_suf_certos", { n: certos.length, ex: String(certos[0].antes || "").slice(0, 34).trim() })));
+    det.append(leiPreEl("p", "nota", t("lei_pre_suf_certos_expl")));
+    dentro = det;
+  }
+  const montar = (onde, a) => {
     const item = leiPreEl("div", "lei-pre-suf-item");
     item.id = "leiPreSuf_" + a.linha;
     const lidoCom = a.manteve ? !a.recusado : !!a.recusado;
@@ -7339,9 +7357,15 @@ function leiPreSufixosEl(c, res, sufixos) {
     });
     item.append(caixa);
     item.append(leiDupContextoEl(res.texto, { linha: a.linha, linhaFim: a.linhaFim || a.linha }));
-    box.append(item);
-  });
+    onde.append(item);
+  };
+  if (lista) sufixos.slice(0, 60).forEach((a) => montar(lista, a));
   if (sufixos.length > 60) box.append(leiPreEl("p", "nota", t("lei_num_mais", { n: sufixos.length - 60 })));
+  if (dentro) {
+    certos.slice(0, 60).forEach((a) => montar(dentro, a));
+    if (certos.length > 60) dentro.append(leiPreEl("p", "nota", t("lei_num_mais", { n: certos.length - 60 })));
+    box.append(dentro);
+  }
   return box;
 }
 

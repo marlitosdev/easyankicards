@@ -263,6 +263,28 @@ async function testes() {
     ok(!api.$("leiPreSeguras") && api.$("leiPreGrupo_grafia"), "T4 sem nada para conferir, sem bloco recolhido: os grupos à vista");
   }
 
+  /* ---- T (19.134.0): a revisão só pergunta o que é dúvida. A Lei 6.830 listava 40 artigos para conferir ---- */
+  {
+    const { api } = rodar();
+    const lin = [];
+    for (let i = 1; i <= 12; i++) lin.push("Art. " + i + (i < 10 ? "º" : "") + " - " + (i % 3 === 0 ? "A Dívida Ativa do artigo " : i % 3 === 1 ? "Constitui regra do artigo " : "O Juiz decidirá no artigo ") + i + ".");
+    const tx = lin.join("\n");
+    api.leiRevisarColagemAbrir({ modo: "criar", texto: tx, pre: api.leiPreprocessar(tx), aoConfirmar: () => {} });
+    const ps = api.$("leiPreSufixos");
+    ok(/Numeração em sequência \(12 artigos\)/.test(api.$("leiPreNumeracao").textContent), "T1 a lei no estilo 'Art. N - Texto' fecha em sequência: " + api.$("leiPreNumeracao").textContent.slice(0, 80));
+    ok(ps && !ps.hidden && !/como o app leu/.test(ps.textContent) && !/pode ser o art\. 3º/.test(ps.textContent), "T2 sem dúvida nenhuma, o bloco NÃO pede conferência: " + (ps ? ps.textContent.slice(0, 120) : "?"));
+    const det = api.$("leiPreSufCertos");
+    ok(det && det.open !== true && /✓ 12 artigo\(s\) vêm com traço depois do número/.test(det.textContent) && /sem dúvida/.test(det.textContent),
+       "T3 no lugar, UMA linha recolhida: quantos foram lidos sem dúvida: " + (det ? det.textContent.slice(0, 110) : "?"));
+    ok(api.$("leiPreSuf_3") && api.$("leiPreSuf_3_com"), "T4 dentro dela a troca continua disponível, artigo por artigo");
+    const rel = api.leiRelatorioFluxo("revisar a colagem");
+    ok(/lidos sem dúvida: 12/.test(rel) && !/para conferir \(/.test(rel), "T5 o relatório diz o total numa linha, e não lista os 12: " + (rel.match(/n[úu]meros com[^\n]*/) || [""])[0]);
+    /* trocar um deles: ele passa para a lista de conferência, à vista */
+    api.$("leiPreSuf_3_com").onclick();
+    const ps2 = api.$("leiPreSufixos");
+    ok(/como o app leu \(1\)/.test(ps2.textContent) && /✓ 11 artigo\(s\)/.test(api.$("leiPreSufCertos").textContent), "T6 o que você trocou sobe para a lista (1), e os outros 11 seguem recolhidos: " + ps2.textContent.slice(0, 60));
+  }
+
   /* ---- S (v19.132.0): os números com letra, como o app leu — à vista, com "ver no texto" e troca
    * na hora. O caso real: Lei 6.830, "Art. 3º - A Dívida Ativa…" virava o fantasma "3º-A", e a tela
    * não dava nem a conferência nem a escolha ---- */
