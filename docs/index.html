@@ -118,6 +118,18 @@
 body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif;
      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:var(--bg);
      color:var(--texto);padding-bottom:84px}
+/* (19.128.0) a capa da abertura: a marca no centro e um fio que corre, sobre a cor de fundo do tema */
+.abertura{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--bg);
+  opacity:1;transition:opacity var(--mov);animation:aberturaSaiSozinha .3s 8s forwards}
+.abertura.abertura-fim{opacity:0;pointer-events:none}
+.abertura-cx{display:flex;flex-direction:column;align-items:center;gap:var(--esp-3)}
+.abertura-ico{border-radius:var(--r-g);box-shadow:var(--sombra-2)}
+.abertura-nome{font-size:var(--fs-5);font-weight:var(--peso-f);color:var(--texto);letter-spacing:.2px}
+.abertura-barra{width:140px;height:3px;border-radius:var(--r-pilula);background:var(--borda);overflow:hidden}
+.abertura-fio{display:block;width:40%;height:100%;border-radius:var(--r-pilula);background:var(--acao);animation:aberturaFio 1.1s ease-in-out infinite}
+@keyframes aberturaFio{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+@keyframes aberturaSaiSozinha{to{opacity:0;visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.abertura-fio{animation:none;width:100%}}
 header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--panel);
        box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:5}
 header h1{font-size:19px;margin:0;flex:1}
@@ -7838,6 +7850,18 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 </style>
 </head>
 <body>
+<!-- (19.128.0) A ABERTURA. A página desenhava a bancada de cartões (o que está no HTML) e só depois trocava para a tela
+     guardada — um pisca de tela errada a cada abertura. Agora uma capa cobre tudo com a marca até o app terminar de se
+     montar. O tema guardado é aplicado já aqui, para a capa nascer na cor certa. Se o início falhar, a capa sai sozinha
+     (animação em CSS, sem depender de script). -->
+<script>try{var temaCedo=localStorage.getItem("eac_theme");if(temaCedo&&temaCedo!=="auto")document.documentElement.dataset.theme=temaCedo;}catch(e){}</script>
+<div id="abertura" class="abertura" aria-hidden="true">
+  <div class="abertura-cx">
+    <img class="abertura-ico" src="icon-192.png" alt="" width="72" height="72">
+    <div class="abertura-nome">EasyAnkiCards</div>
+    <div class="abertura-barra"><span class="abertura-fio"></span></div>
+  </div>
+</div>
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small><span class="hdr-por">by MarlitosDev · </span><span id="versao"></span></small></h1>
@@ -13203,6 +13227,7 @@ window.__sqlPromise = initSqlJs({
 <script src="fatos.js"></script>
 <script src="cobertura-fonte.js"></script>
 <script src="preparar.js"></script>
+<script src="integridade.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>
@@ -13297,9 +13322,16 @@ try { bkIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar bkIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { bkaIniciar().catch((e) => { try { reg("ERRO", "falha ao iniciar o backup automático: " + (e && e.message)); } catch (x) {} }); } catch (e) { console.error(e); }
+/* (19.128.0) o retrato da abertura e a conferência de integridade */
+try { intIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar a conferência de integridade: " + (e && e.message)); } catch (x) {} }
 try { montarBarraModos(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar montarBarraModos: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
+/* (19.128.0) o app está montado: a capa da abertura sai (some em 0,25 s e deixa de existir) */
+try {
+  const capa = document.getElementById("abertura");
+  if (capa) { capa.classList.add("abertura-fim"); setTimeout(() => { try { capa.remove(); } catch (e) {} }, 400); }
+} catch (e) {}
 </script>
 </body>
 </html>

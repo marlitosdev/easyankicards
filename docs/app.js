@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.127.0";
+const VERSAO = "19.128.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -150,7 +150,7 @@ try {
 
 /* Eventos raros valem mais que rotina: seis "[INICIO]" seguidos nao podem
  * empurrar para fora um "[ERRO]" de tres dias atras. Estes ficam. */
-const REG_FIXOS = ["ERRO", "BLOQUEIO", "APAGAR", "RESTAURAR", "TEXTO"];
+const REG_FIXOS = ["ERRO", "BLOQUEIO", "APAGAR", "RESTAURAR", "TEXTO", "INTEGRIDADE"];
 
 /* Com o PWA e o navegador abertos ao mesmo tempo, os eventos das duas
  * execucoes se intercalam no mesmo registro. Quatro caracteres bastam
@@ -4681,6 +4681,15 @@ function diagResumo(L) {
   /* gravação */
   if (typeof falhasGravacao !== "undefined" && falhasGravacao.length) av("Gravação: " + falhasGravacao.length + " recusada(s) nesta sessão (" + [...new Set(falhasGravacao.map((f) => f.chave))].join(", ") + ")");
   else ok("Gravação: nenhuma recusada nesta sessão");
+  /* (19.128.0) integridade: o que a conferência da abertura achou, e as gravações que a trava do progresso recusou */
+  try {
+    if (typeof intLinhaDiagnostico === "function") {
+      const li = intLinhaDiagnostico();
+      if (li.tipo === "ok") ok(li.txt); else if (li.tipo === "aviso") av(li.txt); else L.push("ℹ " + li.txt);
+    }
+    if (typeof edBloqueiosDeProgresso !== "undefined" && edBloqueiosDeProgresso.length)
+      av("Trava do progresso: " + edBloqueiosDeProgresso.length + " gravação(ões) recusada(s) nesta sessão — " + edBloqueiosDeProgresso.map((b) => b.edital + " (" + b.de + " marcações mantidas; origem: " + (b.origem || "?") + ")").join("; "));
+  } catch (e) {}
   /* erros: os da versão de agora são o que importa */
   try {
     const G = rtErrosAgrupados(rtTudo({}));

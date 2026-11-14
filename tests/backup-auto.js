@@ -329,6 +329,33 @@ async function testes() {
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "X falta " + k + " em " + l); }));
     api.setLanguage("pt");
   }
+
+  /* ---- I (19.128.0): o retrato na abertura e a conferência de integridade ---- */
+  {
+    dia(0);
+    const { api, L } = preparar();
+    const regs = () => (api.registroAtual ? api.registroAtual() : []).map((x) => JSON.stringify(x));
+    const r1 = await api.intConferir({ semAviso: true });
+    ok(r1.semReferencia && api.intLer() && api.intLer().resumo.questoes === 30 && api.intLer().versao, "I1 primeira abertura: o retrato vira a referência: " + JSON.stringify(api.intLer()).slice(0, 140));
+    ok(regs().some((x) => /ABERTURA/.test(x) && /versão /.test(x) && /questões 30/.test(x)), "I2 o registro ganha o evento ABERTURA com a versão e os totais");
+    ok(/primeira abertura/.test(api.intLinhaDiagnostico().txt), "I2a o diagnóstico diz que é a primeira conferência");
+    const r2 = await api.intConferir({ semAviso: true });
+    ok(!r2.caiu.length && api.intLinhaDiagnostico().tipo === "ok" && /nada menor/.test(api.intLinhaDiagnostico().txt), "I3 nada mudou: conferência limpa: " + api.intLinhaDiagnostico().txt);
+    /* o incidente: entre o fim de uma sessão e a abertura seguinte, as questões somem */
+    L.setItem("eac_questoes", "[]");
+    const c3 = await conduzir(api, api.intConferir());
+    const r3 = c3.r;
+    ok(r3.caiu.length === 1 && r3.caiu[0].chave === "questoes" && r3.caiu[0].de === 30 && r3.caiu[0].para === 0, "I4 a queda é vista NA ABERTURA: " + JSON.stringify(r3.caiu));
+    ok(/MENOS dados/.test(c3.msgs.join("|")) && /questões: 30 → 0 \(faltam 30\)/.test(c3.msgs.join("|")) && /Restaurar de um arquivo/.test(c3.msgs.join("|")), "I5 o aviso sai na hora, com os números e o caminho: " + c3.msgs.join("|").slice(0, 200));
+    ok(regs().some((x) => /INTEGRIDADE/.test(x) && /menores que no fim da última sessão/.test(x) && /questões 30 → 0/.test(x)), "I6 e vai para o registro como INTEGRIDADE");
+    ok(api.intLinhaDiagnostico().tipo === "aviso" && /questões 30 → 0/.test(api.intLinhaDiagnostico().txt), "I7 o resumo do diagnóstico mostra a queda: " + api.intLinhaDiagnostico().txt);
+    ok(api.intLer().resumo.questoes === 30, "I8 a referência boa NÃO é trocada pela encolhida na abertura (reabrir repete o aviso)");
+    /* o fim da sessão regrava a referência: apagar de propósito não vira alarme depois */
+    api.intFecharSessao();
+    const r4 = await api.intConferir({ semAviso: true });
+    ok(api.intLer().resumo.questoes === 0 && !r4.caiu.length, "I9 no fim da sessão o retrato de agora vira a referência; a abertura seguinte não alarma");
+    ok(api.intQuedas({ questoes: 100, resumos: 10 }, { questoes: 97, resumos: 10 }).length === 0, "I10 queda pequena (3 de 100) não alarma");
+  }
   return falhas;
 }
 
