@@ -3208,10 +3208,144 @@ function jurBibSituacao(j) {
   return "";
 }
 
+/* =====================================================================
+ * (19.126.0) A BUSCA NO JULGADO INTEIRO, ANO, RELATOR E ORDEM
+ *
+ * A caixa só olhava tribunal, número, tese, resumo, etiqueta e tópico: a ementa guardada, o relator e o órgão existiam
+ * no julgado e não eram procurados. Agora: várias palavras (todas têm de aparecer, em qualquer campo), "frase entre
+ * aspas" para a expressão exata, e a linha mostra ONDE achou quando não foi no que está à vista.
+ * ===================================================================== */
+function jurBibTermos(q) {
+  const out = [];
+  jurSemAcento(q).replace(/"([^"]+)"|(\S+)/g, (m, frase, pal) => {
+    const x = String(frase || pal || "").replace(/"/g, "").replace(/\s+/g, " ").trim();
+    if (x) out.push(x);
+    return "";
+  });
+  return out;
+}
+/* sem acento e em minúsculas, mas com o MESMO comprimento do original (para recortar o trecho no texto de verdade) */
+function jurBibNormal(s) {
+  return String(s || "").split("").map((c) => { const n = jurSemAcento(c); return n.length === 1 ? n : c.toLowerCase().length === 1 ? c.toLowerCase() : c; }).join("").replace(/\s/g, " ");
+}
+function jurBibAno(j) { const m = String((j && j.data) || "").match(/(19|20)\d{2}/); return m ? m[0] : ""; }
+/* "Min. Luís Roberto Barroso", "Rel. Ministro LUIS ROBERTO BARROSO" e "Luís Roberto Barroso" são o mesmo relator */
+function jurBibRelatorChave(nome) {
+  return jurSemAcento(nome).replace(/\b(min|ministr[oa]|rel|relator|relatora|des|desembargador|desembargadora|dr|dra|conv|convocad[oa]|p\/ ?acordao)\b\.?/g, " ")
+    .replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+/* { ok, onde } — onde = { campo, antes, achado, depois } quando alguma palavra só aparece no que a linha NÃO mostra */
+function jurBibAchar(j, termos) {
+  if (!termos || !termos.length) return { ok: true, onde: null };
+  const aVista = jurBibNormal([j.tribunal, j.classe, j.numero, j.tema ? "tema " + j.tema : "", (j.tags || []).join(" "),
+    jurBibTopicosDe(j).map((x) => x.disciplina + " " + x.topico).join(" "), jurBibAno(j), j.tese || j.resumo].join(" "));
+  const ocultos = [["relator", j.relator], ["orgao", j.orgao], ["resumo", j.tese ? j.resumo : ""], ["ementa", j.texto], ["precedentes", j.precedentes]]
+    .map(([campo, v]) => ({ campo, v: String(v || ""), n: jurBibNormal(v) })).filter((x) => x.v);
+  let onde = null;
+  for (let i = 0; i < termos.length; i++) {
+    const tm = termos[i];
+    if (aVista.indexOf(tm) >= 0) continue;
+    const c = ocultos.find((x) => x.n.indexOf(tm) >= 0);
+    if (!c) return { ok: false, onde: null };
+    if (!onde) {
+      const k = c.n.indexOf(tm), a = Math.max(0, k - 70), b = Math.min(c.v.length, k + tm.length + 110);
+      onde = { campo: c.campo, antes: (a > 0 ? "…" : "") + c.v.slice(a, k).replace(/\s+/g, " "), achado: c.v.slice(k, k + tm.length),
+        depois: c.v.slice(k + tm.length, b).replace(/\s+/g, " ") + (b < c.v.length ? "…" : "") };
+    }
+  }
+  return { ok: true, onde };
+}
+function jurBibOrdenar(L) {
+  const o = jurBib.ordem || "";
+  if (!o) return L;
+  const c = L.slice();
+  const dt = (j) => (/^\d{4}/.test(String(j.data || "")) ? String(j.data) : jurBibAno(j));
+  if (o === "recente") c.sort((a, b) => (dt(a) ? 0 : 1) - (dt(b) ? 0 : 1) || dt(b).localeCompare(dt(a)));
+  if (o === "antigo") c.sort((a, b) => (dt(a) ? 0 : 1) - (dt(b) ? 0 : 1) || dt(a).localeCompare(dt(b)));
+  /* quem nunca foi verificado vem primeiro; depois, a verificação mais velha */
+  if (o === "verif") c.sort((a, b) => String(a.conferidoEm || "").localeCompare(String(b.conferidoEm || "")));
+  return c;
+}
+function jurBibTemFiltro() {
+  return !!(String(jurBib.busca || "").trim() || jurBib.trib || jurBib.sit || jurBib.assunto || jurBib.tag || jurBib.ano || jurBib.relator || jurBib.pasta);
+}
+function jurBibLimparFiltros() {
+  Object.assign(jurBib, { busca: "", trib: "", sit: "", assunto: "", tag: "", ano: "", relator: "", pasta: "" });
+  if ($("jurBibBusca")) $("jurBibBusca").value = "";
+  if ($("jurBibSit")) $("jurBibSit").value = "";
+  jurBibPintar();
+}
+/* os anos e os relatores que EXISTEM no acervo, com a contagem */
+function jurBibPintarAnoRelator(todos) {
+  const op = (sel, v, r) => { const o = document.createElement("option"); o.value = v; o.textContent = r; sel.append(o); };
+  const sa = $("jurBibAno");
+  if (sa) {
+    const anos = new Map();
+    let sem = 0;
+    todos.forEach((j) => { const a = jurBibAno(j); if (a) anos.set(a, (anos.get(a) || 0) + 1); else sem++; });
+    sa.innerHTML = "";
+    op(sa, "", t("jur_bib_ano_todos"));
+    [...anos.keys()].sort().reverse().forEach((a) => op(sa, a, a + " (" + anos.get(a) + ")"));
+    if (sem && anos.size) op(sa, "sem", t("jur_bib_ano_sem", { n: sem }));
+    if (jurBib.ano && jurBib.ano !== "sem" && !anos.has(jurBib.ano)) jurBib.ano = "";
+    if (jurBib.ano === "sem" && !(sem && anos.size)) jurBib.ano = "";
+    sa.value = jurBib.ano || "";
+    sa.hidden = !anos.size;
+  }
+  const sr = $("jurBibRelator");
+  if (sr) {
+    const rels = new Map();
+    todos.forEach((j) => {
+      const k = jurBibRelatorChave(j.relator);
+      if (!k) return;
+      const nome = String(j.relator).trim();
+      if (!rels.has(k)) rels.set(k, { nome, n: 0 });
+      const R = rels.get(k);
+      /* das grafias do mesmo relator, fica a menos gritada (menos maiusculas; no empate, a mais curta) */
+      const mai = (x) => x.replace(/[^A-ZÀ-Þ]/g, "").length;
+      if (mai(nome) < mai(R.nome) || (mai(nome) === mai(R.nome) && nome.length < R.nome.length)) R.nome = nome;
+      R.n++;
+    });
+    sr.innerHTML = "";
+    op(sr, "", t("jur_bib_rel_todos"));
+    [...rels.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([k, R]) => op(sr, k, R.nome + " (" + R.n + ")"));
+    if (jurBib.relator && !rels.has(jurBib.relator)) jurBib.relator = "";
+    sr.value = jurBib.relator || "";
+    sr.hidden = !rels.size;
+  }
+  if ($("jurBibOrdem")) $("jurBibOrdem").value = jurBib.ordem || "";
+}
+/* "SEU ACERVO, HOJE": de onde vêm os números e o que a busca NÃO alcança */
+function jurBibAcervo(todos, hoje) {
+  const L = todos || jurLista();
+  const r = { n: L.length, ementa: 0, data: 0, verif: 0, nunca: 0, fora: 0 };
+  L.forEach((j) => {
+    if (String(j.texto || "").trim()) r.ementa++;
+    if (jurBibAno(j)) r.data++;
+    if (!j.conferidoEm) r.nunca++;
+    else if (!jurPrecisaRever(j, hoje)) r.verif++;
+    if (jurForaDeVigor(j)) r.fora++;
+  });
+  r.vencida = r.n - r.nunca - r.verif;
+  return r;
+}
+function jurBibPintarAcervo(todos) {
+  const cx = $("jurBibAcervo");
+  if (!cx) return;
+  cx.hidden = !todos.length;
+  if (!todos.length) { cx.textContent = ""; return; }
+  const a = jurBibAcervo(todos);
+  const d = typeof jurHojeISO === "function" ? jurHojeISO().split("-").reverse().join("/") : "";
+  cx.textContent = t("jur_bib_acervo", { d, n: a.n, e: a.ementa, v: a.verif, x: a.vencida, s: a.nunca, f: a.fora })
+    + (a.ementa < a.n ? " " + t("jur_bib_acervo_limite", { n: a.n - a.ementa }) : "") + " " + t("jur_bib_acervo_so_aqui");
+}
+
 function jurBibFiltrados() {
-  const q = jurSemAcento(String(jurBib.busca || "")).toLowerCase().trim();
+  const termos = jurBibTermos(jurBib.busca);
   const todos = jurLista();
-  return todos.filter((j) => {
+  return jurBibOrdenar(todos.filter((j) => {
+    if (jurBib.ano && (jurBib.ano === "sem" ? !!jurBibAno(j) : jurBibAno(j) !== jurBib.ano)) return false;
+    if (jurBib.relator && jurBibRelatorChave(j.relator) !== jurBib.relator) return false;
     /* (v18.95.0) pelo selo de qualidade */
     if (/^q_/.test(jurBib.sit || "") && jurQualidade(j, { lista: todos }).nivel !== jurBib.sit.slice(2)) return false;
     if (jurBib.trib && String(j.tribunal || "") !== jurBib.trib) return false;
@@ -3233,17 +3367,15 @@ function jurBibFiltrados() {
     /* (JM4) a rever: nunca verificado ou há mais de 180 dias; fora de vigor: superada, cancelada ou alterada */
     if (jurBib.sit === "rever" && !jurPrecisaRever(j)) return false;
     if (jurBib.sit === "fora" && !jurForaDeVigor(j)) return false;
-    if (!q) return true;
-    const alvo = [j.tribunal, j.classe, j.numero, j.tema ? "tema " + j.tema : "", j.tese, j.resumo, (j.tags || []).join(" "),
-      jurBibTopicosDe(j).map((x) => x.disciplina + " " + x.topico).join(" ")].join(" ");
-    return jurSemAcento(alvo).toLowerCase().indexOf(q) >= 0;
-  });
+    return jurBibAchar(j, termos).ok;
+  }));
 }
 
 function jurBibAbrir(opc) {
   if (!$("dlgJurBib")) return false;
   const o = opc || {};
   jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", assunto: o.assunto || "", tag: o.tag || "", grupo: "topico", estudo: null, ligando: "", atual: false,
+    ano: "", relator: "", ordem: (jurBib && jurBib.ordem) || "",
     pasta: o.pasta || (jurBib && jurBib.pasta) || "" };
   /* (v18.96.0) tela cheia por padrão (a escolha é lembrada) */
   jurBibCheiaTrocar(jurBibCheiaPreferida(), false);
@@ -3278,7 +3410,9 @@ function jurBibPintar() {
   if (jurBib.trib && tribs.indexOf(jurBib.trib) < 0) jurBib.trib = "";
   st.value = jurBib.trib;
   jurBibPintarFiltros(todos);
+  jurBibPintarAnoRelator(todos);
   const L = jurBibFiltrados();
+  if ($("btnJurBibLimpar")) $("btnJurBibLimpar").hidden = !jurBibTemFiltro();
   const nTop = new Set(todos.flatMap((j) => (j.topicos || []).map(jurChaveComparavel))).size;
   $("jurBibConta").textContent = t("jur_bib_conta", { n: todos.length, k: nTop });
   $("jurBibFiltro").textContent = L.length === todos.length ? "" : t("jur_bib_filtrados", { n: L.length });
@@ -3314,6 +3448,7 @@ function jurBibPintar() {
   if ($("jurBibAtual")) $("jurBibAtual").hidden = !atu;
   $("jurBibLista").hidden = est || atu;
   $("jurBibBarra").hidden = est || atu;
+  if (est || atu) { if ($("jurBibAcervo")) $("jurBibAcervo").hidden = true; } else jurBibPintarAcervo(todos);
   if (est) { jurBibPintarEstudo(); return; }
   if (atu) { jurBibAtualPintar(); return; }
 
@@ -3383,6 +3518,18 @@ function jurBibLinha(j) {
   tese.className = "jur-bib-tese";
   tese.textContent = String(j.tese || j.resumo || t("jur_bib_sem_tese")).trim();
   li.append(tese);
+  /* (19.126.0) a palavra procurada só está na ementa (ou no relator, no órgão…): a linha mostra o trecho */
+  const onde = jurBibAchar(j, jurBibTermos(jurBib.busca)).onde;
+  if (onde) {
+    const ac = document.createElement("div");
+    ac.className = "jur-bib-achado";
+    const rot = document.createElement("b");
+    rot.textContent = t("jur_bib_achado_" + onde.campo) + " ";
+    const mk = document.createElement("mark");
+    mk.textContent = onde.achado;
+    ac.append(rot, document.createTextNode(onde.antes), mk, document.createTextNode(onde.depois));
+    li.append(ac);
+  }
   /* (v18.96.0) AS ETIQUETAS À VISTA: tocar numa filtra a biblioteca por ela */
   const tg = jurTagsDe(j);
   if (tg.length) {
@@ -3662,6 +3809,10 @@ if (typeof document !== "undefined" && $("dlgJurBib")) {
   $("jurBibTrib").onchange = () => { jurBib.trib = $("jurBibTrib").value; jurBibPintar(); };
   $("jurBibSit").onchange = () => { jurBib.sit = $("jurBibSit").value; jurBibPintar(); };
   $("jurBibGrupo").onchange = () => { jurBib.grupo = $("jurBibGrupo").value; jurBibPintar(); };
+  if ($("jurBibAno")) $("jurBibAno").onchange = () => { jurBib.ano = $("jurBibAno").value; jurBibPintar(); };
+  if ($("jurBibRelator")) $("jurBibRelator").onchange = () => { jurBib.relator = $("jurBibRelator").value; jurBibPintar(); };
+  if ($("jurBibOrdem")) $("jurBibOrdem").onchange = () => { jurBib.ordem = $("jurBibOrdem").value; jurBibPintar(); };
+  if ($("btnJurBibLimpar")) $("btnJurBibLimpar").onclick = () => jurBibLimparFiltros();
   $("btnJurBibCartoes").onclick = () => jurBibCartoes();
   $("btnJurBibDesfazer").onclick = () => jurBibDesfazer();
   $("btnJurBibEstudar").onclick = () => jurBibEstudarIniciar();

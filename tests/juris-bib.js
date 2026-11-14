@@ -71,6 +71,68 @@ async function testes() {
     ok(!grupos(api).length && itens(api).length === 3, "B6a sem agrupar: uma lista só");
   }
 
+  /* B7 (19.126.0): a busca no julgado inteiro, ano, relator, ordem e "seu acervo, hoje" */
+  {
+    const { api } = montar();
+    api.jurGravar({ tribunal: "STJ", classe: "REsp", numero: "555", tese: "Tese sobre decadência.", relator: "Min. Herman Benjamin", orgao: "Segunda Turma",
+      data: "2019-03-12", texto: "TRIBUTÁRIO. LANÇAMENTO POR HOMOLOGAÇÃO. O prazo decadencial conta-se do fato gerador quando há pagamento antecipado." });
+    api.jurGravar({ tribunal: "STJ", classe: "AgInt", numero: "666", tese: "Tese sobre prescrição.", relator: "Ministro HERMAN BENJAMIN", data: "2023-08-01", conferidoEm: api.jurHojeISO() });
+    api.jurGravar({ tribunal: "STF", classe: "RE", numero: "777", tese: "Tese sobre imunidade.", relator: "Min. Cármen Lúcia", data: "2023-02-10" });
+    api.jurBibAbrir();
+    const ordem = () => api.jurBibFiltrados().map((j) => j.numero).join();
+    const nums = () => api.jurBibFiltrados().map((j) => j.numero).sort().join();
+    const busca = (q) => { api.$("jurBibBusca").value = q; api.$("jurBibBusca").oninput(); };
+    busca("homologacao");
+    ok(nums() === "555", "B7 a busca acha a palavra que só está na EMENTA (sem acento): " + nums());
+    const ac = api.$("jurBibLista").querySelectorAll(".jur-bib-achado");
+    ok(ac.length === 1 && /na ementa:/.test(ac[0].textContent) && /HOMOLOGAÇÃO/.test(ac[0].textContent) && ac[0].querySelectorAll("mark").length === 1,
+       "B7a e a linha mostra o trecho da ementa, com a palavra marcada: " + (ac[0] && ac[0].textContent));
+    busca("decadência");
+    ok(nums() === "555" && !api.$("jurBibLista").querySelectorAll(".jur-bib-achado").length, "B7b achou na tese (à vista): sem trecho repetido embaixo");
+    busca("benjamin");
+    ok(nums() === "555,666", "B7c a busca acha pelo relator: " + nums());
+    busca("benjamin prescrição");
+    ok(nums() === "666", "B7d várias palavras: todas têm de aparecer, cada uma em qualquer campo: " + nums());
+    busca('"fato gerador"');
+    ok(nums() === "555", "B7e frase entre aspas: a expressão exata: " + nums());
+    busca('"gerador fato"');
+    ok(nums() === "" && /Nenhum julgado/.test(api.$("jurBibLista").textContent), "B7f a frase invertida não existe: " + nums());
+    busca("segunda turma 2019");
+    ok(nums() === "555", "B7g órgão e ano também são procurados: " + nums());
+    busca("");
+    /* o ano e o relator: só os que existem, com a contagem; grafias do mesmo relator viram um só */
+    const anos = api.$("jurBibAno").children.map((o) => o.textContent).join(" | ");
+    ok(anos === "qualquer ano | 2023 (2) | 2019 (1) | sem data (3)" && api.$("jurBibAno").hidden === false, "B7h os anos, do mais novo ao mais velho, e os sem data: " + anos);
+    const rels = api.$("jurBibRelator").children.map((o) => o.textContent).join(" | ");
+    ok(rels === "qualquer relator | Min. Cármen Lúcia (1) | Min. Herman Benjamin (2)", "B7i os relatores (duas grafias = um): " + rels);
+    api.$("jurBibAno").value = "2023"; api.$("jurBibAno").onchange();
+    ok(nums() === "666,777" && api.$("btnJurBibLimpar").hidden === false, "B7j filtrar pelo ano (e o 'limpar filtros' aparece): " + nums());
+    api.$("jurBibRelator").value = api.jurBibRelatorChave("Herman Benjamin"); api.$("jurBibRelator").onchange();
+    ok(nums() === "666", "B7k ano + relator: " + nums());
+    api.$("btnJurBibLimpar").onclick();
+    ok(api.jurBibFiltrados().length === 6 && api.$("btnJurBibLimpar").hidden === true && api.$("jurBibAno").value === "" && api.$("jurBibRelator").value === "",
+       "B7l 'limpar filtros' volta a mostrar tudo");
+    api.$("jurBibAno").value = "sem"; api.$("jurBibAno").onchange();
+    ok(nums().split(",").sort().join() === "111,222,333", "B7m 'sem data': " + nums());
+    api.$("btnJurBibLimpar").onclick();
+    /* a ordem */
+    api.$("jurBibOrdem").value = "recente"; api.$("jurBibOrdem").onchange();
+    ok(ordem().split(",").slice(0, 3).join() === "666,777,555", "B7n mais recentes primeiro (os sem data no fim): " + nums());
+    api.$("jurBibOrdem").value = "antigo"; api.$("jurBibOrdem").onchange();
+    ok(ordem().split(",").slice(0, 3).join() === "555,777,666", "B7o mais antigos primeiro: " + nums());
+    api.$("jurBibOrdem").value = "verif"; api.$("jurBibOrdem").onchange();
+    ok(ordem().split(",").pop() === "666", "B7p há mais tempo sem verificar: o verificado hoje fica por último: " + nums());
+    api.$("jurBibOrdem").value = ""; api.$("jurBibOrdem").onchange();
+    /* o acervo */
+    const a = api.jurBibAcervo();
+    ok(a.n === 6 && a.ementa === 2 && a.data === 3 && a.verif === 1 && a.nunca === 5 && a.vencida === 0, "B7q o acervo em números: " + JSON.stringify(a));
+    const pe = api.$("jurBibAcervo").textContent;
+    ok(api.$("jurBibAcervo").hidden === false && /6 julgado\(s\) · 2 com ementa guardada · verificação em dia: 1 · vencida: 0 · nunca verificados: 5/.test(pe)
+       && /4 sem ementa: esses só são achados pela tese/.test(pe) && /não nos tribunais/.test(pe), "B7r o rodapé diz o acervo e o limite da busca: " + pe);
+    ok(api.jurBibRelatorChave("Rel. Ministra CÁRMEN LÚCIA") === "carmen lucia" && api.jurBibAno({ data: "12/03/2019" }) === "2019" && api.jurBibAno({ data: "" }) === "",
+       "B7s relator e ano normalizados");
+  }
+
   /* B2c: julgado ligado só pela chave (sem rótulo, nome em minúsculas) cai no MESMO grupo, com o nome do material */
   {
     const { api, A } = montar();

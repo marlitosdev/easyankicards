@@ -4966,9 +4966,12 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .res-bib-trecho mark{background:rgba(250,204,21,.32);color:inherit;border-radius:3px;padding:0 1px}
 #dlgJurBib{width:min(900px,96vw)}
 .jur-bib-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 6px}
-.jur-bib-barra input[type=search]{flex:1 1 220px;min-width:0;box-sizing:border-box}
+.jur-bib-barra input[type=search]{flex:1 1 220px;min-width:0;box-sizing:border-box;background:var(--campo);border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-1) var(--esp-2)}
 .jur-bib-barra select{max-width:100%}
 .jur-bib-barra .qm-bts{flex:1 1 100%}
+.jur-bib-achado{font-size:var(--fs-2);color:var(--sutil);line-height:1.45;margin-top:var(--esp-1)}
+.jur-bib-achado b{font-weight:var(--peso-f)}
+.jur-bib-acervo{margin:var(--esp-2) 0 0;padding-top:var(--esp-2);border-top:1px solid var(--borda)}
 .jur-bib-lista{max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
 .jur-bib-grupo{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--info);padding:6px 0 2px;border-bottom:1px solid var(--borda)}
 .jur-bib-item{border:1px solid var(--borda);border-radius:9px;padding:7px 9px}
@@ -10788,7 +10791,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnJurBibCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
     <button type="button" class="dlg-x" id="btnJurBibX" data-i18n-title="help_close">✖</button>
   </div>
-  <p class="nota"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b></p>
+  <p class="nota"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b> <button type="button" class="btn-quieto" id="btnJurBibLimpar" data-i18n="jur_bib_limpar" hidden></button></p>
   <div id="jurBibBarra" class="jur-bib-barra">
     <input type="search" id="jurBibBusca" data-i18n-ph="jur_bib_busca_ph" placeholder="procurar">
     <select id="jurBibTrib" data-i18n-title="jur_bib_trib_aj"></select>
@@ -10808,10 +10811,19 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </select>
     <select id="jurBibAssunto" data-i18n-title="jur_bib_assunto_aj"></select>
     <select id="jurBibTag" data-i18n-title="jur_bib_tag_aj"></select>
+    <!-- (19.126.0) ano do julgamento, relator e ordem -->
+    <select id="jurBibAno" data-i18n-title="jur_bib_ano_aj" hidden></select>
+    <select id="jurBibRelator" data-i18n-title="jur_bib_rel_aj" hidden></select>
     <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
       <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
       <option value="tribunal" data-i18n="jur_bib_grupo_tribunal"></option>
       <option value="" data-i18n="jur_bib_grupo_nenhum"></option>
+    </select>
+    <select id="jurBibOrdem" data-i18n-title="jur_bib_ordem_aj">
+      <option value="" data-i18n="jur_bib_ordem_padrao"></option>
+      <option value="recente" data-i18n="jur_bib_ordem_recente"></option>
+      <option value="antigo" data-i18n="jur_bib_ordem_antigo"></option>
+      <option value="verif" data-i18n="jur_bib_ordem_verif"></option>
     </select>
     <div class="qm-bts">
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstudar" data-i18n-title="jur_bib_estudar_aj"></button>
@@ -10829,6 +10841,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div id="jurBibPastas" class="pas-fileira" role="group"></div>
   </div>
   <div id="jurBibLista" class="jur-bib-lista"></div>
+  <!-- (19.126.0) "seu acervo, hoje": de onde vêm os números e o que a busca não alcança -->
+  <p class="nota jur-bib-acervo" id="jurBibAcervo" hidden></p>
   <!-- JM4: a jurisprudência continua valendo? -->
   <div id="jurBibAtual" class="jur-bib-atual" hidden>
     <p class="nota" id="jurBibAtualIntro"></p>
