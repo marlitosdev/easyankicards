@@ -3867,6 +3867,9 @@ dialog.mat-amplo{max-height:96vh}
 .bka-enc-menos{color:var(--sutil)}
 .bka-enc-det>summary{cursor:pointer;font-size:var(--fs-2);color:var(--sutil)}
 .bka-enc-tab{width:100%;font-size:var(--fs-2)}
+.prep-ia-pdf{display:flex;align-items:flex-start;gap:var(--esp-2);font-size:var(--fs-3);margin:var(--esp-2) 0 0}
+.prep-ia-pdf[hidden]{display:none}
+.prep-sub-alerta{color:var(--atencao);font-weight:var(--peso-m)}
 .bka-hist{display:flex;flex-direction:column;gap:var(--esp-1);margin:var(--esp-2) 0}
 .bka-hist-tit{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
 .bka-hist-lin{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-3);align-items:baseline;font-size:var(--fs-2);padding:var(--esp-1) var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m)}
@@ -10066,6 +10069,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <button type="button" class="btn-min" id="btnPrepIaCancelar" data-i18n="jur_ia_cancelar" hidden></button>
         <button type="button" class="btn-quieto" id="btnPrepIaConfig" data-i18n="prep_ia_config" data-i18n-title="prep_ia_config_tip" hidden></button>
       </div>
+      <!-- (19.131.0) para matéria de cálculo: o Gemini lê a página (fórmula, tabela, gráfico) em vez do texto extraído -->
+      <label class="prep-ia-pdf" id="prepIaPdfCx" hidden><input type="checkbox" id="chkPrepIaPdf"> <span data-i18n="prep_ia_pdf_chk"></span></label>
       <p class="prep-sub" id="prepIaInfo" hidden></p>
       <p class="prep-msg" id="prepIaSt" role="status" aria-live="polite" hidden></p>
       <textarea id="prepPedidoTxt" class="prep-ta prep-ta-pedido" rows="6" readonly hidden aria-label="Pedido para a IA"></textarea>

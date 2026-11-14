@@ -42,7 +42,10 @@ async function jurIaPerguntar(pedido, opc) {
   let tempoEsgotado = false;
   const timer = setTimeout(() => { tempoEsgotado = true; try { if (ctrl) ctrl.abort(); } catch (e) {} }, o.tempo || JUR_IA_TEMPO);
   try {
-    const corpo = { contents: [{ role: "user", parts: [{ text: String(pedido || "") }] }], generationConfig: { temperature: 0.1 } };
+    /* (19.131.0) opc.anexos = [{ mime, base64 }]: o arquivo vai ANTES do texto do pedido (é como o modelo lê melhor) */
+    const partes = (o.anexos || []).filter((a) => a && a.base64).map((a) => ({ inline_data: { mime_type: a.mime || "application/pdf", data: a.base64 } }));
+    partes.push({ text: String(pedido || "") });
+    const corpo = { contents: [{ role: "user", parts: partes }], generationConfig: { temperature: 0.1 } };
     if (o.busca) corpo.tools = [{ google_search: {} }];
     let r = null, modelo = "";
     for (const m of (o.modelos || JUR_IA_MODELOS)) {

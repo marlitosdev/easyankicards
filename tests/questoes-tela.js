@@ -751,6 +751,39 @@ async function testes() {
     const pedA = api.prepMontarPedido(true, "");
     ok(/\[T01\] pág\. 12 — DO VETO\nO Prefeito veta/.test(pedA) && /\[T02\] pág\. 14 — DAS EMENDAS/.test(pedA) && /o TEXTO no fim deste pedido/.test(pedA) && !/material que estou enviando junto/.test(pedA),
       "D8b o pedido direto leva a aula numerada, com a página e o título de cada trecho");
+    /* ---- (19.131.0) P: enviar o PDF em si ao Gemini (matéria de cálculo) ---- */
+    {
+      const bytesPdf = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 255, 0, 128]);   /* "%PDF-1.4\n" + três bytes */
+      ok(api.prepBase64(bytesPdf) === Buffer.from(bytesPdf).toString("base64"), "P1 os bytes viram base64 sem perder nada");
+      api.prepAulaDefinir({ chave: chA, quando: comp.fonte.quando, textos: comp.textos, bytes: bytesPdf, nome: "aula-17.pdf", paginas: 20, marcas: 20 });
+      api.prepIaPintar();
+      ok(api.$("prepIaPdfCx").hidden === false && api.$("chkPrepIaPdf").checked === false && /O PDF em si não é enviado/.test(api.prepIaInfo().msg),
+         "P2 com o PDF lido, a caixa aparece DESMARCADA e o padrão segue sendo o texto limpo");
+      api.$("chkPrepIaPdf").checked = true; api.$("chkPrepIaPdf").onchange();
+      const infoP = api.prepIaInfo();
+      ok(infoP.ok && infoP.f.tipo === "pdf" && /PDF INTEIRO/.test(infoP.msg) && /20 páginas/.test(infoP.msg) && /marca do comprador em 20 página/.test(infoP.msg) && /nome e CPF vão junto ao Google/.test(infoP.msg),
+         "P3 marcada: a tela diz que vai o arquivo inteiro e que a marca do comprador vai junto: " + infoP.msg);
+      ok(/prep-sub-alerta/.test(api.$("prepIaInfo").className), "P3a e a linha fica em destaque");
+      const pedP = api.prepMontarPedido(true, "");
+      ok(/FONTE: o PDF enviado junto/.test(pedP) && /ÍNDICE DOS TRECHOS DO PDF/.test(pedP) && /\[T01\] pág\. 12 — DO VETO\n\[T02\] pág\. 14 — DAS EMENDAS/.test(pedP)
+         && !/O Prefeito veta/.test(pedP) && /Ignore cabeçalho, rodapé e qualquer nome ou documento/.test(pedP) && /TRECHO: T07/.test(pedP),
+         "P4 o pedido aponta para o PDF e leva só o ÍNDICE dos trechos (o texto não vai duas vezes): " + pedP.slice(pedP.indexOf("ÍNDICE"), pedP.indexOf("ÍNDICE") + 120));
+      const nAntes = chamadas.length;
+      fila = [resposta(["[QUESTOES]", "[QUESTAO]", "TIPO: CE", "TRECHO: T01", "ENUNCIADO: O Prefeito veta o projeto em quinze dias úteis.", "GABARITO: C", "COMENTARIO: Do veto.", "[/QUESTAO]", "[/QUESTOES]"].join("\n"))];
+      const rP = await api.prepIaGerar(false);
+      const corpoP = JSON.parse(chamadas[chamadas.length - 1].op.body);
+      const partes = corpoP.contents[0].parts;
+      ok(rP && chamadas.length === nAntes + 1 && partes.length === 2 && partes[0].inline_data && partes[0].inline_data.mime_type === "application/pdf"
+         && partes[0].inline_data.data === Buffer.from(bytesPdf).toString("base64") && /FONTE: o PDF enviado junto/.test(partes[1].text),
+         "P5 a chamada leva o PDF como anexo (antes do texto) e o pedido: " + JSON.stringify(partes.map((x) => Object.keys(x))));
+      /* desmarcada, volta ao texto; e PDF grande demais não vai */
+      api.$("chkPrepIaPdf").checked = false; api.$("chkPrepIaPdf").onchange();
+      ok(api.prepIaInfo().f.tipo === "aula" && !api.prepIaInfo().f.pdf, "P6 desmarcada: volta a ir só o texto");
+      api.prepAulaDefinir({ chave: chA, quando: comp.fonte.quando, textos: comp.textos, bytes: { length: 15 * 1024 * 1024 }, nome: "g.pdf", paginas: 900, marcas: 0 });
+      api.prepIaPdfLigar(true);
+      ok(api.prepIaInfo().ok === false && /grande demais/.test(api.prepIaInfo().msg) && /14 MB/.test(api.prepIaInfo().msg), "P7 PDF acima do limite não vai: a tela diz e aponta a saída: " + api.prepIaInfo().msg);
+      api.prepIaPdfLigar(false);
+    }
     /* a sessão de outro PDF não serve para este tópico */
     api.prepAulaDefinir({ chave: chA, quando: "outra-impressao", textos: comp.textos });
     ok(api.prepIaInfo().ok === false, "D8c o texto de outra leitura não é usado no lugar (a numeração seria outra)");

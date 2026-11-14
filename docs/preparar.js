@@ -57,9 +57,10 @@ function prepPedido(o) {
   L.push("");
   L.push(t("prep_p_contexto", { d: o.disciplina || "?", tp: o.topico || "?", c: o.concurso || "?" }));
   L.push("");
-  L.push(t("prep_p_fonte_" + (PREP_FONTES.indexOf(o.fonte) >= 0 ? o.fonte : "anexo")));
+  /* (19.131.0) o PDF vai anexado: a fonte é ele (fórmulas, tabelas e gráficos como estão na página) */
+  L.push(t(o.pdf ? "prep_p_fonte_pdf" : "prep_p_fonte_" + (PREP_FONTES.indexOf(o.fonte) >= 0 ? o.fonte : "anexo")));
   /* (19.125.0) o texto vai dividido em trechos numerados, e cada questão diz de qual saiu */
-  if (o.numerada) L.push(t("prep_p_numerada"));
+  if (o.numerada) L.push(t(o.pdf ? "prep_p_numerada_pdf" : "prep_p_numerada"));
   L.push("");
   if (ramos.length) {
     L.push(t("prep_p_ramos"));
@@ -79,7 +80,11 @@ function prepPedido(o) {
   if (p.cartoes) { L.push(""); L.push(t("prep_p_b_cartoes", { tags: (o.tags || []).join(" ") })); }
   L.push("");
   L.push(t("prep_p_cobertura"));
-  if (o.fonte === "resumo" && String(o.texto || "").trim()) {
+  if (o.pdf && String(o.texto || "").trim()) {
+    L.push("");
+    L.push(t("prep_p_indice"));
+    L.push(String(o.texto));
+  } else if (o.fonte === "resumo" && String(o.texto || "").trim()) {
     L.push("");
     L.push(t("prep_p_texto"));
     L.push(String(o.texto).slice(0, o.textoMax || PREP_TEXTO_MAX));
@@ -404,16 +409,41 @@ function prepFonteParaPedido(direto) {
   out.fonte = "resumo";      /* no pedido direto, a aula é "o TEXTO no fim deste pedido" */
   if (!fc || cfFonteTipo(fc) !== "pdf" || !prepAula || prepAula.chave !== prepCtx.chave || prepAula.quando !== fc.quando) { out.falta = "prep_ia_sem_aula"; return out; }
   out.numerada = true;
+  /* (19.131.0) "enviar o PDF em si": o arquivo vai anexado e o pedido leva só o índice dos trechos */
+  if (prepIaPdfLigado() && prepAula.bytes && prepAula.bytes.length) {
+    if (prepAula.bytes.length > PREP_PDF_MAX) { out.falta = "prep_ia_pdf_grande"; return out; }
+    out.tipo = "pdf";
+    out.pdf = { bytes: prepAula.bytes, nome: prepAula.nome || "aula.pdf", paginas: prepAula.paginas || 0, marcas: prepAula.marcas || 0 };
+    out.texto = cfIndiceNumerado(fc);
+    out.chars = out.texto.length;
+    return out;
+  }
   out.texto = cfTextoNumerado(fc, prepAula.textos);
   out.chars = out.texto.length;
   return out;
+}
+/* (19.131.0) ENVIAR O PDF EM SI AO GEMINI
+ *
+ * O texto extraído de um PDF de estatística chega quebrado: a fração perde o numerador, a tabela vira linhas soltas, o
+ * gráfico some. O Gemini lê a PÁGINA — então, para matéria de cálculo, vai o arquivo. O preço é dito na tela antes de
+ * ir: custa mais, e o arquivo vai COMO ESTÁ — inclusive a marca que o curso imprime em cada página com o nome e o CPF
+ * de quem comprou, que o envio em texto tirava. Por isso é uma caixa à parte, desmarcada, que vale só nesta sessão. */
+const PREP_PDF_MAX = 14 * 1024 * 1024;       /* em base64 fica perto dos 19 MB; o pedido inteiro ao Gemini tem teto de 20 MB */
+let prepIaPdf = false;
+function prepIaPdfLigado() { return !!prepIaPdf; }
+function prepIaPdfLigar(sim) { prepIaPdf = !!sim; return prepIaPdf; }
+function prepBase64(bytes) {
+  let s = "";
+  const N = 0x8000;
+  for (let i = 0; i < bytes.length; i += N) s += String.fromCharCode.apply(null, bytes.subarray ? bytes.subarray(i, i + N) : bytes.slice(i, i + N));
+  return typeof btoa === "function" ? btoa(s) : Buffer.from(s, "binary").toString("base64");
 }
 function prepMontarPedido(direto, sufixo) {
   if (!prepCtx) return "";
   const f = prepFonteParaPedido(!!direto);
   return prepPedido({
     disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso,
-    ramos: prepCtx.ramos, partes: prepPartes(), fonte: f.fonte, texto: f.texto, numerada: f.numerada,
+    ramos: prepCtx.ramos, partes: prepPartes(), fonte: f.fonte, texto: f.texto, numerada: f.numerada, pdf: !!f.pdf,
     textoMax: direto ? PREP_TEXTO_MAX_DIRETO : 0, sufixo: sufixo || "",
     tags: matEtiquetasTopico(prepCtx.disciplina, prepCtx.topico, prepCtx.concurso, "resumo"),
   });
@@ -555,7 +585,7 @@ async function prepFonteDoPdf(arquivo) {
   if (!r.fonte || r.motivo) { dizer(t(r.motivo === "sem_trechos" ? "cf_sem_trechos" : "qs_pdf_m_" + r.motivo)); return null; }
   cfFonteGuardar(prepCtx.chave, r.fonte, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
   /* (19.125.0) o TEXTO da aula fica só nesta sessão: é ele que o Gemini recebe quando a pessoa gera direto */
-  prepAula = { chave: prepCtx.chave, quando: r.fonte.quando, textos: r.textos || [] };
+  prepAula = { chave: prepCtx.chave, quando: r.fonte.quando, textos: r.textos || [], bytes, nome: arquivo.name || "aula.pdf", paginas: r.paginas || 0, marcas: r.marcas || 0 };
   dizer(t("cf_guardada", { n: r.fonte.nome, k: r.fonte.trechos.length, p: r.paginas }));
   prepPintarConferenciaOuFonte();
   prepIaPintar();
@@ -702,6 +732,11 @@ function prepIniciar() {
   liga("btnPrepIaCancelar", () => { if (typeof jurIaCancelar === "function") jurIaCancelar(); });
   liga("btnPrepIaConfig", () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); });
   PREP_FONTES.forEach((f) => { if ($("prepFonte_" + f)) $("prepFonte_" + f).onchange = () => prepIaPintar(); });
+  if ($("chkPrepIaPdf")) $("chkPrepIaPdf").onchange = () => {
+    prepIaPdfLigar($("chkPrepIaPdf").checked);
+    try { reg("PREPARAR", "enviar o PDF em si: " + (prepIaPdf ? "ligado" : "desligado"), prepCtx ? prepCtx.topico : ""); } catch (e) {}
+    prepIaPintar();
+  };
   liga("btnPrepVer", () => { $("prepPedidoTxt").value = prepMontarPedido(); $("prepPedidoTxt").hidden = !$("prepPedidoTxt").hidden; });
   liga("btnPrepColar", async () => {
     let lido = "";
@@ -758,7 +793,9 @@ function prepIaPronta() { return prepIaLigada() && typeof jurIaPerguntar === "fu
 /* o que vai ao Google nesta consulta — dito ANTES de ir: { ok, f, msg } */
 function prepIaInfo() {
   const f = prepFonteParaPedido(true);
-  if (f.falta) return { ok: false, f, msg: t(f.falta) };
+  if (f.falta) return { ok: false, f, msg: t(f.falta, { m: Math.round(PREP_PDF_MAX / 1048576) }) };
+  if (f.pdf) return { ok: true, f, msg: t("prep_ia_vai_pdf", { m: (f.pdf.bytes.length / 1048576).toFixed(1).replace(".", ","), p: f.pdf.paginas || "?" })
+    + (f.pdf.marcas ? " " + t("prep_ia_vai_pdf_marca", { n: f.pdf.marcas }) : " " + t("prep_ia_vai_pdf_sem_marca")) };
   return { ok: true, f, msg: t(f.tipo === "aula" ? "prep_ia_vai_aula" : "prep_ia_vai_resumo", { n: Math.max(1, Math.round(f.chars / 1000)), k: Math.max(1, Math.round(f.chars / 4000)) }) };
 }
 /* os botões do Gemini: o de gerar (ligado), o de configurar (desligado) e a linha do que vai */
@@ -769,7 +806,20 @@ function prepIaPintar() {
   if ($("btnPrepIaConfig")) $("btnPrepIaConfig").hidden = pronta;
   if ($("btnPrepIaCancelar")) $("btnPrepIaCancelar").hidden = !prepIaRodando;
   const inf = $("prepIaInfo");
-  if (inf) { inf.textContent = pronta && prepCtx ? prepIaInfo().msg : ""; inf.hidden = !inf.textContent; }
+  /* (19.131.0) a caixa "enviar o PDF em si": só com o Gemini ligado, a aula como fonte e o PDF lido nesta sessão */
+  const cxPdf = $("prepIaPdfCx");
+  if (cxPdf) {
+    const tem = pronta && !!prepCtx && !!prepAula && prepAula.chave === prepCtx.chave && !!(prepAula.bytes && prepAula.bytes.length) && prepFonteEscolhida() !== "resumo";
+    cxPdf.hidden = !tem;
+    if (!tem) prepIaPdf = false;
+    if ($("chkPrepIaPdf")) $("chkPrepIaPdf").checked = prepIaPdf;
+  }
+  if (inf) {
+    const info = pronta && prepCtx ? prepIaInfo() : null;
+    inf.textContent = info ? info.msg : "";
+    inf.hidden = !inf.textContent;
+    inf.className = "prep-sub" + (info && info.f && info.f.pdf ? " prep-sub-alerta" : "");
+  }
   if ($("btnPrepIaFalta") && $("btnPrepContinuar")) $("btnPrepIaFalta").hidden = !(pronta && !$("btnPrepContinuar").hidden);
 }
 
@@ -800,7 +850,8 @@ async function prepIaGerar(soFalta) {
   const topico = prepCtx.topico;
   try { reg("PREPARAR", "Gemini direto: consulta", topico + " · " + pedido.length + " caracteres · fonte: " + (info.f.tipo || "—") + (soFalta ? " · só o que falta" : "")); } catch (e) {}
   try {
-    const r = await jurIaPerguntar(pedido, { modulo: "PREPARAR", tempo: PREP_IA_TEMPO });
+    const anexos = info.f.pdf ? [{ mime: "application/pdf", base64: prepBase64(info.f.pdf.bytes) }] : [];
+    const r = await jurIaPerguntar(pedido, { modulo: "PREPARAR", tempo: PREP_IA_TEMPO, anexos });
     const cx = $("prepResposta");
     const antes = String(cx.value || "");
     /* acrescenta: a continuação entra depois do que já veio, e a conferência lê tudo junto */

@@ -162,6 +162,10 @@ function cfCodigo(i) { return "T" + String(i + 1).padStart(2, "0"); }
 function cfTextoNumerado(fonte, textos) {
   return ((fonte && fonte.trechos) || []).map((x, i) => "[" + cfCodigo(i) + "] " + cfRotulo(x) + "\n" + String((textos || [])[i] || "").trim()).join("\n\n");
 }
+/* (19.131.0) só o ÍNDICE dos trechos (código, página e título), sem o texto: para quando o conteúdo vai no PDF */
+function cfIndiceNumerado(fonte) {
+  return ((fonte && fonte.trechos) || []).map((x, i) => "[" + cfCodigo(i) + "] " + cfRotulo(x)).join("\n");
+}
 /* "T07, T08" (ou "[T07]", "T7") → os índices válidos na fonte */
 function cfLerCodigos(valor, total) {
   const out = [];
@@ -272,7 +276,7 @@ async function cfFonteDePdf(bytes, nome, opc) {
   fonte.paginas = limpo.paginas;
   /* "textos": o texto limpo de cada trecho (sem cabeçalho, rodapé nem a marca do comprador) — para quem vai mandá-lo
    * no pedido; não fica guardado */
-  return { fonte, textos: comp.textos, paginas: limpo.paginas, motivo: fonte.trechos.length ? "" : "sem_trechos" };
+  return { fonte, textos: comp.textos, paginas: limpo.paginas, marcas: limpo.marcas || 0, motivo: fonte.trechos.length ? "" : "sem_trechos" };
 }
 
 /* o rótulo de um trecho para a tela e para o pedido: "pág. 12 — Do veto" */
