@@ -22,6 +22,13 @@ const PREP_BLOCOS = ["RAMOS", "RESUMO", "QUESTOES", "CARTOES"];
 /* A FONTE VAI INTEIRA. O pedido de questões cortava o resumo em 12 mil caracteres; um resumo real de 25 mil perdia
  * metade — e a metade cortada é um buraco de cobertura que ninguém vê. Aqui o limite é folgado, e passar dele é dito. */
 const PREP_TEXTO_MAX = 60000;
+/* (19.125.0) DIRETO PELO GEMINI: opcional e desligado; a pessoa liga na tela da chave, que diz o que vai ao Google */
+const PREP_IA_CH = "eac_prep_ia_direta";
+const PREP_IA_TEMPO = 300000;            /* um tópico inteiro demora: 5 minutos antes de desistir */
+const PREP_TEXTO_MAX_DIRETO = 600000;    /* direto, a aula vai inteira (o colar numa conversa é que tem limite) */
+/* o TEXTO da aula lido do PDF, só nesta sessão: { chave, quando (da impressão), textos[] } — nunca é guardado */
+let prepAula = null;
+let prepIaRodando = false;
 
 /* o contexto: { disciplina, topico, chave, editalId, concurso, ramos:[{id, nome, nota}] } */
 let prepCtx = null;
@@ -51,6 +58,8 @@ function prepPedido(o) {
   L.push(t("prep_p_contexto", { d: o.disciplina || "?", tp: o.topico || "?", c: o.concurso || "?" }));
   L.push("");
   L.push(t("prep_p_fonte_" + (PREP_FONTES.indexOf(o.fonte) >= 0 ? o.fonte : "anexo")));
+  /* (19.125.0) o texto vai dividido em trechos numerados, e cada questão diz de qual saiu */
+  if (o.numerada) L.push(t("prep_p_numerada"));
   L.push("");
   if (ramos.length) {
     L.push(t("prep_p_ramos"));
@@ -62,24 +71,30 @@ function prepPedido(o) {
   L.push(t("prep_p_blocos"));
   if (!ramos.length) { L.push(""); L.push(t("prep_p_b_ramos")); }
   if (p.resumo) { L.push(""); L.push(t("prep_p_b_resumo")); }
-  if (p.questoes) { L.push(""); L.push(t("prep_p_b_questoes")); }
+  if (p.questoes) {
+    let bq = t("prep_p_b_questoes");
+    if (o.numerada) bq = bq.replace(/^(RAMO:.*)$/m, (m0) => m0 + "\n" + t("prep_p_trecho_linha"));
+    L.push(""); L.push(bq);
+  }
   if (p.cartoes) { L.push(""); L.push(t("prep_p_b_cartoes", { tags: (o.tags || []).join(" ") })); }
   L.push("");
   L.push(t("prep_p_cobertura"));
   if (o.fonte === "resumo" && String(o.texto || "").trim()) {
     L.push("");
     L.push(t("prep_p_texto"));
-    L.push(String(o.texto).slice(0, PREP_TEXTO_MAX));
+    L.push(String(o.texto).slice(0, o.textoMax || PREP_TEXTO_MAX));
   }
+  /* depois de um texto longo, o que fazer é dito de novo (e, na continuação, o que falta) */
+  if (o.sufixo) { L.push(""); L.push(o.sufixo); }
   return L.join("\n");
 }
 
 /* o pedido da CONTINUAÇÃO: só o que a cobertura mostrou que falta */
-function prepPedidoContinuar(ctx, cobertura, partes, cobFonte) {
+function prepListaDoQueFalta(cobertura, partes, cobFonte, comCodigo) {
   const p = partes || {};
   const linhas = [];
   /* (19.124.0) os trechos da FONTE que nenhum item do tópico cobre: com o título, a página e as palavras deles */
-  const trechos = typeof cfLinhasDoQueFalta === "function" ? cfLinhasDoQueFalta(cobFonte, 20) : [];
+  const trechos = typeof cfLinhasDoQueFalta === "function" ? cfLinhasDoQueFalta(cobFonte, 20, comCodigo) : [];
   (cobertura || []).forEach((c) => {
     const falta = [];
     if (p.resumo && !c.resumo) falta.push(t("prep_f_resumo"));
@@ -91,25 +106,43 @@ function prepPedidoContinuar(ctx, cobertura, partes, cobFonte) {
   const partesTxt = [];
   if (linhas.length) partesTxt.push(linhas.join("\n"));
   if (trechos.length) partesTxt.push(t("prep_p_cont_trechos", { n: cobFonte.faltam.length }) + "\n" + trechos.join("\n"));
-  return t("prep_p_continuar", { tp: (ctx && ctx.topico) || "?", lista: partesTxt.join("\n\n") });
+  return partesTxt.join("\n\n");
+}
+function prepPedidoContinuar(ctx, cobertura, partes, cobFonte) {
+  const lista = prepListaDoQueFalta(cobertura, partes, cobFonte, false);
+  return lista ? t("prep_p_continuar", { tp: (ctx && ctx.topico) || "?", lista }) : "";
 }
 
 /* o conteúdo de um bloco "[NOME] … [/NOME]"; sem o fecho, vai até o próximo bloco conhecido (ou o fim) */
-function prepBloco(txt, nome) {
-  const s = String(txt || "");
-  const abre = new RegExp("\\[\\s*" + nome.replace("OES", "(?:OES|ÕES)") + "\\s*\\]", "i");
-  const m = s.match(abre);
-  if (!m) return "";
-  const resto = s.slice(m.index + m[0].length);
-  const fim = resto.search(new RegExp("\\[\\s*\\/\\s*" + nome.replace("OES", "(?:OES|ÕES)") + "\\s*\\]", "i"));
-  let outro = -1;
-  PREP_BLOCOS.filter((b) => b !== nome).forEach((b) => {
-    const k = resto.search(new RegExp("^\\s*\\[\\s*" + b.replace("OES", "(?:OES|ÕES)") + "\\s*\\]\\s*$", "im"));
-    if (k >= 0 && (outro < 0 || k < outro)) outro = k;
-  });
-  const corta = fim >= 0 && (outro < 0 || fim < outro) ? fim : outro;
-  return (corta >= 0 ? resto.slice(0, corta) : resto).trim();
+/* (19.125.0) TODAS AS VEZES QUE O BLOCO APARECE. A continuação entra depois da primeira resposta, e a caixa passa a ter
+ * dois [QUESTOES], dois [CARTOES]… Só o primeiro era lido: as questões da segunda resposta ficavam de fora, caladas. */
+function prepBlocosDe(txt, nome) {
+  let s = String(txt || "");
+  const N = (b) => b.replace("OES", "(?:OES|ÕES)");
+  const abre = new RegExp("\\[\\s*" + N(nome) + "\\s*\\]", "i");
+  const fecha = new RegExp("\\[\\s*\\/\\s*" + N(nome) + "\\s*\\]", "i");
+  const partes = [];
+  for (let volta = 0; volta < 60; volta++) {
+    const m = s.match(abre);
+    if (!m) break;
+    const resto = s.slice(m.index + m[0].length);
+    const fim = resto.search(fecha);
+    let outro = -1;
+    /* sem o fecho, o bloco acaba onde outro começa — inclusive o MESMO, aberto de novo por outra resposta */
+    PREP_BLOCOS.forEach((b) => {
+      const k = resto.search(new RegExp("^\\s*\\[\\s*" + N(b) + "\\s*\\]\\s*$", "im"));
+      if (k >= 0 && (outro < 0 || k < outro)) outro = k;
+    });
+    const noFecho = fim >= 0 && (outro < 0 || fim < outro);
+    const corta = noFecho ? fim : outro;
+    const corpo = (corta >= 0 ? resto.slice(0, corta) : resto).trim();
+    if (corpo) partes.push(corpo);
+    if (corta < 0) break;
+    s = resto.slice(corta + (noFecho ? (resto.slice(corta).match(fecha) || [""])[0].length : 0));
+  }
+  return partes;
 }
+function prepBloco(txt, nome) { return prepBlocosDe(txt, nome).join("\n\n"); }
 
 /* os cartões do bloco, cada um com o ramo do título "## Ramo — X" acima dele */
 function prepLerCartoes(txt, ramos, chave) {
@@ -159,17 +192,45 @@ function prepLerResposta(txt, ctx, partes) {
   if (b.RAMOS && !existentes.length) {
     let rl = { ramos: [] };
     try { rl = ramLerRespostaIA(b.RAMOS); } catch (e) { rl = { ramos: [] }; }
-    out.ramosNovos = (rl.ramos || []).map((r) => ({ id: edRamoId(r.nome), nome: r.nome, nota: r.nota || "", novo: true })).filter((r) => r.id);
+    out.ramosNovos = (rl.ramos || []).map((r) => ({ id: edRamoId(r.nome), nome: r.nome, nota: r.nota || "", novo: true }))
+      .filter((r, k, todos) => r.id && todos.findIndex((x) => x.id === r.id) === k);
   }
   const ramos = existentes.concat(out.ramosNovos.map((r) => ({ id: r.id, nome: r.nome })));
 
   if (b.RESUMO && p.resumo !== false) {
-    try { out.resumo = riaLerResposta(b.RESUMO, ramos, ""); } catch (e) { out.resumo = null; }
-    if (out.resumo && (out.resumo.vazio || out.resumo.ehPedido || out.resumo.ehRamos)) out.resumo = null;
+    /* cada [RESUMO] (a primeira resposta, a continuação) é lido à parte e as partes se juntam: o geral soma, e a seção
+     * do mesmo ramo continua no fim da que já veio */
+    prepBlocosDe(s, "RESUMO").forEach((corpoR) => {
+      let r1 = null;
+      try { r1 = riaLerResposta(corpoR, ramos, ""); } catch (e) { r1 = null; }
+      if (!r1 || r1.vazio || r1.ehPedido || r1.ehRamos) return;
+      if (!out.resumo) { out.resumo = r1; return; }
+      if (r1.geral) out.resumo.geral = (out.resumo.geral ? out.resumo.geral + "\n\n" : "") + r1.geral;
+      r1.secoes.forEach((x) => {
+        const ja = out.resumo.secoes.find((y) => y.id === x.id);
+        if (ja) ja.corpo = String(ja.corpo || "").replace(/\s+$/, "") + "\n\n" + String(x.corpo || "").trim();
+        else out.resumo.secoes.push(x);
+      });
+      out.resumo.semSecao = !out.resumo.secoes.length;
+    });
   }
   if (b.QUESTOES && p.questoes !== false) {
     const corpo = b.QUESTOES.replace(/^\s*FALTA\s*:.*$/gim, "");
-    out.questoes = qsLerResposta(corpo, { disciplina: c.disciplina, topico: c.topico, chave: c.chave, concurso: c.concurso, ramos });
+    const ctxQ = { disciplina: c.disciplina, topico: c.topico, chave: c.chave, concurso: c.concurso, ramos };
+    /* (19.125.0) "TRECHO: T07": de qual trecho da fonte a questão saiu. A linha sai do texto antes da leitura (não é
+     * campo da questão) e fica guardada como a origem dela. Bloco a bloco, para a origem não trocar de questão. */
+    const fonteQ = typeof cfFonteDe === "function" ? cfFonteDe(c.chave) : null;
+    const blocosQ = corpo.split(/(?=\[\s*QUEST[ÃA]O\s*\])/i).filter((x) => /\[\s*QUEST[ÃA]O\s*\]/i.test(x));
+    if (blocosQ.length && /^[ \t]*TRECHOS?\s*:/im.test(corpo)) {
+      out.questoes = { achados: [], ignoradas: [] };
+      blocosQ.forEach((bl) => {
+        let cods = [];
+        const semTrecho = bl.replace(/^[ \t]*TRECHOS?\s*:[ \t]*(.*)$/gim, (m0, v) => { if (fonteQ) cods = cods.concat(cfLerCodigos(v, fonteQ.trechos.length)); return ""; });
+        const r1 = qsLerResposta(semTrecho, ctxQ);
+        r1.achados.forEach((q) => { if (cods.length) q._trechos = cods.filter((x, k) => cods.indexOf(x) === k); out.questoes.achados.push(q); });
+        r1.ignoradas.forEach((x) => out.questoes.ignoradas.push(x));
+      });
+    } else out.questoes = qsLerResposta(corpo, ctxQ);
     /* o ramo sugerido que virou ramo novo: a questão já aponta para ele */
     out.questoes.achados.forEach((q) => {
       if (q.ramo || !q.ramoSugerido) return;
@@ -242,7 +303,19 @@ function prepGravar(lido, ctx, opc) {
   }
   /* 3. as questões (o ramo só fica se existe de verdade) */
   if (lido.questoes.achados.length) {
-    lido.questoes.achados.forEach((q) => { if (q.ramo && !idsValidos.has(q.ramo)) { delete q.ramo; delete q.ramoNome; } });
+    const fonteG = typeof cfFonteDe === "function" ? cfFonteDe(c.chave) : null;
+    lido.questoes.achados.forEach((q) => {
+      if (q.ramo && !idsValidos.has(q.ramo)) { delete q.ramo; delete q.ramoNome; }
+      /* (19.125.0) a questão diz de onde saiu: "Fonte: aula-17.pdf, pág. 12 — Do veto" no fim do comentário */
+      if (fonteG && q._trechos && q._trechos.length) {
+        const rot = q._trechos.map((i) => fonteG.trechos[i]).filter(Boolean).map((x) => cfRotulo(x));
+        if (rot.length) {
+          q.comentario = String(q.comentario || "").replace(/\s+$/, "") + "\n" + t("prep_fonte_linha", { n: fonteG.nome || t("cf_sem_nome"), r: rot.join("; ") });
+          q.trechos = { f: fonteG.quando, i: q._trechos.slice() };
+        }
+      }
+      delete q._trechos;
+    });
     const r = qsAplicar(lido.questoes.achados);
     rec.questoes = { ids: r.ids, lote: r.lote, novas: r.novas, repetidas: r.repetidas };
   }
@@ -299,14 +372,62 @@ function prepFonteEscolhida() {
   const r = PREP_FONTES.find((f) => $("prepFonte_" + f) && $("prepFonte_" + f).checked);
   return r || "anexo";
 }
-function prepMontarPedido() {
-  if (!prepCtx) return "";
+/* (19.125.0) A FONTE QUE VAI NO PEDIDO. Devolve { fonte (a frase do pedido), texto, numerada, guardar (a impressão nova a
+ * guardar, quando a numeração nasce agora), tipo: "resumo"|"aula"|"", chars, falta (a chave do aviso) }.
+ *  · o resumo: vai o texto dele; numerado em trechos quando a fonte medida É o resumo (ou ainda não há nenhuma) — com
+ *    o PDF da aula guardado, a numeração é a da aula e o resumo vai sem números;
+ *  · o material de fora: pelo copiar e colar, a pessoa manda junto; DIRETO, o app manda o texto da aula que leu do PDF
+ *    nesta sessão (limpo: sem cabeçalho, rodapé nem a marca do comprador), numerado. */
+function prepFonteParaPedido(direto) {
+  const out = { fonte: prepFonteEscolhida(), texto: "", numerada: false, guardar: null, tipo: "", chars: 0, falta: "" };
+  if (!prepCtx) return out;
   const reg0 = (typeof matObter === "function" && matObter(prepCtx.chave)) || {};
+  const resumo = String(reg0.texto || "");
+  const fc = typeof cfFonteDe === "function" ? cfFonteDe(prepCtx.chave) : null;
+  if (out.fonte === "resumo") {
+    out.tipo = "resumo";
+    if (!resumo.trim()) { out.falta = "prep_ia_sem_resumo"; return out; }
+    out.texto = resumo; out.chars = resumo.length;
+    if (typeof cfFonteCompleta === "function" && (!fc || cfFonteTipo(fc) === "resumo")) {
+      const comp = cfFonteCompleta(cfTrechosDeTexto(resumo), t("cf_nome_resumo"), "resumo");
+      if (comp.fonte.trechos.length >= 2) {
+        const mesma = !!fc && cfMesmaFonte(fc, comp.fonte);
+        out.numerada = true;
+        out.texto = cfTextoNumerado(mesma ? fc : comp.fonte, comp.textos);
+        out.guardar = mesma ? null : comp.fonte;
+      }
+    }
+    return out;
+  }
+  if (!direto) return out;
+  out.tipo = "aula";
+  out.fonte = "resumo";      /* no pedido direto, a aula é "o TEXTO no fim deste pedido" */
+  if (!fc || cfFonteTipo(fc) !== "pdf" || !prepAula || prepAula.chave !== prepCtx.chave || prepAula.quando !== fc.quando) { out.falta = "prep_ia_sem_aula"; return out; }
+  out.numerada = true;
+  out.texto = cfTextoNumerado(fc, prepAula.textos);
+  out.chars = out.texto.length;
+  return out;
+}
+function prepMontarPedido(direto, sufixo) {
+  if (!prepCtx) return "";
+  const f = prepFonteParaPedido(!!direto);
   return prepPedido({
     disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso,
-    ramos: prepCtx.ramos, partes: prepPartes(), fonte: prepFonteEscolhida(), texto: reg0.texto || "",
+    ramos: prepCtx.ramos, partes: prepPartes(), fonte: f.fonte, texto: f.texto, numerada: f.numerada,
+    textoMax: direto ? PREP_TEXTO_MAX_DIRETO : 0, sufixo: sufixo || "",
     tags: matEtiquetasTopico(prepCtx.disciplina, prepCtx.topico, prepCtx.concurso, "resumo"),
   });
+}
+/* a numeração que nasceu com o pedido fica guardada na hora em que ele sai: é por ela que "T07" volta a ser um trecho */
+function prepGuardarNumeracao(f) {
+  if (!f || !f.guardar || !prepCtx || typeof cfFonteGuardar !== "function") return false;
+  cfFonteGuardar(prepCtx.chave, f.guardar, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
+  return true;
+}
+/* os dois botões do "que falta" andam juntos: copiar o pedido, e (com o Gemini ligado) pedir direto */
+function prepMostrarFalta(sim) {
+  if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = !sim;
+  if ($("btnPrepIaFalta")) $("btnPrepIaFalta").hidden = !(sim && prepIaPronta());
 }
 
 function prepEl(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; }
@@ -319,7 +440,7 @@ function prepPintarConferencia() {
   const l = prepLido;
   const b = $("btnPrepGravar");
   if (b) b.disabled = true;
-  if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = true;
+  prepMostrarFalta(false);
   if ($("prepFonteCob")) $("prepFonteCob").textContent = "";
   if (!l || l.vazio) return;
   if (l.ehPedido) { cx.append(prepEl("p", "prep-aviso", t("prep_c_eh_pedido"))); return; }
@@ -360,11 +481,11 @@ function prepPintarConferencia() {
     cx.append(prepEl("div", "prep-cob-tit", t("prep_cob_tit")), rol);
     if (buracos) {
       cx.append(prepEl("p", "prep-aviso", t("prep_cob_buracos", { n: buracos })));
-      if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = false;
+      prepMostrarFalta(true);
     } else cx.append(prepEl("p", "prep-ok", t("prep_cob_ok")));
   }
   /* (19.124.0) a cobertura contra a FONTE, contando o que o tópico já tem e o que veio nesta resposta */
-  try { if (prepPintarFonteCob(l) && $("btnPrepContinuar")) $("btnPrepContinuar").hidden = false; } catch (e) {}
+  try { if (prepPintarFonteCob(l)) prepMostrarFalta(true); } catch (e) {}
   if (l.falta.length) cx.append(prepEl("p", "prep-aviso", t("prep_c_falta", { f: l.falta.join("; ") })));
   if (l.ramosNovos.length && !(prepCtx && prepCtx.editalId)) cx.append(prepEl("p", "prep-aviso", t("prep_c_ramos_sem_edital")));
 
@@ -400,7 +521,12 @@ function prepPintarFonteCob(lido) {
   if (st) st.textContent = fonte ? t("cf_st_tem", { n: fonte.nome || t("cf_sem_nome"), k: fonte.trechos.length, d: String(fonte.quando || "").slice(0, 10).split("-").reverse().join("/") }) : t("cf_st_sem");
   if ($("btnPrepFonteTirar")) $("btnPrepFonteTirar").hidden = !fonte;
   if (!fonte) return false;
-  const cob = cfCobertura(fonte, cfItensDoTopico(prepCtx.chave).concat(cfItensDaResposta(lido)));
+  /* (19.125.0) o trecho que uma questão DECLARA como origem está coberto: as já gravadas e as desta resposta */
+  const citados = typeof cfCitadosDoTopico === "function" ? cfCitadosDoTopico(prepCtx.chave, fonte) : new Set();
+  ((lido && lido.questoes && lido.questoes.achados) || []).forEach((q) => (q._trechos || []).forEach((i) => citados.add(i)));
+  /* com o RESUMO como fonte, o próprio resumo não conta como cobertura dele mesmo (daria sempre 100%) */
+  const semResumo = cfFonteTipo(fonte) === "resumo";
+  const cob = cfCobertura(fonte, cfItensDoTopico(prepCtx.chave, semResumo).concat(cfItensDaResposta(lido, semResumo)), citados);
   prepCobFonte = cob;
   cx.append(prepEl("div", "prep-cob-tit", t("cf_tit")));
   const chips = prepEl("div", "mc-status");
@@ -428,25 +554,29 @@ async function prepFonteDoPdf(arquivo) {
   const r = await cfFonteDePdf(bytes, arquivo.name || "PDF", { onProgresso: (p, n) => dizer(t("qs_pdf_lendo", { p, n })) });
   if (!r.fonte || r.motivo) { dizer(t(r.motivo === "sem_trechos" ? "cf_sem_trechos" : "qs_pdf_m_" + r.motivo)); return null; }
   cfFonteGuardar(prepCtx.chave, r.fonte, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
+  /* (19.125.0) o TEXTO da aula fica só nesta sessão: é ele que o Gemini recebe quando a pessoa gera direto */
+  prepAula = { chave: prepCtx.chave, quando: r.fonte.quando, textos: r.textos || [] };
   dizer(t("cf_guardada", { n: r.fonte.nome, k: r.fonte.trechos.length, p: r.paginas }));
   prepPintarConferenciaOuFonte();
+  prepIaPintar();
   return r.fonte;
 }
 function prepFonteDoResumo() {
   if (!prepCtx) return null;
   const txt = String(((typeof matObter === "function" && matObter(prepCtx.chave)) || {}).texto || "");
-  const fonte = cfImpressao(cfTrechosDeTexto(txt), t("cf_nome_resumo"));
+  const fonte = cfFonteCompleta(cfTrechosDeTexto(txt), t("cf_nome_resumo"), "resumo").fonte;
   if (!fonte.trechos.length) { $("prepMsg").textContent = t("cf_sem_trechos"); $("prepMsg").hidden = false; return null; }
   cfFonteGuardar(prepCtx.chave, fonte, { disciplina: prepCtx.disciplina, topico: prepCtx.topico, concurso: prepCtx.concurso });
   $("prepMsg").textContent = t("cf_guardada", { n: fonte.nome, k: fonte.trechos.length, p: "—" }); $("prepMsg").hidden = false;
   prepPintarConferenciaOuFonte();
+  prepIaPintar();
   return fonte;
 }
 /* repinta o que estiver na tela: a conferência (se há resposta) ou só a cobertura da fonte */
 function prepPintarConferenciaOuFonte() {
   if (prepLido && !prepLido.vazio) { prepPintarConferencia(); return; }
   const falta = prepPintarFonteCob(null);
-  if ($("btnPrepContinuar")) $("btnPrepContinuar").hidden = !falta;
+  prepMostrarFalta(falta);
 }
 
 function prepConferir() {
@@ -481,12 +611,16 @@ function prepPintar() {
   $("prepMsg").textContent = ""; $("prepMsg").hidden = true;
   if ($("btnPrepDesfazer")) $("btnPrepDesfazer").hidden = true;
   prepLido = null;
+  if ($("prepIaSt")) { $("prepIaSt").textContent = ""; $("prepIaSt").hidden = true; }
   prepPintarConferencia();
   prepPintarConferenciaOuFonte();
+  prepIaPintar();
 }
 
 function prepCopiar(texto, chaveMsg) {
+  const fPed = texto ? null : prepFonteParaPedido(false);
   const txt = texto || prepMontarPedido();
+  if (prepGuardarNumeracao(fPed)) { try { prepPintarConferenciaOuFonte(); } catch (e) {} }
   $("prepPedidoTxt").value = txt;
   let copiou = false;
   try { const p = navigator.clipboard && navigator.clipboard.writeText(txt); copiou = !!p; if (p && p.catch) p.catch(() => { $("prepPedidoTxt").hidden = false; }); } catch (e) { copiou = false; }
@@ -562,6 +696,12 @@ function prepIniciar() {
   const liga = (id, fn) => { if ($(id)) $(id).onclick = fn; };
   liga("btnMatFichaPreparar", () => prepAbrirDaFicha());
   liga("btnPrepCopiar", () => prepCopiar());
+  /* (19.125.0) direto pelo Gemini */
+  liga("btnPrepIa", () => prepIaGerar(false));
+  liga("btnPrepIaFalta", () => prepIaGerar(true));
+  liga("btnPrepIaCancelar", () => { if (typeof jurIaCancelar === "function") jurIaCancelar(); });
+  liga("btnPrepIaConfig", () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); });
+  PREP_FONTES.forEach((f) => { if ($("prepFonte_" + f)) $("prepFonte_" + f).onchange = () => prepIaPintar(); });
   liga("btnPrepVer", () => { $("prepPedidoTxt").value = prepMontarPedido(); $("prepPedidoTxt").hidden = !$("prepPedidoTxt").hidden; });
   liga("btnPrepColar", async () => {
     let lido = "";
@@ -581,7 +721,7 @@ function prepIniciar() {
   liga("btnPrepFontePdf", () => { const a = $("prepFonteArq"); if (a) { try { a.value = ""; } catch (e) {} a.click(); } });
   if ($("prepFonteArq")) $("prepFonteArq").onchange = () => { const f = $("prepFonteArq").files && $("prepFonteArq").files[0]; if (f) prepFonteDoPdf(f); };
   liga("btnPrepFonteResumo", () => prepFonteDoResumo());
-  liga("btnPrepFonteTirar", () => { if (prepCtx) { cfFonteEsquecer(prepCtx.chave); prepPintarConferenciaOuFonte(); } });
+  liga("btnPrepFonteTirar", () => { if (prepCtx) { cfFonteEsquecer(prepCtx.chave); prepAula = null; prepPintarConferenciaOuFonte(); prepIaPintar(); } });
   liga("btnPrepGravar", () => prepAplicar());
   liga("btnPrepDesfazer", () => {
     if (!prepRecibo) return;
@@ -595,4 +735,90 @@ function prepIniciar() {
   liga("btnPrepX", () => $("dlgPreparar").close());
   if ($("prepResposta")) $("prepResposta").addEventListener("input", () => prepConferir());
   ["prepPResumo", "prepPQuestoes", "prepPCartoes"].forEach((id) => { if ($(id)) $(id).onchange = () => { if (prepLido) prepConferir(); }; });
+}
+
+/* =====================================================================
+ * DIRETO PELO GEMINI (19.125.0) — a mesma tela, sem copiar e colar
+ *
+ * Opcional e DESLIGADO: a pessoa liga na tela da chave, que diz o que vai ao Google. O que muda é só o transporte: o
+ * pedido é o mesmo, a resposta cai na MESMA caixa e passa pela MESMA conferência — nada é gravado sozinho.
+ *  · o que vai: o pedido (tópico, ramos) e a fonte — o resumo do tópico, ou o TEXTO da aula que o app leu do PDF nesta
+ *    sessão, já limpo (sem cabeçalho, rodapé nem a marca do comprador: o PDF em si não é enviado);
+ *  · a fonte vai dividida em trechos numerados, e cada questão volta dizendo de qual saiu ("TRECHO: T07") — a
+ *    cobertura passa a contar por citação, e a questão ganha a linha "Fonte: …, pág. 12 — Do veto";
+ *  · "pedir o que falta": o mesmo pedido, com a fonte, restrito aos ramos e trechos que a conferência mostrou vazios;
+ *  · a tela diz o que acontece (⏳ N s, cancelar), cada erro tem nome, e a resposta cortada pelo limite do modelo é
+ *    dita — o consumo fica anotado no painel da chave, como o das outras chamadas.
+ * O caderno do NotebookLM não é alcançável daqui: quem gera a partir da aula escolhe o PDF em "Conferir contra a fonte".
+ * ===================================================================== */
+function prepIaLigada() { try { return localStorage.getItem(PREP_IA_CH) === "1"; } catch (e) { return false; } }
+function prepIaLigar(sim) { try { if (sim) localStorage.setItem(PREP_IA_CH, "1"); else localStorage.removeItem(PREP_IA_CH); } catch (e) {} return prepIaLigada(); }
+function prepIaPronta() { return prepIaLigada() && typeof jurIaPerguntar === "function" && typeof vzChaveApi === "function" && !!vzChaveApi(); }
+
+/* o que vai ao Google nesta consulta — dito ANTES de ir: { ok, f, msg } */
+function prepIaInfo() {
+  const f = prepFonteParaPedido(true);
+  if (f.falta) return { ok: false, f, msg: t(f.falta) };
+  return { ok: true, f, msg: t(f.tipo === "aula" ? "prep_ia_vai_aula" : "prep_ia_vai_resumo", { n: Math.max(1, Math.round(f.chars / 1000)), k: Math.max(1, Math.round(f.chars / 4000)) }) };
+}
+/* os botões do Gemini: o de gerar (ligado), o de configurar (desligado) e a linha do que vai */
+function prepIaPintar() {
+  if (!$("btnPrepIa")) return;
+  const pronta = prepIaPronta();
+  $("btnPrepIa").hidden = !pronta;
+  if ($("btnPrepIaConfig")) $("btnPrepIaConfig").hidden = pronta;
+  if ($("btnPrepIaCancelar")) $("btnPrepIaCancelar").hidden = !prepIaRodando;
+  const inf = $("prepIaInfo");
+  if (inf) { inf.textContent = pronta && prepCtx ? prepIaInfo().msg : ""; inf.hidden = !inf.textContent; }
+  if ($("btnPrepIaFalta") && $("btnPrepContinuar")) $("btnPrepIaFalta").hidden = !(pronta && !$("btnPrepContinuar").hidden);
+}
+
+async function prepIaGerar(soFalta) {
+  if (!prepCtx || prepIaRodando) return null;
+  if (!prepIaPronta()) { if (typeof vzAbrirChave === "function") vzAbrirChave(); return null; }
+  const st = $("prepIaSt");
+  const dizer = (s, cls) => { if (st) { st.textContent = s; st.hidden = !s; st.className = "prep-msg" + (cls ? " " + cls : ""); } };
+  const info = prepIaInfo();
+  if (!info.ok) { dizer(info.msg, "prep-msg-erro"); return null; }
+  let sufixo = info.f.texto ? t("prep_p_fim_texto") : "";
+  if (soFalta) {
+    const lista = prepListaDoQueFalta(prepLido ? prepLido.cobertura : [], prepPartes(), prepCobFonte, info.f.numerada);
+    if (!lista) { dizer(t("prep_ia_nada_falta")); return null; }
+    sufixo = (sufixo ? sufixo + "\n\n" : "") + t("prep_p_so_falta", { lista });
+  }
+  const pedido = prepMontarPedido(true, sufixo);
+  prepGuardarNumeracao(info.f);
+  try { prepFonteGravar(prepCtx.chave, prepFonteEscolhida()); } catch (e) {}
+  prepIaRodando = true;
+  const travar = (sim) => { ["btnPrepIa", "btnPrepIaFalta"].forEach((id) => { if ($(id)) $(id).disabled = sim; }); if ($("btnPrepIaCancelar")) $("btnPrepIaCancelar").hidden = !sim; };
+  travar(true);
+  const inicio = Date.now();
+  const seg = () => Math.round((Date.now() - inicio) / 1000);
+  const espera = () => dizer(t("prep_ia_esperando", { s: seg() }), "prep-msg-espera");
+  espera();
+  const relogio = setInterval(espera, 1000);
+  const topico = prepCtx.topico;
+  try { reg("PREPARAR", "Gemini direto: consulta", topico + " · " + pedido.length + " caracteres · fonte: " + (info.f.tipo || "—") + (soFalta ? " · só o que falta" : "")); } catch (e) {}
+  try {
+    const r = await jurIaPerguntar(pedido, { modulo: "PREPARAR", tempo: PREP_IA_TEMPO });
+    const cx = $("prepResposta");
+    const antes = String(cx.value || "");
+    /* acrescenta: a continuação entra depois do que já veio, e a conferência lê tudo junto */
+    cx.value = antes.trim() ? antes.replace(/\s*$/, "") + "\n\n" + r.texto : r.texto;
+    prepConferir();
+    const cortou = /MAX_TOKENS/i.test(String(r.fim || ""));
+    dizer(t(cortou ? "prep_ia_ok_cortou" : "prep_ia_ok", { s: seg(), n: r.texto.length }), cortou ? "prep-msg-erro" : "");
+    try { reg("PREPARAR", "Gemini direto: resposta", topico + " · " + r.texto.length + " caracteres · " + seg() + " s · " + r.modelo + (cortou ? " · CORTADA pelo limite" : "")); } catch (e) {}
+    return r;
+  } catch (e) {
+    const cod = (e && e.codigo) || "rede";
+    dizer((cod === "tempo" ? t("prep_ia_erro_tempo") : t("jur_ia_erro_" + cod)) + (e && e.detalhe && cod !== "cancelado" ? " (" + e.detalhe + ")" : "") + " " + t("jur_ia_erro_rodape"), "prep-msg-erro");
+    try { reg("PREPARAR", "Gemini direto: falhou", topico + " · " + cod + (e && e.detalhe ? " · " + e.detalhe : "")); } catch (e2) {}
+    return null;
+  } finally {
+    clearInterval(relogio);
+    prepIaRodando = false;
+    travar(false);
+    prepIaPintar();
+  }
 }

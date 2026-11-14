@@ -615,6 +615,171 @@ async function testes() {
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "C11 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
   }
+
+  /* ===================================================================
+   * (19.125.0) PREPARAR O TÓPICO DIRETO PELO GEMINI
+   * A etapa 3: tirar o copiar e colar. Opcional e desligado; o que muda é só o transporte — o mesmo pedido, a mesma
+   * caixa, a mesma conferência. A fonte vai em trechos numerados e cada questão volta dizendo de qual saiu.
+   * =================================================================== */
+  {
+    const { api, janela: J } = rodar();
+    api.matIniciar(); api.qsUiIniciar(); api.vkIniciarTela();
+    /* um Gemini de mentira: guarda as chamadas e responde o que o teste mandar */
+    const chamadas = [];
+    let fila = [];
+    J.fetch = async (url, op) => {
+      chamadas.push({ url, op, corpo: JSON.parse(op.body) });
+      const r = fila.shift();
+      if (r instanceof Error) throw r;
+      return { ok: r.status === 200, status: r.status, json: async () => r.json };
+    };
+    const resposta = (texto, fim) => ({ status: 200, json: { candidates: [{ content: { parts: [{ text: texto }] }, finishReason: fim || "STOP" }], usageMetadata: { promptTokenCount: 1200, candidatesTokenCount: 600 }, modelVersion: "gemini-teste" } });
+    const pedidoDe = (k) => chamadas[k].corpo.contents[0].parts[0].text;
+
+    const ch = api.matChave("D", "Processo legislativo");
+    const RESUMO = ["# Resumo geral", "O processo legislativo municipal compreende a elaboração de emendas, leis complementares, leis ordinárias, decretos legislativos e resoluções.", "",
+      "## Do veto e da sanção", "O Prefeito pode vetar o projeto no prazo de quinze dias úteis; o veto parcial abrange o texto integral de artigo, parágrafo, inciso ou alínea, e a Câmara o aprecia em trinta dias, com rejeição por maioria absoluta em votação nominal.", "",
+      "## Das emendas à Lei Orgânica", "A Lei Orgânica é emendada por proposta de um terço dos Vereadores ou do Prefeito, discutida e votada em dois turnos com interstício mínimo de dez dias e aprovada por dois terços dos membros.", "",
+      "## Das comissões de inquérito", "As comissões especiais de inquérito são criadas por requerimento de um terço dos membros, para apurar fato determinado por prazo certo, e encaminham as conclusões ao Ministério Público."].join("\n");
+    api.matGravar(ch, RESUMO, { disciplina: "D", topico: "Processo legislativo" });
+    const ctx = { disciplina: "D", topico: "Processo legislativo", chave: ch, editalId: "", concurso: "ISS Teste", ramos: [] };
+
+    /* ---- opcional e desligado ---- */
+    api.vzGuardarChave("AIzaTESTE123456");
+    api.prepAbrir(ctx);
+    ok(api.prepIaLigada() === false && api.prepIaPronta() === false && api.$("btnPrepIa").hidden === true && api.$("btnPrepIaConfig").hidden === false,
+      "D1 com a chave guardada, mas sem ligar: nenhum botão de gerar, só o de configurar");
+    api.$("btnPrepIaConfig").onclick();
+    ok(api.$("dlgVzChave").open === true && api.$("chkVzPrepIa").checked === false, "D1a o configurar abre a tela da chave, que mostra a opção desligada");
+    api.$("chkVzPrepIa").checked = true; api.$("vzChaveCampo").value = "AIzaTESTE123456"; api.$("btnVzChaveOk").onclick();
+    ok(api.prepIaLigada() === true && api.prepIaPronta() === true && api.jurIaLigada() === false && api.$("btnPrepIa").hidden === false && api.$("btnPrepIaConfig").hidden === true,
+      "D1b ligar na tela da chave liga SÓ o preparar o tópico (a jurisprudência é outra escolha), e o botão de gerar aparece");
+    api.vzAbrirChave();
+    ok(api.$("chkVzPrepIa").checked === true, "D1c a tela reabre mostrando o que está guardado");
+    api.$("dlgVzChave").close();
+    ok(/só se você ligar/.test(api.t("vz_chave_ajuda")) && /preparar o material/.test(api.t("vz_chave_ajuda")) && /marca do comprador/.test(api.t("prep_ia_optin_aj")) && /nada é gravado sozinho/.test(api.t("prep_ia_optin_aj")),
+      "D1d a tela da chave diz o que vai ao Google e que nada é gravado sozinho");
+
+    /* ---- o que vai: o resumo, em trechos numerados ---- */
+    const info = api.prepIaInfo();
+    ok(info.ok === true && info.f.tipo === "resumo" && info.f.numerada === true && /resumo deste tópico/.test(info.msg) && /resumo deste tópico/.test(api.$("prepIaInfo").textContent),
+      "D2 antes de ir, a tela diz o que o Gemini recebe: " + info.msg);
+    const ped = api.prepMontarPedido(true, api.t("prep_p_fim_texto"));
+    ok(/\[T01\] /.test(ped) && /\[T03\] Das emendas à Lei Orgânica/.test(ped) && /TRECHO: T07/.test(ped) && /trechos numerados/.test(ped) && /FIM DO TEXTO\. Agora responda SÓ COM OS BLOCOS/.test(ped),
+      "D2a a fonte vai em trechos numerados e rotulados, com a linha TRECHO: no formato da questão e o lembrete no fim");
+
+    /* ---- gerar: a resposta cai na caixa e passa pela conferência ---- */
+    const RESP1 = ["[RAMOS]", "- Veto", "- Emendas", "[/RAMOS]", "[QUESTOES]",
+      "[QUESTAO]", "TIPO: CE", "RAMO: Veto", "TRECHO: T02", "ENUNCIADO: O veto do Prefeito é apreciado pela Câmara em trinta dias.", "GABARITO: C", "COMENTARIO: A rejeição exige maioria absoluta.", "[/QUESTAO]",
+      "[QUESTAO]", "TIPO: CE", "RAMO: Emendas", "TRECHO: T03, T99", "ENUNCIADO: A emenda à Lei Orgânica é votada em turno único.", "GABARITO: E", "COMENTARIO: São dois turnos, com interstício de dez dias.", "[/QUESTAO]",
+      "[/QUESTOES]"].join("\n");
+    fila = [resposta(RESP1)];
+    const r1 = await api.prepIaGerar(false);
+    ok(r1 && chamadas.length === 1 && /generativelanguage\.googleapis\.com\/v1beta\/models\//.test(chamadas[0].url) && chamadas[0].op.headers["x-goog-api-key"] === "AIzaTESTE123456" && chamadas[0].url.indexOf("AIza") < 0,
+      "D3 uma chamada ao Gemini, com a chave no cabeçalho (nunca na URL)");
+    ok(/\[T02\] Do veto e da sanção/.test(pedidoDe(0)) && /quinze dias úteis/.test(pedidoDe(0)) && /RESPONDA SÓ COM OS BLOCOS/.test(pedidoDe(0)), "D3a o pedido enviado é o mesmo da tela, com a fonte dentro");
+    const l1 = api.prepLidoAtual();
+    ok(api.$("prepResposta").value === RESP1 && l1 && l1.questoes.achados.length === 2 && l1.questoes.ignoradas.length === 0 && api.$("btnPrepGravar").disabled === false,
+      "D3b a resposta cai na caixa de sempre e a conferência lê as questões: " + (l1 && l1.questoes.achados.length));
+    ok(JSON.stringify(l1.questoes.achados[0]._trechos) === "[1]" && JSON.stringify(l1.questoes.achados[1]._trechos) === "[2]" && !/TRECHO/.test(l1.questoes.achados[0].enunciado + l1.questoes.achados[0].comentario),
+      "D3c cada questão guarda de qual trecho saiu (código que não existe é ignorado) e a linha TRECHO não suja o texto: " + JSON.stringify(l1.questoes.achados.map((q) => q._trechos)));
+    const cob1 = api.prepCobFonteAtual();
+    ok(cob1 && cob1.total === 4 && cob1.lista[1].citado === true && cob1.lista[2].citado === true && cob1.lista[1].coberto && cob1.lista[2].coberto && cob1.lista[3].coberto === false,
+      "D3d a cobertura conta o trecho CITADO como coberto, e o das comissões continua vazio: " + JSON.stringify(cob1 && cob1.lista.map((x) => [x.citado, x.coberto])));
+    ok(/Resposta recebida em \d+ s/.test(api.$("prepIaSt").textContent) && api.$("btnPrepIa").disabled === false && api.$("btnPrepIaCancelar").hidden === true && api.$("btnPrepIaFalta").hidden === false,
+      "D3e a tela diz que chegou, solta os botões e oferece pedir o que falta: " + api.$("prepIaSt").textContent);
+    ok(api.iacResumo().hoje.n === 1, "D3f o consumo fica anotado no painel da chave: " + api.iacResumo().hoje.n);
+    ok(api.cfFonteDe(ch) && api.cfFonteTipo(api.cfFonteDe(ch)) === "resumo" && api.cfFonteDe(ch).trechos.length === 4, "D3g a numeração que saiu no pedido fica guardada (é por ela que T02 volta a ser um trecho)");
+
+    /* ---- pedir o que falta: o mesmo pedido, restrito ---- */
+    fila = [resposta("[QUESTOES]\n[QUESTAO]\nTIPO: CE\nRAMO: Veto\nTRECHO: T04\nENUNCIADO: A comissão de inquérito apura fato determinado por prazo certo.\nGABARITO: C\nCOMENTARIO: Requerimento de um terço dos membros.\n[/QUESTAO]\n[/QUESTOES]")];
+    const r2 = await api.prepIaGerar(true);
+    ok(r2 && chamadas.length === 2 && /ESTA É UMA CONTINUAÇÃO/.test(pedidoDe(1)) && /- T04 · Das comissões de inquérito/.test(pedidoDe(1)) && /\[T04\] Das comissões de inquérito/.test(pedidoDe(1)) && !/- T02 · /.test(pedidoDe(1)),
+      "D4 'pedir o que falta' manda o mesmo pedido com a fonte, restrito ao trecho vazio (pelo código): " + (pedidoDe(1).split("CONTINUAÇÃO")[1] || "").slice(0, 160).replace(/\n/g, " ⏎ "));
+    ok(api.prepLidoAtual().questoes.achados.length === 3 && api.prepCobFonteAtual().lista[3].coberto === true, "D4a a continuação entra junto da resposta anterior e fecha o trecho que faltava");
+
+    /* ---- gravar: a questão diz de onde saiu ---- */
+    const quando = api.cfFonteDe(ch).quando;
+    await api.prepAplicar();
+    const qs = api.qsTodas().filter((q) => q.chave === ch);
+    ok(qs.length === 3 && /\nFonte: resumo do tópico, Do veto e da sanção$/.test(qs[0].comentario) && JSON.stringify(qs[0].trechos) === JSON.stringify({ f: quando, i: [1] }),
+      "D5 gravada, a questão traz a fonte no fim do comentário e guarda o trecho: " + JSON.stringify([qs[0] && qs[0].comentario.split("\n").pop(), qs[0] && qs[0].trechos]));
+    const cit = api.cfCitadosDoTopico(ch, api.cfFonteDe(ch));
+    ok(cit.has(1) && cit.has(2) && cit.has(3) && !cit.has(0), "D5a depois de gravar, a cobertura continua contando pelas citações das questões");
+
+    /* ---- os erros têm nome, e nada é gravado ---- */
+    fila = [{ status: 429, json: { error: { message: "Quota exceeded" } } }];
+    const antesTxt = api.$("prepResposta").value;
+    const r3 = await api.prepIaGerar(false);
+    ok(r3 === null && /Cota esgotada/.test(api.$("prepIaSt").textContent) && /Nada foi gravado/.test(api.$("prepIaSt").textContent) && api.$("prepResposta").value === antesTxt && api.$("btnPrepIa").disabled === false,
+      "D6 cota esgotada: a tela diz o motivo, não mexe na caixa e solta o botão: " + api.$("prepIaSt").textContent);
+    /* o temporizador do teste dispara na hora: seguro durante a chamada, para o erro de rede não parecer "demorou" */
+    api.segurarAdiados();
+    fila = [new Error("falhou a rede")];
+    ok((await api.prepIaGerar(false)) === null && /Sem conexão com o Google/.test(api.$("prepIaSt").textContent) && /Nada foi gravado/.test(api.$("prepIaSt").textContent),
+      "D6a sem rede: dito com o nome: " + api.$("prepIaSt").textContent);
+    api.soltarAdiados();
+    /* o tempo-limite de verdade: o temporizador dispara antes da resposta (5 minutos, para um tópico inteiro) */
+    fila = [new Error("aborted")];
+    ok((await api.prepIaGerar(false)) === null && /mais de 5 minutos/.test(api.$("prepIaSt").textContent) && /desmarque o resumo ou os cartões/.test(api.$("prepIaSt").textContent),
+      "D6c passou do tempo: a tela diz o limite e o que tentar: " + api.$("prepIaSt").textContent);
+    fila = [resposta("[QUESTOES]\n[QUESTAO]\nTIPO: CE\nENUNCIADO: Questão que chegou inteira antes do corte da resposta.\nGABARITO: C\nCOMENTARIO: ok.\n[/QUESTAO]\n[QUESTAO]\nTIPO: CE\nENUNCIADO: Esta ficou pela meta", "MAX_TOKENS")];
+    const r4 = await api.prepIaGerar(false);
+    ok(r4 && /CORTADA pelo limite do modelo/.test(api.$("prepIaSt").textContent) && api.prepLidoAtual().questoes.achados.length === 1,
+      "D6b resposta cortada pelo limite: dito, e o que veio inteiro fica na conferência: " + api.prepLidoAtual().questoes.achados.length);
+    api.$("prepResposta").value = ""; api.prepConferir();
+
+    /* ---- a aula lida do PDF: vai o texto limpo, numerado ---- */
+    const chA = api.matChave("D", "Lei Orgânica");
+    const ctxA = { disciplina: "D", topico: "Lei Orgânica", chave: chA, editalId: "", concurso: "", ramos: [] };
+    api.prepAbrir(ctxA);
+    api.$("prepFonte_anexo").checked = true; api.$("prepFonte_resumo").checked = false;
+    ok(api.prepIaInfo().ok === false && /escolha o PDF dela/.test(api.prepIaInfo().msg), "D7 sem o PDF lido nesta sessão, gerar a partir da aula explica o que falta (o caderno não é alcançável)");
+    fila = [];
+    ok((await api.prepIaGerar(false)) === null && chamadas.length === 6 && /escolha o PDF dela/.test(api.$("prepIaSt").textContent), "D7a e nada é enviado: " + chamadas.length);
+    const trechosAula = [{ titulo: "DO VETO", pagina: 12, texto: "O Prefeito veta o projeto em quinze dias úteis e a Câmara aprecia o veto em trinta dias, com rejeição por maioria absoluta." },
+      { titulo: "", pagina: 12, texto: "Nota." },
+      { titulo: "DAS EMENDAS", pagina: 14, texto: "A Lei Orgânica é emendada em dois turnos, com interstício de dez dias, por dois terços dos Vereadores, mediante proposta de um terço." }];
+    const comp = api.cfFonteCompleta(trechosAula, "aula-17.pdf", "pdf");
+    ok(comp.fonte.trechos.length === 2 && comp.textos.length === 2 && /Nota\.$/.test(comp.textos[0]) && comp.fonte.tipo === "pdf" && comp.fonte.trechos.every((x) => x.o === undefined),
+      "D8 a impressão e os textos ficam alinhados: o trecho pequeno demais não some, o texto dele entra no vizinho");
+    comp.fonte.paginas = 20;
+    api.cfFonteGuardar(chA, comp.fonte, { disciplina: "D", topico: "Lei Orgânica" });
+    api.prepAulaDefinir({ chave: chA, quando: comp.fonte.quando, textos: comp.textos });
+    const infoA = api.prepIaInfo();
+    ok(infoA.ok === true && infoA.f.tipo === "aula" && /sem cabeçalho, rodapé nem a marca do comprador/.test(infoA.msg) && /O PDF em si não é enviado/.test(infoA.msg), "D8a com o PDF lido, a tela diz que vai o texto limpo, não o arquivo: " + infoA.msg.slice(0, 80));
+    const pedA = api.prepMontarPedido(true, "");
+    ok(/\[T01\] pág\. 12 — DO VETO\nO Prefeito veta/.test(pedA) && /\[T02\] pág\. 14 — DAS EMENDAS/.test(pedA) && /o TEXTO no fim deste pedido/.test(pedA) && !/material que estou enviando junto/.test(pedA),
+      "D8b o pedido direto leva a aula numerada, com a página e o título de cada trecho");
+    /* a sessão de outro PDF não serve para este tópico */
+    api.prepAulaDefinir({ chave: chA, quando: "outra-impressao", textos: comp.textos });
+    ok(api.prepIaInfo().ok === false, "D8c o texto de outra leitura não é usado no lugar (a numeração seria outra)");
+    /* com o PDF como fonte medida, o resumo vai sem números (a numeração é a da aula) */
+    api.matGravar(chA, RESUMO, { disciplina: "D", topico: "Lei Orgânica" });
+    api.prepAbrir(ctxA);
+    api.$("prepFonte_resumo").checked = true; api.$("prepFonte_anexo").checked = false;
+    const fR = api.prepFonteParaPedido(true);
+    ok(fR.tipo === "resumo" && fR.numerada === false && fR.guardar === null && api.cfFonteTipo(api.cfFonteDe(chA)) === "pdf", "D9 com a aula guardada como fonte, pedir pelo resumo não troca a numeração dela");
+
+    /* ---- pelo copiar e colar, o resumo também vai numerado ---- */
+    const chC = api.matChave("D", "Só resumo");
+    api.matGravar(chC, RESUMO, { disciplina: "D", topico: "Só resumo" });
+    api.prepAbrir({ disciplina: "D", topico: "Só resumo", chave: chC, editalId: "", concurso: "", ramos: [] });
+    ok(api.cfFonteDe(chC) === null, "D10-pre sem fonte guardada ainda");
+    const txtC = api.prepCopiar();
+    ok(/\[T02\] Do veto e da sanção/.test(txtC) && /TRECHO: T07/.test(txtC) && api.cfFonteDe(chC) && api.cfFonteDe(chC).trechos.length === 4,
+      "D10 copiar o pedido pelo resumo também numera os trechos e guarda a numeração");
+    const q1 = api.cfFonteDe(chC).quando;
+    api.prepCopiar();
+    ok(api.cfFonteDe(chC).quando === q1, "D10a copiar de novo, com o resumo igual, mantém a mesma numeração (as citações já gravadas continuam valendo)");
+    /* os códigos */
+    ok(JSON.stringify(api.cfLerCodigos("T07, [T08] e t9", 10)) === "[6,7,8]" && JSON.stringify(api.cfLerCodigos("T00, T11, sem código", 10)) === "[]" && api.cfCodigo(0) === "T01" && api.cfCodigo(104) === "T105",
+      "D11 os códigos dos trechos: T07 é o sétimo; fora da fonte é ignorado");
+    ["prep_ia_btn", "prep_ia_config", "prep_ia_falta_btn", "prep_ia_vai_resumo", "prep_ia_vai_aula", "prep_ia_sem_aula", "prep_ia_esperando", "prep_ia_ok", "prep_ia_ok_cortou", "prep_ia_erro_tempo", "prep_ia_optin", "prep_ia_optin_aj",
+      "prep_p_numerada", "prep_p_trecho_linha", "prep_p_fim_texto", "prep_p_so_falta", "prep_fonte_linha", "iac_mod_preparar"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "D12 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
   return falhas;
 }
 

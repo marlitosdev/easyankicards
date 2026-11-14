@@ -82,7 +82,8 @@ async function jurIaPerguntar(pedido, opc) {
     const fontes = ((cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [])
       .map((c) => c && c.web ? { titulo: String(c.web.title || ""), url: String(c.web.uri || "") } : null)
       .filter((f) => f && /^https?:\/\//.test(f.url));
-    return { texto, fontes, modelo };
+    /* (19.125.0) "fim": por que a resposta terminou (STOP, MAX_TOKENS…) — quem pede textos longos precisa saber do corte */
+    return { texto, fontes, modelo, fim: String((cand && cand.finishReason) || "") };
   } finally {
     clearTimeout(timer);
     if (jurIaEmCurso === em) jurIaEmCurso = null;

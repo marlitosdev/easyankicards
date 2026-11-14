@@ -811,6 +811,8 @@ function qsAplicar(lista, gravar) {
     };
     /* Q1 — a questão pode nascer já ligada a um RAMO do tópico */
     if (q.ramo) { limpa.ramo = String(q.ramo); limpa.ramoNome = String(q.ramoNome || ""); }
+    /* (19.125.0) os trechos da FONTE de onde a questão saiu (a impressão "f" e os índices): a cobertura conta por eles */
+    if (q.trechos && Array.isArray(q.trechos.i) && q.trechos.i.length) limpa.trechos = { f: String(q.trechos.f || ""), i: q.trechos.i.slice(0, 6).map((x) => +x || 0) };
     qsBanco.push(limpa);
     novas.push(limpa);
   });

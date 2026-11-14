@@ -6358,6 +6358,9 @@ dialog.prep-dlg{max-width:860px}
 .prep-aviso{margin:var(--esp-2) 0 0;font-size:var(--fs-2);color:var(--atencao);line-height:1.45;max-width:72ch}
 .prep-ok{margin:var(--esp-2) 0 0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
 .prep-msg{margin:0;font-size:var(--fs-2);color:var(--ok);line-height:1.45}
+.prep-passo .prep-msg{margin-top:var(--esp-2)}
+.prep-msg.prep-msg-erro{color:var(--atencao)}
+.prep-msg.prep-msg-espera{color:var(--info)}
 .mat-ficha-prep{margin:0 0 var(--esp-2)}
 /* (19.124.0) a cobertura contra a fonte: os trechos sem nenhum item */
 .cf-lista{list-style:none;margin:var(--esp-2) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--esp-1)}
@@ -7699,8 +7702,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 .mat-ficha-corpo.com-ramos{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:12px;overflow:hidden}
 .mat-ficha-corpo.com-ramos > .mat-ficha-escopo{flex-direction:column;flex-wrap:nowrap;gap:2px;margin:0;min-height:0;overflow-y:auto;overflow-x:hidden;padding:2px 6px 2px 0;border-right:1px solid var(--borda)}
 .mat-ficha-corpo.com-ramos > .mat-ficha-lista{margin:0;min-height:0;overflow-y:auto;padding:0 2px 2px 0}
-.btn-min.mat-ficha-esc{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:6px 8px;font-size:12.5px;line-height:1.3;white-space:normal;background:transparent;border-color:transparent}
-.btn-min.mat-ficha-esc:hover{background:rgba(127,127,127,.14)}
+/* (19.125.0) so na ficha "Estudar": os chips de ramo do leitor de resumo usam a mesma classe e ficavam com a largura toda */
+:where(.mat-ficha-dlg) .btn-min.mat-ficha-esc{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:6px 8px;font-size:12.5px;line-height:1.3;white-space:normal;background:transparent;border-color:transparent}
+:where(.mat-ficha-dlg) .btn-min.mat-ficha-esc:hover{background:rgba(127,127,127,.14)}
 .btn-min.mat-ficha-esc-todo{font-weight:700}
 .mat-ficha-dot{flex:none;width:9px;height:9px;border-radius:50%;border:1px solid var(--sutil);box-sizing:border-box}
 .mat-ficha-dot[class*="dom-n-"]{border-color:rgba(255,255,255,.55)}
@@ -7719,7 +7723,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 @media (max-width:700px){
   .mat-ficha-corpo.com-ramos{display:flex;flex-direction:column;gap:8px}
   .mat-ficha-corpo.com-ramos > .mat-ficha-escopo{flex:0 0 auto;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:0 0 6px;border-right:0;border-bottom:1px solid var(--borda)}
-  .btn-min.mat-ficha-esc{width:auto;flex:0 0 auto;max-width:220px;border-color:var(--borda)}
+  :where(.mat-ficha-dlg) .btn-min.mat-ficha-esc{width:auto;flex:0 0 auto;max-width:220px;border-color:var(--borda)}
   .mat-ficha-corpo.com-ramos > .mat-ficha-lista{flex:1 1 auto}
 }
 
@@ -9319,6 +9323,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <!-- (v18.97.0) a chave na jurisprudência: só se a pessoa ligar, dito o que vai ao Google -->
   <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzJurIa"> <span data-i18n="jur_ia_optin"></span></label>
   <p class="nota" data-i18n="jur_ia_optin_aj"></p>
+  <!-- (19.125.0) a chave no "preparar o tópico": outra escolha, porque vai outro dado (o resumo ou o texto da aula) -->
+  <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzPrepIa"> <span data-i18n="prep_ia_optin"></span></label>
+  <p class="nota" data-i18n="prep_ia_optin_aj"></p>
   <div class="dlg-rodape">
     <button class="btn btn-verde" id="btnVzChaveOk" data-i18n="vz_chave_salvar"></button>
     <button class="btn btn-cinza" id="btnVzChaveFechar" data-i18n="cancel_btn"></button>
@@ -9980,7 +9987,13 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <div class="prep-acoes">
         <button type="button" class="btn btn-azul" id="btnPrepCopiar" data-i18n="prep_copiar" data-i18n-title="prep_copiar_tip"></button>
         <button type="button" class="btn-quieto" id="btnPrepVer" data-i18n="prep_ver"></button>
+        <!-- (19.125.0) direto pelo Gemini: só aparece ligado na tela da chave; a resposta cai na caixa do passo 2 -->
+        <button type="button" class="btn-min btn-min-ok" id="btnPrepIa" data-i18n="prep_ia_btn" data-i18n-title="prep_ia_btn_tip" hidden></button>
+        <button type="button" class="btn-min" id="btnPrepIaCancelar" data-i18n="jur_ia_cancelar" hidden></button>
+        <button type="button" class="btn-quieto" id="btnPrepIaConfig" data-i18n="prep_ia_config" data-i18n-title="prep_ia_config_tip" hidden></button>
       </div>
+      <p class="prep-sub" id="prepIaInfo" hidden></p>
+      <p class="prep-msg" id="prepIaSt" role="status" aria-live="polite" hidden></p>
       <textarea id="prepPedidoTxt" class="prep-ta prep-ta-pedido" rows="6" readonly hidden aria-label="Pedido para a IA"></textarea>
     </section>
     <section class="prep-passo">
@@ -9990,6 +10003,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <button type="button" class="btn-min" id="btnPrepColar" data-i18n="prep_colar" data-i18n-title="prep_colar_tip"></button>
         <button type="button" class="btn-min" id="btnPrepConferir" data-i18n="prep_conferir"></button>
         <button type="button" class="btn-min btn-min-ok" id="btnPrepContinuar" data-i18n="prep_continuar" data-i18n-title="prep_continuar_tip" hidden></button>
+        <button type="button" class="btn-min btn-min-ok" id="btnPrepIaFalta" data-i18n="prep_ia_falta_btn" data-i18n-title="prep_ia_falta_tip" hidden></button>
       </div>
       <div id="prepConf" class="prep-conf"></div>
     </section>

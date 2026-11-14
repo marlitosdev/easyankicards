@@ -6637,6 +6637,8 @@ function vzAbrirChave(aba) {
   }
   /* (v18.97.0) usar a chave também na jurisprudência: escolha da pessoa, desligada por padrão */
   if ($("chkVzJurIa")) $("chkVzJurIa").checked = typeof jurIaLigada === "function" && jurIaLigada();
+  /* (19.125.0) e no "preparar o tópico": outra escolha, também desligada por padrão */
+  if ($("chkVzPrepIa")) $("chkVzPrepIa").checked = typeof prepIaLigada === "function" && prepIaLigada();
   /* (v18.99.0) as abas: chave · consumo · faturas (o selo do cabeçalho e a jurisprudência abrem no consumo) */
   if (typeof iacAba === "function") iacAba(aba === "consumo" || aba === "faturas" ? aba : "chave");
   abrirModal("dlgVzChave");
@@ -7950,6 +7952,12 @@ function vkIniciarTela() {
       const antes = jurIaLigada();
       const depois = jurIaLigar(!!$("chkVzJurIa").checked);
       if (antes !== depois) reg("JURIS", depois ? "Gemini direto na jurisprudência: LIGADO pela pessoa" : "Gemini direto na jurisprudência: desligado");
+    }
+    if ($("chkVzPrepIa") && typeof prepIaLigar === "function") {
+      const antesP = prepIaLigada();
+      const depoisP = prepIaLigar(!!$("chkVzPrepIa").checked);
+      if (antesP !== depoisP) reg("PREPARAR", depoisP ? "Gemini direto no preparar o tópico: LIGADO pela pessoa" : "Gemini direto no preparar o tópico: desligado");
+      try { if (typeof prepIaPintar === "function") prepIaPintar(); } catch (e) {}
     }
     $("dlgVzChave").close();
     vzPintarChave();
