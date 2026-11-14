@@ -5019,6 +5019,7 @@ async function edLoteAplicar(marcar) {
   });
   reg("EDITAL", (marcar ? "marcados" : "desmarcados") + " em lote", n + " tópicos");
   edSelecao.clear();
+  if (!marcar && typeof edPermitirQueda === "function") edPermitirQueda();
   edSalvar();
   edRender();
   if (typeof hubPintarAgenda === "function") hubPintarAgenda();
@@ -5800,6 +5801,8 @@ function edIniciar() {
     if (!(await uiConfirm(t("ed_limpar_conf", { t: itens.length, f: feitos })))) return;
     reg("EDITAL", "edital apagado", itens.length + " tópicos");
     $("editalTexto").value = ""; edProgresso = {};
+    /* apagar de propósito: a trava do progresso (edSalvarLista) deixa passar */
+    if (typeof edPermitirQueda === "function") edPermitirQueda();
     edRender();
   };
   /* o botão existia na tela desde a v8.70 e não estava ligado a nada —

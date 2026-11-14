@@ -51,11 +51,71 @@ function edCarregarLista() {
   }
   try { editalAtual = localStorage.getItem("eac_edital_atual") || null; } catch (e) {}
   if (editalAtual && !editais.some((x) => x.id === editalAtual)) editalAtual = null;
+  edProgFotografar();
   return editais;
 }
 
+/* =====================================================================
+ * (19.127.0) A TRAVA DO PROGRESSO — o incidente de 14/11/2026
+ *
+ * O app abriu com a bancada VAZIA por 5 segundos ("0 disciplinas" no registro) e, nesse intervalo, uma gravação levou
+ * o progresso vazio da tela para dentro do edital ISS Caruaru: 53 tópicos marcados viraram 0, a 15 dias da prova. O
+ * texto do edital sobreviveu; o progresso, não. Só o backup percebeu — depois.
+ *
+ * TODA gravação da lista de editais passa por edSalvarLista. É aqui que mora a trava, e não em cada um dos caminhos
+ * que chegam nela (são mais de dez, e o que falhou não era nenhum dos que se imaginava):
+ *  · progresso que vai de 3 ou mais marcações para ZERO, sem alguém ter pedido, NÃO É GRAVADO: volta o que estava
+ *    (inclusive na tela, se for o edital aberto), fica um BLOQUEIO no registro com o caminho do código, e um aviso;
+ *  · queda grande que não zera (5 ou mais) é gravada, mas fica no registro, com o caminho;
+ *  · quem apaga de propósito (apagar o edital da bancada, desmarcar em lote) avisa antes com edPermitirQueda().
+ * Desmarcar um tópico por vez nunca cai aqui: a queda é de 1.
+ * ===================================================================== */
+let edProgGravado = {};        /* id do edital -> { n, json } do progresso na última gravação */
+let edQuedaPermitida = false;
+let edBloqueiosDeProgresso = [];   /* desta sessão: [{ quando, edital, de, origem }] — o diagnóstico mostra */
+function edPermitirQueda() { edQuedaPermitida = true; }
+function edProgFotografar() {
+  edProgGravado = {};
+  (editais || []).forEach((e) => {
+    if (!e || !e.id) return;
+    const p = e.progresso || {};
+    try { edProgGravado[e.id] = { n: Object.keys(p).length, json: JSON.stringify(p) }; } catch (x) {}
+  });
+}
+/* quem chamou a gravação: os nomes das funções na pilha, de dentro para fora */
+function edOrigemDaChamada() {
+  try {
+    return String(new Error().stack || "").split("\n").slice(1, 12)
+      .map((l) => ((l.match(/at (?:async )?([\w$.]+)/) || l.match(/^([\w$.]+)@/) || [])[1] || ""))
+      .filter((n) => n && !/^(edOrigemDaChamada|edSalvarLista|Object|Array|new|HTML\w+)/.test(n)).slice(0, 5).join(" ← ");
+  } catch (e) { return ""; }
+}
 function edSalvarLista() {
+  (editais || []).forEach((e) => {
+    const ant = e && edProgGravado[e.id];
+    if (!ant) return;
+    const n = Object.keys(e.progresso || {}).length;
+    if (n >= ant.n) return;
+    const origem = edOrigemDaChamada();
+    if (ant.n >= 3 && n === 0 && !edQuedaPermitida) {
+      let volta = {};
+      try { volta = JSON.parse(ant.json) || {}; } catch (x) { volta = {}; }
+      e.progresso = volta;
+      /* o edital aberto: a tela e a cópia de trabalho voltam junto, senão a próxima gravação tentaria de novo */
+      if (e.id === editalAtual) {
+        try { if (typeof edProgresso !== "undefined") edProgresso = volta; } catch (x) {}
+        try { localStorage.setItem("eac_edital_progresso", ant.json); } catch (x) {}
+      }
+      edBloqueiosDeProgresso.push({ quando: new Date().toISOString(), edital: e.nome || e.id, de: ant.n, origem });
+      try { reg("BLOQUEIO", "progresso zerado recusado", (e.nome || e.id) + " · " + ant.n + " marcações mantidas · origem: " + (origem || "?")); } catch (x) {}
+      try { if (typeof toastMsg === "function" && typeof t === "function") toastMsg(t("ed_trava_progresso", { n: ant.n, e: e.nome || "" }), 9000); } catch (x) {}
+    } else if (ant.n - n >= 5) {
+      try { reg("EDITAL-PROGRESSO", "marcações caíram de " + ant.n + " para " + n, (e.nome || e.id) + (edQuedaPermitida ? " · a pedido" : "") + " · origem: " + (origem || "?")); } catch (x) {}
+    }
+  });
+  edQuedaPermitida = false;
   guardar("eac_editais", JSON.stringify(editais));
+  edProgFotografar();
 }
 
 function edAberto() {

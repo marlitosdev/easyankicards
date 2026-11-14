@@ -795,6 +795,39 @@ function matTexTemCara(x) {
   return /[\\^_=]/.test(x) || /^[A-Za-z]{1,3}$/.test(x.trim()) || /^[A-Za-z0-9+\-*/().,\s]{1,15}$/.test(x) && /[A-Za-z]/.test(x) && !/\s\w{4,}\s/.test(" " + x + " ");
 }
 
+/* =====================================================================
+ * (19.127.0) TABELA NO RESUMO
+ *
+ * A tabela em Markdown (como toda IA devolve) aparecia literal: "| X | f |", "|---|---|". A questão já desenhava tabela
+ * (19.116.0); o resumo, não — e matéria de cálculo (frequências, fluxo de caixa, tabela-verdade) é feita delas.
+ * Tabela = duas ou mais linhas seguidas que começam e terminam em "|". A linha "| --- | :--: |" não aparece: ela diz que
+ * o que veio antes é cabeçalho e como alinhar cada coluna. O texto guardado não muda; cada linha da tabela continua
+ * sendo uma linha do resumo (data-l), então marcar, ler e editar seguem valendo.
+ * ===================================================================== */
+const MAT_TAB_LINHA = /^\|.*\|$/;
+/* as células: corta nas barras, menos as de dentro de fórmula ("$|x - \bar{x}|$") e as escapadas ("\|") */
+function matTabCelulas(s) {
+  const miolo = String(s).trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cels = [];
+  let atual = "", emTex = false;
+  for (let k = 0; k < miolo.length; k++) {
+    const ch = miolo[k];
+    if (ch === "\\" && miolo[k + 1] === "|") { atual += "|"; k++; continue; }
+    if (ch === "$" && miolo[k - 1] !== "\\") emTex = !emTex;
+    if (ch === "|" && !emTex) { cels.push(atual.trim()); atual = ""; continue; }
+    atual += ch;
+  }
+  cels.push(atual.trim());
+  return cels;
+}
+function matTabEhSeparador(s) {
+  const cels = matTabCelulas(s);
+  return cels.length > 0 && cels.every((c) => /^(:?-{2,}:?|:-:?|-:)$/.test(c));
+}
+function matTabAlinhamentos(s) {
+  return matTabCelulas(s).map((c) => (/^:-+:$/.test(c) ? "c" : /-:$/.test(c) ? "d" : /^:-/.test(c) ? "e" : ""));
+}
+
 function matParaHtml(txt, prova, opc) {
   const linhas = matEscapar(matComMarcador(txt)).split(/\r?\n/);
   const saida = [];
@@ -844,7 +877,32 @@ function matParaHtml(txt, prova, opc) {
    * precisa dela ANTES do ponto onde estava declarada */
   let emDica = false, emDicaJust = false;
   const fecharLista = () => { if (emLista) { saida.push("</ul>"); emLista = false; } };
+  /* (19.127.0) a tabela aberta: { alin: alinhamento por coluna, cab: as próximas linhas são cabeçalho? } */
+  let tab = null;
+  const fecharTabela = () => { if (tab) { saida.push("</tbody></table></div>"); tab = null; } };
+  const ehLinhaTab = (k) => !porLinha[k] && MAT_TAB_LINHA.test(String(linhas[k] || "").trim());
   linhas.forEach((l, kLinha) => {
+    if (tab && !ehLinhaTab(kLinha)) fecharTabela();
+    if (ehLinhaTab(kLinha) && (tab || ehLinhaTab(kLinha + 1))) {
+      const sT = l.trim();
+      if (!tab) {
+        fecharLista();
+        emDica = false;
+        /* o separador pode vir na 2ª linha (o comum) — e é ele quem diz o alinhamento e que a 1ª é cabeçalho */
+        let kSep = -1;
+        for (let k = kLinha; ehLinhaTab(k) && kSep < 0; k++) if (matTabEhSeparador(linhas[k])) kSep = k;
+        tab = { alin: kSep >= 0 ? matTabAlinhamentos(linhas[kSep]) : [], sep: kSep };
+        saida.push('<div class="mat-tab-cx"><table class="mat-tab"><tbody>');
+      }
+      if (matTabEhSeparador(sT)) return;
+      const cab = tab.sep >= 0 && kLinha < tab.sep;
+      const tag = cab ? "th" : "td";
+      saida.push("<tr" + dl(kLinha) + ">" + matTabCelulas(sT).map((c, k) => {
+        const a = tab.alin[k];
+        return "<" + tag + (a ? ' class="mat-tab-' + a + '"' : "") + ">" + inline(c) + "</" + tag + ">";
+      }).join("") + "</tr>");
+      return;
+    }
     /* linha dentro de um bloco de questão: quem desenha é o cartão */
     const alvoQ = porLinha[kLinha];
     if (alvoQ) {
@@ -934,6 +992,7 @@ function matParaHtml(txt, prova, opc) {
     saida.push("<p" + (cl ? ' class="' + cl + '"' : "") + dl(kLinha) + ">" + inline(s) + "</p>");
   });
   if (emLista) saida.push("</ul>");
+  fecharTabela();
   return saida.join("\n");
 }
 

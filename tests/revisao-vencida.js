@@ -309,6 +309,52 @@ async function testes() {
        + "com fuso negativo e depois das 21h isto fica em -1");
   }
 
+  /* ---- (19.127.0) T: A TRAVA DO PROGRESSO — o incidente de 14/11/2026 ----
+   * O app abriu com a bancada vazia por alguns segundos e uma gravação levou o progresso vazio para dentro do edital:
+   * 53 marcações viraram 0. Toda gravação da lista passa por edSalvarLista; é lá que a trava mora. */
+  {
+    const { api, janela } = rodar();
+    api.matIniciar(); api.edIniciar();
+    const txtEd = ["# ISS | prova: " + daqui(15) + " | horas: 29", "@ Tributário :: 5", "+ A :: 5", "+ B :: 5", "+ C :: 5", "+ D :: 5", "+ E :: 5", "+ F :: 5"].join("\n");
+    const ed = api.edCriar("ISS", txtEd);
+    api.hubAbrirEdital(ed.id);
+    const marcas = {};
+    ["a", "b", "c", "d", "e", "f"].forEach((x) => { marcas["tributário›" + x] = { e: "feito", d: daqui(-3) }; });
+    api.edProgressoPor(marcas);
+    api.edSalvar();
+    const L = janela.localStorage;
+    const naLista = () => Object.keys((JSON.parse(L.getItem("eac_editais")).find((x) => x.id === ed.id) || {}).progresso || {}).length;
+    ok(naLista() === 6, "T1 seis tópicos marcados e gravados: " + naLista());
+    /* o incidente: a tela fica sem progresso (não carregou) e alguém grava */
+    api.edProgressoPor({});
+    api.edSalvar();
+    ok(naLista() === 6 && Object.keys(api.edProgressoAtual()).length === 6, "T2 a gravação que zeraria o progresso é RECUSADA: a lista e a tela ficam com as 6: " + naLista() + "/" + Object.keys(api.edProgressoAtual()).length);
+    ok(Object.keys(JSON.parse(L.getItem("eac_edital_progresso") || "{}")).length === 6, "T2a a cópia de trabalho também volta (senão a próxima gravação tentaria de novo)");
+    const bl = api.edBloqueiosDeProgresso();
+    ok(bl.length === 1 && bl[0].de === 6 && /ISS/.test(bl[0].edital), "T3 o bloqueio fica anotado, com o edital e quantas marcações: " + JSON.stringify(bl));
+    const regs = (api.registroAtual ? api.registroAtual() : []).filter((x) => /progresso zerado recusado/.test(JSON.stringify(x)));
+    ok(regs.length === 1 && /6 marcações mantidas/.test(JSON.stringify(regs[0])) && /origem:/.test(JSON.stringify(regs[0])), "T3a e vai para o registro como BLOQUEIO, com a origem: " + JSON.stringify(regs[0] || null).slice(0, 220));
+    /* o mesmo pela troca de edital (hubGravarAberto), que foi por onde o vazio entrou */
+    const outro = api.edCriar("Outro", txtEd.replace("# ISS", "# Outro"));
+    api.edProgressoPor({});
+    L.setItem("eac_edital_progresso", "{}");
+    api.hubAbrirEdital(outro.id);
+    ok(naLista() === 6, "T4 trocar de edital com a cópia de trabalho vazia também não zera: " + naLista());
+    api.hubAbrirEdital(ed.id);
+    ok(Object.keys(api.edProgressoAtual()).length === 6, "T4a ao voltar, as 6 marcações estão lá");
+    /* desmarcar uma por vez continua livre; e apagar de propósito também */
+    const menos = Object.assign({}, api.edProgressoAtual());
+    delete menos["tributário›a"];
+    api.edProgressoPor(menos);
+    api.edSalvar();
+    ok(naLista() === 5, "T5 desmarcar um tópico grava normalmente: " + naLista());
+    api.edProgressoPor({});
+    api.edPermitirQueda();
+    api.edSalvar();
+    ok(naLista() === 0 && api.edBloqueiosDeProgresso().length === 2 - 1 + (api.edBloqueiosDeProgresso().length - 1), "T6 zerar DE PROPÓSITO (edPermitirQueda) passa: " + naLista());
+    ok(api.edBloqueiosDeProgresso().length <= 2, "T6a e não vira bloqueio a mais: " + api.edBloqueiosDeProgresso().length);
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

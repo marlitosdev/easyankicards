@@ -109,6 +109,15 @@ function bkaHash(s) {
   for (let i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return (h >>> 0).toString(16) + "." + x.length.toString(36);
 }
+/* (19.127.0) A IMPRESSÃO DOS DADOS, SEM O QUE MUDA SOZINHO. Cada edital leva "tocado" (a hora em que foi aberto ou
+ * redesenhado), que muda só de abrir o app: com ele na conta, toda abertura virava "os dados mudaram" e uma gravação. */
+function bkaImpressao(dados) {
+  let s = "";
+  try {
+    s = JSON.stringify(dados, (k, v) => (k === "eac_editais" && typeof v === "string" ? v.replace(/"tocado":"[^"]*",?/g, "") : v));
+  } catch (e) { s = JSON.stringify(dados); }
+  return bkaHash(s);
+}
 /* o que caiu MUITO entre dois resumos: zerou, ou perdeu ≥ 20% e ≥ 5 itens. Apagar três cartões não pausa nada. */
 function bkaEncolheu(antes, novo) {
   const A = antes || {}, N = novo || {};
@@ -173,7 +182,9 @@ function bkaGravarAgora(motivo, opc) {
   /* (19.40.0) o balão: "salvando…" enquanto grava; depois ✓ por um instante (ou o aviso, se falhou) */
   const est0 = bkaEstado();
   const vaiGravar = !!(est0.ligado && bkaPasta);
-  if (vaiGravar) bkaBolhaPintar("gravando");
+  /* (19.127.0) O BALÃO SÓ APARECE QUANDO HÁ O QUE GRAVAR. Ele acendia "salvando…" a cada tentativa — aos 30 minutos e
+   * toda vez que a janela perdia o foco —, mesmo quando nada tinha mudado e nada era gravado: parecia backup sem parar.
+   * Agora quem acende é bkaGravarDeVerdade, depois de ver que os dados mudaram. */
   bkaGravando = bkaGravarDeVerdade(motivo || "", opc || {})
     .then((r) => { if (vaiGravar) bkaBolhaPintar(r && r.ok && !r.igual ? "gravou" : ""); return r; })
     .finally(() => { bkaGravando = null; });
@@ -186,8 +197,9 @@ async function bkaGravarDeVerdade(motivo, o) {
   if ((await bkaPermitido(!!o.gesto)) !== "granted") { bkaPintarTudo(); return { ok: false, razao: "permissao" }; }
   let bk;
   try { await bkEsperarDados(); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
-  const hash = bkaHash(JSON.stringify(bk.dados));
+  const hash = bkaImpressao(bk.dados);
   if (!o.forcar && est.ultimo && est.ultimo.hash === hash) return { ok: true, igual: true };
+  try { bkaBolhaPintar("gravando"); } catch (e) {}
   /* (19.40.0) NÃO SOBREPOR O MAIS NOVO. Cada aparelho grava o SEU arquivo — nunca apaga o do outro —, mas um aparelho
    * desatualizado que segue gravando deixa o arquivo DELE como o mais novo da pasta, e o outro aparelho passa a ver
    * "backup mais novo" com dados velhos (e pode restaurá-los). Havendo um backup de outro aparelho mais novo que a
@@ -357,6 +369,169 @@ async function bkaManterDesteAparelho() {
   bkaPintarTudo();
   return r;
 }
+/* =====================================================================
+ * (19.127.0) O QUE ENCOLHEU, À VISTA — antes de a pessoa responder "fui eu"
+ *
+ * O aviso era um parágrafo: "tópicos marcados caiu de 62 para 9. Isso costuma ser…" e um botão vermelho. Não dava para
+ * avaliar: caiu ONDE? o resto está inteiro? o que acontece se eu apertar? Agora o painel mostra, com números e barra,
+ * cada item que caiu; diz quantos itens ficaram iguais (com a tabela inteira a um toque); abre a última cópia boa da
+ * pasta para dizer EM QUAL EDITAL foi; e põe as duas saídas lado a lado, cada uma com a sua consequência.
+ * ===================================================================== */
+function bkaComparacao(est) {
+  const e = est || bkaEstado();
+  const antes = bkaReferencia(e) || {};
+  let agora = {};
+  try { agora = resumoAtual(); } catch (x) { agora = {}; }
+  const graves = {};
+  ((e.pausado && e.pausado.encolheu) || []).forEach((x) => { graves[x.chave] = x; });
+  const linhas = Object.keys(BK_ROTULOS).map((k) => {
+    const de = Number(antes[k]) || 0, para = Number(agora[k]) || 0;
+    return { chave: k, rotulo: BK_ROTULOS[k], de, para, dif: para - de, pct: de ? Math.round((para - de) * 100 / de) : 0,
+      tipo: graves[k] && para < de ? "caiu" : para < de ? "menos" : para > de ? "mais" : "igual" };
+  });
+  return { linhas, caiu: linhas.filter((l) => l.tipo === "caiu"), menos: linhas.filter((l) => l.tipo === "menos"),
+    mais: linhas.filter((l) => l.tipo === "mais"), iguais: linhas.filter((l) => l.tipo === "igual") };
+}
+/* a última cópia BOA, lida da pasta: { nome, quando, editais:[{nome, de, para, sumiu}] } — ou null se não der para ler */
+async function bkaOndeEncolheu(est) {
+  const e = est || bkaEstado();
+  if (!bkaPasta || !e.ultimo || !e.ultimo.nome) return null;
+  try {
+    const fh = await bkaPasta.getFileHandle(e.ultimo.nome);
+    const f = await fh.getFile();
+    const obj = JSON.parse(await bkTextoDoArquivo({ name: e.ultimo.nome, arrayBuffer: () => f.arrayBuffer(), text: () => f.text() }));
+    const lista = (dados) => { try { const L = JSON.parse((((dados || {}).edital || {}).eac_editais) || "[]"); return Array.isArray(L) ? L : []; } catch (x) { return []; } };
+    const A = lista(obj.dados), B = lista(montarBackup().dados);
+    const n = (x) => Object.keys((x && x.progresso) || {}).length;
+    const editais = A.map((a) => { const b = B.find((y) => y.id === a.id); return { nome: a.nome || a.id, de: n(a), para: b ? n(b) : 0, sumiu: !b }; });
+    return { nome: e.ultimo.nome, quando: e.ultimo.quando, editais };
+  } catch (x) { return null; }
+}
+/* abre a conferência de restauração com a última cópia boa (nada é trocado sem a confirmação de lá) */
+async function bkaVerBoa() {
+  const est = bkaEstado();
+  if (!bkaPasta || !est.ultimo || !est.ultimo.nome) return false;
+  try {
+    const fh = await bkaPasta.getFileHandle(est.ultimo.nome);
+    const f = await fh.getFile();
+    await bkLerArquivo({ name: est.ultimo.nome, arrayBuffer: () => f.arrayBuffer(), text: () => f.text() });
+    return true;
+  } catch (e) {
+    await uiAlert(t("bka_enc_sem_boa", { n: est.ultimo.nome }));
+    return false;
+  }
+}
+function bkaPainelEncolheu(cx, est) {
+  const c = bkaComparacao(est);
+  const el = (tag, cls, txt) => { const x = document.createElement(tag); if (cls) x.className = cls; if (txt !== undefined) x.textContent = txt; return x; };
+  const p = el("div", "bka-enc");
+  p.id = "bkaEnc";
+  p.append(el("div", "bka-enc-tit", t("bka_enc_tit", { q: est.ultimo && est.ultimo.quando ? bkQuandoCurto(est.ultimo.quando) : t("bka_enc_ref_manual") })));
+  const num = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v);
+  c.caiu.forEach((l) => {
+    const it = el("div", "bka-enc-item");
+    const topo = el("div", "bka-enc-topo");
+    topo.append(el("span", "bka-enc-rot", l.rotulo), el("span", "bka-enc-nums", l.de + " → " + l.para),
+      el("span", "bka-enc-selo", "▼ " + num(l.dif) + " (" + num(l.pct) + "%)"));
+    const trilho = el("div", "bka-enc-trilho");
+    const fica = el("div", "bka-enc-fica");
+    fica.style.width = Math.max(0, Math.min(100, l.de ? Math.round(l.para * 100 / l.de) : 0)) + "%";
+    trilho.append(fica);
+    trilho.title = t("bka_enc_barra", { f: l.para, s: l.de - l.para });
+    it.append(topo, trilho);
+    p.append(it);
+  });
+  /* EM QUAL EDITAL — vem da última cópia boa, lida da pasta (chega depois; sem ela, a linha não aparece) */
+  const onde = el("div", "bka-enc-onde");
+  onde.id = "bkaEncOnde";
+  onde.hidden = true;
+  p.append(onde);
+  if (c.caiu.some((l) => l.chave === "progresso" || l.chave === "editais")) {
+    bkaOndeEncolheu(est).then((r) => {
+      if (!r || !onde.isConnected && typeof onde.isConnected === "boolean") return;
+      const mud = r.editais.filter((x) => x.sumiu || x.para < x.de), iguais = r.editais.length - mud.length;
+      if (!mud.length) return;
+      onde.append(el("div", "bka-enc-sub", t("bka_enc_onde")));
+      mud.forEach((x) => onde.append(el("div", "bka-enc-ed", x.sumiu ? t("bka_enc_ed_sumiu", { e: x.nome, de: x.de }) : t("bka_enc_ed", { e: x.nome, de: x.de, para: x.para }))));
+      if (iguais) onde.append(el("div", "bka-enc-ed-ok", t("bka_enc_ed_iguais", { n: iguais })));
+      onde.hidden = false;
+    }).catch(() => {});
+  }
+  /* o resto: quantos ficaram iguais (o que tranquiliza), e a tabela inteira a um toque */
+  const resto = el("div", "bka-enc-resto");
+  resto.append(el("span", "bka-enc-ok", "✓ " + t("bka_enc_iguais", { n: c.iguais.length, t: c.linhas.length })));
+  if (c.mais.length) resto.append(el("span", "bka-enc-mais", "▲ " + t("bka_enc_mais", { n: c.mais.length })));
+  if (c.menos.length) resto.append(el("span", "bka-enc-menos", "▽ " + t("bka_enc_menos", { n: c.menos.length })));
+  p.append(resto);
+  const det = el("details", "bka-enc-det");
+  det.append(el("summary", "", t("bka_enc_tabela")));
+  const tab = el("table", "bk-tab bka-enc-tab");
+  c.linhas.forEach((l) => {
+    const tr = el("tr", l.tipo === "caiu" || l.tipo === "menos" ? "bk-perde" : l.tipo === "mais" ? "bk-ganha" : "bk-igual");
+    tr.append(el("td", "", l.rotulo), el("td", "bk-num", String(l.de)), el("td", "bk-num", String(l.para)),
+      el("td", "bk-dif", l.dif ? (l.dif < 0 ? "▼ " : "▲ ") + num(l.dif) : "="));
+    tab.append(tr);
+  });
+  det.append(tab);
+  p.append(det);
+  cx.append(p);
+  return c;
+}
+
+/* (19.127.0) "FUI EU" PEDE CONFIRMAÇÃO, COM O QUE SE PERDE ESCRITO. Um toque no botão vermelho fazia o backup passar a
+ * gravar o estado encolhido como o bom — e, em 7 dias, a rotação levava embora a última cópia com os dados. */
+async function bkaAceitarPedido() {
+  const est = bkaEstado();
+  let c = null, onde = null;
+  try { c = bkaComparacao(est); } catch (e) { c = null; }
+  try { onde = await bkaOndeEncolheu(est); } catch (e) { onde = null; }
+  const linhas = ((c && c.caiu) || []).map((l) => "· " + t("bka_conf_item", { r: l.rotulo, de: l.de, para: l.para, n: l.de - l.para }));
+  ((onde && onde.editais) || []).filter((x) => x.sumiu || x.para < x.de)
+    .forEach((x) => linhas.push("   " + (x.sumiu ? t("bka_enc_ed_sumiu", { e: x.nome, de: x.de }) : t("bka_enc_ed", { e: x.nome, de: x.de, para: x.para }))));
+  const msg = t("bka_conf_tit") + "\n\n" + (linhas.length ? linhas.join("\n") : t("bka_conf_sem_lista")) + "\n\n" + t("bka_conf_efeito", { d: BKA_DIAS });
+  let sim = false;
+  try { sim = await uiConfirm(msg); } catch (e) { sim = false; }
+  if (!sim) { try { reg("BACKUP", "'fui eu' cancelado na confirmação", linhas.join(" ").slice(0, 200)); } catch (e) {} return { ok: false, razao: "cancelado" }; }
+  try { reg("BACKUP", "'fui eu' confirmado", linhas.join(" ").slice(0, 200)); } catch (e) {}
+  return bkaAceitarEncolhido();
+}
+/* (19.127.0) AS ÚLTIMAS CÓPIAS, RESUMIDAS: quando, por onde, e o que mudou em relação à anterior */
+function bkaUltimasCopias(n) {
+  const L = bkHistorico().slice(0, (n || 3) + 1);
+  return L.slice(0, n || 3).map((x, k) => {
+    const ant = L[k + 1], mud = [];
+    if (ant && ant.resumo && x.resumo) Object.keys(BK_ROTULOS).forEach((c) => {
+      const d = (Number(x.resumo[c]) || 0) - (Number(ant.resumo[c]) || 0);
+      if (d) mud.push((d > 0 ? "+" : "−") + Math.abs(d) + " " + BK_ROTULOS[c]);
+    });
+    return { quando: x.quando, onde: x.onde, nome: x.nome, mudou: mud, primeira: !ant };
+  });
+}
+function bkaPintarUltimas(cx) {
+  const L = bkaUltimasCopias(3);
+  if (!L.length) return;
+  const cxh = document.createElement("div");
+  cxh.className = "bka-hist";
+  cxh.id = "bkaHist";
+  const tit = document.createElement("div");
+  tit.className = "bka-hist-tit";
+  tit.textContent = t("bka_hist_tit");
+  cxh.append(tit);
+  L.forEach((x) => {
+    const li = document.createElement("div");
+    li.className = "bka-hist-lin";
+    li.title = x.nome || "";
+    const q = document.createElement("span"); q.className = "bka-hist-q"; q.textContent = bkQuandoCurto(x.quando);
+    const o = document.createElement("span"); o.className = "bka-hist-o"; o.textContent = t(x.onde === "auto" ? "bka_hist_auto" : "bka_hist_manual");
+    const m = document.createElement("span");
+    m.className = "bka-hist-m" + (x.mudou.some((s) => s.charAt(0) === "−") ? " caiu" : "");
+    m.textContent = x.primeira ? t("bka_hist_primeira") : x.mudou.length ? x.mudou.slice(0, 4).join(" · ") + (x.mudou.length > 4 ? " …" : "") : t("bka_hist_igual");
+    li.append(q, o, m);
+    cxh.append(li);
+  });
+  cx.append(cxh);
+}
+
 async function bkaAceitarEncolhido() {
   return bkaGravarAgora("encolhido confirmado", { gesto: true, forcar: true, aceitarEncolhido: true });
 }
@@ -428,7 +603,12 @@ function bkaPintar() {
   if (est.pausado) {
     const itens = (est.pausado.encolheu || []).map((x) => t("bka_pausado_item", { r: x.rotulo, de: x.de, para: x.para })).join("; ");
     nota(t("bka_pausado", { lista: itens, n: est.pausado.nome }), "bk-aviso grave bka-pausado");
-    botao(linha(), t("bka_aceitar"), bkaAceitarEncolhido, "btn btn-perigo", "btnBkaAceitar", t("bka_aceitar_tip"));
+    /* (19.127.0) os números à vista, e as duas saídas com a consequência de cada uma */
+    try { bkaPainelEncolheu(cx, est); } catch (e) {}
+    nota(t("bka_enc_pergunta"), "bka-enc-pergunta");
+    const ls = linha();
+    if (bkaPasta && est.ultimo && est.ultimo.nome) botao(ls, t("bka_enc_ver_boa"), bkaVerBoa, "btn btn-azul", "btnBkaVerBoa", "", t("bka_enc_ver_boa_sub", { q: bkQuandoCurto(est.ultimo.quando) }));
+    botao(ls, t("bka_aceitar"), bkaAceitarPedido, "btn btn-perigo", "btnBkaAceitar", t("bka_aceitar_tip"), t("bka_aceitar_sub"));
   }
   if (est.erro) nota(t("bka_erro", { e: est.erro.msg }), "bk-aviso grave");
   if (bkaMaisNovo) {
@@ -440,6 +620,7 @@ function bkaPintar() {
     botao(lm, t("bka_manter_deste"), bkaManterDesteAparelho, "btn btn-cinza", "btnBkaManterDeste", t("bka_manter_deste_tip"));
   }
   nota(est.ultimo && est.ultimo.nome ? t("bka_ultimo", { q: bkQuandoCurto(est.ultimo.quando), n: est.ultimo.nome }) : t("bka_ainda_nao"), "bk-txt bka-ultimo");
+  try { bkaPintarUltimas(cx); } catch (e) {}
   if (bkaPasta) botao(linha(), t("bka_gravar_agora"), bkaGravarPedido, "btn btn-azul", "btnBkaGravar", "", t("bka_gravar_agora_sub"));
   /* (19.42.0) O QUE É RARO fica recolhido: nome do aparelho, mudar a pasta, desligar */
   const aj = document.createElement("details");

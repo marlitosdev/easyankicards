@@ -172,8 +172,44 @@ async function testes() {
     api.bkPintarPainel();
     ok(/pausado: questões caiu de 30 para 0/.test(corpo(api)) && /cópias boas/.test(corpo(api)) && api.$("btnBkaAceitar"), "E5 o painel explica e oferece 'Fui eu, pode seguir': " + corpo(api).slice(0, 120));
     ok(/pausado/.test(api.$("seloBase").textContent) && /sb-alerta/.test(api.$("seloBase").className) && api.$("seloBase").onclick, "E6 o selo do topo avisa (e abre o painel)");
+    /* (19.127.0) o que encolheu, à vista: números, selo, barra, o que ficou igual, e as duas saídas */
+    {
+      const cmp = api.bkaComparacao();
+      ok(cmp.caiu.length === 1 && cmp.caiu[0].chave === "questoes" && cmp.caiu[0].de === 30 && cmp.caiu[0].para === 0 && cmp.caiu[0].pct === -100
+         && cmp.iguais.length === cmp.linhas.length - 1, "E6a a comparação: só as questões caíram, o resto está igual: " + JSON.stringify(cmp.caiu) + " iguais " + cmp.iguais.length);
+      const enc = api.$("bkaEnc");
+      const it = enc && enc.querySelectorAll(".bka-enc-item");
+      ok(enc && it.length === 1 && /questões/.test(it[0].textContent) && /30 → 0/.test(it[0].textContent) && /▼ −30 \(−100%\)/.test(it[0].textContent),
+         "E6b o item que caiu aparece com antes → agora e o selo da queda: " + (it && it[0] && it[0].textContent));
+      ok(enc.querySelectorAll(".bka-enc-fica")[0].style.width === "0%", "E6c a barra mostra quanto ficou");
+      ok(new RegExp("✓ " + (cmp.linhas.length - 1) + " de " + cmp.linhas.length + " itens sem mudança").test(enc.textContent) && enc.querySelectorAll("tr").length === cmp.linhas.length,
+         "E6d diz quantos itens ficaram iguais, e a tabela inteira está a um toque: " + enc.textContent.slice(-120));
+      ok(/Foi você que apagou isso\?/.test(corpo(api)) && api.$("btnBkaVerBoa") && /Não — ver a cópia boa/.test(api.$("btnBkaVerBoa").textContent) && /só restaura se você confirmar/.test(api.$("btnBkaVerBoa").textContent)
+         && /Sim, fui eu/.test(api.$("btnBkaAceitar").textContent) && /como estão agora/.test(api.$("btnBkaAceitar").textContent),
+         "E6e a pergunta e as duas saídas, cada uma com a consequência: " + api.$("btnBkaVerBoa").textContent + " | " + api.$("btnBkaAceitar").textContent);
+      const onde = await api.bkaOndeEncolheu();
+      ok(onde && onde.nome === doDia && Array.isArray(onde.editais), "E6f a última cópia boa é lida da pasta para dizer em qual edital foi: " + JSON.stringify(onde).slice(0, 160));
+    }
+    /* (19.127.0) "fui eu" pede uma SEGUNDA confirmação, com o que se perde escrito; cancelar não muda nada */
+    {
+      const c1 = await conduzir(api, api.bkaAceitarPedido(), () => false);
+      ok(c1.r.razao === "cancelado" && api.bkaEstado().pausado && /DE PROPÓSITO/.test(c1.msgs.join("|")) && /questões: 30 → 0 \(some 30\)/.test(c1.msgs.join("|")) && /COMO ESTÃO AGORA/.test(c1.msgs.join("|")),
+         "E6g a confirmação diz o que some e o efeito; cancelada, o backup continua pausado: " + c1.msgs.join("|").slice(0, 200));
+      ok(P.conteudo(doDia).resumo.questoes === 30, "E6h e a cópia boa do dia segue intacta");
+      /* a impressão ignora o carimbo "tocado" dos editais: abrir o app não é mudança */
+      const d1 = { edital: { eac_editais: JSON.stringify([{ id: "a", nome: "X", tocado: "2026-11-13T02:00:00.000Z", progresso: { k: 1 } }]) } };
+      const d2 = { edital: { eac_editais: JSON.stringify([{ id: "a", nome: "X", tocado: "2026-11-14T11:32:01.958Z", progresso: { k: 1 } }]) } };
+      const d3 = { edital: { eac_editais: JSON.stringify([{ id: "a", nome: "X", tocado: "2026-11-14T11:32:01.958Z", progresso: {} }]) } };
+      ok(api.bkaImpressao(d1) === api.bkaImpressao(d2) && api.bkaImpressao(d1) !== api.bkaImpressao(d3), "E6i só o 'tocado' diferente = mesma impressão; progresso diferente = outra");
+    }
     /* a rotação não apaga um "encolheu" recente */
     await api.bkaAceitarEncolhido();
+    {
+      const u = api.bkaUltimasCopias(3);
+      api.bkPintarPainel();
+      ok(u.length >= 1 && u.length <= 3 && api.$("bkaHist") && /Últimas cópias/.test(api.$("bkaHist").textContent) && /automático/.test(api.$("bkaHist").textContent),
+         "E7a o painel mostra as últimas cópias, resumidas: " + (api.$("bkaHist") && api.$("bkaHist").textContent.slice(0, 160)));
+    }
     ok(!api.bkaEstado().pausado && P.conteudo(doDia).resumo.questoes === 0 && P.arqs.has(r.nome), "E7 'fui eu': volta a gravar a cópia do dia; o arquivo à parte fica");
     /* sem cópia automática anterior, compara com a última cópia MANUAL */
     const { api: a2, L: L2 } = preparar();

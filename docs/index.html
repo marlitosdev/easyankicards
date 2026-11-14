@@ -764,6 +764,14 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .fmt-sep{width:1px;height:18px;background:var(--borda);margin:0 3px}
 .fmt-colar{width:auto;padding:0 10px;font-size:11px;font-weight:700}
 .mat-num{margin:0 0 7px;padding-left:4px}
+/* (19.127.0) a tabela do resumo: rola de lado quando não cabe; números alinhados pela largura */
+.mat-tab-cx{overflow-x:auto;max-width:100%;margin:var(--esp-2) 0 var(--esp-3)}
+.mat-tab{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.95em}
+.mat-tab th,.mat-tab td{border:1px solid var(--borda);padding:var(--esp-1) var(--esp-3);text-align:left;vertical-align:top}
+.mat-tab th{background:var(--campo);font-weight:var(--peso-f)}
+.mat-tab .mat-tab-c{text-align:center}
+.mat-tab .mat-tab-d{text-align:right}
+.mat-tab .mat-tab-e{text-align:left}
 .fmt-dica{font-size:10.5px;color:var(--sutil);margin-left:auto}
 /* flex-wrap FALTAVA aqui — a .mat-barra tinha, esta nao. Numa janela
    estreita a fila de marcadores nao quebrava linha e o que sobrava era
@@ -3822,6 +3830,33 @@ dialog.mat-amplo{max-height:96vh}
 .bk-aviso.ok{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.45)}
 .bk-aviso.grave{background:rgba(220,38,38,.16);border-color:rgba(220,38,38,.5)}
 .bk-tab{margin-top:4px}
+/* (19.127.0) o que encolheu, à vista: um bloco por item que caiu (números, selo, barra do que ficou) */
+.bka-enc{display:flex;flex-direction:column;gap:var(--esp-2);margin:var(--esp-2) 0;padding:var(--esp-3);border:1px solid var(--borda);border-radius:var(--r-g)}
+.bka-enc-tit{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
+.bka-enc-item{display:flex;flex-direction:column;gap:var(--esp-1)}
+.bka-enc-topo{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--esp-1) var(--esp-3)}
+.bka-enc-rot{font-size:var(--fs-3);font-weight:var(--peso-f);flex:1 1 auto}
+.bka-enc-nums{font-size:var(--fs-5);font-weight:var(--peso-f);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bka-enc-selo{font-size:var(--fs-2);font-weight:var(--peso-f);color:var(--erro);border:1px solid var(--erro);border-radius:var(--r-pilula);padding:0 var(--esp-2);white-space:nowrap}
+.bka-enc-trilho{height:var(--esp-2);border-radius:var(--r-pilula);background:var(--erro);overflow:hidden}
+.bka-enc-fica{height:100%;background:var(--ok)}
+.bka-enc-onde{display:flex;flex-direction:column;gap:var(--esp-1);padding-top:var(--esp-2);border-top:1px dashed var(--borda)}
+.bka-enc-sub{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
+.bka-enc-ed{font-size:var(--fs-3);color:var(--erro);font-weight:var(--peso-f)}
+.bka-enc-ed-ok{font-size:var(--fs-2);color:var(--ok)}
+.bka-enc-resto{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-4);font-size:var(--fs-2);padding-top:var(--esp-2);border-top:1px dashed var(--borda)}
+.bka-enc-ok,.bka-enc-mais{color:var(--ok);font-weight:var(--peso-m)}
+.bka-enc-menos{color:var(--sutil)}
+.bka-enc-det>summary{cursor:pointer;font-size:var(--fs-2);color:var(--sutil)}
+.bka-enc-tab{width:100%;font-size:var(--fs-2)}
+.bka-hist{display:flex;flex-direction:column;gap:var(--esp-1);margin:var(--esp-2) 0}
+.bka-hist-tit{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
+.bka-hist-lin{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-3);align-items:baseline;font-size:var(--fs-2);padding:var(--esp-1) var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m)}
+.bka-hist-q{font-weight:var(--peso-f);white-space:nowrap}
+.bka-hist-o{color:var(--sutil);white-space:nowrap}
+.bka-hist-m{flex:1 1 180px;color:var(--ok)}
+.bka-hist-m.caiu{color:var(--erro);font-weight:var(--peso-f)}
+.bka-enc-pergunta{font-size:var(--fs-3);font-weight:var(--peso-f);margin:var(--esp-2) 0 var(--esp-1)}
 .bk-tab .bk-num{text-align:right;font-weight:700;width:70px}
 .bk-tab .bk-dif{font-size:12px;color:var(--sutil);width:130px;white-space:nowrap}
 /* A DIREÇÃO DA MUDANÇA, DE RELANCE: verde sobe, vermelho encolhe, o resto

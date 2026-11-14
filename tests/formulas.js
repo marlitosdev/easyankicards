@@ -73,6 +73,29 @@ async function testes() {
   ok(api.apkgTexAnki(R`$$\frac{a}{b}$$`) === R`\[\frac{a}{b}\]`, "A2 bloco vira \[…\]");
   ok(api.apkgTexAnki("Custa R$ 100,00 e US$ 5; total $ 3.") === "Custa R$ 100,00 e US$ 5; total $ 3.", "A3 dinheiro fica");
   ok(api.apkgTexAnki(R`{{c1::$p \vee q$::conectivo?}}`) === R`{{c1::\(p \vee q\)::conectivo?}}`, "A4 dentro da lacuna também");
+  /* ---- (19.127.0) T: a tabela em Markdown no resumo ---- */
+  {
+    const tb = H("Frequências:\n| X | f | $|x_i - \\bar{x}|$ |\n| :-- | --: | :-: |\n| 0 | 5 | **2,5** |\n| 1 | 10 | ==!1,5== |\nDepois da tabela.");
+    ok((tb.match(/<table class="mat-tab">/g) || []).length === 1 && /<div class="mat-tab-cx">/.test(tb) && /<\/tbody><\/table><\/div>\n<p>Depois da tabela\.<\/p>$/.test(tb),
+       "T1 as linhas com | viram UMA tabela, e o texto depois continua parágrafo: " + tb);
+    ok((tb.match(/<tr/g) || []).length === 3 && (tb.match(/<th/g) || []).length === 3 && (tb.match(/<td/g) || []).length === 6 && !/---/.test(tb),
+       "T2 cabeçalho (th), duas linhas de dados, e a linha de traços não aparece");
+    ok(/<th class="mat-tab-e">X<\/th><th class="mat-tab-d">f<\/th><th class="mat-tab-c"><span class="mt">/.test(tb) && /<td class="mat-tab-d">10<\/td>/.test(tb),
+       "T3 o alinhamento vem da linha de traços (:-- esquerda, --: direita, :-: centro): " + tb);
+    ok(/<th class="mat-tab-c"><span class="mt">\|x<sub>i<\/sub> - <span class="mt-barra">x<\/span>\|<\/span><\/th>/.test(tb),
+       "T4 a barra de dentro da fórmula não corta a célula, e a fórmula é desenhada: " + tb);
+    ok(/<td class="mat-tab-c"><b>2,5<\/b><\/td>/.test(tb) && /<mark class="m-imp" data-marca="importante">1,5<\/mark>/.test(tb), "T5 negrito e marca funcionam dentro da célula");
+    const comL = api.matParaHtml("a\n| X | f |\n|---|---|\n| 0 | 5 |", null, { comLinhas: true });
+    ok(/<tr data-l="1">/.test(comL) && /<tr data-l="3">/.test(comL) && !/data-l="2"/.test(comL), "T6 cada linha da tabela guarda a sua linha do texto (ler, marcar e editar seguem valendo): " + comL);
+    const semSep = H("| a | b |\n| c | d |");
+    ok(/<table/.test(semSep) && !/<th/.test(semSep) && (semSep.match(/<td/g) || []).length === 4, "T7 sem a linha de traços: tabela sem cabeçalho");
+    ok(!/<table/.test(H("| uma linha só com barras |")) && !/<table/.test(H("o módulo |x| e o |y| numa frase\noutra frase | com barra")),
+       "T8 uma linha só, ou barra no meio da frase, não é tabela");
+    ok(api.matTabCelulas("| a \\| b | c |").join("§") === "a | b§c" && api.matTabEhSeparador("|:--|--:|") && !api.matTabEhSeparador("| - | x |"), "T9 barra escapada fica na célula; separador reconhecido");
+    const duas = H("| a | b |\n|---|---|\n| 1 | 2 |\n\n- item\n\n| c | d |\n|---|---|\n| 3 | 4 |");
+    ok((duas.match(/<table/g) || []).length === 2 && (duas.match(/<\/table>/g) || []).length === 2 && /<ul>\n<li>item<\/li>\n<\/ul>/.test(duas), "T10 duas tabelas com lista no meio: cada uma abre e fecha: " + duas);
+    ok(/a conta passo a passo/.test(api.t("prep_p_regras")) && /\| --- \| --- \| debaixo do cabeçalho/.test(api.t("prep_p_regras")), "T11 o pedido do Preparar tópico pede a tabela completa e a conta passo a passo");
+  }
   /* (19.66.0) H — colar página com fórmula desenhada: conferido no navegador (o ambiente de teste não tem o leitor de HTML) */
   return Object.assign(falhas, { quantas: n });
 }
