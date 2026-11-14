@@ -382,6 +382,50 @@ async function testes() {
     ok(api.intLer().resumo.questoes === 0 && !r4.caiu.length, "I9 no fim da sessão o retrato de agora vira a referência; a abertura seguinte não alarma");
     ok(api.intQuedas({ questoes: 100, resumos: 10 }, { questoes: 97, resumos: 10 }).length === 0, "I10 queda pequena (3 de 100) não alarma");
   }
+  /* ---- A (19.130.0): duas abas do app abertas ---- */
+  {
+    const { api } = rodar();
+    let rel = 1000000;
+    const enviadas = [];
+    api.abasRelogioDefinir(() => rel);
+    api.abasEnviarDefinir((m) => enviadas.push(m));
+    api.abasIniciar({ semCanal: true });
+    api.abasEnviarDefinir((m) => enviadas.push(m));
+    const fx = api.$("abasFaixa");
+    const regs = () => (api.registroAtual ? api.registroAtual() : []).map((x) => JSON.stringify(x));
+    ok(fx && fx.hidden === true && api.abasLinhaDiagnostico().tipo === "ok", "A1 sozinha: sem faixa, diagnóstico 'só esta aberta'");
+    api.abasReceber({ t: "ola", id: "outra1" });
+    ok(api.abasEstado().outras === 1 && fx.hidden === false && /aberto em outra aba/.test(api.$("abasFaixaTxt").textContent) && !/grave/.test(fx.className),
+       "A2 outra aba diz olá: a faixa avisa: " + api.$("abasFaixaTxt").textContent.slice(0, 80));
+    ok(enviadas.some((m) => m.t === "aqui" && m.id === api.abasEstado().id), "A2a e esta responde 'aqui' (a outra também fica sabendo)");
+    ok(regs().filter((x) => /ABAS/.test(x) && /aberto em outra aba/.test(x)).length === 1, "A3 vai para o registro");
+    api.abasReceber({ t: "viva", id: "outra1" });
+    ok(regs().filter((x) => /ABAS/.test(x) && /aberto em outra aba/.test(x)).length === 1, "A3a uma vez só por aparição (o sinal de 10 s não repete)");
+    api.abasReceber({ t: "ola", id: api.abasEstado().id });
+    ok(api.abasEstado().outras === 1, "A4 a própria mensagem não conta como outra aba");
+    api.$("btnAbasFechar").onclick();
+    ok(fx.hidden === true && /mais 1 aba/.test(api.abasLinhaDiagnostico().txt), "A5 'entendi' recolhe a faixa; o diagnóstico continua dizendo");
+    /* a outra aba grava: esta fica desatualizada — e a faixa volta, vermelha, com o recarregar */
+    ok(api.abasGravouFora({ key: "eac_tema_x", oldValue: "a", newValue: "b" }) === false && fx.hidden === true, "A6 preferência gravada pela outra aba não é alarme");
+    ok(api.abasGravouFora({ key: "eac_editais", oldValue: "[1]", newValue: "[]" }) === true, "A7 dado gravado pela outra aba é");
+    ok(fx.hidden === false && /grave/.test(fx.className) && /A outra aba gravou dados \(editais e progresso\)/.test(api.$("abasFaixaTxt").textContent)
+       && api.$("btnAbasRecarregar").hidden === false && api.$("btnAbasFechar").hidden === true,
+       "A7a a faixa fica vermelha, diz o que mudou e oferece recarregar (sem 'entendi'): " + api.$("abasFaixaTxt").textContent.slice(0, 110));
+    api.abasGravouFora({ key: "eac_questoes", oldValue: "[]", newValue: "[1]" });
+    ok(/editais e progresso, questões/.test(api.$("abasFaixaTxt").textContent) && regs().filter((x) => /outra aba gravou dados/.test(x)).length === 2, "A7b cada tipo de dado entra na lista e no registro");
+    ok(api.abasLinhaDiagnostico().tipo === "aviso" && /desatualizada/.test(api.abasLinhaDiagnostico().txt), "A8 o diagnóstico diz que esta aba está desatualizada");
+    /* a outra fecha */
+    api.abasReceber({ t: "tchau", id: "outra1" });
+    ok(api.abasEstado().outras === 0 && fx.hidden === false, "A9 a outra fechou, mas esta continua desatualizada: a faixa fica até recarregar");
+    /* e some sozinha quem parou de dar sinal */
+    const b = rodar().api;
+    let r2 = 5000000;
+    b.abasRelogioDefinir(() => r2);
+    b.abasReceber({ t: "ola", id: "z" });
+    r2 += 26000;
+    b.abasReceber({ t: "viva", id: "y" });
+    ok(b.abasEstado().outras === 1, "A10 aba que não dá sinal há 25 s sai da conta (ficou só a que acabou de falar): " + b.abasEstado().outras);
+  }
   return falhas;
 }
 

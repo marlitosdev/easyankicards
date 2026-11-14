@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.129.0";
+const VERSAO = "19.130.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4686,6 +4686,11 @@ function diagResumo(L) {
     if (typeof intLinhaDiagnostico === "function") {
       const li = intLinhaDiagnostico();
       if (li.tipo === "ok") ok(li.txt); else if (li.tipo === "aviso") av(li.txt); else L.push("ℹ " + li.txt);
+    }
+    /* (19.130.0) duas abas abertas, ou a outra já gravou por cima */
+    if (typeof abasLinhaDiagnostico === "function") {
+      const la = abasLinhaDiagnostico();
+      if (la.tipo === "ok") ok(la.txt); else av(la.txt);
     }
     if (typeof edBloqueiosDeProgresso !== "undefined" && edBloqueiosDeProgresso.length)
       av("Trava do progresso: " + edBloqueiosDeProgresso.length + " gravação(ões) recusada(s) nesta sessão — " + edBloqueiosDeProgresso.map((b) => b.edital + " (" + b.de + " marcações mantidas; origem: " + (b.origem || "?") + ")").join("; "));

@@ -118,6 +118,12 @@
 body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif;
      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:var(--bg);
      color:var(--texto);padding-bottom:84px}
+/* (19.130.0) a faixa das duas abas: no alto, por cima de tudo menos da capa e dos diálogos */
+.abas-faixa{position:sticky;top:0;z-index:900;display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2) var(--esp-3);
+  padding:var(--esp-2) var(--esp-4);background:var(--panel);border-bottom:2px solid var(--atencao);font-size:var(--fs-3)}
+.abas-faixa[hidden]{display:none}
+.abas-faixa.grave{border-bottom-color:var(--erro);box-shadow:inset 4px 0 0 var(--erro)}
+.abas-faixa-txt{flex:1 1 260px;font-weight:var(--peso-m)}
 /* (19.128.0) a capa da abertura: a marca no centro e um fio que corre, sobre a cor de fundo do tema */
 .abertura{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--bg);
   opacity:1;transition:opacity var(--mov);animation:aberturaSaiSozinha .3s 8s forwards}
@@ -7862,6 +7868,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
+<!-- (19.130.0) o app aberto em duas abas: a faixa avisa; vermelha quando a outra já gravou e esta ficou desatualizada -->
+<div id="abasFaixa" class="abas-faixa" role="alert" hidden>
+  <span id="abasFaixaTxt" class="abas-faixa-txt"></span>
+  <button type="button" class="btn-min" id="btnAbasRecarregar" data-i18n="abas_recarregar" hidden></button>
+  <button type="button" class="btn-quieto" id="btnAbasFechar" data-i18n="abas_entendi"></button>
+</div>
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small><span class="hdr-por">by MarlitosDev · </span><span id="versao"></span></small></h1>
@@ -13228,6 +13240,7 @@ window.__sqlPromise = initSqlJs({
 <script src="cobertura-fonte.js"></script>
 <script src="preparar.js"></script>
 <script src="integridade.js"></script>
+<script src="abas.js"></script>
 <script src="rascunho.js"></script>
 <script src="copiar-questao.js"></script>
 <script src="grifo.js"></script>
@@ -13322,6 +13335,8 @@ try { bkIniciar(); } catch (e) { console.error(e);
   try { reg("ERRO", "falha ao iniciar bkIniciar: " + (e && e.message),
             "esta parte do app pode estar sem funcionar"); } catch (x) {} }
 try { bkaIniciar().catch((e) => { try { reg("ERRO", "falha ao iniciar o backup automático: " + (e && e.message)); } catch (x) {} }); } catch (e) { console.error(e); }
+/* (19.130.0) duas abas do app abertas */
+try { abasIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar o aviso de abas: " + (e && e.message)); } catch (x) {} }
 /* (19.128.0) o retrato da abertura e a conferência de integridade */
 try { intIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar a conferência de integridade: " + (e && e.message)); } catch (x) {} }
 try { montarBarraModos(); } catch (e) { console.error(e);
