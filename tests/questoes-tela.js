@@ -813,6 +813,73 @@ async function testes() {
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "D12 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
   }
+
+  /* ---- F (19.132.0): figuras nas questões ---- */
+  {
+    const { api } = rodar();
+    const disco = new Map();
+    const loja = {
+      lerTudo: () => Promise.resolve([...disco.values()]),
+      por: (l) => { l.forEach((f) => disco.set(f.id, JSON.parse(JSON.stringify(f)))); return Promise.resolve(true); },
+      apagar: (ids) => { ids.forEach((id) => disco.delete(id)); return Promise.resolve(true); },
+      limpar: () => { disco.clear(); return Promise.resolve(true); },
+    };
+    const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    disco.set("fvelha", { id: "fvelha", d: PNG, w: 300, h: 200, t: "2026-11-01T10:00:00.000Z", nome: "aula.pdf", pag: 7 });
+    api.figLojaDefinir(loja);
+    api.matIniciar(); api.qsUiIniciar();
+    await api.figCarregar();
+    const tique = () => new Promise((r) => setImmediate(r));
+    ok(api.figTotal() === 1 && api.figDe("fvelha").pag === 7, "F1 as figuras guardadas chegam à memória ao abrir: " + api.figTotal());
+    const ch = api.matChave("D", "T");
+    api.qsAplicar(api.qsLerResposta([
+      "[QUESTAO] ENUNCIADO: Considerando o histograma, julgue o item. GABARITO: C COMENTARIO: c1.",
+      "[QUESTAO] ENUNCIADO: Outra questão sem figura. GABARITO: E COMENTARIO: c2.",
+    ].join("\n"), { disciplina: "D", topico: "T", chave: ch }).achados);
+    const [q1, q2] = api.qsTodas();
+    /* anexar */
+    const r1 = api.figAnexar(q1.id, { d: PNG, w: 640, h: 360, nome: "aula-04.pdf", pag: 22 });
+    await tique(); await tique();
+    ok(r1.ok && api.qsTodas()[0].figs.join() === r1.id && api.figTotal() === 2 && disco.has(r1.id) && disco.get(r1.id).pag === 22,
+       "F2 anexar: a questão guarda o código, a figura vai para a gaveta (IndexedDB): " + JSON.stringify(api.qsTodas()[0].figs));
+    ok(api.figAnexar(q1.id, { d: "isto não é imagem", w: 1, h: 1 }).ok === false && api.figAnexar("nao-existe", { d: PNG, w: 1, h: 1 }).ok === false && api.qsTodas()[0].figs.length === 1,
+       "F3 o que não é imagem, ou questão que não existe, não entra");
+    /* na questão: debaixo do enunciado, e o menu diz quantas */
+    api.qsUiResponderAbrir(api.qsFiltrar({}), "aba", "t");
+    const el = api.figPintarNaQuestao(api.qsTodas()[0]);
+    const imgs = el ? el.querySelectorAll("img") : [];
+    ok(el && /qs-figs/.test(el.className) && imgs.length === 1 && imgs[0].src === PNG && /Figura 1 da questão/.test(imgs[0].alt), "F4 a figura é desenhada para a questão, com texto alternativo");
+    imgs[0].onclick();
+    ok(/qs-fig-grande/.test(imgs[0].className), "F4a um toque amplia");
+    imgs[0].onclick();
+    ok(!/qs-fig-grande/.test(imgs[0].className), "F4b outro toque volta");
+    ok(api.figPintarNaQuestao(api.qsTodas()[1]) === null, "F4c questão sem figura não ganha caixa vazia");
+    ok(/figura \(1\)/.test(api.figBotaoDoMenu(api.qsTodas()[0]).textContent) && /figura$/.test(api.figBotaoDoMenu(api.qsTodas()[1]).textContent.trim()), "F5 o ⋮ da questão tem 'figura', com a contagem quando há");
+    ok(html.indexOf('id="dlgFigura"') > 0 && html.indexOf('id="btnFigPdf"') > 0 && html.indexOf('id="figPalco"') > 0 && html.indexOf('id="btnFigAnexar"') > 0, "F5a a janela de anexar existe (imagem, PDF, palco e anexar)");
+    /* o limite por questão */
+    api.figAnexar(q1.id, { d: PNG, w: 10, h: 10 }); api.figAnexar(q1.id, { d: PNG, w: 10, h: 10 }); api.figAnexar(q1.id, { d: PNG, w: 10, h: 10 });
+    const r5 = api.figAnexar(q1.id, { d: PNG, w: 10, h: 10 });
+    ok(r5.ok === false && r5.motivo === "cheio" && api.qsTodas()[0].figs.length === 4, "F6 no máximo 4 figuras por questão: " + JSON.stringify(r5));
+    /* o backup leva as figuras, e a restauração traz de volta */
+    const bk = api.montarBackup();
+    const noBk = JSON.parse(bk.dados.material.eac_figuras);
+    ok(Array.isArray(noBk) && noBk.length === 5 && noBk.some((f) => f.id === r1.id && f.d === PNG) && bk.resumo.figuras === 5, "F7 as figuras entram no backup, e o resumo conta: " + noBk.length + " / " + bk.resumo.figuras);
+    api.figDesanexar(q1.id, r1.id);
+    await tique(); await tique();
+    ok(api.qsTodas()[0].figs.length === 3 && api.figDe(r1.id) === null && !disco.has(r1.id), "F8 tirar da questão apaga a figura da gaveta (ninguém mais usa)");
+    api.figsDefinirTudo(noBk);
+    await tique(); await tique(); await tique();
+    ok(api.figTotal() === 5 && api.figDe(r1.id) && disco.size === 5, "F9 restaurar: a gaveta passa a ser a do arquivo: " + api.figTotal() + "/" + disco.size);
+    ok(api.figsDaQuestao({ figs: ["nao-existe", "fvelha"] }).length === 1, "F9a código sem figura (gaveta que não veio) não quebra a questão");
+    /* as contas do recorte */
+    const rec = api.figRecortePx({ x: 100, y: 50, w: 200, h: 100 }, { w: 500, h: 400 }, { w: 1000, h: 800 });
+    ok(rec.x === 200 && rec.y === 100 && rec.w === 400 && rec.h === 200, "F10 o retângulo arrastado na tela vira pixels da imagem: " + JSON.stringify(rec));
+    const tudo = api.figRecortePx(null, { w: 500, h: 400 }, { w: 1000, h: 800 });
+    ok(tudo.x === 0 && tudo.w === 1000 && tudo.h === 800 && api.figRecortePx({ x: 1, y: 1, w: 3, h: 3 }, { w: 500, h: 400 }, { w: 1000, h: 800 }).w === 1000, "F10a sem arrastar (ou um toque sem querer), vai a imagem inteira");
+    const fora = api.figRecortePx({ x: 450, y: 350, w: 200, h: 200 }, { w: 500, h: 400 }, { w: 1000, h: 800 });
+    ok(fora.x === 900 && fora.w === 100 && fora.y === 700 && fora.h === 100, "F10b o recorte não passa da borda: " + JSON.stringify(fora));
+    ok(JSON.stringify(api.figTamanhoFinal(2200, 1000)) === '{"w":1100,"h":500}' && JSON.stringify(api.figTamanhoFinal(400, 300)) === '{"w":400,"h":300}', "F11 figura larga é reduzida a 1100 px; pequena não é ampliada");
+  }
   return falhas;
 }
 

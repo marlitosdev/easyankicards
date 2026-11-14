@@ -1475,6 +1475,8 @@ function qsUiPintarSessao() {
    * selecionado. */
   try { grEnvolver(en, q.id, q.enunciado); } catch (e) {}
   corpo.append(en);
+  /* (19.132.0) as figuras da questão (gráfico, histograma, diagrama), debaixo do enunciado */
+  try { const fg = typeof figPintarNaQuestao === "function" ? figPintarNaQuestao(q) : null; if (fg) corpo.append(fg); } catch (e) {}
   qsGrBolhaEsconder();
 
   /* HISTÓRICO DESTA QUESTÃO, ANTES DE RESPONDER — SEM ENTREGAR O GABARITO.
@@ -4740,6 +4742,8 @@ function qsUiIniciar() {
   /* (19.122.0) o livro de fatos: a tela e, em segundo plano, a carga e o histórico que já existe (fatos.js) */
   try { if (typeof fatosUiIniciar === "function") fatosUiIniciar(); } catch (e) {}
   try { if (typeof fatosIniciar === "function") fatosIniciar(); } catch (e) {}
+  /* (19.132.0) as figuras das questões (figuras.js) */
+  try { if (typeof figIniciar === "function") figIniciar(); } catch (e) {}
   /* (19.123.0) preparar o tópico: um pedido, uma resposta, uma conferência (preparar.js) */
   try { if (typeof prepIniciar === "function") prepIniciar(); } catch (e) {}
   if ($("btnQsCriarAplicar")) $("btnQsCriarAplicar").onclick = () => qsUiAplicar();
@@ -5098,6 +5102,8 @@ function qsUiFerramentas(q) {
     qsFerMenu(menu.hidden ? bm : null, menu);
   };
   try { menu.append(plBarraCopiar(q)); } catch (e) {}
+  /* (19.132.0) anexar figura: colar, escolher imagem ou recortar do PDF */
+  try { if (typeof figBotaoDoMenu === "function") menu.append(figBotaoDoMenu(q)); } catch (e) {}
   /* limpar os grifos da questão: saiu da fileira (que não existe mais) para cá — e também está no balão do grifo */
   const limpar = document.createElement("button");
   limpar.type = "button";

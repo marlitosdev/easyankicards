@@ -76,6 +76,8 @@ const BK_CHAVES = {
              "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei", "eac_lixeira",
              /* (19.122.0) o livro de fatos (fatos.js): cada resposta e cada revisão de cartão; mora no IndexedDB */
              "eac_fatos",
+             /* (19.132.0) as figuras das questões (figuras.js): moram no IndexedDB */
+             "eac_figuras",
              "eac_decisoes", "eac_decisoes_resumo",
              /* (v19.8.0) as marcas do lápis: moram no IndexedDB e só entram com a opção ligada (tnParaBackup) */
              "eac_tinta",
@@ -164,7 +166,8 @@ function montarBackup() {
         : k === "eac_cm_recibo" ? (typeof cmReciboParaBackup === "function" ? cmReciboParaBackup() : bkLer(k))
         : k === "eac_tinta" ? (typeof tnParaBackup === "function" ? tnParaBackup() : null)
         : k === "eac_rascunhos" ? (typeof rsNoIdb === "function" && rsNoIdb() ? JSON.stringify(rsLerTudo()) : bkLer(k))
-        : k === "eac_fatos" ? (typeof fatosParaBackup === "function" ? fatosParaBackup() : null) : bkLer(k);
+        : k === "eac_fatos" ? (typeof fatosParaBackup === "function" ? fatosParaBackup() : null)
+        : k === "eac_figuras" ? (typeof figsParaBackup === "function" ? figsParaBackup() : null) : bkLer(k);
       if (v !== null) dados[grupo][k] = v;
     });
   });
@@ -204,6 +207,8 @@ function resumirBackup(dados) {
     diario: jsonN(e.eac_edital_diario),
     resumos: jsonN(m.eac_resumos),
     questoes: jsonN(m.eac_questoes),
+    /* (19.132.0) as figuras anexadas às questões */
+    figuras: jsonN(m.eac_figuras),
     /* =================================================================
      * OS TRÊS QUE FALTAVAM NA CONFERÊNCIA
      *
@@ -261,7 +266,7 @@ const BK_ROTULOS = {
   progresso: "tópicos marcados", diario: "registros de estudo",
   resumos: "resumos",
   /* os três que a tabela calava — ver resumirBackup */
-  questoes: "questões", leis: "leis guardadas",
+  questoes: "questões", figuras: "figuras das questões", leis: "leis guardadas",
   artigos: "artigos de lei", juris: "julgados",
 };
 function compararBackup(bk) {
@@ -347,6 +352,9 @@ const BK_ESPECIAIS = {
   /* (19.122.0) o livro de fatos nunca vai ao localStorage; restaurar troca o livro pelo do arquivo */
   eac_fatos: { pode: () => typeof fatosSuportado === "function" && fatosSuportado(), ler: () => fatosParaBackup(), vazio: () => [], serve: Array.isArray,
     gravar: (o) => { fatosDefinirTudo(o); } },
+  /* (19.132.0) as figuras das questões */
+  eac_figuras: { pode: () => typeof figSuportado === "function" && figSuportado(), ler: () => figsParaBackup(), vazio: () => [], serve: Array.isArray,
+    gravar: (o) => { figsDefinirTudo(o); } },
   /* as marcas do lápis nunca vão ao localStorage; o "ler" pega as guardadas mesmo com a opção de backup desligada */
   eac_tinta: { pode: () => true, ler: () => bkLerTintaToda(), gravar: (o) => { if (typeof tnRestaurarTudo === "function") tnRestaurarTudo(o); }, vazio: () => ({}), serve: bkEhObjeto },
 };

@@ -6433,6 +6433,26 @@ dialog.prep-dlg{max-width:860px}
 .cf-ini{font-size:var(--fs-2);color:var(--sutil);line-height:1.4}
 /* (19.122.0) O LIVRO DE FATOS — no padrão de design (DESIGN.md): só variáveis da tabela */
 dialog.fatos-dlg{max-width:880px}
+/* (19.132.0) a figura da questão: na questão (debaixo do enunciado) e na janela de anexar */
+.qs-figs{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin:var(--esp-2) 0 var(--esp-3)}
+.qs-fig{max-width:min(100%,520px);max-height:340px;border:1px solid var(--borda);border-radius:var(--r-m);background:var(--campo);cursor:zoom-in}
+.qs-fig.qs-fig-grande{max-width:100%;max-height:none;cursor:zoom-out}
+dialog.fig-dlg{max-width:980px;width:min(980px,96vw)}
+.fig-lista{display:flex;flex-direction:column;gap:var(--esp-1);margin:0 0 var(--esp-2)}
+.fig-lista[hidden]{display:none}
+.fig-item{display:flex;align-items:center;gap:var(--esp-3);padding:var(--esp-1) var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m)}
+.fig-mini{width:64px;height:44px;object-fit:contain;background:var(--campo);border-radius:var(--r-p)}
+.fig-item-inf{flex:1 1 auto;min-width:0;font-size:var(--fs-2);color:var(--sutil);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fig-fontes{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0}
+.fig-pdf-nav{display:inline-flex;align-items:center;gap:var(--esp-1)}
+.fig-pdf-nav[hidden]{display:none}
+.fig-pag{width:64px;padding:var(--esp-1) var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m);background:var(--campo)}
+.fig-palco-cx{max-height:60vh;overflow:auto;border:1px solid var(--borda);border-radius:var(--r-m);background:var(--campo)}
+.fig-palco-cx[hidden]{display:none}
+.fig-palco-area{position:relative;display:inline-block;line-height:0;touch-action:none;cursor:crosshair;user-select:none}
+.fig-palco{max-width:100%;height:auto;display:block}
+.fig-sel{position:absolute;border:2px solid var(--acao);background:color-mix(in srgb, var(--acao) 18%, transparent);pointer-events:none}
+.fig-sel[hidden]{display:none}
 .fatos-entrada{display:flex;gap:var(--esp-2) var(--esp-3);align-items:center;flex-wrap:wrap;margin:0 0 var(--esp-3)}
 .fatos-linha{font-size:var(--fs-2);color:var(--sutil)}
 .fatos-cab{display:flex;justify-content:space-between;align-items:center;gap:var(--esp-3);padding:var(--esp-4) var(--esp-4) 0}
@@ -10112,6 +10132,39 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 </dialog>
 
 <!-- (19.122.0) O LIVRO DE FATOS: o que foi respondido e revisado, por tópico e por período -->
+<!-- (19.132.0) a figura da questão: colar, escolher imagem ou recortar da página do PDF -->
+<dialog id="dlgFigura" class="ui-modal diag-modal fig-dlg">
+  <div class="fatos-cab">
+    <h3 data-i18n="fig_titulo"></h3>
+    <button type="button" class="qs-x" id="btnFigX" aria-label="Fechar">✕</button>
+  </div>
+  <div class="fig-lista" id="figLista" hidden></div>
+  <p class="nota" data-i18n="fig_como"></p>
+  <div class="fig-fontes">
+    <button type="button" class="btn-min" id="btnFigImagem" data-i18n="fig_escolher"></button>
+    <button type="button" class="btn-min" id="btnFigPdf" data-i18n="fig_abrir_pdf"></button>
+    <span class="fig-pdf-nav" id="figPdfNav" hidden>
+      <button type="button" class="btn-min" id="btnFigAntes" aria-label="Página anterior">‹</button>
+      <input type="number" id="figPdfPag" class="fig-pag" min="1" value="1" aria-label="Página">
+      <span id="figPdfDe" class="nota"></span>
+      <button type="button" class="btn-min" id="btnFigDepois" aria-label="Próxima página">›</button>
+    </span>
+    <input type="file" id="figArqImagem" accept="image/*" hidden>
+    <input type="file" id="figArqPdf" accept=".pdf,application/pdf" hidden>
+  </div>
+  <p class="prep-msg" id="figMsg" role="status" aria-live="polite" hidden></p>
+  <div class="fig-palco-cx" id="figPalcoCx" hidden>
+    <div class="fig-palco-area" id="figPalcoArea">
+      <canvas id="figPalco" class="fig-palco"></canvas>
+      <div class="fig-sel" id="figSel" hidden></div>
+    </div>
+  </div>
+  <div class="dlg-rodape">
+    <button type="button" class="btn-quieto" id="btnFigTudo" data-i18n="fig_sem_recorte"></button>
+    <button type="button" class="btn btn-azul" id="btnFigAnexar" data-i18n="fig_anexar" disabled></button>
+    <button type="button" class="btn btn-cinza" id="btnFigFechar" data-i18n="help_close"></button>
+  </div>
+</dialog>
 <dialog id="dlgFatos" class="ui-modal diag-modal fatos-dlg">
   <div class="fatos-cab">
     <h3 data-i18n="fatos_titulo"></h3>
@@ -13250,6 +13303,7 @@ window.__sqlPromise = initSqlJs({
 <script src="fatos.js"></script>
 <script src="cobertura-fonte.js"></script>
 <script src="preparar.js"></script>
+<script src="figuras.js"></script>
 <script src="integridade.js"></script>
 <script src="abas.js"></script>
 <script src="rascunho.js"></script>
