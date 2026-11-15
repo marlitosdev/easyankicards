@@ -7909,12 +7909,8 @@ function vkIniciarTela() {
   });
   if ($("btnVkRevLog")) $("btnVkRevLog").onclick = vkRevVerLog;
   if ($("btnVkLogAqui")) $("btnVkLogAqui").onclick = vkRevVerLog;
-  /* o interruptor da chave: uma vez, para o aplicativo inteiro */
-  if ($("btnChaveIA")) {
-    $("btnChaveIA").onclick = () => {
-      if (typeof vzAbrirChave === "function") vzAbrirChave();
-    };
-  }
+  /* (19.136.0) o interruptor "IA LIGADA" das Configurações saiu: o botão Gemini do cabeçalho mostra a luz e abre a
+   * chave (ia-consumo.js). vkChavePintar continua inofensivo sem o botão. */
   vkChavePintar();
   if ($("btnVkRevDesmarcar")) {
     $("btnVkRevDesmarcar").onclick = vkRevDesmarcar;

@@ -104,8 +104,8 @@ async function testes() {
        + "ainda mira 'resumos', que nao e' o id deste modo)");
     ok(/\.modo-btn\[data-modo="questoes"\]\{--modo-cor:/.test(html),
        "A1n Questoes continua sem cor propria");
-    ok(/\.modo-btn\[data-modo="ferramentas"\]\{--modo-cor:/.test(html),
-       "A1o a cor de Ferramentas sumiu do CSS");
+    ok(!/\.modo-btn\[data-modo="ferramentas"\]/.test(html),
+       "A1o (19.136.0) a aba Ferramentas foi extinta, mas a cor dela ficou no CSS");
     ok(!/\.modo-btn\[data-modo="resumos"\]/.test(html),
        "A1p o seletor morto '[data-modo=\"resumos\"]' (nunca casa com "
        + "nenhum botao) continua no CSS");
@@ -437,8 +437,9 @@ async function testes() {
       ok(!!api.$(id), "A7a " + id + " sumiu da tela ao se mudar para dlgConfig");
     });
     /* o rodape tecnico inteiro tambem se mudou para ca */
-    ["btnChaveIA", "chaveIaLuz", "chaveIaTxt", "seloBase", "btnSeloAjuda",
-     "btnBackup", "btnDiagnostico", "status"].forEach((id) => {
+    /* (19.136.0) "IA LIGADA" e o link do backup saíram (o Gemini do cabeçalho e o próprio selo fazem isso); entraram
+     * as versões do texto e "procurar atualizações" */
+    ["seloBase", "btnSeloAjuda", "btnDiagnostico", "status", "btnHistorico", "btnCheckUpdate"].forEach((id) => {
       ok(!!api.$(id), "A7b " + id + " sumiu da tela ao sair do rodape fixo");
     });
 

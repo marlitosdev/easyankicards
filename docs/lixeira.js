@@ -434,7 +434,9 @@ function lixAtualizarBotao() {
   const b = $("btnLixeira");
   if (!b) return;
   const n = lixLer().length;
-  b.textContent = n ? t("lix_botao_n", { n }) : t("lix_botao");
+  /* (19.136.0) o ícone no lugar da palavra; o nome fica para o leitor de tela */
+  b.textContent = n ? "🗑️ " + n : "🗑️";
+  try { b.setAttribute("aria-label", n ? t("lix_botao_n", { n }) : t("lix_botao")); } catch (e) {}
 }
 
 /* ---------------------------------------------------------------------

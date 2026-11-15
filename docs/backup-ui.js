@@ -61,6 +61,7 @@ function atualizarSeloBase() {
   if (!i) {
     el.textContent = t("bk_selo_nunca");
     el.classList.add("sb-alerta");
+    el.title = t("bk_selo_ajuda_curta");
   } else {
     el.textContent = t("bk_selo", { q: bkQuandoCurto(i.quando, i.dias) });
     /* O NOME DO ARQUIVO NO TÍTULO: é o que se compara com a pasta de
@@ -84,7 +85,7 @@ function atualizarSeloBase() {
       el.className = "selo-base " + av.cls + " selo-clicavel";
       el.title = av.txt;
       el.onclick = bkAbrirPainel;
-    } else el.onclick = null;
+    } else el.onclick = bkAbrirPainel;   /* (19.136.0) o selo é o botão do backup, sempre */
   } catch (e) {}
   if (typeof medirCabecalho === "function") {
     try { medirCabecalho(); } catch (e) {}
@@ -647,7 +648,8 @@ async function bkRegravar() {
 }
 
 function bkIniciar() {
-  const b = $("btnBackup");
+  /* (19.136.0) o link "Salvar base ou carregar outra" saiu: o próprio selo abre o painel */
+  const b = $("seloBase");
   if (!b) return;
   b.onclick = bkAbrirPainel;
   $("btnBkSalvarNuvem").onclick = bkSalvarNaNuvem;

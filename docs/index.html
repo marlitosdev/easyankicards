@@ -3775,6 +3775,12 @@ dialog.mat-amplo{max-height:96vh}
 .sb-aviso{border-color:rgba(245,158,11,.5);color:var(--atencao)}
 /* (v19.17.0) o selo vira botão quando o backup automático tem algo a resolver */
 .selo-clicavel{cursor:pointer;text-decoration:underline dotted}
+/* (19.136.0) o selo é botão sempre: abre o painel do backup */
+button.selo-base{font-family:inherit;cursor:pointer;line-height:1.4}
+button.selo-base:hover{filter:brightness(1.15);border-color:currentColor}
+.lix-btn{font-size:var(--fs-4);opacity:1;padding:0 var(--esp-1);line-height:1}
+.cfg-bloco{margin:var(--esp-3) 0}
+.cfg-bloco .nota{margin:var(--esp-1) 0 0}
 .sb-alerta{border-color:rgba(220,38,38,.5);color:var(--erro)}
 :root[data-theme="light"] .sb-alerta{color:var(--erro)}
 .selo-ajuda{all:unset;cursor:help;width:15px;height:15px;border-radius:50%;
@@ -4072,7 +4078,6 @@ button.modos-min:hover{color:var(--texto);border-color:var(--acao)}
 .ds-ed-discs{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0}
 .ds-ed-disc{display:flex;gap:4px;align-items:center;font-size:13px}
 @media (max-width:560px){.ds-cortes-lin{grid-template-columns:minmax(0,1fr) 64px 56px}.ds-cortes-b{grid-column:1/-1;font-size:12px}.ds-sug-lin{flex-wrap:wrap}}
-.modo-btn[data-modo="ferramentas"]{--modo-cor:#a78bfa}
 .modo-ic{font-size:15px;line-height:1;filter:grayscale(.35)}
 .modo-btn.ativo .modo-ic{filter:none}
 .modo-rot{display:none;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -7932,11 +7937,11 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
        Passado esse período, voltam a fazer sentido dentro de
        Configurações, junto do resto do que se ajusta raramente. -->
   <div class="hdr-dev rodape-tec" id="hdrDev">
-    <span class="selo-base" id="seloBase"></span>
+    <!-- (19.136.0) o selo É o botão do backup: tocar abre "salvar a base ou carregar outra" (o link ao lado saiu) -->
+    <button type="button" class="selo-base" id="seloBase"></button>
     <button type="button" id="btnSeloAjuda" class="selo-ajuda" title="?">?</button>
-    <button type="button" id="btnBackup" class="link-tec" data-i18n="bk_btn"></button>
     <button type="button" id="btnDiagnostico" class="link-tec" data-i18n="diag_btn"></button>
-    <button type="button" id="btnLixeira" class="link-tec" data-i18n="lix_botao" data-i18n-title="lix_botao_aj"></button>
+    <button type="button" id="btnLixeira" class="link-tec lix-btn" data-i18n-title="lix_botao_aj" aria-label="lixeira">🗑️</button>
   </div>
 </header>
 
@@ -7971,11 +7976,34 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <!-- BASE E DIAGNÓSTICO MORAM NO CABEÇALHO AGORA (enquanto o app está
          em desenvolvimento — ver o comentário lá). "IA ligada" continua
          aqui: é ajuste, não ferramenta de quem está testando o app. -->
+    <!-- (19.136.0) o "IA LIGADA" saiu: repetia o botão Gemini do cabeçalho. Entraram o que estava na aba Ferramentas
+         (extinta): as versões do texto do editor e, só no app de computador, a importação de arquivo. -->
+    <div class="cfg-bloco">
+      <div class="cfg-linha">
+        <span class="cfg-rot" data-i18n="hist_titulo"></span>
+        <button class="btn-min" id="btnHistorico" title=""></button>
+      </div>
+      <p class="nota" data-i18n="hist_ajuda"></p>
+    </div>
+    <div class="cfg-bloco" id="cfgImportar" hidden>
+      <div class="gaveta-importar">
+        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
+          <span class="gv-icone">▸</span>
+          <span data-i18n="import_handle"></span>
+          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
+        </button>
+        <div class="gaveta-corpo" id="gavetaImportar" hidden>
+          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
+          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
+          <div class="nota" id="importAviso"></div>
+          <div id="importProgresso" style="display:none">
+            <div class="ip-txt" id="importProgTxt"></div>
+            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="rodape-tec">
-      <button type="button" id="btnChaveIA" class="chave-ia">
-        <span class="chave-ia-luz" id="chaveIaLuz"></span>
-        <span class="chave-ia-txt" id="chaveIaTxt"></span>
-      </button>
       <button type="button" class="link-tec" id="btnCheckUpdate" data-i18n="check_update_btn"></button>
     </div>
   </div>
@@ -8226,42 +8254,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         </div>
       </details>
       <div id="qsLista" class="qs-lista-aba"></div>
-    </div>
-  </div>
-</section>
-
-<section id="secFerramentas" data-modo="ferramentas" hidden>
-  <div class="grupo" style="max-width:620px">
-    <div class="bancada-cab">
-      <h2 class="bancada-nome" data-i18n="modo_ferramentas"></h2>
-    </div>
-    <p class="nota" data-i18n="ferr_intro"></p>
-      <div class="gaveta-importar">
-        <button class="gaveta-alca" id="alcaImportar" aria-expanded="false">
-          <span class="gv-icone">▸</span>
-          <span data-i18n="import_handle"></span>
-          <span class="gv-selo" id="importSelo" data-i18n="import_desktop_only"></span>
-        </button>
-        <div class="gaveta-corpo" id="gavetaImportar" hidden>
-          <button class="btn btn-verde" id="btnImportar" data-i18n="import_choose"></button>
-          <button class="btn btn-cinza" id="btnImportarReabrir" style="display:none" data-i18n="import_reopen"></button>
-          <div class="nota" id="importAviso"></div>
-          <div id="importProgresso" style="display:none">
-            <div class="ip-txt" id="importProgTxt"></div>
-            <div class="ip-barra"><div class="ip-fill" id="importProgFill"></div></div>
-          </div>
-        </div>
-      </div>
-    <div class="ferr-bloco">
-      <div class="ferr-tit" data-i18n="hist_titulo"></div>
-      <p class="nota" data-i18n="hist_ajuda"></p>
-      <button class="btn btn-cinza" id="btnHistorico" title=""></button>
-    </div>
-    <div class="ferr-lista">
-      <div class="ferr-item"><b data-i18n="ferr_soon_edital"></b>
-        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
-      <div class="ferr-item"><b data-i18n="ferr_soon_backup"></b>
-        <span class="ferr-selo" data-i18n="modo_em_breve"></span></div>
     </div>
   </div>
 </section>

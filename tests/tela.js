@@ -1111,8 +1111,8 @@ async function testes() {
     const GUARDADO = "Uma pergunta qualquer :: Uma resposta :: tag_z";
     api.$("editor").value = GUARDADO;
     ok(api.MODOS.length >= 4, "K1 esperava pelo menos quatro modos no registro");
-    ok(api.MODOS.some((m) => m.id === "ferramentas"),
-       "K1b faltou o modo de ferramentas");
+    ok(!api.MODOS.some((m) => m.id === "ferramentas") && !api.$("secFerramentas"),
+       "K1b (19.136.0) a aba Ferramentas foi extinta e voltou");
     /* a importacao de arquivo mudou de casa: tem de estar DENTRO do modo
      * ferramentas, senao volta a poluir a bancada */
     ok(!!api.$("btnImportar"), "K1c o botao de importar sumiu");

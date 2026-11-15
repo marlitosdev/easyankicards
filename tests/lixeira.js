@@ -84,7 +84,7 @@ async function testes() {
       "B3 vai para o historico de decisoes, com a via 'texto_vazio': " + JSON.stringify([d.regra, d.decisao, d.via, d.risco]));
     const bar = api.$("barraLixeira");
     ok(bar.hidden === false && /Dica “macete” foi para a lixeira\./.test(api.$("lixTxt").textContent) && api.$("btnLixDesfazer").hidden === false, "B4 aparece o aviso com 'desfazer': " + api.$("lixTxt").textContent);
-    ok(api.$("btnLixeira").textContent === "lixeira (1)", "B5 o botao do rodape conta: " + api.$("btnLixeira").textContent);
+    ok(api.$("btnLixeira").textContent === "🗑️ 1", "B5 o botao do rodape conta: " + api.$("btnLixeira").textContent);
     api.soltarAdiados();
     ok(bar.hidden === true, "B5a passados os segundos, o aviso some sozinho");
     const it2 = api.lixJogar({ tipo: "cartao", via: "editor", rotulo: "c", onde: "ed", dados: { bloco: "F :: V" } });
@@ -439,7 +439,7 @@ async function testes() {
     /* restaurar pela tela */
     achar(api.$("lixLista"), (c) => cls(c, "lix-restaurar"))[2].onclick();
     ok(api.leiNotaDe("lei_h", "1") === "nota um" && api.lixLer().length === 2 && achar(api.$("lixLista"), (c) => cls(c, "lix-item")).length === 2, "H8 'restaurar' devolve e a lista se repinta");
-    ok(api.$("btnLixeira").textContent === "lixeira (2)", "H9 o botao do rodape se atualiza: " + api.$("btnLixeira").textContent);
+    ok(api.$("btnLixeira").textContent === "🗑️ 2", "H9 o botao do rodape se atualiza: " + api.$("btnLixeira").textContent);
     /* apagar de vez: pergunta e mostra o que e' */
     const p = api.lixApagarDeVez(api.lixLer()[0].id);
     await tick();
@@ -463,7 +463,7 @@ async function testes() {
     const p4 = api.lixEsvaziar();
     await tick();
     api.uiModalResponder(true);
-    ok((await p4) === true && api.lixLer().length === 0 && api.$("btnLixeira").textContent === "lixeira", "H16 'sim': esvazia e o botao volta a 'lixeira'");
+    ok((await p4) === true && api.lixLer().length === 0 && api.$("btnLixeira").textContent === "🗑️", "H16 'sim': esvazia e o botao volta ao ícone sozinho");
     const d2 = dec(api).slice(-1)[0];
     ok(d2.regra === "apagar.definitivo" && d2.via === "esvaziar" && d2.proposta.n === 2, "H17 esvaziar fica no historico com quantos itens: " + JSON.stringify([d2.via, d2.proposta.n]));
     ok((await api.lixEsvaziar()) === false, "H18 esvaziar uma lixeira vazia: nada");

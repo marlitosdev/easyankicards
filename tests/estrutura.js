@@ -39,8 +39,9 @@ const NINHOS = [
   ["edHub", "secEdital"],
   ["edAgendaTopo", "secEdital"],
   ["editalTexto", "edBancada"],
-  ["btnImportar", "secFerramentas"],
-  ["btnHistorico", "secFerramentas"],
+  /* (19.136.0) a aba Ferramentas foi extinta: as duas moram em Configurações */
+  ["btnImportar", "dlgConfig"],
+  ["btnHistorico", "dlgConfig"],
   ["barraRecuperar", "painelEsquerdo"],
   ["editalTexto", "painelEdital"],
   ["bancadaNome", "painelEsquerdo"],

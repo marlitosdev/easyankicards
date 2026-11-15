@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.135.0";
+const VERSAO = "19.136.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -3502,6 +3502,8 @@ $("alcaImportar").onclick = () => toggleGaveta();
 
 function configurarImportar() {
   const desktop = ehDesktop();
+  /* (19.136.0) a importação mora em Configurações e só aparece no app de computador: no navegador ela nunca funcionou */
+  if ($("cfgImportar")) $("cfgImportar").hidden = !desktop;
   $("alcaImportar").classList.toggle("desktop-ok", desktop);
   $("importAviso").textContent = desktop ? "" : t("import_notice");
   $("importAviso").style.display = desktop ? "none" : "";

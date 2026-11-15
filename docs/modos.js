@@ -28,7 +28,8 @@ const MODOS = [
   { id: "questoes", secao: "secQuestoes", icone: "❓", rotulo: "modo_questoes", pronto: true },
   { id: "material", secao: "secResumos", icone: "📚", rotulo: "modo_material",
     rotuloCurto: "modo_material_curto", pronto: true },
-  { id: "ferramentas", secao: "secFerramentas", icone: "🧰", rotulo: "modo_ferramentas", pronto: true },
+  /* (19.136.0) a aba "Ferramentas" foi extinta: a importação e as versões do texto foram para ⚙ Configurações, e os
+   * dois "em breve" (pasta automática, backup completo) já existem no backup */
 ];
 
 let modoAtual = "cartoes";

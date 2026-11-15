@@ -80,23 +80,15 @@ async function testes() {
     const { api } = rodar();
     api.vzGuardarChave("");
     api.vkIniciarTela();
-    const b = api.$("btnChaveIA");
-    ok(b, "C1-pre o interruptor da chave nao existe no rodape");
-    ok(/chave-off/.test(b.className || ""),
-       "C1 sem chave guardada o interruptor nao aparece desligado: "
-       + b.className);
-    ok(/DESLIGADA/i.test(api.$("chaveIaTxt").textContent || ""),
-       "C1b o interruptor nao escreve o estado: "
-       + api.$("chaveIaTxt").textContent);
-
+    /* (19.136.0) o interruptor "IA LIGADA" saiu de Configurações: repetia o botão Gemini do cabeçalho, que mostra o
+     * mesmo estado (a luz) e abre a mesma tela */
+    ok(!api.$("btnChaveIA"), "C1 o interruptor duplicado voltou para Configurações");
+    api.iacPintarSelo();
+    const b = api.$("btnHdrIa");
+    ok(b && !/\btem\b/.test(b.className || ""), "C1b sem chave, a luz do Gemini fica apagada: " + (b && b.className));
     api.vzGuardarChave("AIzaTeste");
-    api.vkChavePintar();
-    ok(/chave-on/.test(b.className || "") && !/chave-off/.test(b.className || ""),
-       "C1c com chave guardada o interruptor continua desligado: "
-       + b.className);
-    ok(/LIGADA/i.test(api.$("chaveIaTxt").textContent || ""),
-       "C1d o texto nao acompanhou o estado: "
-       + api.$("chaveIaTxt").textContent);
+    api.iacPintarSelo();
+    ok(/\btem\b/.test(b.className || ""), "C1c com chave guardada, a luz acende: " + b.className);
 
     /* A EXPLICAÇÃO EM LINGUAGEM SIMPLES. Quem lê isto pode nunca ter
      * ouvido falar em API — e "chave de API" não explica nada a quem
