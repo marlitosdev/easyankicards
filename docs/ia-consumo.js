@@ -23,6 +23,7 @@ const IAC_PRECOS_PADRAO = {
   embedding: { rotulo: "Gemini Embedding", entrada: 0.15, saida: 0, busca: 0 },
 };
 const IAC_LINKS = [
+  { id: "chave", url: "https://aistudio.google.com/apikey" },
   { id: "precos", url: "https://ai.google.dev/gemini-api/docs/pricing" },
   { id: "limites", url: "https://aistudio.google.com/rate-limit" },
   { id: "billing", url: "https://console.cloud.google.com/billing" },
@@ -181,16 +182,42 @@ function iacDinheiro(usd, cot) {
 }
 function iacMil(n) { return n >= 1e6 ? (n / 1e6).toFixed(1).replace(".", ",") + " mi" : n >= 1000 ? (n / 1000).toFixed(1).replace(".", ",") + " mil" : String(n); }
 
-/* o selo do cabeçalho: só com chave guardada */
+/* (19.135.0) o botão do cabeçalho: sempre à vista, com a luz da chave (o consumo do dia, que ele mostrava, quase
+ * nunca era o que se ia procurar — está na aba Consumo). Abre na aba da chave. */
 function iacPintarSelo() {
   const b = typeof $ === "function" ? $("btnHdrIa") : null;
   if (!b) return;
   const tem = typeof vzChaveApi === "function" && !!vzChaveApi();
-  b.hidden = !tem;
-  if (!tem) return;
-  const r = iacResumo();
-  b.textContent = t("iac_selo", { n: r.hoje.n, c: iacDinheiro(r.usdHojeTabela, 0) });
-  b.title = t("iac_selo_aj");
+  b.hidden = false;
+  b.className = "hdr-btn hdr-ia" + (tem ? " tem" : "");
+  if ($("hdrIaTxt")) $("hdrIaTxt").textContent = "Gemini";
+  b.title = t(tem ? "iac_selo_aj_tem" : "iac_selo_aj_falta");
+  b.setAttribute("aria-label", "Gemini — " + b.title);
+}
+
+/* (19.135.0) os links do Google, em cartões, na aba da chave */
+function iacPintarLinks() {
+  const lk = $("iacLinks");
+  if (!lk || lk.childNodes.length) return;
+  IAC_LINKS.forEach((x) => {
+    const a = document.createElement("a");
+    a.className = "iac-link"; a.id = "iacLink_" + x.id;
+    a.href = x.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    const tt = document.createElement("span"); tt.className = "iac-link-tit"; tt.textContent = t("iac_link_" + x.id) + " ↗";
+    const sb = document.createElement("span"); sb.className = "iac-link-sub"; sb.textContent = t("iac_link_" + x.id + "_aj");
+    a.append(tt, sb);
+    lk.append(a);
+  });
+}
+
+/* (19.135.0) o teste da chave mora na aba da chave: o resultado é pintado aqui, sem depender da aba Consumo */
+function iacPintarDisp() {
+  const dp = iacLer().disp;
+  if (!$("iacDisp")) return;
+  $("iacDisp").className = "nota iac-disp" + (dp ? (dp.ativa ? " ok" : " erro") : "");
+  $("iacDisp").textContent = !dp ? t("iac_disp_nunca")
+    : dp.ativa ? t("iac_disp_ok", { ms: dp.ms, n: dp.n, f: dp.temFlash ? "✓" : "✗", e: dp.temEmbedding ? "✓" : "✗", d: new Date(dp.em).toLocaleString() })
+    : t("iac_disp_erro_" + (dp.erro || "rede"), { s: dp.status });
 }
 
 /* as abas da tela da chave: chave · consumo · faturas */
@@ -200,6 +227,7 @@ function iacAba(qual) {
     if (sec) sec.hidden = a !== qual;
     if (bt) { bt.className = "vz-aba" + (a === qual ? " ativa" : ""); bt.setAttribute("aria-selected", String(a === qual)); }
   });
+  if (qual === "chave") { iacPintarDisp(); iacPintarLinks(); }
   if (qual === "consumo") iacPintarConsumo();
   if (qual === "faturas") iacPintarFaturas();
   return qual;
@@ -225,14 +253,6 @@ function iacPintarConsumo() {
     card(t("iac_k_custo"), iacDinheiro(r.plano === "pago" ? r.usdTabela : 0, r.cotacao),
       r.plano === "pago" ? t("iac_k_custo_pago", { d: r.tabelaEm }) : t("iac_k_custo_gratis", { v: iacDinheiro(r.usdTabela, r.cotacao) }), "iacKpiCusto"));
   if ($("iacLimiteBarra")) { $("iacLimiteBarra").hidden = !r.limiteDia; $("iacLimiteBarra").value = r.limiteDia ? Math.min(100, Math.round(r.hoje.n / r.limiteDia * 100)) : 0; }
-  /* disponibilidade (o último teste) */
-  const dp = r.disp;
-  if ($("iacDisp")) {
-    $("iacDisp").className = "nota iac-disp" + (dp ? (dp.ativa ? " ok" : " erro") : "");
-    $("iacDisp").textContent = !dp ? t("iac_disp_nunca")
-      : dp.ativa ? t("iac_disp_ok", { ms: dp.ms, n: dp.n, f: dp.temFlash ? "✓" : "✗", e: dp.temEmbedding ? "✓" : "✗", d: new Date(dp.em).toLocaleString() })
-      : t("iac_disp_erro_" + (dp.erro || "rede"), { s: dp.status });
-  }
   if ($("iacPorModulo")) $("iacPorModulo").textContent = Object.keys(r.mes.porModulo).length
     ? t("iac_por_modulo") + " " + Object.keys(r.mes.porModulo).map((m) => t("iac_mod_" + m.toLowerCase()) + " " + r.mes.porModulo[m]).join(" · ") : t("iac_sem_chamadas");
   const L = $("iacRecentes");
@@ -281,12 +301,6 @@ function iacPintarFaturas() {
     li.append(" ", x);
     L.append(li);
   });
-  const lk = $("iacLinks");
-  if (lk && !lk.childNodes.length) IAC_LINKS.forEach((x, i) => {
-    if (i) lk.append(" · ");
-    const a = document.createElement("a"); a.href = x.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = t("iac_link_" + x.id);
-    lk.append(a);
-  });
 }
 
 function iacIniciarTela() {
@@ -295,7 +309,7 @@ function iacIniciarTela() {
   if ($("btnIacTestar")) $("btnIacTestar").onclick = async () => {
     $("btnIacTestar").disabled = true;
     if ($("iacDisp")) { $("iacDisp").className = "nota iac-disp"; $("iacDisp").textContent = t("iac_disp_testando"); }
-    try { await iacTestarChave(); } finally { $("btnIacTestar").disabled = false; iacPintarConsumo(); }
+    try { await iacTestarChave(); } finally { $("btnIacTestar").disabled = false; iacPintarDisp(); }
   };
   if ($("btnIacSalvarCfg")) $("btnIacSalvarCfg").onclick = () => {
     iacConfigurar({ limiteDia: ($("iacLimite") || {}).value, plano: ($("iacPlano") || {}).value, cotacao: ($("iacCotacao") || {}).value });
@@ -311,7 +325,7 @@ function iacIniciarTela() {
     if ($("iacFatMsg")) $("iacFatMsg").textContent = f ? t("iac_fat_ok", { m: f.competencia.split("-").reverse().join("/") }) : t("iac_fat_erro");
     iacPintarFaturas();
   };
-  if ($("btnHdrIa")) $("btnHdrIa").onclick = () => { if (typeof vzAbrirChave === "function") vzAbrirChave("consumo"); };
+  if ($("btnHdrIa")) $("btnHdrIa").onclick = () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); };
   ["btnIacFechar1", "btnIacFechar2"].forEach((id) => { if ($(id)) $(id).onclick = () => $("dlgVzChave").close(); });
   iacPintarSelo();
 }

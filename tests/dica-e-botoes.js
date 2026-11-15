@@ -143,7 +143,7 @@ async function testes() {
        "B3b o balao abriu sem o texto: " + bal.textContent);
     /* NÃO É MODAL: nada de <dialog>, nada de escurecer a tela. O que
      * está atrás continua legível — é o ponto de ser uma dica. */
-    ok(!api.$("dlgAjuda").open,
+    ok(!api.$("dlgConfig").open && !api.$("dlgVzChave").open,
        "B3c abrir a dica abriu um modal por baixo dos panos");
 
     /* TOCAR NO MESMO (?) FECHA. Sem isto o ícone só liga, e para

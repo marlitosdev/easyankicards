@@ -104,7 +104,8 @@ async function testes() {
     const { api: a, janela: J } = rodar();
     a.iacIniciarTela();
     a.vkIniciarTela();
-    ok(a.$("btnHdrIa").hidden === true, "K6 sem chave: nenhum selo no cabeçalho");
+    ok(a.$("btnHdrIa").hidden === false && !/\btem\b/.test(a.$("btnHdrIa").className) && /colar/.test(a.$("btnHdrIa").title), "K6 sem chave: o botão Gemini aparece, de luz apagada, e diz para colar a chave");
+    ok(!a.$("btnAjuda") && !a.$("dlgAjuda") && a.$("btnCheckUpdate"), "K6-ajuda (19.135.0) o 'Ajuda' saiu do cabeçalho; 'Procurar atualizações' mora em Configurações");
     a.vzGuardarChave("AIzaTESTE123456");
     a.jurIaLigar(true);
     a.iacConfigurar({ limiteDia: 250 });
@@ -112,9 +113,23 @@ async function testes() {
     gemini(J, [JSON.parse(JSON.stringify(respOk))]);
     await a.jurIaPerguntar("p", { busca: false });
     a.soltarAdiados();
-    ok(a.$("btnHdrIa").hidden === false && /1 hoje/.test(a.$("btnHdrIa").textContent), "K6a com chave: o selo mostra o consumo de hoje: " + a.$("btnHdrIa").textContent);
+    a.iacPintarSelo();
+    ok(/\btem\b/.test(a.$("btnHdrIa").className) && a.$("hdrIaTxt").textContent === "Gemini", "K6a com chave: a luz do botão Gemini acende");
     a.$("btnHdrIa").onclick();
-    ok(a.$("dlgVzChave").open && a.$("vzAba_consumo").hidden === false && a.$("vzAba_chave").hidden === true && a.$("btnVzAba_consumo").className.indexOf("ativa") >= 0, "K6b o selo abre a tela da chave já na aba Consumo");
+    ok(a.$("dlgVzChave").open && a.$("vzAba_chave").hidden === false && a.$("vzAba_consumo").hidden === true, "K6b o botão abre na aba da chave");
+    ok(a.$("iacLinks").childNodes.length === 6 && a.$("iacLink_chave") && /apikey/.test(a.$("iacLink_chave").href),
+       "K6b1 os 6 links do Google (com 'criar ou ver suas chaves') em cartões, na aba da chave");
+    ok(/● chave guardada/.test(a.$("vzChaveAgora").textContent) && /\btem\b/.test(a.$("vzChaveAgora").className), "K6b2 a chave, o teste e o estado ficam juntos no bloco 'Sua chave'");
+    {
+      /* onde cada coisa mora (o DOM de teste não aninha o HTML estático: confere-se no próprio index.html) */
+      const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
+      const abaChave = (html.split('<div id="vzAba_chave">')[1] || "").split('<div id="vzAba_consumo"')[0];
+      const config = (html.split('<dialog id="dlgConfig"')[1] || "").split("</dialog>")[0];
+      ok(/id="iacLinks"/.test(abaChave) && /id="btnIacTestar"/.test(abaChave) && /id="vzChaveCampo"/.test(abaChave) && /id="chkVzPrepIa"/.test(abaChave)
+         && /id="btnCheckUpdate"/.test(config) && !/id="btnAjuda"/.test(html),
+         "K6b3 na aba da chave: o campo, o teste, as permissões e os links; 'Procurar atualizações' dentro de Configurações");
+    }
+    a.$("btnVzAba_consumo").onclick();
     ok(/de 250 \(seu limite\)/.test(a.$("iacKpiHoje").textContent) && a.$("iacLimiteBarra").hidden === false, "K6c o cartão de hoje compara com o limite que a pessoa informou");
     ok(a.$("iacRecentes").querySelectorAll("li").length === 1 && /Jurisprudência/.test(a.$("iacRecentes").textContent), "K6d as últimas chamadas aparecem");
     /* configuração pela tela */
@@ -123,7 +138,7 @@ async function testes() {
     ok(/R\$/.test(a.$("iacKpiCusto").textContent) && /de 100/.test(a.$("iacKpiHoje").textContent), "K6e salvar a configuração: R$ aparece e o limite muda");
     /* faturas pela tela */
     a.$("btnVzAba_faturas").onclick();
-    ok(a.$("vzAba_faturas").hidden === false && /estimativa/i.test(a.$("iacFatEstimativa").textContent) && a.$("iacLinks").querySelectorAll("a").length === 5, "K6f aba Faturas: estimativa marcada e os 5 atalhos oficiais");
+    ok(a.$("vzAba_faturas").hidden === false && /estimativa/i.test(a.$("iacFatEstimativa").textContent), "K6f aba Faturas: estimativa marcada");
     a.$("iacFatMes").value = "2026-09"; a.$("iacFatValor").value = "3,20"; a.$("iacFatMoeda").value = "BRL"; a.$("iacFatStatus").value = "aberta"; a.$("iacFatNota").value = "";
     a.$("btnIacFatGuardar").onclick();
     ok(a.$("iacFat_2026-09") && /em aberto/.test(a.$("iacFat_2026-09").textContent) && /09\/2026/.test(a.$("iacFatMsg").textContent), "K6g anotar pela tela (a confirmação diz o mês como 09/2026)");

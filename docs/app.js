@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.134.0";
+const VERSAO = "19.135.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -965,7 +965,6 @@ function aplicarTextos() {
   });
   $("versao").textContent = "v" + VERSAO;
   $("editor").placeholder = t("paste_here");
-  $("ajudaTexto").textContent = t("help_text");
   rotularTemas();
   rotularPrevia();
   rotularEstilos();
@@ -3767,7 +3766,7 @@ window.addEventListener("pywebviewready", () => {
  ["btnColarMais","paste_more"],["btnDesfazerColagem","undo_paste"],["btnNovoCartao","tip_new"],
  ["btnMCRapido","tip_mc"],["btnPromptIA","tip_prompt"],["btnApkgImport","tip_apkg_import"],
  ["btnNormalizar","normalize_tooltip"],
- ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],["btnAjuda","help_tooltip"],
+ ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],
  ["chkDestaque","tip_highlight"],["selTema","tip_theme"],["corLetra","tip_textcolor"],
  ["btnCorReset","textcolor_reset"],["selIdioma","tip_lang"],["chk2col","tip_two_cols"],
  ["tituloGeral","gen_title_note"],["selEstiloPainel","style_hint"],
@@ -4022,8 +4021,8 @@ $("selAlinha").onchange = () => {
   preview();
 };
 
-$("btnAjuda").onclick = () => abrirModal("dlgAjuda");
-$("btnFechar").onclick = () => $("dlgAjuda").close();
+/* (19.135.0) o botão "Ajuda" saiu do cabeçalho: o guia longo não era usado, os prompts estão em "Gerar prompt" e
+ * "Procurar atualizações" passou para Configurações (o app já procura sozinho a cada 30 min e ao voltar à aba). */
 
 /* O ⚙ DO CABEÇALHO abre "Configurações" (dlgConfig) — tema, cor da
  * letra, idioma e o antigo rodapé técnico (chave da IA, base, ajuda,
@@ -4042,7 +4041,6 @@ attachTip($("btnMCRapido"), "tip_mc");
 attachTip($("btnPromptIA"), "tip_prompt");
 attachTip($("btnTxt"), "export_txt_tooltip");
 attachTip($("btnApkg"), "export_apkg_tooltip");
-attachTip($("btnAjuda"), "help_tooltip");
 attachTip($("selIdioma"), "tip_lang");
 attachTip($("btnEmbaralhar"), "shuffle_hint");
 attachTip($("btnEmbaralharCloze"), "shuffle_hint");
@@ -4053,8 +4051,6 @@ function copiarPrompt(btn, key) {
   btn.textContent = t("copied");
   setTimeout(() => { btn.textContent = rotulo; }, 2000);
 }
-$("btnPromptFull").onclick = () => copiarPrompt($("btnPromptFull"), "prompt_full");
-$("btnPromptMini").onclick = () => copiarPrompt($("btnPromptMini"), "prompt_mini");
 
 /* ------------------------------ start ------------------------------ */
 

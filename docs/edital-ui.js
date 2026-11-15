@@ -6635,8 +6635,9 @@ function vzAbrirChave(aba) {
   const agora = $("vzChaveAgora");
   const c = vzChaveApi();
   if (agora) {
-    agora.textContent = c ? t("vz_chave_tem", { c: vzChaveResumida(c) })
-                          : t("vz_chave_falta");
+    agora.textContent = c ? "● " + t("vz_chave_tem", { c: vzChaveResumida(c) })
+                          : "○ " + t("vz_chave_falta");
+    agora.className = "vz-chave-agora" + (c ? " tem" : "");
   }
   /* (v18.97.0) usar a chave também na jurisprudência: escolha da pessoa, desligada por padrão */
   if ($("chkVzJurIa")) $("chkVzJurIa").checked = typeof jurIaLigada === "function" && jurIaLigada();

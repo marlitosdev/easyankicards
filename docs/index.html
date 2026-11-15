@@ -165,7 +165,6 @@ header .hdr-dev{flex-basis:100%;justify-content:flex-start;margin:0;gap:10px}
 .hdr-cor input{position:absolute;inset:-4px;width:calc(100% + 8px);
   height:calc(100% + 8px);border:0;padding:0;cursor:pointer}
 .hdr-reset{width:34px;justify-content:center;padding:0;font-size:15px}
-header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
 /* O ⚙ ABRE "CONFIGURAÇÕES" (dlgConfig) EM QUALQUER TAMANHO DE TELA —
    tema, cor da letra e idioma não são o dia a dia de ninguém, então
    saem da fileira do cabeçalho também no computador, não só no celular.
@@ -173,9 +172,6 @@ header .hdr-ajuda{background:var(--azul);color:#fff;border-color:transparent}
    janela: uma "configurações" só, não duas superfícies diferentes. */
 header .hdr-config{width:34px;justify-content:center;padding:0;font-size:15px}
 .hdr-cor-linha{display:flex;align-items:center;gap:6px}
-/* O ÍCONE SÓ APARECE NO MOBILE — no computador o texto "?  Ajuda" já diz
-   tudo sozinho, e mostrar os dois juntos duplicaria o "?". */
-header .hdr-ajuda .hdr-ic{display:none}
 
 /* ---- CABEÇALHO NO MOBILE: de três fileiras para uma ----
    Ícone, nome, ❓ e ⚙ cabiam perto de 400px de altura em três fileiras
@@ -185,9 +181,6 @@ header .hdr-ajuda .hdr-ic{display:none}
 @media (max-width:760px){
   /* no celular some só o "by MarlitosDev": o NÚMERO DA VERSÃO fica (é ele que diz se a atualização chegou) */
   header h1 .hdr-por{display:none}
-  header .hdr-ajuda .hdr-ic{display:inline}
-  header .hdr-ajuda .hdr-txt{display:none}
-  header .hdr-ajuda{width:34px;justify-content:center;padding:0;font-size:15px}
 }
 
 /* ---- A JANELA DE CONFIGURAÇÕES ----
@@ -4877,8 +4870,24 @@ body.split-lj{overflow:hidden}
 .jur-ia-config{opacity:.8}
 .jur-ia-optin{margin-top:8px;font-weight:600}
 /* (v18.99.0) o consumo da API */
-.hdr-ia{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--info);color:var(--info);background:transparent}
+.hdr-ia{font-size:var(--fs-2);font-weight:var(--peso-f);padding:3px 10px;border-radius:var(--r-pilula);border:1px solid var(--info);color:var(--info);background:transparent;gap:6px}
 .hdr-ia[hidden]{display:none}
+/* (19.135.0) a luz da chave: verde com chave guardada, cinza sem */
+.hdr-ia-luz{width:8px;height:8px;border-radius:50%;background:var(--sutil);flex:none}
+.hdr-ia.tem .hdr-ia-luz{background:var(--ok)}
+.vz-bloco{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-3) var(--esp-4);margin:var(--esp-3) 0}
+.vz-bloco-tit{margin:0 0 var(--esp-2);font-size:var(--fs-3);font-weight:var(--peso-f)}
+.vz-bloco .jur-ia-optin{margin-top:var(--esp-2);font-size:var(--fs-3);display:flex;gap:var(--esp-2);align-items:flex-start}
+.vz-det{margin:var(--esp-1) 0 0 26px}
+.vz-det>summary{cursor:pointer;color:var(--info);font-size:var(--fs-2)}
+.vz-det .nota{font-size:var(--fs-2);margin:var(--esp-1) 0 0}
+.vz-uso-salvar{margin:var(--esp-3) 0 0;font-size:var(--fs-2)}
+.vz-chave-agora{margin:0 0 var(--esp-2);font-weight:var(--peso-m)}
+.vz-chave-agora.tem{color:var(--ok)}
+.vz-chave-linha{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin-bottom:var(--esp-2)}
+.vz-chave-linha .mat-busca{flex:1 1 220px;min-width:0}
+.vz-chave-linha .iac-disp{flex:1 1 200px}
+.vz-apagar{margin-left:auto}
 .vz-abas{display:flex;gap:4px;border-bottom:1px solid var(--borda);margin:6px 0 10px}
 .vz-aba{background:transparent;border:0;border-bottom:2px solid transparent;padding:6px 10px;cursor:pointer;color:var(--sutil);font:inherit}
 .vz-aba.ativa{border-bottom-color:var(--info);color:var(--info);font-weight:700}
@@ -4897,8 +4906,12 @@ body.split-lj{overflow:hidden}
 .iac-fat-form input[type=month]{padding:7px 9px;border-radius:8px;border:1px solid var(--borda);background:var(--campo);color:var(--texto);color-scheme:light dark}
 dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .iac-fat-est{color:var(--sutil);font-style:italic}
-.iac-links{line-height:1.8}
+.iac-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--esp-2)}
 .iac-links a{color:var(--info)}
+.iac-link{display:block;border:1px solid var(--borda);border-radius:var(--r-p);padding:var(--esp-2) var(--esp-3);text-decoration:none}
+.iac-link:hover{border-color:var(--info)}
+.iac-link-tit{display:block;font-weight:var(--peso-f);font-size:var(--fs-3)}
+.iac-link-sub{display:block;color:var(--sutil);font-size:var(--fs-2)}
 .iac-fat-paga{color:var(--ok)} .iac-fat-aberta{color:var(--atencao)} .iac-fat-isenta{color:var(--sutil)}
 .jur-ia-consumo{font-size:11.5px}
 .jur-ia-consumo .btn-link{font-size:inherit;color:var(--info)}
@@ -7907,12 +7920,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 <header>
   <img src="icon-192.png" alt="" width="34" height="34" style="border-radius:8px">
   <h1>EasyAnkiCards <small><span class="hdr-por">by MarlitosDev · </span><span id="versao"></span></small></h1>
-  <button class="hdr-btn hdr-ajuda" id="btnAjuda">
-    <span class="hdr-ic" aria-hidden="true">❓</span>
-    <span class="hdr-txt" data-i18n="help_btn"></span>
-  </button>
-  <!-- (v18.99.0) o consumo do Gemini: só aparece com a chave guardada; abre o painel na tela da chave -->
-  <button class="hdr-btn hdr-ia" id="btnHdrIa" type="button" hidden></button>
+  <!-- (19.135.0) o Gemini no cabeçalho: sempre à vista, com a luz da chave; abre a chave, as permissões e os links.
+       O "Ajuda" saiu (o guia não era usado; os prompts estão em "Gerar prompt"; "Procurar atualizações" foi para ⚙). -->
+  <button class="hdr-btn hdr-ia" id="btnHdrIa" type="button"><span class="hdr-ia-luz" id="hdrIaLuz" aria-hidden="true"></span><span id="hdrIaTxt">Gemini</span></button>
   <button class="hdr-btn hdr-config" id="btnHdrConfig" type="button"
           data-i18n-title="cfg_titulo">⚙</button>
   <!-- BASE E DIAGNÓSTICO, PERTO DA VERSÃO — de propósito enquanto o app
@@ -7966,6 +7976,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <span class="chave-ia-luz" id="chaveIaLuz"></span>
         <span class="chave-ia-txt" id="chaveIaTxt"></span>
       </button>
+      <button type="button" class="link-tec" id="btnCheckUpdate" data-i18n="check_update_btn"></button>
     </div>
   </div>
   <div class="dlg-rodape">
@@ -8590,16 +8601,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </div>
   </div>
 </div>
-
-<dialog id="dlgAjuda">
-  <div class="dlg-corpo" id="ajudaTexto"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-roxo" id="btnPromptFull" data-i18n="prompt_full_btn"></button>
-    <button class="btn btn-ciano" id="btnPromptMini" data-i18n="prompt_mini_btn"></button>
-    <button class="btn btn-azul" id="btnCheckUpdate" data-i18n="check_update_btn"></button>
-    <button class="btn btn-cinza" id="btnFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
 
 <dialog id="dlgNormalizar" style="max-width:760px;width:94%">
   <div style="padding:16px">
@@ -9418,28 +9419,45 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="vz-aba" id="btnVzAba_consumo" role="tab" data-i18n="iac_aba_consumo"></button>
     <button type="button" class="vz-aba" id="btnVzAba_faturas" role="tab" data-i18n="iac_aba_faturas"></button>
   </div>
+  <!-- (19.135.0) A ABA DA CHAVE EM TRÊS BLOCOS: a chave (como está, testar, trocar), onde ela é usada (as duas
+       escolhas) e os links do Google — que antes moravam no fim da aba Faturas, onde ninguém procurava. -->
   <div id="vzAba_chave">
   <p class="nota" data-i18n="vz_chave_ajuda"></p>
-  <div class="vka-aviso" data-i18n="vz_chave_aviso"></div>
-  <input type="password" id="vzChaveCampo" class="mat-busca"
-    autocomplete="off" spellcheck="false" placeholder="AIza...">
-  <p class="nota" id="vzChaveAgora"></p>
-  <!-- (v18.97.0) a chave na jurisprudência: só se a pessoa ligar, dito o que vai ao Google -->
-  <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzJurIa"> <span data-i18n="jur_ia_optin"></span></label>
-  <p class="nota" data-i18n="jur_ia_optin_aj"></p>
-  <!-- (19.125.0) a chave no "preparar o tópico": outra escolha, porque vai outro dado (o resumo ou o texto da aula) -->
-  <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzPrepIa"> <span data-i18n="prep_ia_optin"></span></label>
-  <p class="nota" data-i18n="prep_ia_optin_aj"></p>
+  <section class="vz-bloco" aria-labelledby="vzBlocoChave">
+    <h4 class="vz-bloco-tit" id="vzBlocoChave" data-i18n="vz_bloco_chave"></h4>
+    <p class="vz-chave-agora" id="vzChaveAgora"></p>
+    <div class="vz-chave-linha">
+      <input type="password" id="vzChaveCampo" class="mat-busca"
+        autocomplete="off" spellcheck="false" placeholder="AIza..." data-i18n-title="vz_chave_campo_aj">
+      <button class="btn btn-verde" id="btnVzChaveOk" data-i18n="vz_chave_salvar"></button>
+    </div>
+    <div class="vz-chave-linha">
+      <button type="button" class="btn-min" id="btnIacTestar" data-i18n="iac_testar" data-i18n-title="iac_testar_aj"></button>
+      <span class="nota iac-disp" id="iacDisp" role="status" aria-live="polite"></span>
+      <button class="btn-min btn-min-perigo vz-apagar" id="btnVzChaveApagar" data-i18n="vz_chave_apagar"></button>
+    </div>
+    <div class="vka-aviso" data-i18n="vz_chave_aviso"></div>
+  </section>
+  <section class="vz-bloco" aria-labelledby="vzBlocoUso">
+    <h4 class="vz-bloco-tit" id="vzBlocoUso" data-i18n="vz_bloco_uso"></h4>
+    <!-- (v18.97.0) a chave na jurisprudência: só se a pessoa ligar, dito o que vai ao Google -->
+    <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzJurIa"> <span data-i18n="jur_ia_optin"></span></label>
+    <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="jur_ia_optin_aj"></p></details>
+    <!-- (19.125.0) a chave no "preparar o tópico": outra escolha, porque vai outro dado (o resumo ou o texto da aula) -->
+    <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzPrepIa"> <span data-i18n="prep_ia_optin"></span></label>
+    <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="prep_ia_optin_aj"></p></details>
+    <p class="nota vz-uso-salvar" data-i18n="vz_bloco_uso_salvar"></p>
+  </section>
+  <section class="vz-bloco" aria-labelledby="vzBlocoLinks">
+    <h4 class="vz-bloco-tit" id="vzBlocoLinks" data-i18n="vz_bloco_links"></h4>
+    <div class="iac-links" id="iacLinks"></div>
+  </section>
   <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnVzChaveOk" data-i18n="vz_chave_salvar"></button>
-    <button class="btn btn-cinza" id="btnVzChaveFechar" data-i18n="cancel_btn"></button>
-    <button class="btn-min btn-min-perigo" id="btnVzChaveApagar" data-i18n="vz_chave_apagar"></button>
+    <button class="btn btn-cinza" id="btnVzChaveFechar" data-i18n="help_close"></button>
   </div>
   </div>
   <div id="vzAba_consumo" hidden>
     <p class="nota" data-i18n="iac_intro"></p>
-    <div class="qm-bts"><button type="button" class="btn-min" id="btnIacTestar" data-i18n="iac_testar" data-i18n-title="iac_testar_aj"></button>
-      <span class="nota iac-disp" id="iacDisp" role="status" aria-live="polite"></span></div>
     <div class="iac-kpis" id="iacKpis"></div>
     <progress id="iacLimiteBarra" max="100" value="0" hidden></progress>
     <p class="nota" id="iacPorModulo"></p>
@@ -9469,7 +9487,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <button type="button" class="btn-min btn-min-ok" id="btnIacFatGuardar" data-i18n="iac_fat_guardar"></button>
     </div>
     <p class="nota" id="iacFatMsg" role="status"></p>
-    <p class="nota iac-links" id="iacLinks"></p>
+    <p class="nota" data-i18n="iac_fat_links"></p>
     <div class="dlg-rodape"><button class="btn btn-cinza" id="btnIacFechar2" data-i18n="help_close"></button></div>
   </div>
 </dialog>
