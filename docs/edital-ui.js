@@ -499,7 +499,7 @@ function edFatorReal(disciplina, itens) {
 /* OS CINCO MATERIAIS DE UM TÓPICO — resumo, cartões, lei seca, jurisprudência, questões —, partilhados entre a
  * Agenda da semana (edLinhaTopico) e a sanfona de "Horas por assunto" (horas-assunto.js): um lugar só decide o que
  * "existe" para cada tipo e o que cada ícone faz, para as duas telas nunca divergirem. */
-function edRecursosDoTopico(disciplina, nome) {
+function edRecursosDoTopico(disciplina, nome, editalId) {
   const ch = (typeof matChaveViva === "function")
     ? matChaveViva(disciplina, nome) : matChave(disciplina, nome);
   const temTxt = !!(matObter(ch) && String(matObter(ch).texto || "").trim());
@@ -540,7 +540,13 @@ function edRecursosDoTopico(disciplina, nome) {
   lei.className = "ed-lei" + (temLei ? " tem" : "");
   lei.textContent = "⚖";
   lei.title = t(temLei ? "ed_lei_ver" : "ed_lei_novo", { n: nome });
-  lei.onclick = (ev) => { if (ev) ev.stopPropagation(); if (typeof leiAbrir === "function") leiAbrir(disciplina, nome); };
+  /* (19.138.0) com o edital da linha conhecido (a agenda), o ⚖ abre as LEIS DO EDITAL com este tópico em destaque no
+   * topo: a lei dele a um toque, e as do resto do edital por disciplina e peso, com o que falta ler (leis-edital.js) */
+  lei.onclick = (ev) => {
+    if (ev) ev.stopPropagation();
+    if (editalId && typeof ledAbrir === "function" && ledAbrir(editalId, { disciplina, topico: nome })) return;
+    if (typeof leiAbrir === "function") leiAbrir(disciplina, nome);
+  };
 
   const jur = document.createElement("button");
   jur.type = "button";
@@ -898,7 +904,7 @@ function edLinhaTopico(i, semDisciplina) {
 
   /* Os cinco materiais (resumo, cartões, lei seca, jurisprudência, questões) vêm de edRecursosDoTopico, o mesmo lugar
    * que a sanfona de "Horas por assunto" usa — as duas telas nunca divergem sobre o que "existe". */
-  const r = edRecursosDoTopico(i.disciplina, i.nome);
+  const r = edRecursosDoTopico(i.disciplina, i.nome, i.edital || (typeof editalAtual !== "undefined" ? editalAtual : "") || "");
   if (i.ramos && i.ramos.length) meio.append(edRamosNaLinha(i));
   /* (19.94.0) O MATERIAL EM TEXTO. Eram até cinco etiquetas clicáveis ("resumo", "lei seca", "+ resumo", "🤖 resumo pela
    * IA"…) e mais "📚 materiais" e "começar" — três caminhos para a mesma ficha. A linha diz o que existe; abrir é com

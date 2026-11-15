@@ -116,6 +116,58 @@ async function testes() {
     ok(api.montarBackup().dados.material.eac_pastas, "K1 as pastas vão no backup");
   }
 
+  /* ---- L (19.138.0): AS LEIS DO EDITAL — por disciplina e peso, o tópico do ⚖ em destaque, o que falta pelos artigos cobrados ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar(); api.leiIniciar && api.leiIniciar();
+    api.ledIniciar();
+    const e = api.edCriar("ISS", ["# ISS Caruaru | prova: 2027-06-01 | horas: 20", "@ Direito Constitucional :: 3", "+ Repartição de receitas :: 3 :: Art. 3º da CF",
+      "@ Sistema Tributário :: 5", "+ Suspensão do crédito :: 5 :: Arts. 3 a 5 do CTN", "++ Moratória :: 4 :: art. 7º do CTN", "+ Imunidades :: 4 :: CF e LC 116/03",
+      "+ Dívida ativa :: 3 :: Lei 6.830/80"].join(NL));
+    const arts = (n) => Array.from({ length: n }, (_, i) => "Art. " + (i + 1) + "º Texto do artigo " + (i + 1) + ".").join(NL);
+    const chS = api.matChave("Sistema Tributário", "Suspensão do crédito");
+    const ctn = api.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", texto: arts(12), topicos: [chS] });
+    const cf = api.leiGuardar({ nome: "Constituição Federal", apelido: "CF", texto: arts(10), topicos: [] });
+    const lef = api.leiGuardar({ nome: "Lei 6.830/1980 - LEF", texto: arts(8), topicos: [] });
+    api.leiParar(ctn.id, "3", 2);
+    const M = api.ledModelo(e.id);
+    ok(M.disciplinas.map((D) => D.nome).join() === "Sistema Tributário,Direito Constitucional", "L1 as disciplinas na ordem do peso (5 antes de 3): " + M.disciplinas.map((D) => D.nome).join());
+    const trib = M.disciplinas[0];
+    ok(trib.lista.map((x) => x.id).join() === [ctn.id, cf.id, lef.id].join(), "L1a dentro da disciplina, a lei dos tópicos de maior peso vem antes: " + trib.lista.map((x) => x.id).join());
+    ok(M.leis[ctn.id].leit.cobrados.join() === "3,4,5,7", "L2 a faixa 'arts. 3 a 5' abre o miolo, e o artigo do ramo entra no tópico: " + M.leis[ctn.id].leit.cobrados.join());
+    ok(M.leis[ctn.id].leit.lidos === 1 && M.leis[ctn.id].leit.prox.num === "4", "L3 o marcador no art. 3º: 1 de 4 lidos, continuar no 4º");
+    ok(M.leis[lef.id].leit.modo === "lei" && M.total === 5 && M.lidos === 1, "L4 lei citada sem artigo é medida inteira e NÃO entra no total de artigos cobrados: " + M.total);
+    ok(trib.lista[1].leit.modo === "cobrados" && M.disciplinas[1].lista[0].leit.cobrados.join() === "3", "L4a a CF em Constitucional mede o artigo que ESTA disciplina cobra");
+    api.leiArtigoVistoMarcar(ctn.id, "7", true);
+    ok(api.ledModelo(e.id).leis[ctn.id].leit.lidos === 2, "L5 o artigo marcado como visto conta como lido");
+    /* o ⚖ da agenda, com o edital da linha: abre as leis do edital com o tópico em destaque */
+    const r = api.edRecursosDoTopico("Sistema Tributário", "Suspensão do crédito", e.id);
+    r.lei.onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeisEd").open && api.$("ledFoco") && /Suspensão do crédito/.test(api.$("ledFoco").textContent) && /2 de 4 lidos/.test(api.$("ledFoco").textContent),
+      "L6 o ⚖ da agenda abre as leis do edital, com o tópico em destaque e o que dele está lido: " + (api.$("ledFoco") && api.$("ledFoco").textContent.slice(0, 160)));
+    const bt = api.$("btnLedFocoLer_" + ctn.id);
+    ok(bt && /continuar no art\. 4º/.test(bt.textContent), "L7 'continuar' no primeiro artigo cobrado que falta: " + (bt && bt.textContent));
+    ok(/2 de 5 artigos cobrados lidos/.test(api.$("ledResumo").textContent), "L8 o resumo do edital: " + api.$("ledResumo").textContent);
+    api.$("btnLedF_ok").onclick();
+    ok(/Nada neste filtro/.test(api.$("ledCorpo").textContent) && !/Código Tributário/.test(api.$("ledCorpo").textContent.split("Concluídas")[1] || "") && api.$("btnLedF_ok").getAttribute("aria-pressed") === "true", "L9 o filtro 'concluídas' esconde o que falta");
+    api.$("btnLedF_falta").onclick();
+    ok(api.$("ledLei_0_" + ctn.id) && api.$("ledLei_0_" + lef.id), "L9a 'falta ler' mostra as que faltam");
+    bt.onclick();
+    ok(api.$("dlgLeiSeca").open, "L10 'continuar' abre a lei (pelo tópico ligado, no artigo)");
+    /* sem edital conhecido, o ⚖ continua abrindo a lei do tópico direto */
+    api.$("dlgLeiSeca").close(); api.$("dlgLeisEd").close();
+    api.edRecursosDoTopico("Sistema Tributário", "Suspensão do crédito").lei.onclick({ stopPropagation() {} });
+    ok(api.$("dlgLeiSeca").open && !api.$("dlgLeisEd").open, "L11 sem o edital da linha, o ⚖ abre a lei do tópico como antes");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+    const ferr = (html.split('id="edTopoFerr"')[1] || "").split("</div>")[0];
+    ok(/id="btnEdLeis"/.test(ferr) && /<dialog id="dlgLeisEd"/.test(html), "L12 o botão '⚖ Leis' nas ferramentas do edital e a janela existem");
+    ["led_btn", "led_btn_tip", "led_titulo", "led_como", "led_resumo", "led_foco_tit", "led_foco_sub", "led_foco_vazio", "led_foco_abrir", "led_foco_nums", "led_foco_sem_art",
+      "led_f_todas", "led_f_falta", "led_f_ok", "led_disc_meta", "led_cob", "led_cob_lei", "led_em_topicos", "led_tambem", "led_arts", "led_topicos_n", "led_continuar",
+      "led_comecar", "led_abrir", "led_anel_aj", "led_nao_ligada", "led_vazio", "led_vazio_filtro"].forEach((k) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "L13 falta " + k + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   /* ---- textos ---- */
   {
     const { api } = rodar();
