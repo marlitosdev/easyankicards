@@ -1970,18 +1970,8 @@ function hubControlesAgenda() {
   const cx = document.createElement("div");
   cx.className = "ed-agenda-cfg";
 
-  const ld = document.createElement("label");
-  ld.className = "ed-agenda-cfg-item";
-  ld.append(document.createTextNode(t("hub_cfg_dias")));
-  const dias = document.createElement("input");
-  dias.type = "number"; dias.min = "1"; dias.max = "7"; dias.step = "1";
-  dias.value = String(hubPref("dias", 5));
-  dias.onchange = () => {
-    hubPrefGravar("dias", Math.max(1, Math.min(7, Number(dias.value) || 5)));
-    hubPintarAgenda();
-    if (typeof edRender === "function" && edAberto()) edRender();
-  };
-  ld.append(dias);
+  /* (19.137.0) "dias/semana" SAIU DA AGENDA: é rotina que se ajusta uma vez, e continua no planejamento de cada edital
+   * (campo edDias, ao lado das horas por semana) — o mesmo valor, guardado num lugar só (hubPref "dias"). */
 
   /* HORAS POR SEMANA, SÓ PARA VER.
    * O horário de início saiu: ninguém estuda às 05:40 porque uma divisão
@@ -2003,9 +1993,15 @@ function hubControlesAgenda() {
   const usados = hubEditaisNaVista();
   const totalH = usados.reduce(
     (s2, e) => s2 + ((lerEdital(e.texto || "").cfg || {}).horas || 0), 0);
-  lh.textContent = usados.length > 1
-    ? t("hub_cfg_horas_n", { h: totalH, n: usados.length })
-    : t("hub_cfg_horas", { h: totalH });
+  /* (19.137.0) "· 2 editais" não dizia QUAIS nem POR QUE dois: eram os que o filtro da agenda deixa à vista. Agora diz
+   * quantos estão ocultos no filtro, e o título dá os nomes com as horas de cada um. */
+  const ativosN = editais.filter((e) => edSituacao(e).grupo !== "encerrado").length;
+  const ocultosN = Math.max(0, ativosN - usados.length);
+  lh.textContent = ocultosN
+    ? t("hub_cfg_horas_filtro", { h: totalH, n: usados.length, o: ocultosN })
+    : usados.length > 1
+      ? t("hub_cfg_horas_n", { h: totalH, n: usados.length })
+      : t("hub_cfg_horas", { h: totalH });
   /* (19.79.0) COM O RITMO REAL OU UMA META PRÓPRIA EM USO, o topo diz o número que a agenda está usando — "54 h/semana"
    * continuava ali depois de "planejar com 13h19/semana", e a agenda já era de 13h19 */
   let usadoMin = 0, usadoMeta = false;
@@ -2036,7 +2032,7 @@ function hubControlesAgenda() {
   raio.title = t("plog_gatilho_aj");
   raio.onclick = () => { if (typeof plAbrir === "function") plAbrir(); };
 
-  cx.append(ld, lh, raio);
+  cx.append(lh, raio);
   return cx;
 }
 

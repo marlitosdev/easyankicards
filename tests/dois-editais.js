@@ -377,6 +377,13 @@ async function testes() {
       const outro = so === a ? b : a;
       api.hubEdAlternar(outro.id);
       api.hubRender();
+      /* (19.137.0) o topo da agenda: sem "dias/semana", e o número diz que há edital oculto no filtro */
+      if (so === a) {
+        const horas = (function acha(el) { for (const f of Array.from(el.children || [])) { if (/(^| )ed-agenda-horas( |$)/.test(f.className || "")) return f; const r = acha(f); if (r) return r; } return null; })(api.$("edAgendaTopo"));
+        const temDias = (function acha(el) { for (const f of Array.from(el.children || [])) { if ((f.textContent || "") === api.t("hub_cfg_dias") || (f.tagName === "INPUT" && f.max === "7")) return true; if (acha(f)) return true; } return false; })(api.$("edAgendaTopo"));
+        ok(horas && /1 oculto\(s\) no filtro/.test(horas.textContent) && /1 edital\(is\) em vista/.test(horas.textContent) && !temDias,
+           "D7h (19.137.0) com um edital oculto, o topo diz 'em vista (1 oculto no filtro)' e não tem mais 'dias/semana': " + (horas && horas.textContent));
+      }
       const selos = achar(api.$("edAgendaTopo"), []);
       vistos.push(selos.length);
       selos.forEach((s) => textos.push(s.textContent || ""));
