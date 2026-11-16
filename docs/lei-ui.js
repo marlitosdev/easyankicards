@@ -2868,11 +2868,22 @@ function leiCitaVincInfoPintar(c) {
   el.hidden = false;
 }
 
+/* (19.148.0) A PRÉVIA ANDA. "‹ Art. 172" e "Art. 174 ›" mostram os vizinhos, e as citações de dentro do artigo ("art. 134",
+ * "no inciso V", "art. 5º da CF") abrem aqui mesmo — tudo com "↩ voltar". leiCitaPilha guarda por onde se passou; a
+ * abertura de fora (resumo, cartão, questão, leitor) começa do zero. "Desligar" e "ligar a outro" só valem para a
+ * citação de origem: navegando, eles somem. */
+let leiCitaPilha = [];
+let leiCitaAtual = null;
+let leiCitaTrechoAberto = false;
+
 function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!$("dlgLeiCitaPreview")) return;
-  leiCitaVincInfoPintar(c);
-  leiCitaPreviewOrigemArt = origemNum || "";
   const o = opc || {};
+  if (!o._nav) leiCitaPilha = [];
+  leiCitaAtual = { c, origemNum: origemNum || "", opc: o };
+  leiCitaTrechoAberto = false;
+  leiCitaVincInfoPintar(leiCitaPilha.length ? null : c);
+  leiCitaPreviewOrigemArt = origemNum || "";
   let lei = o.lei || (c.leiId ? leiDe(c.leiId) : null);   /* (v18.47.0) vínculo manual: a lei é a que a pessoa escolheu */
   if (!lei) {
     try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; }
@@ -2886,18 +2897,21 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     $("leiCitaPreviewTexto").textContent = "";
     $("btnLeiCitaPreviewAbrir").hidden = true;
     if ($("leiCitaNotaBox")) $("leiCitaNotaBox").hidden = true;
-    leiCitaPreviewAlvo = { lei: null, num: c.num, sub: c, ctx: o.ctx || null, art: null };
+    leiCitaPreviewAlvo = { lei: null, num: c.num, sub: c, ctx: o.ctx || null, art: null, vz: {} };
     leiCitaBotoesDoLink();
-    abrirModal("dlgLeiCitaPreview");
+    leiCitaBarraPintar();
+    if (!$("dlgLeiCitaPreview").open) abrirModal("dlgLeiCitaPreview");
     return;
   }
 
   const efetivos = leiArtigosEfetivos(lei);
-  const art = efetivos.filter((x) => x.num === c.num)[0];
+  const iArt = efetivos.findIndex((x) => x.num === c.num);
+  const art = iArt >= 0 ? efetivos[iArt] : null;
+  const vz = art ? { ant: iArt > 0 ? efetivos[iArt - 1] : null, prox: iArt < efetivos.length - 1 ? efetivos[iArt + 1] : null } : {};
   $("leiCitaPreviewTitulo").textContent = lei.nome;
   if (!art) {
     $("leiCitaPreviewArtigo").textContent = "";
-    $("leiCitaPreviewTexto").textContent = t("lei_cita_artigo_nao_achou", { a: c.numCru });
+    $("leiCitaPreviewTexto").textContent = t("lei_cita_artigo_nao_achou", { a: c.numCru || c.num });
     if ($("leiCitaNotaBox")) $("leiCitaNotaBox").hidden = true;
   } else {
     $("leiCitaPreviewArtigo").textContent = art.rotulo
@@ -2916,26 +2930,160 @@ function leiCitacaoPreviewAbrir(c, origemNum, opc) {
     leiCitaTrechoPintar(art, un, linhas);
     const p = $("leiCitaPreviewTexto");
     p.textContent = "";
-    /* (19.43.0) uma linha por bloco: é por elas que o localizador sabe em que § e inciso a leitura está */
+    /* (19.43.0) uma linha por bloco: é por elas que o localizador sabe em que § e inciso a leitura está.
+     * (19.148.0) Sem o recuo de 8 espaços que vem do texto da lei e sem as linhas vazias (o espaço entre blocos é do
+     * CSS): no celular eles comiam um quinto da largura e meia tela de altura. O degrau que importa — inciso, alínea,
+     * item — vem do próprio começo da linha (leiCitaNivelClasse). */
     linhas.forEach((l, i) => {
+      const txt = String(l).replace(/^\s+/, "");
+      if (!txt.trim()) return;
       const d = document.createElement("div");
-      d.className = "lei-cita-l";
-      if (alvo.has(i)) { const m = document.createElement("mark"); m.className = "lei-cita-alvo"; m.textContent = l; d.append(m); }
-      else d.textContent = l;
+      d.className = "lei-cita-l" + leiCitaNivelClasse(txt);
+      if (alvo.has(i)) {
+        const m = document.createElement("mark");
+        m.className = "lei-cita-alvo";
+        m.append(document.createTextNode(txt));
+        d.append(m);
+      } else d.append(document.createTextNode(txt));
       p.append(d);
     });
+    try { leiCitaLigarCitacoes(p, lei, art); } catch (e) {}
   }
-  leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null };
+  leiCitaPreviewAlvo = { lei, num: c.num, sub: c, ctx: o.ctx || null, art: art || null, vz };
   if (art) leiCitaNotaPintar();
   leiCitaBotoesDoLink();
+  leiCitaBarraPintar();
   $("btnLeiCitaPreviewAbrir").hidden = false;
-  abrirModal("dlgLeiCitaPreview");
-  /* o artigo inteiro rola até a parte citada */
-  try { const m = $("leiCitaPreviewTexto").querySelector("mark.lei-cita-alvo"); if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" }); } catch (e) {}
+  if (!$("dlgLeiCitaPreview").open) abrirModal("dlgLeiCitaPreview");
+  /* o artigo inteiro rola até a parte citada; o vizinho começa do topo */
+  try {
+    const m = $("leiCitaPreviewTexto").querySelector("mark.lei-cita-alvo");
+    if (m && m.scrollIntoView) m.scrollIntoView({ block: "center" });
+    else if ($("leiCitaPreviewTexto").scrollTop) $("leiCitaPreviewTexto").scrollTop = 0;
+  } catch (e) {}
   if ($("leiCitaPreviewTexto")) $("leiCitaPreviewTexto").onscroll = leiCitaLocAgendar;
   leiCitaLocAgendar();
-  try { leiReg("citacao", "preview de citação aberto", lei.nome + " · art. " + c.numCru + (c.mesmaLei ? " (desta lei)" : "")); }
+  try { leiReg("citacao", o._nav ? "prévia da citação: navegou" : "preview de citação aberto", lei.nome + " · art. " + (c.numCru || c.num) + (c.mesmaLei ? " (desta lei)" : "")); }
   catch (e) {}
+}
+
+/* o degrau da linha, pelo começo dela: § e parágrafo único, inciso (I -), alínea (a)), item (1.) */
+function leiCitaNivelClasse(txt) {
+  const s = String(txt || "");
+  if (/^(?:§|Par[áa]grafo\s+[úu]nico)/i.test(s)) return " lcl-par";
+  if (/^[IVXLC]+(?:-[A-Z])?\s*[-–—]/.test(s)) return " lcl-inc";
+  if (/^[a-z](?:-[a-z])?\)/.test(s)) return " lcl-ali";
+  if (/^\d+(?:-[A-Z])?[.)]\s/.test(s)) return " lcl-item";
+  return "";
+}
+
+/* AS CITAÇÕES DE DENTRO DO ARTIGO VIRAM LINKS — as mesmas regras do leitor (leiCitarNoTexto: outra lei nomeada, "desta
+ * Lei", e "no inciso V" deste artigo) —, mas o toque abre AQUI, empilhando o que se estava vendo. */
+function leiCitaLigarCitacoes(p, lei, art) {
+  if (!p || !art || typeof leiCitarNoTexto !== "function") return 0;
+  const nos = [];
+  const juntar = (el) => Array.from((el && el.childNodes) || []).forEach((x) => {
+    if (x.nodeType === 3) nos.push(x); else if (x.nodeType === 1) juntar(x);
+  });
+  juntar(p);
+  nos.forEach((no) => { try { leiCitarNoTexto(no, art.num, lei); } catch (e) {} });
+  try { if (typeof leiRelativasResolver === "function") leiRelativasResolver(p, art); } catch (e) {}
+  const bts = [];
+  const descer = (el) => Array.from((el && el.children) || []).forEach((x) => {
+    if (/\blei-cita-link\b/.test(String(x.className || ""))) bts.push(x); else descer(x);
+  });
+  descer(p);
+  bts.forEach((b) => {
+    const c = b._cit;
+    b.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); leiCitaSeguir(c); };
+  });
+  return bts.length;
+}
+
+function leiCitaCtxOriginal() {
+  const base = leiCitaPilha.length ? leiCitaPilha[0] : leiCitaAtual;
+  return (base && base.opc && base.opc.ctx) || null;
+}
+function leiCitaEmpilhar() {
+  if (leiCitaAtual) leiCitaPilha.push(leiCitaAtual);
+  while (leiCitaPilha.length > 30) leiCitaPilha.shift();
+}
+/* segue uma citação de dentro do artigo mostrado */
+function leiCitaSeguir(c) {
+  const al = leiCitaPreviewAlvo;
+  if (!c || !al) return false;
+  let lei = null;
+  if (c.mesmaLei || c.relativa) lei = al.lei;
+  else if (c.leiId) lei = leiDe(c.leiId);
+  else { try { lei = leiCasarRotulo(c.rotulo, leisLista()); } catch (e) { lei = null; } }
+  leiCitaEmpilhar();
+  leiCitacaoPreviewAbrir(c, al.art ? al.art.num : "", { lei: lei || undefined, ctx: leiCitaCtxOriginal(), _nav: true });
+  return true;
+}
+/* o artigo anterior (delta < 0) ou o seguinte, da mesma lei */
+function leiCitaVizinho(delta) {
+  const al = leiCitaPreviewAlvo;
+  const a = al && al.vz ? (delta < 0 ? al.vz.ant : al.vz.prox) : null;
+  if (!a) return false;
+  leiCitaEmpilhar();
+  leiCitacaoPreviewAbrir({ num: a.num, numCru: a.num, incisos: [], paragrafos: [], alineas: [] }, "",
+    { lei: al.lei, ctx: leiCitaCtxOriginal(), _nav: true });
+  return true;
+}
+function leiCitaVoltar() {
+  const prev = leiCitaPilha.pop();
+  if (!prev) return false;
+  leiCitacaoPreviewAbrir(prev.c, prev.origemNum, Object.assign({}, prev.opc, { _nav: true }));
+  return true;
+}
+function leiCitaRotuloArt(a) { return a ? (a.rotulo || "Art. " + a.num) : ""; }
+
+/* a barra de cima do artigo: ‹ anterior · seguinte › · ↩ voltar · ✎ nota · A− 100% A+ */
+function leiCitaBarraPintar() {
+  const al = leiCitaPreviewAlvo || {};
+  const vz = al.vz || {};
+  const ant = $("btnLeiCitaAnt"), prox = $("btnLeiCitaProx"), volta = $("btnLeiCitaVoltar");
+  if (ant) { ant.hidden = !vz.ant; ant.textContent = vz.ant ? "‹ " + leiCitaRotuloArt(vz.ant) : ""; }
+  if (prox) { prox.hidden = !vz.prox; prox.textContent = vz.prox ? leiCitaRotuloArt(vz.prox) + " ›" : ""; }
+  if (volta) {
+    const prev = leiCitaPilha[leiCitaPilha.length - 1];
+    volta.hidden = !prev;
+    volta.textContent = prev ? t("lei_cita_voltar", { a: prev.c && (prev.c.numCru || prev.c.num) ? "art. " + (prev.c.numCru || prev.c.num) : "" }) : "";
+  }
+  if (!al.art && $("btnLeiCitaNotaNova")) $("btnLeiCitaNotaNova").hidden = true;
+  leiCitaFontePintar();
+}
+
+/* A LETRA DA PRÉVIA É A DO LEITOR DE LEI (leiFonte, o mesmo A−/A+, guardado no mesmo lugar). No celular o CSS não deixa
+ * descer de 16 px; no computador a janela acompanha a letra para a linha ficar em torno de 70 letras. */
+function leiCitaFontePintar() {
+  const d = $("dlgLeiCitaPreview");
+  if (d && d.style) {
+    if (d.style.setProperty) d.style.setProperty("--lei-cita-fs", leiFonte + "px");
+    else d.style["--lei-cita-fs"] = leiFonte + "px";
+  }
+  if (d && d.setAttribute) d.setAttribute("data-lei-fs", String(leiFonte));
+  if ($("leiCitaFonte")) $("leiCitaFonte").textContent = leiFonteRotulo(leiFonte);
+  if ($("btnLeiCitaMenor")) $("btnLeiCitaMenor").disabled = leiFonte <= LEI_FONTE_MIN;
+  if ($("btnLeiCitaMaior")) $("btnLeiCitaMaior").disabled = leiFonte >= LEI_FONTE_MAX;
+}
+function leiCitaFonteMudar(delta) {
+  leiFonte = Math.max(LEI_FONTE_MIN, Math.min(LEI_FONTE_MAX, leiFonte + (delta > 0 ? 2 : -2)));
+  try { localStorage.setItem(LEI_FONTE_CHAVE, String(leiFonte)); } catch (e) {}
+  leiFontePintar();
+  try { if ($("dlgLeiSeca") && $("dlgLeiSeca").open) leiTrocarModo(leiModo); } catch (e) {}
+  leiCitaFontePintar();
+  leiCitaLocAgendar();
+  try { leiReg("leitura", "tamanho da letra (prévia da citação)", leiFonte + "px"); } catch (e) {}
+  return leiFonte;
+}
+
+/* o trecho citado já vem marcado no artigo logo abaixo: a caixa de cima fica numa linha; tocar abre (e fecha) */
+function leiCitaTrechoTrocar() {
+  leiCitaTrechoAberto = !leiCitaTrechoAberto;
+  const box = $("leiCitaPreviewTrecho");
+  if (box) box.className = "lei-cita-trecho" + (leiCitaTrechoAberto ? "" : " curto");
+  return leiCitaTrechoAberto;
 }
 
 /* (v19.5.0) o texto da lei SEM as marcas de estudo (==…==, ==!…==, ==?…==, ==§…==, ==*…==, ==~…==, ==@…==): a prévia
@@ -2948,6 +3096,9 @@ function leiCitaTrechoPintar(art, un, linhas) {
   if (!box) return;
   box.hidden = !un.length;
   if (!un.length) return;
+  /* (19.148.0) recolhida numa linha: o trecho inteiro já está marcado no artigo logo abaixo */
+  box.className = "lei-cita-trecho" + (leiCitaTrechoAberto ? "" : " curto");
+  box.title = t("lei_cita_trecho_aj");
   const rev = un.some((u) => { try { return leiRevogacaoDoArtigo(String(art.texto).split("\n").slice(u.linha, u.linhaFim + 1)); } catch (e) { return false; } });
   $("leiCitaPreviewTrechoCab").textContent = t("lei_cita_trecho_cab", { a: art.rotulo, u: un.map(leiRotuloDaUnidade).join(" · ") });
   $("leiCitaPreviewTrechoRev").hidden = !rev;
@@ -2968,9 +3119,12 @@ function leiCitaNotaPintar() {
   const al = leiCitaPreviewAlvo;
   const box = $("leiCitaNotaBox");
   if (!box) return;
-  if (!al || !al.lei || !al.art) { box.hidden = true; return; }
-  box.hidden = false;
+  const nova = $("btnLeiCitaNotaNova");
+  if (!al || !al.lei || !al.art) { box.hidden = true; if (nova) nova.hidden = true; return; }
   const nota = leiNotaDe(al.lei.id, al.art.num);
+  /* (19.148.0) sem nota, a caixa sai e fica só o "✎ nota" na barra de cima: no celular ela ocupava uma faixa inteira */
+  box.hidden = !nota && !!nova;
+  if (nova) nova.hidden = !!nota;
   const tx = $("leiCitaNotaTxt");
   tx.textContent = nota ? "📝 " + nota : t("lei_cita_nota_vazia");
   tx.className = "lei-cita-nota-txt" + (nota ? "" : " vazia");
@@ -2986,6 +3140,8 @@ function leiCitaNotaEditar() {
   if (!al || !al.lei || !al.art) return;
   $("leiCitaNotaCampo").value = leiNotaDe(al.lei.id, al.art.num);
   $("leiCitaNotaCampo").placeholder = t("lei_nota_placeholder");
+  $("leiCitaNotaBox").hidden = false;
+  if ($("btnLeiCitaNotaNova")) $("btnLeiCitaNotaNova").hidden = true;
   $("leiCitaNotaVer").hidden = true;
   $("leiCitaNotaEd").hidden = false;
   try { $("leiCitaNotaCampo").focus(); } catch (e) {}
@@ -3019,7 +3175,7 @@ function leiCitaNotaSugerir() {
  * leitor (resumo, cartão, questão): é onde o trecho tem dono e tópico */
 function leiCitaBotoesDoLink() {
   const al = leiCitaPreviewAlvo;
-  const ok = !!(al && al.ctx && al.sub && al.sub.texto);
+  const ok = !!(al && al.ctx && al.sub && al.sub.texto) && !leiCitaPilha.length;
   if ($("btnLeiCitaDesligar")) $("btnLeiCitaDesligar").hidden = !ok;
   if ($("btnLeiCitaOutro")) $("btnLeiCitaOutro").hidden = !ok;
 }
@@ -10891,6 +11047,14 @@ function leiIniciar() {
   liga("btnLeiCitaNotaGuardar", "guardar a nota do artigo pela citação", () => leiCitaNotaGuardar());
   liga("btnLeiCitaNotaSugerir", "sugerir a nota do artigo com IA", () => leiCitaNotaSugerir());
   liga("btnLeiCitaNotaCancelar", "cancelar a nota do artigo", () => leiCitaNotaPintar());
+  /* (19.148.0) a barra da prévia: vizinhos, voltar, nota e letra */
+  liga("btnLeiCitaAnt", "prévia: artigo anterior", () => leiCitaVizinho(-1));
+  liga("btnLeiCitaProx", "prévia: artigo seguinte", () => leiCitaVizinho(1));
+  liga("btnLeiCitaVoltar", "prévia: voltar", () => leiCitaVoltar());
+  liga("btnLeiCitaNotaNova", "escrever a nota do artigo pela citação", () => leiCitaNotaEditar());
+  liga("btnLeiCitaMenor", "prévia: letra menor", () => leiCitaFonteMudar(-1));
+  liga("btnLeiCitaMaior", "prévia: letra maior", () => leiCitaFonteMudar(1));
+  if ($("leiCitaPreviewTrecho")) $("leiCitaPreviewTrecho").onclick = () => leiCitaTrechoTrocar();
   liga("btnLeiVincFechar", "fechar o vínculo", () => $("dlgLeiVincular").close());
   /* (v18.47.0) a bolha da seleção do leitor e a lei nova pela biblioteca */
   liga("btnLeiBolhaVinc", "ligar trecho à lei (leitor)", () => leiBolhaVincular());

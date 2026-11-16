@@ -831,18 +831,28 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 /* (19.43.0) A PRÉVIA É PARA LER: janela mais larga, o artigo ocupa toda a altura que sobra (sem caixa de 40vh dentro
  * de uma janela que também rola), trecho e nota enxutos, e os botões numa fileira só — os do link à esquerda,
  * "abrir a lei inteira" e "fechar" à direita. */
-dialog.ui-modal.lei-cita-dlg{max-width:760px;max-height:94dvh;padding:14px 16px 12px}
+/* (19.148.0) a janela acompanha a letra: a linha do artigo fica em torno de 70 letras (38 × a letra ≈ 70 caracteres) */
+dialog.ui-modal.lei-cita-dlg{max-width:none;width:min(calc(100% - 16px),calc(var(--lei-cita-fs,15px) * 38 + 64px));max-height:94dvh;padding:14px 16px 12px}
 dialog.ui-modal.lei-cita-dlg[open]{display:flex;flex-direction:column}
 .lei-cita-dlg h3{margin:0 0 2px;font-size:15px}
 .lei-cita-dlg #leiCitaPreviewArtigo{margin:0 0 6px}
 .lei-cita-dlg .lei-cita-trecho{padding:7px 10px;margin:2px 0 8px;max-height:26dvh;overflow:auto;flex:0 0 auto}
-.lei-cita-dlg .lei-cita-trecho-txt{font-size:15px;line-height:1.45}
+.lei-cita-dlg .lei-cita-trecho-txt{font-size:var(--lei-cita-fs,15px);line-height:1.45}
+.lei-cita-trecho.curto{cursor:pointer}
+.lei-cita-trecho.curto .lei-cita-trecho-txt{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.lei-cita-barra{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1);margin:0 0 var(--esp-2);flex:0 0 auto}
+.lei-cita-barra [hidden]{display:none}
+.lei-cita-barra .lcb-esp{flex:1 1 auto}
+.lei-cita-fonte{font-size:var(--fs-1);color:var(--sutil);min-width:3.2em;text-align:center}
 .lei-cita-dlg .lei-cita-nota{flex:0 0 auto;padding:4px 8px;margin:0 0 8px}
 .lei-cita-dlg .lei-cita-nota-txt{font-size:12.5px}
 .lei-cita-dlg .lei-cita-nota-ver{align-items:center}
 .lei-cita-txt-cx{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
-.lei-cita-dlg .lei-cita-preview-txt{flex:1 1 auto;min-height:28dvh;max-height:none;font-size:15px;line-height:1.55;padding:8px 12px}
-.lei-cita-l{min-height:.6em;margin:0 0 6px}
+.lei-cita-dlg .lei-cita-preview-txt{flex:1 1 auto;min-height:28dvh;max-height:none;font-size:var(--lei-cita-fs,15px);line-height:1.6;padding:8px 12px}
+.lei-cita-l{margin:0 0 .6em}
+.lei-cita-l.lcl-inc{padding-left:1em}
+.lei-cita-l.lcl-ali{padding-left:2em}
+.lei-cita-l.lcl-item{padding-left:3em}
 .lei-cita-loc{top:1px;left:1px;right:12px;border-radius:6px 0 0 0}
 .lei-cita-loc[hidden]{display:none}
 .lei-cita-dlg .dlg-rodape{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-top:10px;padding-top:0;border-top:0}
@@ -852,6 +862,9 @@ dialog.ui-modal.lei-cita-dlg[open]{display:flex;flex-direction:column}
 .lei-cita-dlg #btnLeiCitaPreviewAbrir{order:3}
 .lei-cita-dlg #btnLeiCitaPreviewFechar{order:4}
 @media (max-width:600px){dialog.ui-modal.lei-cita-dlg{width:calc(100% - 16px);padding:12px}
+  /* no celular a letra do artigo não desce de 16 px, mesmo com o leitor de lei menor */
+  .lei-cita-dlg .lei-cita-preview-txt,.lei-cita-dlg .lei-cita-trecho-txt{font-size:max(16px,var(--lei-cita-fs,16px))}
+  .lei-cita-dlg .lei-cita-preview-txt{padding:8px 10px}
   .lei-cita-dlg .dlg-rodape .btn{padding:7px 10px;font-size:12.5px}}
 /* DICA incorporada ao resumo: precisa ser reconhecível de relance como
    acréscimo seu, não como parte do material original. */
@@ -11381,6 +11394,17 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <p class="nota" id="leiCitaPreviewArtigo"></p>
   <!-- (v18.49.0) o vínculo é seu: desde quando e onde vale -->
   <p class="nota lei-cita-vinc-info" id="leiCitaVincInfo" hidden></p>
+  <!-- (19.148.0) a barra: os artigos vizinhos e o voltar (a prévia anda sem fechar), a nota e a letra do leitor de lei -->
+  <div class="lei-cita-barra" id="leiCitaBarra">
+    <button type="button" class="btn-min" id="btnLeiCitaVoltar" data-i18n-title="lei_cita_voltar_aj" hidden></button>
+    <button type="button" class="btn-min" id="btnLeiCitaAnt" data-i18n-title="lei_cita_ant_aj" hidden></button>
+    <button type="button" class="btn-min" id="btnLeiCitaProx" data-i18n-title="lei_cita_prox_aj" hidden></button>
+    <span class="lcb-esp"></span>
+    <button type="button" class="btn-min" id="btnLeiCitaNotaNova" data-i18n="lei_cita_nota_nova" data-i18n-title="lei_cita_nota_nova_aj" hidden></button>
+    <button type="button" class="btn-min" id="btnLeiCitaMenor" data-i18n-title="lei_cita_menor_aj">A−</button>
+    <span class="lei-cita-fonte" id="leiCitaFonte"></span>
+    <button type="button" class="btn-min" id="btnLeiCitaMaior" data-i18n-title="lei_cita_maior_aj">A+</button>
+  </div>
   <!-- (v19.5.0) o trecho citado, em destaque, no topo -->
   <div class="lei-cita-trecho" id="leiCitaPreviewTrecho" role="note" hidden>
     <div class="lei-cita-trecho-cab" id="leiCitaPreviewTrechoCab"></div>
