@@ -260,6 +260,69 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---- C144 (19.144.0): CONFERIR UM A UM — verificações, fila por risco, links da fonte, corrigir, decidir e desfazer ---- */
+  {
+    const { api, re, resp, adi } = montar();
+    api.jcfIniciar();
+    const ADI5135 = "EMENTA AGRAVO INTERNO EM RECURSO EXTRAORDINÁRIO COM AGRAVO. DIREITO TRIBUTÁRIO. PROTESTO DE CERTIDÃO DE DÍVIDA ATIVA. MECANISMO CONSTITUCIONAL DE COBRANÇA DE OBRIGAÇÕES FISCAIS. AUSÊNCIA DE OFENSA A DIREITOS FUNDAMENTAIS DOS CONTRIBUINTES. Agravo interno a que se nega provimento, mantida a decisão do tribunal de origem.";
+    const j51 = api.jurGravar({ tribunal: "STF", classe: "ADI", numero: "5135", tese: "A inclusão das certidões de dívida ativa no rol de títulos sujeitos a protesto é constitucional.", texto: ADI5135, orgao: "Tribunal Pleno", relator: "Min. Roberto Barroso", data: "2016-11-09", fonte: "STF ADI 5135" });
+    const v51 = api.jcfVerificacoes(api.jurDe(j51.id)).map((x) => x.k);
+    ok(v51.indexOf("outra_classe") >= 0, "C1 a ementa de outro processo (ADI guardando ementa de ARE-AgR) é apontada: " + v51.join());
+    ok(api.jcfClassesDaEmenta("EMENTA: AÇÃO DIRETA DE INCONSTITUICIONALIDADE. OFENSA AO PRINCÍPIO")[0].c === "ADI", "C1a a classe é lida no começo da ementa (mesmo com erro de grafia)");
+    const are = api.jurGravar({ tribunal: "STF", classe: "ARE", numero: "800395 AgR", tese: "Tese do ARE.", texto: "EMENTA: AGRAVO REGIMENTAL NO RECURSO EXTRAORDINÁRIO COM AGRAVO. IPTU. IMUNIDADE. " + "x ".repeat(120), relator: "Min. X", data: "2014-01-01", orgao: "Primeira Turma", fonte: "STF" });
+    ok(api.jcfVerificacoes(api.jurDe(are.id)).every((x) => x.k !== "outra_classe"), "C1b ARE-AgR com ementa de agravo regimental no RE com agravo: confere");
+    const vRe = api.jcfVerificacoes(api.jurDe(re.id)).map((x) => x.k), vAdi = api.jcfVerificacoes(api.jurDe(adi.id)).map((x) => x.k);
+    const resumo = api.jurGravar({ tribunal: "STF", classe: "ADI", numero: "2405", tese: "Tese da 2405.", texto: "— outra tese guardada para o mesmo julgado (STF ADI 2405): no julgamento, o STF decidiu que não há reserva de lei complementar." });
+    const vRes = api.jcfVerificacoes(api.jurDe(resumo.id)).map((x) => x.k);
+    ok(vRe.indexOf("sem_ementa") >= 0 && vRe.indexOf("sem_relator") >= 0 && vAdi.indexOf("memoria") >= 0 && vRes.indexOf("nao_ementa") >= 0,
+      "C2 sem ementa, sem relator, de memória, texto que não é ementa: " + vRe.join() + " / " + vAdi.join() + " / " + vRes.join());
+    const fila = api.jcfFila();
+    ok(fila.length >= 3 && fila.every((id, i) => i === 0 || api.jcfRisco(api.jurDe(fila[i - 1])) >= api.jcfRisco(api.jurDe(id))), "C3 a fila vai do maior risco para o menor");
+    const lk = api.jcfLinks(api.jurDe(j51.id)).map((x) => x.url).join(" ");
+    ok(/listarProcessos\.asp\?classe=ADI&numeroProcesso=5135/.test(lk) && /jurisprudencia\.stf\.jus\.br/.test(lk), "C4 os links da fonte: o processo e a pesquisa no STF");
+    /* a fila na tela */
+    api.jcfAbrir([j51.id, re.id, resp.id]);
+    ok(api.$("dlgJcf").open && /1 de 3/.test(api.$("jcfPos").textContent) && /ementa é de “agravo interno/.test(api.$("jcfVer").textContent), "C5 a fila abre no primeiro, com as verificações por extenso");
+    ok(api.$("btnJcfConfere").disabled === true, "C6 'confere' só depois dos três vistos");
+    ["proc", "ementa", "tese"].forEach((k) => { api.$("jcfCk_" + k).checked = true; });
+    api.$("jcfCk_tese").onchange();
+    ok(api.$("btnJcfConfere").disabled === false, "C6a com os três vistos, 'confere' liga");
+    api.$("btnJcfConfere").onclick();
+    ok(api.jurQualidade(api.jurDe(j51.id)).nivel === "conferido" && /2 de 3/.test(api.$("jcfPos").textContent), "C7 'confere' dá o selo azul e passa ao próximo");
+    api.$("btnJcfDesfazer").onclick();
+    ok(!api.jurDe(j51.id).selo && /1 de 3/.test(api.$("jcfPos").textContent), "C8 desfazer tira o selo e volta ao julgado");
+    api.$("btnJcfPular").onclick();
+    /* corrigir aqui (o RE sem ementa e sem relator) */
+    api.$("jcfCampo_relator").value = "Min. Fulano";
+    api.$("jcfCampo_texto").value = "EMENTA: RECURSO EXTRAORDINÁRIO. Tese do RE e mais texto.";
+    api.$("btnJcfSalvarCorr").onclick();
+    const vRe2 = api.jcfVerificacoes(api.jurDe(re.id)).map((x) => x.k);
+    ok(api.jurDe(re.id).relator === "Min. Fulano" && vRe2.indexOf("sem_ementa") < 0 && vRe2.indexOf("sem_relator") < 0, "C9 corrigir aqui grava os campos e refaz as verificações: " + vRe2.join());
+    api.$("jcfMotivo").value = "a tese não está no acórdão";
+    api.$("btnJcfProblema").onclick();
+    const qRe = api.jurQualidade(api.jurDe(re.id), { lista: api.jurLista() });
+    ok(qRe.nivel === "problema" && qRe.motivos.some((m) => /tese não está no acórdão/.test(m.txt)), "C10 'problema' marca o julgado (vermelho na biblioteca) com o motivo");
+    api.$("btnJcfPular").onclick();
+    ok(/1 com problema · 2 pulado/.test(api.$("jcfCorpo").textContent) || /com problema/.test(api.$("jcfCorpo").textContent), "C11 o fim da fila resume: " + api.$("jcfCorpo").textContent.slice(0, 120));
+    api.$("dlgJcf").close();
+    /* na biblioteca: o botão da fila e, na leitura, as verificações */
+    api.jurBibAbrir();
+    ok(api.$("btnJurBibFila").hidden === false && /Conferir um a um \(\d+\)/.test(api.$("btnJurBibFila").textContent), "C12 a biblioteca oferece a fila: " + api.$("btnJurBibFila").textContent);
+    api.jurBibSelecionar(j51.id);
+    ok(/Verificações/.test(api.$("jurBibLeitor").textContent) && api.$("btnJurBibLtConferir"), "C13 a leitura mostra as verificações e 'conferir este'");
+    api.$("btnJurBibLtConferir").onclick();
+    ok(api.$("dlgJcf").open && /1 de 1/.test(api.$("jcfPos").textContent), "C13a 'conferir este' abre a fila só com ele");
+    ["jcf_tit", "jcf_bt", "jcf_bt_aj", "jcf_bt_este", "jcf_pos", "jcf_pos_fim", "jcf_vazia", "jcf_vazia_expl", "jcf_guardado", "jcf_verificacoes", "jcf_na_fonte", "jcf_sem_links",
+      "jcf_corrigir", "jcf_c_relator", "jcf_c_orgao", "jcf_c_data", "jcf_c_fonte_url", "jcf_c_ementa", "jcf_salvar_corr", "jcf_corr_nada", "jcf_corr_ok", "jcf_editar_tudo",
+      "jcf_editar_tudo_aj", "jcf_checklist", "jcf_ck_proc", "jcf_ck_ementa", "jcf_ck_tese", "jcf_motivo_ph", "jcf_confere", "jcf_confere_aj", "jcf_confere_falta",
+      "jcf_confere_sem_tese", "jcf_problema", "jcf_problema_aj", "jcf_problema_sem_motivo", "jcf_pular", "jcf_pular_aj", "jcf_voltar", "jcf_desfazer", "jcf_selo_fonte",
+      "jcf_fim_tit", "jcf_fim", "jcf_rever_pulados", "jcf_v_nada", "jcf_v_sem_ementa", "jcf_v_nao_ementa", "jcf_v_outra_classe", "jcf_v_tese_fora", "jcf_v_memoria",
+      "jcf_v_sem_fonte", "jcf_v_vig_ia", "jcf_v_certeza", "jcf_v_campos", "jcf_v_sem_relator", "jcf_v_sem_data", "jcf_v_sem_orgao", "jcf_l_stf_proc", "jcf_l_stf_juris",
+      "jcf_l_stj_juris", "jcf_l_stj_proc", "jcf_l_sua", "jur_q_m_pessoa_problema"].forEach((k2) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k2) && api.t(k2) !== k2, "C14 falta " + k2 + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   return falhas;
 }
 

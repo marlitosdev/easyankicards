@@ -254,6 +254,8 @@ function jurQualidade(j, opc) {
   if (ofItem && (ofItem.situacao === "cancelada" || ofItem.situacao === "superada") && j.situacao !== ofItem.situacao)
     mot.push({ k: "oficial_fora", txt: t("jur_q_m_oficial_fora", { s: t("jur_sit_" + ofItem.situacao) }) });
   if (jurRepetidosDe(j, L).length) mot.push({ k: "repetido", txt: t("jur_q_m_repetido", { n: jurRepetidosDe(j, L).map(jurCitNome).join("; ") }) });
+  /* (19.144.0) o problema marcado pela pessoa na fila "Conferir um a um" */
+  if (j.problema && j.problema.em) mot.push({ k: "pessoa_problema", txt: t("jur_q_m_pessoa_problema", { d: jurDataBr(j.problema.em), n: j.problema.nota || "" }) });
   if (mot.length) return { nivel: "problema", motivos: mot, oficial: of };
   /* selo */
   const dias = jurDiasDesde(j.selo && j.selo.em || j.conferidoEm, o.hoje);

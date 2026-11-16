@@ -3445,6 +3445,13 @@ function jurBibPintar() {
     $("btnJurBibConferir").disabled = !L.length;
   }
   ["btnJurBibAuditar", "btnJurBibAtual", "btnJurBibCorrigir"].forEach((id) => { if ($(id)) $(id).hidden = true; });
+  /* (19.144.0) a fila "Conferir um a um": os filtrados com algo a resolver */
+  if ($("btnJurBibFila") && typeof jcfFila === "function") {
+    const fila = jcfFila(L);
+    $("btnJurBibFila").hidden = !fila.length;
+    $("btnJurBibFila").textContent = t("jcf_bt", { n: fila.length });
+    $("btnJurBibFila").onclick = () => jcfAbrir(jcfFila(jurBibFiltrados()));
+  }
   const est = !!jurBib.estudo, atu = !!jurBib.atual;
   $("jurBibEstudo").hidden = !est;
   if ($("jurBibAtual")) $("jurBibAtual").hidden = !atu;
@@ -3641,9 +3648,24 @@ function jurBibPintarLeitor(L) {
   /* a fonte, e o link oficial quando o app sabe montar */
   const fonte = el("div", "");
   fonte.append(el("p", "jbb-lt-ementa", String(j.fonte || "").trim() || t("jbb_lt_sem_fonte")));
+  if (String(j.fonteUrl || "").trim()) { const a = el("a", "btn-min jur-oficial-lnk", "↗ " + t("jcf_l_sua")); a.href = String(j.fonteUrl).trim(); a.target = "_blank"; a.rel = "noopener noreferrer"; a.id = "jurBibLtFonteUrl"; fonte.append(a); }
   const lk = typeof jurLinkOficial === "function" ? jurLinkOficial(j) : null;
   if (lk) { const a = el("a", "btn-min jur-oficial-lnk", "↗ " + lk.nome); a.href = lk.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.id = "jurBibLtOficial"; fonte.append(a); }
   sec(t("jbb_lt_fonte"), fonte);
+  /* (19.144.0) as verificações deste julgado, e a fila só com ele */
+  if (typeof jcfVerificacoes === "function") {
+    const ver = jcfVerificacoes(j);
+    const box = el("div", "");
+    const ul = el("ul", "jcf-ver");
+    if (!ver.length) ul.append(el("li", "jcf-ok", t("jcf_v_nada")));
+    ver.forEach((x) => ul.append(el("li", "jcf-p" + x.peso, x.txt)));
+    box.append(ul);
+    const bc = el("button", "btn-min btn-min-ok", t("jcf_bt_este"));
+    bc.type = "button"; bc.id = "btnJurBibLtConferir";
+    bc.onclick = () => jcfAbrir([j.id]);
+    box.append(bc);
+    sec(t("jcf_verificacoes", { n: ver.length }), box);
+  }
   /* a qualidade: o porquê, e o que fazer */
   const q = jurQualidade(j, { lista: jurLista() });
   const qp = jurQualidadePainel(j, q);

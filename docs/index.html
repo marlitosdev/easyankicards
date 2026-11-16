@@ -5208,6 +5208,36 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .jbb-lt-vazio{font-size:var(--fs-3);color:var(--atencao)}
 .jbb-leitor .jur-qpainel{display:block}
 .jbb-leitor .jur-bib-tags,.jbb-leitor .jur-bib-tops{margin:0}
+/* (19.144.0) as verificações (na leitura e na fila) e a fila "Conferir um a um" */
+.jcf-ver{list-style:none;margin:0 0 var(--esp-2);padding:0;display:flex;flex-direction:column;gap:var(--esp-1)}
+.jcf-ver li{font-size:var(--fs-3);line-height:1.45;padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border-left:3px solid var(--borda);background:var(--campo)}
+.jcf-ver li.jcf-p3{border-left-color:var(--erro)}
+.jcf-ver li.jcf-p2{border-left-color:var(--atencao)}
+.jcf-ver li.jcf-p1{border-left-color:var(--sutil);color:var(--sutil)}
+.jcf-ver li.jcf-ok{border-left-color:var(--ok);color:var(--ok)}
+dialog.jcf-dlg[open]{display:flex;flex-direction:column;width:min(1200px,98vw);max-width:min(1200px,98vw);max-height:94vh;max-height:94dvh;overflow:hidden}
+dialog.jcf-dlg[open]>*{flex:0 0 auto}
+dialog.jcf-dlg[open]>.jcf-corpo{flex:1 1 auto;min-height:0;overflow:auto}
+.jcf-prog{width:100%;height:6px;margin:0 0 var(--esp-2)}
+.jcf-grade{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--esp-4)}
+.jcf-col{min-width:0}
+.jcf-rot{font-size:var(--fs-2);font-weight:var(--peso-f);text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin:var(--esp-3) 0 var(--esp-1)}
+.jcf-col>.jcf-rot:first-child{margin-top:0}
+.jcf-rot2{font-size:var(--fs-2);font-weight:var(--peso-f);color:var(--sutil);margin:var(--esp-2) 0 var(--esp-1)}
+.jcf-tit{font-size:var(--fs-5);font-weight:var(--peso-f);margin:var(--esp-1) 0}
+.jcf-dados{font-size:var(--fs-3);color:var(--sutil);margin:0}
+.jcf-ementa{max-height:40vh;overflow:auto}
+.jcf-links{display:flex;flex-wrap:wrap;gap:var(--esp-2)}
+.jcf-corrigir{margin:var(--esp-3) 0;border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
+.jcf-corrigir>summary{cursor:pointer;font-weight:var(--peso-m)}
+.jcf-corrigir .jbb-campo{margin:var(--esp-2) 0}
+.jcf-corrigir input,.jcf-corrigir textarea{width:100%;box-sizing:border-box;font-size:var(--fs-3);padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.jcf-check{display:flex;flex-direction:column;gap:var(--esp-1)}
+.jcf-motivo{width:100%;box-sizing:border-box;margin-top:var(--esp-2);font-size:var(--fs-3);padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.jcf-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;justify-content:space-between;border-top:1px solid var(--borda);padding-top:var(--esp-2)}
+.jcf-acoes-dir{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin-left:auto}
+.jcf-fim{text-align:center;padding:var(--esp-4)}
+@media (max-width:820px){.jcf-grade{grid-template-columns:minmax(0,1fr)}}
 /* tela média: com a leitura aberta, o painel de filtros recolhe (o botão "⚙ Filtros" continua à mão) */
 @media (max-width:1250px){
   #dlgJurBib.jbb-filtros-aberto.jbb-com-leitor .jbb-corpo{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
@@ -11159,6 +11189,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
       <button type="button" class="btn-min" id="btnJurBibAtual"></button>
       <button type="button" class="btn-min" id="btnJurBibCorrigir" data-i18n-title="jur_corrigir_btn_aj"></button>
+      <!-- (19.144.0) a fila dos que têm algo a resolver, do maior risco para o menor -->
+      <button type="button" class="btn-min btn-min-ok" id="btnJurBibFila" data-i18n-title="jcf_bt_aj" hidden></button>
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibConferir" data-i18n-title="jur_conf_btn_aj"></button>
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibAuditar" data-i18n-title="jur_aud_btn_aj" hidden></button>
     </div>
@@ -11848,6 +11880,26 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   </div>
   <p class="nota led-como" data-i18n="led_como"></p>
   <div id="ledCorpo"></div>
+</dialog>
+
+<!-- (19.144.0) CONFERIR JULGADOS UM A UM (juris-conferir.js) -->
+<dialog id="dlgJcf" class="ui-modal diag-modal jcf-dlg">
+  <div class="vka-cab">
+    <div><h3 data-i18n="jcf_tit"></h3><div class="nota" id="jcfPos"></div></div>
+    <button type="button" class="dlg-x" id="btnJcfX" data-i18n-title="help_close" aria-label="Fechar">✖</button>
+  </div>
+  <progress id="jcfProg" class="jcf-prog" max="100" value="0"></progress>
+  <div id="jcfCorpo" class="jcf-corpo"></div>
+  <p class="nota" id="jcfMsg" role="status"></p>
+  <div class="jcf-acoes">
+    <button type="button" class="btn-min" id="btnJcfDesfazer" data-i18n="jcf_desfazer" hidden></button>
+    <span class="jcf-acoes-dir">
+      <button type="button" class="btn-min" id="btnJcfAnt" data-i18n="jcf_voltar"></button>
+      <button type="button" class="btn-min" id="btnJcfPular" data-i18n="jcf_pular" data-i18n-title="jcf_pular_aj"></button>
+      <button type="button" class="btn-min btn-min-perigo" id="btnJcfProblema" data-i18n="jcf_problema" data-i18n-title="jcf_problema_aj"></button>
+      <button type="button" class="btn btn-verde" id="btnJcfConfere" data-i18n="jcf_confere"></button>
+    </span>
+  </div>
 </dialog>
 
 <!-- (v19.2.0) INCLUIR LEI EM 3 PASSOS (lei-nova.js) -->
@@ -13567,6 +13619,7 @@ window.__sqlPromise = initSqlJs({
 <script src="juris-ia.js"></script>
 <script src="ia-consumo.js"></script>
 <script src="juris-ui.js"></script>
+<script src="juris-conferir.js"></script>
 <script src="pastas.js"></script>
 <script src="pre-edital.js"></script>
 <script src="prompts-cartao.js"></script>
@@ -13622,6 +13675,7 @@ try { bkaIniciar().catch((e) => { try { reg("ERRO", "falha ao iniciar o backup a
 /* (19.130.0) duas abas do app abertas */
 try { abasIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar o aviso de abas: " + (e && e.message)); } catch (x) {} }
 /* (19.128.0) o retrato da abertura e a conferência de integridade */
+try { jcfIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar a conferência de julgados: " + (e && e.message)); } catch (x) {} }
 try { ledIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar as leis do edital: " + (e && e.message)); } catch (x) {} }
 try { intIniciar(); } catch (e) { console.error(e); try { reg("ERRO", "falha ao iniciar a conferência de integridade: " + (e && e.message)); } catch (x) {} }
 try { montarBarraModos(); } catch (e) { console.error(e);
