@@ -5750,6 +5750,25 @@ dialog.arm-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 .ae-sub-tit{margin-top:var(--esp-3)}
 .plog-sec-tit{font-size:var(--fs-3);margin:var(--esp-3) 0 var(--esp-2)}
 .plog-tab-cx{overflow-x:auto;max-width:100%}
+/* (19.153.0) COBERTURA: uma linha por disciplina, cinco colunas que levam às telas de detalhe */
+.ae-cov-linha{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(4,minmax(0,1fr)) 3.5em;gap:var(--esp-2);align-items:center;padding:6px 0;border-top:1px solid var(--borda);font-size:var(--fs-2)}
+.ae-cov-cab{border-top:0;color:var(--sutil);font-size:var(--fs-1);padding-top:0}
+.ae-cov-nome{display:flex;flex-direction:column;min-width:0}
+.ae-cov-nome b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:var(--peso-m)}
+.ae-cov-peso{color:var(--sutil);font-size:var(--fs-1)}
+.ae-cov-cel{appearance:none;background:transparent;border:0;padding:2px 0;color:inherit;font:inherit;text-align:left;display:flex;flex-direction:column;gap:3px;min-width:0}
+button.ae-cov-cel{cursor:pointer}
+button.ae-cov-cel:hover .ae-cov-num{color:var(--acao);text-decoration:underline}
+.ae-cov-num{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ae-cov-q{text-align:right;font-variant-numeric:tabular-nums}
+.ae-cov-tr{height:8px;overflow:hidden}
+.ae-seg.dom-verde,.ae-leg-q.dom-verde{background:var(--ok)}
+.ae-seg.dom-azul,.ae-leg-q.dom-azul{background:var(--info)}
+.ae-seg.dom-amarelo,.ae-leg-q.dom-amarelo{background:var(--atencao)}
+.ae-seg.dom-vermelho,.ae-leg-q.dom-vermelho{background:var(--erro)}
+.ae-seg.dom-cinza,.ae-leg-q.dom-cinza{background:color-mix(in srgb,var(--texto) 18%,var(--bg))}
+@media (max-width:640px){.ae-cov-linha{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:6px}.ae-cov-nome{grid-column:1/-1}
+  .ae-cov-cab{display:none}.ae-cov-q{text-align:left}.ae-cov-q::before{content:attr(data-rot)}}
 .plog-falha{margin:0 0 var(--esp-3)}
 /* (19.151.0) as orientações: o que fazer, com o número que justifica; a discursiva por edital */
 .ae-orient{display:flex;align-items:flex-start;gap:var(--esp-2);padding:var(--esp-2) 0 var(--esp-2) var(--esp-2);border-top:1px solid var(--borda);border-left:3px solid var(--borda)}
@@ -12304,6 +12323,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       data-i18n="plog_aba_tempo" data-i18n-title="plog_aba_tempo_aj"></button>
     <button class="plog-aba" id="btnPlogAbaSinais" data-plog-aba="sinais" role="tab"
       data-i18n="plog_aba_sinais" data-i18n-title="plog_aba_sinais_aj"></button>
+    <button class="plog-aba" id="btnPlogAbaCob" data-plog-aba="cobertura" role="tab"
+      data-i18n="plog_aba_cob" data-i18n-title="plog_aba_cob_aj"></button>
     <button class="plog-aba" id="btnPlogAbaPlano" data-plog-aba="plano" role="tab"
       data-i18n="plog_aba_plano" data-i18n-title="plog_aba_plano_aj"></button>
     <span class="plog-cab-dir">

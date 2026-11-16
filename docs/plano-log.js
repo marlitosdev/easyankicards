@@ -1149,6 +1149,12 @@ function plPintar() {
     plAbasPintar();
     return;
   }
+  /* (19.153.0) COBERTURA: domínio, resumos, cartões, leis e questões por disciplina — do edital em vista */
+  if (plAba === "cobertura") {
+    plRede(box, () => { if (typeof aePintarCobertura === "function") aePintarCobertura(box, d); });
+    plAbasPintar();
+    return;
+  }
   if (plAba === "sinais") {
     plRede(box, () => {
       if (typeof aePintarDesemp === "function") aePintarDesemp(box, d);
@@ -1221,7 +1227,7 @@ function plRegistroAbrir() {
 }
 
 /* as três abas principais, pelos ids (a busca por classe não enxerga a marcação estática no simulador dos testes) */
-const PL_ABAS_IDS = { btnPlogAbaGeral: "geral", btnPlogAbaTempo: "tempo", btnPlogAbaSinais: "sinais", btnPlogAbaPlano: "plano" };
+const PL_ABAS_IDS = { btnPlogAbaGeral: "geral", btnPlogAbaTempo: "tempo", btnPlogAbaSinais: "sinais", btnPlogAbaCob: "cobertura", btnPlogAbaPlano: "plano" };
 function plAbasBotoes() {
   return Object.keys(PL_ABAS_IDS).map((id) => document.getElementById(id)).filter(Boolean);
 }

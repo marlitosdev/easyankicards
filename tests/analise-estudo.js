@@ -221,6 +221,44 @@ async function testes() {
     ok(!!api.$("aeOrient") && !!api.$("aeOr_seguir") || !!api.$("aeOrient") && api.$("aeOrient").children.length > 1, "O8 a visão geral desenha as orientações");
   }
 
+  /* ================= 19.153.0: COBERTURA ================= */
+  {
+    const { api } = rodar();
+    const daqui = (d) => { const x = new Date(Date.now() + d * 86400000); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
+    const texto = ["# Cob | prova: " + daqui(90) + " | horas: 10", "@ A :: 5", "+ Tema um :: 5", "+ Tema dois :: 4", "@ B :: 3", "+ Tema três :: 3"].join("\n");
+    const e = { id: "cobx", nome: "Cob", texto };
+    const dom = { disciplinas: [
+      { nome: "A", pesoPct: 70, distribuicao: { verde: 50, azul: 10, amarelo: 20, vermelho: 0, cinza: 20 } },
+      { nome: "B", pesoPct: 30, distribuicao: { verde: 0, azul: 0, amarelo: 0, vermelho: 0, cinza: 100 } } ] };
+    const cov = { folhas: [
+      { disciplina: "A", pesoPct: 40, faixa: "ok", cartoes: 10 }, { disciplina: "A", pesoPct: 30, faixa: "vazio", cartoes: 0 },
+      { disciplina: "B", pesoPct: 30, faixa: "pouco", cartoes: 2 } ] };
+    const led = { disciplinas: [{ nome: "A", total: 10, lidos: 4, pct: 40 }], total: 10, lidos: 4, pct: 40, n: 1 };
+    const resumos = {};
+    resumos[api.matChave("A", "Tema um")] = { texto: "# Parte 1\nabc\n# Parte 2\ndef" };
+    const banco = [{ disciplina: "a", tentativas: [{}, {}] }];
+    const m = api.aeCoberturaModelo(e, { dom, cov, led, resumos, banco });
+    const A = m.lista[0], B = m.lista[1];
+    ok(A.nome === "A" && B.nome === "B" && A.pesoPct === 70, "C1a uma linha por disciplina, na ordem do peso");
+    ok(A.dom.verde === 50 && A.cartoes.pct === 57 && A.cartoes.n === 10 && B.cartoes.pct === 0, "C1b domínio e cartões no alvo pelo peso das folhas: " + JSON.stringify(A.cartoes));
+    ok(A.resumo.pct === 56 && A.resumo.n === 1 && A.resumo.lidoPct === 0 && B.resumo.pct === 0, "C1c resumo pelo peso dos tópicos (5 de 9): " + JSON.stringify(A.resumo));
+    ok(A.leis.pct === 40 && A.leis.lidos === 4 && B.leis === null && A.questoes === 2, "C1d leis lidas e questões (o nome casa sem caixa)");
+    ok(m.total.dominado === 42 && m.total.cartoes === 40 && m.total.resumo === 39 && m.total.leis === 40 && m.total.questoes === 2,
+      "C1e os totais, ponderados pelo peso da disciplina na prova: " + JSON.stringify(m.total));
+    /* na tela, com um edital de verdade */
+    api.matIniciar(); api.edIniciar();
+    const ee = api.edCriar("Cob tela", texto);
+    api.hubAbrirEdital(ee.id);
+    api.plIniciar();
+    api.plAbrir({ aba: "cobertura" });
+    ok(api.plAbaAtual() === "cobertura" && !!api.$("aeCobTab") && !!api.$("aeCob_0") && !!api.$("aeCob_1") && !api.$("aeCob_2") && /ativa/.test(api.$("btnPlogAbaCob").className),
+      "C2a a aba Cobertura desenha uma linha por disciplina do edital");
+    ok(!!api.$("aeCobDom_0") && !!api.$("aeCobCart_0") && !!api.$("aeCobLeis_0") && !!api.$("aeCobDom") && !!api.$("aeCobLeis"), "C2b cada coluna leva ao detalhe; os totais em cima");
+    api.$("aeCobDom_0").onclick();
+    ok(api.$("dlgDominio").open === true, "C2c tocar no domínio abre o Domínio daquela disciplina");
+    ok(/data-plog-aba="cobertura"/.test(html) && html.indexOf('id="btnPlogAbaCob"') < html.indexOf('id="btnPlogAbaPlano"'), "C2d a aba fica antes de 'Como o plano decide'");
+  }
+
   /* R1: o registro para relatar — botão no cabeçalho, a aba vista no registro, e a aba que falha diz onde está o erro */
   {
     const { api } = rodar();

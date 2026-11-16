@@ -934,7 +934,208 @@ function aePintarOrient(box, m, d) {
   return { lista, ds };
 }
 
+/* =====================================================================
+ * (19.153.0) A ABA "COBERTURA" — o quanto do edital já tem estudo, material e revisão, num lugar só
+ *
+ * Cada pergunta tinha a sua tela: o Domínio (quanto sei), a Cobertura de cartões (tenho cartão na proporção do peso),
+ * as Leis do edital (o que falta ler), a leitura dos resumos (seções lidas) e o banco de questões. Aqui elas viram
+ * COLUNAS de uma mesma tabela, uma linha por disciplina na ordem do peso, cada célula com a barra, o número e o atalho
+ * para a tela que detalha. Em cima, o total do edital, ponderado pelo peso de cada disciplina na prova.
+ *
+ * NADA É MEDIDO DE NOVO: domDoEdital (o mesmo mapa do Domínio), covDoEdital (o da Cobertura de cartões), ledModelo (o
+ * das Leis do edital), rlsSecoes/rlsResumo sobre o texto de cada resumo (a mesma conta do "lida / mudou") e as
+ * tentativas do banco de questões.
+ * ===================================================================== */
+const AE_DOM_NIVEIS = ["verde", "azul", "amarelo", "vermelho", "cinza"];
+let aeLeisPedidas = false;
+
+function aeCoberturaModelo(e, opc) {
+  const o = opc || {};
+  if (!e) return null;
+  const r = lerEdital(e.texto || "");
+  const ativas = (r.disciplinas || []).filter((d) => !d.inativa);
+  const linhas = {};
+  const pega = (nome) => linhas[aeChaveDisc(nome)];
+  ativas.forEach((d) => { linhas[aeChaveDisc(d.nome)] = { nome: d.nome, pesoPct: 0, dom: null, resumo: null, cartoes: null, leis: null, questoes: 0 }; });
+
+  /* o domínio: a distribuição por nível, já pelo peso dos tópicos (e o peso da disciplina na prova) */
+  let dom = o.dom;
+  if (dom === undefined) { try { dom = typeof domDoEdital === "function" ? domDoEdital(e) : null; } catch (err) { dom = null; } }
+  ((dom && dom.disciplinas) || []).forEach((D) => {
+    const L = pega(D.nome);
+    if (!L) return;
+    L.pesoPct = D.pesoPct || 0;
+    L.dom = Object.assign({}, D.distribuicao || {});
+  });
+
+  /* os cartões: a parte do peso de cada disciplina cujas folhas estão no alvo (ok ou excesso) */
+  let cov = o.cov;
+  if (cov === undefined) { try { cov = typeof covDoEdital === "function" ? covDoEdital(e, typeof cqLerBiblioteca === "function" ? cqLerBiblioteca() : []) : null; } catch (err) { cov = null; } }
+  const covD = {};
+  ((cov && cov.folhas) || []).forEach((f) => {
+    const k = aeChaveDisc(f.disciplina);
+    const c = covD[k] || (covD[k] = { peso: 0, ok: 0, cartoes: 0 });
+    c.peso += f.pesoPct || 0;
+    if (f.faixa === "ok" || f.faixa === "excesso") c.ok += f.pesoPct || 0;
+    c.cartoes += f.cartoes || 0;
+  });
+  Object.keys(covD).forEach((k) => {
+    const L = linhas[k];
+    if (L) L.cartoes = { pct: covD[k].peso ? Math.round((covD[k].ok / covD[k].peso) * 100) : 0, n: covD[k].cartoes };
+  });
+
+  /* os resumos: a parte do peso dos tópicos que TEM resumo, e quanto dele foi lido (seções marcadas) */
+  const res = o.resumos || (typeof matResumos !== "undefined" ? matResumos : {});
+  ativas.forEach((d) => {
+    const L = pega(d.nome);
+    let soma = 0, com = 0, lido = 0, nCom = 0;
+    (d.topicos || []).forEach((tp) => {
+      const w = Number(tp.peso) || 1;
+      soma += w;
+      let ch = "";
+      try { ch = typeof matChaveViva === "function" ? matChaveViva(d.nome, tp.nome) : matChave(d.nome, tp.nome); } catch (err) { ch = ""; }
+      const txt = ch && res[ch] && res[ch].texto ? String(res[ch].texto) : "";
+      if (!txt.trim()) return;
+      com += w; nCom++;
+      try {
+        const R = typeof rlsResumo === "function" ? rlsResumo(rlsSecoes(txt), typeof rlsMarcasDe === "function" ? rlsMarcasDe(ch) : {}) : null;
+        if (R && R.total) lido += w * (R.lidas / R.total);
+      } catch (err) {}
+    });
+    L.resumo = { pct: soma ? Math.round((com / soma) * 100) : 0, lidoPct: soma ? Math.round((lido / soma) * 100) : 0, n: nCom };
+  });
+
+  /* as leis do edital: os artigos cobrados já lidos (só quando a biblioteca de leis já foi lida do IndexedDB) */
+  let led = o.led;
+  if (led === undefined) {
+    let pronta = true;
+    try { pronta = typeof _leisCache === "undefined" || _leisCache !== null; } catch (err) { pronta = true; }
+    try { led = pronta && typeof ledModelo === "function" ? ledModelo(e.id) : null; } catch (err) { led = null; }
+  }
+  ((led && led.disciplinas) || []).forEach((D) => {
+    const L = pega(D.nome);
+    if (L && D.total) L.leis = { pct: D.pct, lidos: D.lidos, total: D.total };
+  });
+
+  /* as questões respondidas (todas, desde o começo) */
+  (o.banco || (typeof qsBanco !== "undefined" && qsBanco) || []).forEach((q) => {
+    const L = pega(q.disciplina);
+    if (L) L.questoes += (q.tentativas || []).length;
+  });
+
+  const lista = Object.keys(linhas).map((k) => linhas[k]).sort((a, b) => b.pesoPct - a.pesoPct);
+  /* o total do edital, pelo peso de cada disciplina na prova */
+  const somaP = lista.reduce((a, x) => a + (x.pesoPct || 0), 0) || 1;
+  const pond = (f) => {
+    const com = lista.filter((x) => f(x) != null);
+    const p = com.reduce((a, x) => a + (x.pesoPct || 0), 0);
+    return com.length && p ? Math.round(com.reduce((a, x) => a + f(x) * (x.pesoPct || 0), 0) / p) : null;
+  };
+  const total = {
+    dominado: pond((x) => (x.dom ? (x.dom.verde || 0) + (x.dom.azul || 0) : null)),
+    resumo: pond((x) => (x.resumo ? x.resumo.pct : null)),
+    lido: pond((x) => (x.resumo ? x.resumo.lidoPct : null)),
+    cartoes: pond((x) => (x.cartoes ? x.cartoes.pct : null)),
+    leis: led && led.total ? led.pct : null,
+    leisN: led ? led.n : 0,
+    questoes: lista.reduce((a, x) => a + x.questoes, 0),
+  };
+  return { edId: e.id, nome: e.nome || "", lista, total, somaP, ledPendente: led === null };
+}
+
+function aeBarrinha(pct, cls) {
+  const tr = aeEl("span", "ae-trilho ae-cov-tr");
+  const b = aeEl("span", "ae-seg " + (cls || "est"));
+  if (b.style) b.style.width = Math.max(0, Math.min(100, pct || 0)) + "%";
+  tr.append(b);
+  return tr;
+}
+function aeDomBarra(dist) {
+  const tr = aeEl("span", "ae-trilho ae-cov-tr ae-dom-tr");
+  AE_DOM_NIVEIS.forEach((n) => {
+    const v = (dist && dist[n]) || 0;
+    if (!v) return;
+    const s = aeEl("span", "ae-seg dom-" + n);
+    if (s.style) s.style.width = v + "%";
+    s.title = t("ae_c_dom_" + n) + ": " + Math.round(v) + "%";
+    tr.append(s);
+  });
+  return tr;
+}
+
+function aePintarCobertura(box, d) {
+  let e = null;
+  try { e = d && typeof editais !== "undefined" ? editais.filter((x) => x.id === d.editalId)[0] : null; } catch (err) { e = null; }
+  if (!e) { box.append(aeEl("div", "plog-vazio", t("plog_sem_edital"))); return null; }
+  const m = aeCoberturaModelo(e);
+  /* a biblioteca de leis ainda vindo do IndexedDB: a coluna fica "lendo…" e a aba se repinta quando ela chegar */
+  /* UMA vez por sessão: se a leitura terminar sem a biblioteca (aparelho sem IndexedDB), repintar pediria de novo, sem fim */
+  if (m.ledPendente && !aeLeisPedidas && typeof leisIdbMigrar === "function") {
+    aeLeisPedidas = true;
+    try { Promise.resolve(leisIdbMigrar()).then(() => { if (typeof plAba !== "undefined" && plAba === "cobertura" && typeof plPintar === "function") plPintar(); }); } catch (err) {}
+  }
+  const T = m.total;
+  const kpis = aeEl("div", "ae-kpis");
+  const kpi = (id, rot, v, sub, aj) => {
+    const c = aeEl("div", "ae-kpi"); c.id = id; if (aj) c.title = aj;
+    c.append(aeEl("div", "ae-kpi-rot", rot), aeEl("div", "ae-kpi-val", v == null ? "—" : v + "%"));
+    if (sub) c.append(aeEl("div", "ae-kpi-sub", sub));
+    kpis.append(c);
+  };
+  kpi("aeCobDom", t("ae_c_k_dom"), T.dominado, t("ae_c_k_dom_sub"), t("ae_c_k_dom_aj"));
+  kpi("aeCobRes", t("ae_c_k_res"), T.resumo, T.lido == null ? "" : t("ae_c_k_res_sub", { l: T.lido }), t("ae_c_k_res_aj"));
+  kpi("aeCobCart", t("ae_c_k_cart"), T.cartoes, t("ae_c_k_cart_sub"), t("ae_c_k_cart_aj"));
+  kpi("aeCobLeis", t("ae_c_k_leis"), T.leis, m.ledPendente ? t("ae_c_lendo") : t("ae_c_k_leis_sub", { n: T.leisN }), t("ae_c_k_leis_aj"));
+  box.append(kpis);
+
+  const c = aeCartao(t("ae_c_tit"), "aeCobTab");
+  const cab = aeEl("div", "ae-cov-linha ae-cov-cab");
+  [t("ae_c_disc"), t("ae_c_dom"), t("ae_c_res"), t("ae_c_cart"), t("ae_c_leis"), t("ae_c_q")].forEach((x) => cab.append(aeEl("span", "", x)));
+  c.append(cab);
+  const ir = (txt, fn, id) => {
+    const b = aeEl("button", "ae-cov-cel", "");
+    b.type = "button";
+    if (id) b.id = id;
+    b.onclick = fn;
+    return b;
+  };
+  m.lista.forEach((x, k) => {
+    const li = aeEl("div", "ae-cov-linha");
+    li.id = "aeCob_" + k;
+    const nm = aeEl("span", "ae-cov-nome");
+    nm.append(aeEl("b", "", x.nome), aeEl("span", "ae-cov-peso", t("ae_c_peso", { p: Math.round(x.pesoPct) })));
+    li.append(nm);
+    /* domínio */
+    const cd = ir("", () => { if (typeof domAbrir === "function") domAbrir(m.edId, x.nome); }, "aeCobDom_" + k);
+    const dom = x.dom || {};
+    cd.append(aeDomBarra(dom), aeEl("span", "ae-cov-num", x.dom ? t("ae_c_dom_val", { p: Math.round((dom.verde || 0) + (dom.azul || 0)) }) : "—"));
+    cd.title = t("ae_c_dom_aj", { d: x.nome });
+    /* resumos */
+    const cr = aeEl("span", "ae-cov-cel");
+    cr.append(aeBarrinha(x.resumo ? x.resumo.pct : 0), aeEl("span", "ae-cov-num", x.resumo ? t("ae_c_res_val", { p: x.resumo.pct, l: x.resumo.lidoPct }) : "—"));
+    cr.title = t("ae_c_res_aj", { n: x.resumo ? x.resumo.n : 0 });
+    /* cartões */
+    const cc = ir("", () => { if (typeof covAbrir === "function") covAbrir(m.edId, x.nome); }, "aeCobCart_" + k);
+    cc.append(aeBarrinha(x.cartoes ? x.cartoes.pct : 0), aeEl("span", "ae-cov-num", x.cartoes ? t("ae_c_cart_val", { p: x.cartoes.pct, n: x.cartoes.n }) : "—"));
+    cc.title = t("ae_c_cart_aj", { d: x.nome });
+    /* leis */
+    const cl = ir("", () => { if (typeof ledAbrir === "function") ledAbrir(m.edId, { disciplina: x.nome }); }, "aeCobLeis_" + k);
+    cl.append(aeBarrinha(x.leis ? x.leis.pct : 0), aeEl("span", "ae-cov-num", x.leis ? t("ae_c_leis_val", { p: x.leis.pct, l: x.leis.lidos, t: x.leis.total }) : (m.ledPendente ? t("ae_c_lendo") : "—")));
+    cl.title = x.leis ? t("ae_c_leis_aj", { d: x.nome }) : t("ae_c_leis_sem");
+    const cq = aeEl("span", "ae-cov-q", String(x.questoes));
+    cq.setAttribute("data-rot", t("ae_c_q") + ": ");
+    li.append(cd, cr, cc, cl, cq);
+    c.append(li);
+  });
+  const leg = aeEl("div", "ae-leg");
+  AE_DOM_NIVEIS.forEach((n) => { const s = aeEl("span", "ae-leg-it"); s.append(aeEl("span", "ae-leg-q dom-" + n), document.createTextNode(t("ae_c_dom_" + n))); leg.append(s); });
+  c.append(leg);
+  c.append(aeEl("p", "nota ae-fonte", t("ae_c_nota")));
+  box.append(c);
+  return m;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
+  module.exports = { aeCoberturaModelo, aePintarCobertura, aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
     aeTempoModelo, aeDesempModelo, aePintarTempo, aePintarDesemp, aeChaveDisc };
 }
