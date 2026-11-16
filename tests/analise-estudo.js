@@ -259,6 +259,54 @@ async function testes() {
     ok(/data-plog-aba="cobertura"/.test(html) && html.indexOf('id="btnPlogAbaCob"') < html.indexOf('id="btnPlogAbaPlano"'), "C2d a aba fica antes de 'Como o plano decide'");
   }
 
+  /* ================= 19.154.0: PEDIR ANÁLISE À IA ================= */
+  {
+    const { api, janela } = rodar();
+    const daqui = (d) => { const x = new Date(Date.now() + d * 86400000); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
+    api.matIniciar(); api.edIniciar();
+    const ee = api.edCriar("IA tela", ["# IA | prova: " + daqui(60) + " | horas: 10", "# discursiva | pontos: 30 | objetiva: 70 | linhas: 20-30 | disciplinas: A", "@ A :: 5", "+ Tema um :: 5", "@ B :: 3", "+ Tema três :: 3"].join("\n"));
+    api.hubAbrirEdital(ee.id);
+    const d = api.plContexto();
+    const rel = api.aeRelatorio({ d, periodo: "30" });
+    ok(/^PEDIDO: /.test(rel) && /PLANEJAMENTO.*EXECUCAO/.test(rel) && /proximas 2 semanas/.test(rel), "I1a o relatório começa pelo pedido: planejamento × execução e as próximas 2 semanas");
+    ok(/== VISAO GERAL ==/.test(rel) && /== TEMPO REAL/.test(rel) && /== DESEMPENHO/.test(rel) && /== COBERTURA DO EDITAL/.test(rel) && /== DISCURSIVA/.test(rel) && !/COMO O PLANO DECIDE/.test(rel),
+      "I1b as seções padrão (a conta do plano, longa, fica de fora)");
+    ok(/edital em vista: IA( tela)? \| prova: /.test(rel) && /periodo: ultimos 30 dias/.test(rel), "I1c o contexto: edital e período");
+    const rel2 = api.aeRelatorio({ d, periodo: "7", secoes: { geral: false, plano: true }, pergunta: "Largo Informática?" });
+    ok(!/== VISAO GERAL ==/.test(rel2) && /== COMO O PLANO DECIDE/.test(rel2) && /MINHA PERGUNTA: Largo Informática\?/.test(rel2) && /ultimos 7 dias/.test(rel2) && (rel2.match(/^PEDIDO:/gm) || []).length === 1,
+      "I1d escolher seções e período; a pergunta vai junto; o pedido aparece uma vez só");
+    /* a janela */
+    api.plIniciar();
+    api.plAbrir({ aba: "geral" });
+    api.$("btnPlogCopiar").onclick();
+    ok(api.$("dlgAeIa").open && api.t("plog_copiar") === "🤖 Pedir análise à IA", "I2a o botão do cabeçalho abre 'Pedir análise à IA'");
+    ok(["geral", "orient", "tempo", "desemp", "cob", "disc", "plano"].every((k) => !!api.$("chkAeIa_" + k)) && api.$("chkAeIa_plano").checked === false && api.$("chkAeIa_geral").checked === true,
+      "I2b as sete seções, com a conta do plano desmarcada");
+    ok(/^PEDIDO: /.test(api.$("aeIaPrevia").value) && /caracteres/.test(api.$("aeIaInfo").textContent), "I2c a prévia e o tamanho");
+    const chk = api.$("chkAeIa_tempo");
+    chk.checked = false; chk.onchange();
+    ok(api.aeIaSecoesLer().tempo === false && !/== TEMPO REAL/.test(api.$("aeIaPrevia").value), "I2d desmarcar uma seção tira do pedido e fica lembrado");
+    api.$("aeIaPergunta").value = "Vale largar B?";
+    api.$("aeIaPergunta").oninput();
+    const pv = api.$("aeIaPrevia").value;
+    ok(/\nMINHA PERGUNTA: Vale largar B\?\n\nANALISE DO ESTUDO/.test(pv) && (pv.match(/MINHA PERGUNTA/g) || []).length === 1, "I2g a pergunta entra logo depois do pedido, uma vez só (sem refazer as contas)");
+    api.$("btnAeIaCopiar").onclick();
+    ok(janela.__area === api.$("aeIaPrevia").value && /Pedido copiado/.test(api.$("aeIaMsg").textContent), "I2e copiar leva o pedido inteiro");
+    ok(api.$("btnAeIaGemini").hidden === true && api.$("aeIaSemChave").hidden === false, "I2f sem chave e sem autorização: só copiar, e o aviso de como ligar");
+    /* com a chave e a autorização: o Gemini responde na janela */
+    api.vzGuardarChave("AIzaTESTE123456"); api.aeIaLigar(true);
+    let corpo = null;
+    janela.fetch = async (url, op) => { corpo = JSON.parse(op.body); return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: "Diagnóstico: estude mais A." }] } }] }) }; };
+    api.aeIaAbrir();
+    ok(api.$("btnAeIaGemini").hidden === false, "I3a com a chave e a autorização, aparece 'Perguntar ao Gemini'");
+    await api.aeIaGemini();
+    ok(corpo && /^PEDIDO: /.test(corpo.contents[0].parts[0].text) && api.$("aeIaResp").hidden === false && /estude mais A/.test(api.$("aeIaResp").value) && api.$("btnAeIaRespCopiar").hidden === false,
+      "I3b o pedido vai ao Gemini e a resposta aparece, com 'copiar a resposta'");
+    ok((api.registroAtual() || []).some((e) => e.tipo === "ANALISE" && /Gemini direto/.test(e.msg)), "I3c a consulta fica no registro (sem o texto)");
+    ok(/id="chkVzAeIa"/.test(html), "I3d a autorização mora na tela da chave, como as outras");
+    api.vzGuardarChave(""); api.aeIaLigar(false);
+  }
+
   /* R1: o registro para relatar — botão no cabeçalho, a aba vista no registro, e a aba que falha diz onde está o erro */
   {
     const { api } = rodar();

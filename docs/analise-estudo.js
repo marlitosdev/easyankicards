@@ -1135,7 +1135,263 @@ function aePintarCobertura(box, d) {
   return m;
 }
 
+/* =====================================================================
+ * (19.154.0) PEDIR ANÁLISE À IA — o relatório da análise, por período e por seção
+ *
+ * "O objetivo é que o usuário consiga fazer análise centralizada de tudo e pedir opinião de uma IA ou analisar
+ * gráficos e chegar a suas próprias conclusões."
+ *
+ * O "Copiar relatório" levava só a conta do plano. Agora a janela "🤖 Pedir análise à IA" monta o pedido com o que a
+ * pessoa escolher — visão geral, orientações, tempo, desempenho, cobertura, discursiva e, se quiser, a conta do plano —
+ * no período da análise, com uma pergunta própria opcional. Dá para COPIAR (para qualquer IA) ou, com a chave do Gemini
+ * e a autorização desta tela ligada (⚙ Gemini, desligada por padrão), PERGUNTAR DIRETO: a resposta aparece na janela.
+ *
+ * O pedido diz à IA o que fazer com os dados e o que é estimativa; os números saem dos MESMOS modelos das abas.
+ * ===================================================================== */
+const AE_IA_SECOES = ["geral", "orient", "tempo", "desemp", "cob", "disc", "plano"];
+const AE_IA_PADRAO = { geral: true, orient: true, tempo: true, desemp: true, cob: true, disc: true, plano: false };
+const AE_IA_CH = "eac_ae_ia_secoes";
+const AE_IA_DIRETA = "eac_ae_ia_direta";   /* "1": o Gemini direto pode ser usado aqui (opção da tela da chave) */
+function aeIaLigada() { try { return localStorage.getItem(AE_IA_DIRETA) === "1"; } catch (e) { return false; } }
+function aeIaLigar(sim) { try { if (sim) localStorage.setItem(AE_IA_DIRETA, "1"); else localStorage.removeItem(AE_IA_DIRETA); } catch (e) {} return aeIaLigada(); }
+function aeIaPronta() { return aeIaLigada() && typeof jurIaPerguntar === "function" && typeof vzChaveApi === "function" && !!vzChaveApi(); }
+function aeIaSecoesLer() {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(AE_IA_CH) || "null"); } catch (e) { v = null; }
+  const out = {};
+  AE_IA_SECOES.forEach((k) => { out[k] = v && typeof v[k] === "boolean" ? v[k] : AE_IA_PADRAO[k]; });
+  return out;
+}
+function aeIaSecoesGravar(s) { try { localStorage.setItem(AE_IA_CH, JSON.stringify(s)); } catch (e) {} }
+
+/* O TEXTO. o: { d (plDados), periodo, secoes, pergunta, agora } */
+function aeRelatorio(o) {
+  const op = o || {};
+  const d = op.d || null;
+  const S = Object.assign({}, AE_IA_PADRAO, op.secoes || {});
+  const periodo = AE_PERIODOS.indexOf(String(op.periodo)) >= 0 ? String(op.periodo) : aePeriodoLer();
+  const base = { plano: d && d.plano, r: d && d.r, periodo, agora: op.agora };
+  const L = [];
+  const h = (min) => aeHorasTxt(min);
+  const pct = (x) => (x == null ? "?" : x + "%");
+  /* o pedido */
+  L.push("PEDIDO: Voce e um orientador de estudos para concursos. Abaixo estao os dados do meu app de estudos (horas registradas, acerto em questoes, cartoes, cobertura do edital e o plano). Com eles:");
+  L.push("1) diagnostique como estou estudando e se o tempo vai para o que mais vale na prova;");
+  L.push("2) aponte problemas no PLANEJAMENTO (o que o plano pede) e na EXECUCAO (o que eu de fato fiz), separando os dois;");
+  L.push("3) diga o que mudar nas proximas 2 semanas, de forma concreta (por disciplina, com horas), inclusive na discursiva;");
+  L.push("4) diga quais dados estao faltando ou sao fracos (poucas questoes, estimativas) antes de tirar conclusoes.");
+  L.push("Use os numeros daqui, sem inventar outros. Trate como SUPOSICAO o que estiver marcado como estimado. Responda em portugues, em topicos curtos.");
+  const perg = String(op.pergunta || "").trim();
+  if (perg) L.push("MINHA PERGUNTA: " + perg);
+  L.push("");
+  L.push("ANALISE DO ESTUDO — " + aeDiaDe(op.agora || aeRelogio()) + " | periodo: " + (periodo === "tudo" ? "tudo" : "ultimos " + periodo + " dias"));
+  if (d && d.plano) L.push("edital em vista: " + (d.nome || "?") + " | prova: " + (d.plano.prazo || "?") + " | fase: " + (d.plano.fase ? d.plano.fase.n : 1)
+    + " | fatia da prova: " + (d.plano.fatiaExata ? "exata (numeros do edital)" : "ESTIMADA (pesos 1-5)"));
+  else L.push("edital em vista: nenhum");
+  L.push("");
+
+  let m = null;
+  try { m = aeModelo(Object.assign({}, base)); } catch (e) { m = null; }
+  if (S.geral && m) {
+    L.push("== VISAO GERAL ==");
+    L.push("horas estudadas: " + h(m.horas.min) + " (estudo " + h(m.horas.estudo) + ", revisao " + h(m.horas.revisao) + ")"
+      + (m.horas.metaPeriodo ? " | previstas: " + h(m.horas.metaPeriodo) + " (" + (m.horas.fonteMeta === "meta" ? "meta propria" : "horas do plano") + ")" : " | sem meta")
+      + (m.horas.minAnt != null ? " | periodo anterior: " + h(m.horas.minAnt) : ""));
+    L.push("dias estudados: " + m.dias.estudados + " de " + m.dias.total + " | sequencia atual: " + m.dias.sequencia
+      + (m.dias.semEstudar != null ? " | dias desde o ultimo registro: " + m.dias.semEstudar : ""));
+    L.push("acerto em questoes: " + pct(m.acerto.pct) + " (" + m.acerto.certas + " de " + m.acerto.feitas + ")" + (m.acerto.pctAnt != null ? " | periodo anterior: " + pct(m.acerto.pctAnt) : ""));
+    L.push("cartoes: " + m.cartoes.hoje + " a revisar hoje (" + m.cartoes.atrasados + " de dias anteriores) | " + m.cartoes.venceSemana + " nos proximos 7 dias | " + m.cartoes.revisao + " em revisao, " + m.cartoes.aprendendo + " aprendendo");
+    L.push("horas por semana (13 semanas, estudo+revisao): " + m.semanas.map((s) => h(s.estudo + s.revisao)).join(", "));
+    if (m.alertas.length) { L.push("alertas do app:"); m.alertas.forEach((a) => L.push("- " + a.txt)); }
+    L.push("");
+  }
+  let T = null, D = null;
+  try { T = aeTempoModelo(Object.assign({}, base)); } catch (e) { T = null; }
+  try { D = aeDesempModelo(Object.assign({}, base)); } catch (e) { D = null; }
+  if (S.orient && m) {
+    let lista = [];
+    try {
+      const prazo = d && d.plano && d.plano.prazo;
+      const diasProva = prazo && /^\d{4}-\d{2}-\d{2}$/.test(prazo) ? aeDiasEntre(m.fim, prazo) : null;
+      lista = aeOrientacoes({ m, T, D, diasProva });
+    } catch (e) { lista = []; }
+    if (lista.length) {
+      L.push("== ORIENTACOES QUE O APP JA DEU (regras simples) ==");
+      lista.forEach((x) => L.push("- " + x.tit + ": " + x.txt));
+      L.push("");
+    }
+  }
+  if (S.tempo && T) {
+    L.push("== TEMPO REAL (diario) — disciplina | tempo | % do tempo | % da prova | desvio ==");
+    T.discs.forEach((x) => L.push(x.nome + " | " + h(x.min) + " (estudo " + h(x.est) + ", revisao " + h(x.rev) + ") | " + pct(x.real) + " | " + pct(x.prova) + " | " + (x.desvio == null ? "-" : (x.desvio > 0 ? "+" : "") + x.desvio + "pp")));
+    if (T.formas.length) L.push("formas de estudo: " + T.formas.map((f) => f.forma + " " + h(f.min) + (f.boa + f.media + f.ruim ? " (rendeu bem " + Math.round((f.boa / (f.boa + f.media + f.ruim)) * 100) + "%)" : "")).join("; "));
+    L.push("media por dia da semana (seg..dom): " + T.diaSemana.map((x) => h(x.media)).join(", "));
+    L.push("");
+  }
+  if (S.desemp && D) {
+    L.push("== DESEMPENHO — disciplina | acerto no periodo | periodo anterior | questoes | acerto por semana (13 semanas, - = sem questao) ==");
+    D.discs.forEach((x) => L.push(x.nome + " | " + pct(x.pct) + " | " + pct(x.pctAnt) + " | " + x.feitas + " | " + x.sem.map((s) => (s.pct == null ? "-" : s.pct)).join(",")));
+    L.push("chute x certeza (banco): certeza " + pct(D.chute.sem.pct) + " em " + D.chute.sem.f + " | chute " + pct(D.chute.com.pct) + " em " + D.chute.com.f);
+    const C = D.cartoes;
+    if (C.total) {
+      const prox7 = C.previsao.slice(0, 7).reduce((a, x) => a + x.n, 0), prox30 = C.previsao.reduce((a, x) => a + x.n, 0);
+      L.push("cartoes: " + C.total + " na agenda | vencem hoje (com atrasados) " + C.previsao[0].n + ", em 7 dias " + prox7 + ", em 30 dias " + prox30
+        + (C.respostas ? " | respostas: de novo " + Math.round((C.notas[0] / C.respostas) * 100) + "%, dificil " + Math.round((C.notas[1] / C.respostas) * 100) + "%, bom " + Math.round((C.notas[2] / C.respostas) * 100) + "%, facil " + Math.round((C.notas[3] / C.respostas) * 100) + "%" : "")
+        + (C.dificeis ? " | esquecidos " + C.limiar + "+ vezes: " + C.dificeis : ""));
+    }
+    L.push("");
+  }
+  if (S.cob && d) {
+    let cm = null;
+    try {
+      const e = typeof editais !== "undefined" ? editais.filter((x) => x.id === d.editalId)[0] : null;
+      cm = e ? aeCoberturaModelo(e) : null;
+    } catch (err) { cm = null; }
+    if (cm) {
+      L.push("== COBERTURA DO EDITAL — disciplina | % da prova | dominio verde/azul | com resumo (lido) | cartoes no alvo | leis lidas | questoes ==");
+      cm.lista.forEach((x) => L.push(x.nome + " | " + Math.round(x.pesoPct) + "% | " + (x.dom ? Math.round((x.dom.verde || 0) + (x.dom.azul || 0)) + "%" : "-")
+        + " | " + (x.resumo ? x.resumo.pct + "% (" + x.resumo.lidoPct + "%)" : "-") + " | " + (x.cartoes ? x.cartoes.pct + "%" : "-")
+        + " | " + (x.leis ? x.leis.pct + "% (" + x.leis.lidos + "/" + x.leis.total + ")" : "-") + " | " + x.questoes));
+      L.push("totais (pelo peso): dominio " + pct(cm.total.dominado) + " | com resumo " + pct(cm.total.resumo) + " | cartoes no alvo " + pct(cm.total.cartoes) + " | leis lidas " + pct(cm.total.leis));
+      L.push("");
+    }
+  }
+  if (S.disc) {
+    let ds = [];
+    try { ds = aeDiscursivasInfo(d && d.plano); } catch (e) { ds = [];
+    }
+    if (ds.length) {
+      L.push("== DISCURSIVA (por edital) ==");
+      ds.forEach((x) => {
+        const res = x.res || {};
+        L.push(x.nome + " | " + x.est.nome + (x.est.dias != null ? " | faltam " + x.est.dias + " dias" : "") + " | meta " + x.est.meta + " redacao(oes)/semana, feitas nesta semana " + x.feitas
+          + " | redacoes registradas " + (res.n || 0) + (res.media5 != null ? ", media das ultimas " + res.media5 + "%" : "") + (res.minPct != null ? ", minimo " + res.minPct + "%" : "")
+          + (x.tema && x.tema.tema ? " | proximo tema: " + x.tema.tema : ""));
+      });
+      L.push("");
+    }
+  }
+  if (S.plano && d && d.plano) {
+    try {
+      const diario = (typeof edDiario !== "undefined" && edDiario) || [];
+      const banco = (typeof qsBanco !== "undefined" && qsBanco) || [];
+      const pr = plRelatorio(d.plano, d.r, diario, banco, d.cfg);
+      /* sem o pedido do relatório do plano: o pedido é o de cima */
+      const corpo = String(pr || "").split("\n");
+      const ini = corpo.findIndex((l) => /^RAIO-X DA RECOMENDACAO/.test(l));
+      L.push("== COMO O PLANO DECIDE (a conta da agenda) ==");
+      (ini >= 0 ? corpo.slice(ini + 1) : corpo).forEach((l) => L.push(l));
+      L.push("");
+    } catch (e) {}
+  }
+  return L.join("\n");
+}
+
+/* ---------------- a janela ---------------- */
+let aeIaResposta = "";
+/* o relatório leva ~2 s para montar (o Domínio e a Cobertura são as contas pesadas): ele é montado UMA vez por escolha
+ * de seções e período, e a pergunta só é encaixada — digitar não refaz a conta a cada letra */
+let aeIaCache = { k: "", txt: "" };
+function aeIaTexto() {
+  const s = aeIaSecoesLer();
+  const per = aePeriodoLer();
+  const k = per + "|" + JSON.stringify(s);
+  if (aeIaCache.k !== k) aeIaCache = { k, txt: aeRelatorio({ d: typeof plDados !== "undefined" ? plDados : null, periodo: per, secoes: s, pergunta: "" }) };
+  const perg = String((($("aeIaPergunta") || {}).value) || "").trim();
+  if (!perg) return aeIaCache.txt;
+  const NL = String.fromCharCode(10);
+  const i = aeIaCache.txt.indexOf(NL + NL);
+  return i < 0 ? aeIaCache.txt + NL + "MINHA PERGUNTA: " + perg : aeIaCache.txt.slice(0, i) + NL + "MINHA PERGUNTA: " + perg + aeIaCache.txt.slice(i);
+}
+function aeIaPintar() {
+  const box = $("aeIaSecoes");
+  if (!box) return;
+  const s = aeIaSecoesLer();
+  box.innerHTML = "";
+  AE_IA_SECOES.forEach((k) => {
+    const lb = document.createElement("label");
+    lb.className = "diag-op ae-ia-sec";
+    const ck = document.createElement("input");
+    ck.type = "checkbox"; ck.id = "chkAeIa_" + k; ck.checked = !!s[k];
+    ck.onchange = () => { const v = aeIaSecoesLer(); v[k] = !!ck.checked; aeIaSecoesGravar(v); aeIaAtualizar(); };
+    const sp = document.createElement("span");
+    sp.textContent = t("ae_ia_s_" + k);
+    lb.append(ck, sp);
+    box.append(lb);
+  });
+  aeIaAtualizar();
+}
+function aeIaAtualizar() {
+  const txt = aeIaTexto();
+  if ($("aeIaPrevia")) $("aeIaPrevia").value = txt;
+  const per = aePeriodoLer();
+  if ($("aeIaInfo")) $("aeIaInfo").textContent = t("ae_ia_info", { p: t("ae_per_" + per), n: txt.length.toLocaleString() });
+  const pronta = aeIaPronta();
+  if ($("btnAeIaGemini")) $("btnAeIaGemini").hidden = !pronta;
+  if ($("aeIaSemChave")) $("aeIaSemChave").hidden = pronta;
+  return txt;
+}
+function aeIaAbrir() {
+  if (!$("dlgAeIa")) return false;
+  aeIaResposta = "";
+  aeIaCache = { k: "", txt: "" };   /* os dados podem ter mudado desde a última abertura */
+  if ($("aeIaResp")) { $("aeIaResp").value = ""; $("aeIaResp").hidden = true; }
+  if ($("btnAeIaRespCopiar")) $("btnAeIaRespCopiar").hidden = true;
+  if ($("aeIaMsg")) $("aeIaMsg").textContent = "";
+  aeIaPintar();
+  if (typeof abrirModal === "function") abrirModal("dlgAeIa");
+  try { reg("ANALISE", "pedir análise à IA: janela aberta", "período " + aePeriodoLer()); } catch (e) {}
+  return true;
+}
+function aeCopiarTexto(txt, aviso) {
+  let ok = false;
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(String(txt)); ok = !!p; if (p && p.catch) p.catch(() => {}); } catch (e) { ok = false; }
+  if (!ok) { try { const ta = $("aeIaPrevia"); if (ta) { ta.closest && ta.closest("details") && (ta.closest("details").open = true); ta.focus(); ta.select(); } } catch (e) {} }
+  if ($("aeIaMsg")) $("aeIaMsg").textContent = ok ? t(aviso || "ae_ia_copiado") : t("ae_ia_copie_mao");
+  return ok;
+}
+function aeIaCopiar() {
+  const txt = aeIaAtualizar();
+  try { reg("ANALISE", "pedir análise à IA: pedido copiado", txt.length + " caracteres"); } catch (e) {}
+  return aeCopiarTexto(txt, "ae_ia_copiado");
+}
+async function aeIaGemini() {
+  if (!aeIaPronta()) return null;
+  const pedido = aeIaAtualizar();
+  if ($("btnAeIaGemini")) $("btnAeIaGemini").disabled = true;
+  if ($("aeIaMsg")) $("aeIaMsg").textContent = t("ae_ia_esperando");
+  try { reg("ANALISE", "pedir análise à IA: Gemini direto", pedido.length + " caracteres"); } catch (e) {}
+  try {
+    const r = await jurIaPerguntar(pedido, { modulo: "ANALISE", tempo: 180000 });
+    aeIaResposta = String(r.texto || "");
+    if ($("aeIaResp")) { $("aeIaResp").value = aeIaResposta; $("aeIaResp").hidden = false; }
+    if ($("btnAeIaRespCopiar")) $("btnAeIaRespCopiar").hidden = false;
+    if ($("aeIaMsg")) $("aeIaMsg").textContent = t("ae_ia_respondeu", { m: r.modelo || "Gemini" });
+    return r;
+  } catch (e) {
+    const cod = (e && e.codigo) || "rede";
+    if ($("aeIaMsg")) $("aeIaMsg").textContent = t("jur_ia_erro_" + cod) + (e && e.detalhe && cod !== "cancelado" ? " (" + e.detalhe + ")" : "") + " " + t("ae_ia_copiar_ainda");
+    try { reg("ANALISE", "pedir análise à IA: Gemini falhou", cod); } catch (x) {}
+    return null;
+  } finally {
+    if ($("btnAeIaGemini")) $("btnAeIaGemini").disabled = false;
+  }
+}
+function aeIaIniciar() {
+  if (typeof document === "undefined" || !$("dlgAeIa")) return;
+  const liga = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+  liga("btnAeIaCopiar", aeIaCopiar);
+  liga("btnAeIaGemini", aeIaGemini);
+  liga("btnAeIaFechar", () => $("dlgAeIa").close());
+  liga("btnAeIaRespCopiar", () => aeCopiarTexto(aeIaResposta, "ae_ia_resp_copiada"));
+  liga("btnAeIaChave", () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); });
+  let tm = null;
+  if ($("aeIaPergunta")) $("aeIaPergunta").oninput = () => { clearTimeout(tm); tm = setTimeout(aeIaAtualizar, 300); };
+}
+
+if (typeof document !== "undefined") { try { aeIaIniciar(); } catch (e) {} }
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { aeCoberturaModelo, aePintarCobertura, aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
+  module.exports = { aeRelatorio, aeIaAbrir, aeIaCopiar, aeIaGemini, aeIaLigar, aeIaLigada, aeIaPronta, aeIaSecoesLer, aeCoberturaModelo, aePintarCobertura, aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
     aeTempoModelo, aeDesempModelo, aePintarTempo, aePintarDesemp, aeChaveDisc };
 }

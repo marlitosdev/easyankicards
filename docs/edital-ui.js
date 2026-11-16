@@ -6651,6 +6651,7 @@ function vzAbrirChave(aba) {
   if ($("chkVzPrepIa")) $("chkVzPrepIa").checked = typeof prepIaLigada === "function" && prepIaLigada();
   /* (19.139.0) e nas "Leis do edital": conferir a lista de leis, também desligada por padrão */
   if ($("chkVzLedIa")) $("chkVzLedIa").checked = typeof ledIaLigada === "function" && ledIaLigada();
+  if ($("chkVzAeIa")) $("chkVzAeIa").checked = typeof aeIaLigada === "function" && aeIaLigada();
   /* (v18.99.0) as abas: chave · consumo · faturas (o selo do cabeçalho e a jurisprudência abrem no consumo) */
   if (typeof iacAba === "function") iacAba(aba === "consumo" || aba === "faturas" ? aba : "chave");
   abrirModal("dlgVzChave");
@@ -7972,6 +7973,12 @@ function vkIniciarTela() {
       const depoisL = ledIaLigar(!!$("chkVzLedIa").checked);
       if (antesL !== depoisL) reg("LEI", depoisL ? "Gemini direto nas leis do edital: LIGADO pela pessoa" : "Gemini direto nas leis do edital: desligado");
       try { if ($("dlgLeisEd") && $("dlgLeisEd").open && typeof ledPintar === "function") ledPintar(); } catch (e) {}
+    }
+    /* (19.154.0) a chave na Análise do estudo: perguntar direto ao Gemini sobre o relatório da análise */
+    if ($("chkVzAeIa") && typeof aeIaLigar === "function") {
+      const antesA = aeIaLigada();
+      const depoisA = aeIaLigar(!!$("chkVzAeIa").checked);
+      if (antesA !== depoisA) reg("ANALISE", depoisA ? "Gemini direto na análise do estudo: LIGADO pela pessoa" : "Gemini direto na análise do estudo: desligado");
     }
     $("dlgVzChave").close();
     vzPintarChave();

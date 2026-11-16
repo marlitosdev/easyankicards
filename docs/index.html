@@ -5770,6 +5770,15 @@ button.ae-cov-cel:hover .ae-cov-num{color:var(--acao);text-decoration:underline}
 @media (max-width:640px){.ae-cov-linha{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:6px}.ae-cov-nome{grid-column:1/-1}
   .ae-cov-cab{display:none}.ae-cov-q{text-align:left}.ae-cov-q::before{content:attr(data-rot)}}
 .plog-falha{margin:0 0 var(--esp-3)}
+/* (19.154.0) a janela "Pedir análise à IA" */
+dialog.ae-ia-dlg{max-width:min(720px,96vw);width:min(720px,96vw)}
+.ae-ia-rot{display:block;font-size:var(--fs-2);color:var(--sutil);margin:var(--esp-2) 0 var(--esp-1)}
+.ae-ia-secoes{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-3)}
+.ae-ia-dlg textarea{width:100%;box-sizing:border-box}
+.ae-ia-dlg #aeIaPergunta{height:4.6em;min-height:0;resize:vertical}
+.ae-ia-dlg #aeIaPrevia,.ae-ia-dlg #aeIaResp{height:16em;min-height:0;resize:vertical}
+.ae-ia-ver{margin:var(--esp-1) 0}
+.ae-ia-msg:empty{display:none}
 /* (19.151.0) as orientações: o que fazer, com o número que justifica; a discursiva por edital */
 .ae-orient{display:flex;align-items:flex-start;gap:var(--esp-2);padding:var(--esp-2) 0 var(--esp-2) var(--esp-2);border-top:1px solid var(--borda);border-left:3px solid var(--borda)}
 .ae-cartao-tit + .ae-orient{border-top:0}
@@ -9852,6 +9861,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <!-- (19.139.0) a chave nas "Leis do edital": conferir a lista de leis do edital -->
     <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzLedIa"> <span data-i18n="led_ia_optin"></span></label>
     <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="led_ia_optin_aj"></p></details>
+    <!-- (19.154.0) a chave na Análise do estudo: perguntar direto sobre o relatório -->
+    <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzAeIa"> <span data-i18n="ae_ia_optin"></span></label>
+    <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="ae_ia_optin_aj"></p></details>
     <p class="nota vz-uso-salvar" data-i18n="vz_bloco_uso_salvar"></p>
   </section>
   <section class="vz-bloco" aria-labelledby="vzBlocoLinks">
@@ -12328,11 +12340,33 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="plog-aba" id="btnPlogAbaPlano" data-plog-aba="plano" role="tab"
       data-i18n="plog_aba_plano" data-i18n-title="plog_aba_plano_aj"></button>
     <span class="plog-cab-dir">
-      <button class="btn-min" id="btnPlogCopiar" data-i18n="plog_copiar"
-        title="Copia o relatorio inteiro em texto, para colar numa conversa."></button>
+      <button class="btn-min" id="btnPlogCopiar" data-i18n="plog_copiar" data-i18n-title="plog_copiar_aj"></button>
     </span>
   </div>
   <div class="plog-corpo" id="plogCorpo"></div>
+</dialog>
+
+<!-- (19.154.0) PEDIR ANÁLISE À IA: as seções e o período da análise, uma pergunta própria, a prévia; copiar ou Gemini -->
+<dialog id="dlgAeIa" class="ui-modal ae-ia-dlg">
+  <h3 data-i18n="ae_ia_tit"></h3>
+  <p class="nota" data-i18n="ae_ia_ajuda"></p>
+  <div class="ae-ia-rot" data-i18n="ae_ia_secoes_rot"></div>
+  <div class="ae-ia-secoes" id="aeIaSecoes"></div>
+  <label class="ae-ia-rot" for="aeIaPergunta" data-i18n="ae_ia_pergunta_rot"></label>
+  <textarea id="aeIaPergunta" rows="2" maxlength="600" data-i18n-placeholder="ae_ia_pergunta_ph"></textarea>
+  <p class="nota" id="aeIaInfo"></p>
+  <details class="ae-ia-ver"><summary data-i18n="ae_ia_ver"></summary>
+    <textarea id="aeIaPrevia" rows="10" readonly></textarea>
+  </details>
+  <p class="nota" id="aeIaSemChave"><span data-i18n="ae_ia_sem_chave"></span> <button type="button" class="btn-min" id="btnAeIaChave" data-i18n="ae_ia_chave_bt"></button></p>
+  <p class="nota ae-ia-msg" id="aeIaMsg" role="status"></p>
+  <textarea id="aeIaResp" rows="12" readonly hidden></textarea>
+  <div class="dlg-rodape">
+    <button class="btn btn-verde" id="btnAeIaCopiar" data-i18n="ae_ia_copiar"></button>
+    <button class="btn btn-azul" id="btnAeIaGemini" data-i18n="ae_ia_gemini" hidden></button>
+    <button class="btn btn-cinza" id="btnAeIaRespCopiar" data-i18n="ae_ia_resp_copiar" hidden></button>
+    <button class="btn btn-cinza" id="btnAeIaFechar" data-i18n="help_close"></button>
+  </div>
 </dialog>
 
 <!-- (19.149.0) o armazenamento, aberto por ⚙ Configurações (era a aba "Armazenamento" do Raio-X) -->

@@ -1415,7 +1415,8 @@ function plIniciar() {
     if (typeof fecharModal === "function") fecharModal("dlgPlanoLog");
     else { const d = document.getElementById("dlgPlanoLog"); if (d) d.close(); }
   });
-  liga("btnPlogCopiar", plCopiar);
+  /* (19.154.0) o botão do cabeçalho abre "Pedir análise à IA" (seções, período, pergunta; copiar ou Gemini) */
+  liga("btnPlogCopiar", () => (typeof aeIaAbrir === "function" ? aeIaAbrir() : plCopiar()));
   liga("btnPlogTela", plTelaAlternar);
   liga("btnCfgArmazem", plArmazemAbrir);
   liga("btnPlogRegistro", plRegistroAbrir);
