@@ -271,8 +271,12 @@ function hubPintarAgenda() {
     const s = edSituacao(e);
     const r = lerEdital(e.texto || "");
     const cfg = r.cfg || {};
+    /* (19.152.0) A DISCURSIVA RESERVA O SEU TEMPO ANTES: a semana dela (calendário próprio, discursiva-agenda.js) sai das
+     * horas do plano das objetivas — às claras, na faixa e no medidor. Sem isso a agenda prometeria horas que não existem. */
+    const reservaDisc = typeof dagReservaMin === "function" ? dagReservaMin(e) : 0;
+    const horasBase = minUsado ? minUsado / 60 : (cfg.horas || 10);
     const plano = montarPlano(r, {
-      horas: minUsado ? minUsado / 60 : (cfg.horas || 10), prova: s.prova, feitos: e.progresso || {},
+      horas: Math.max(0.5, horasBase - reservaDisc / 60), prova: s.prova, feitos: e.progresso || {},
       modos: hubModosLer(),
     });
     /* o edital de prova mais próxima é o dos cenários do aviso e do pedido à IA */
@@ -404,7 +408,9 @@ function hubPintarAgenda() {
   /* (19.88.0) A DISCURSIVA NA AGENDA, PELO PAINEL: a semana conta TEMAS (gerados com a IA ou escritos), cada disciplina da
    * discursiva vira uma bolinha na cor do Painel, a linha diz o passo de agora e há um atalho para "o que falta". O botão
    * "feito esta semana" saiu daqui (continua no histórico de escrita): o que é feito no app conta sozinho. */
-  discs.forEach((q) => {
+  /* (19.152.0) A DISCURSIVA SAIU DOS AVISOS: é uma faixa da semana (dagPintar, logo abaixo dos dias), com as etapas, o
+   * tempo reservado e as mesmas bolinhas, passo e atalhos que moravam aqui. O bloco antigo fica desligado. */
+  if (false) discs.forEach((q) => {
     const ln = document.createElement("div");
     const dd = q.d;
     let P = null, passo = null, est = null;
@@ -514,7 +520,7 @@ function hubPintarAgenda() {
   const avisos = [];
   /* (19.88.0) o chip conta temas e pendências; vermelho (alerta) com disciplina sem tema a 30 dias ou menos da prova, e
    * abre sozinho UMA vez quando aparece disciplina sem tema nova (a mesma regra da conferência) */
-  if (discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc2", { f: discF, m: discM }) + (discPend ? " · " + t("hub_av_disc_pend", { n: discPend }) : ""),
+  if (false && discs.length) avisos.push({ id: "disc", txt: t("hub_av_disc2", { f: discF, m: discM }) + (discPend ? " · " + t("hub_av_disc_pend", { n: discPend }) : ""),
     cls: discUrg ? "alerta" : (discF >= discM && !discPend ? "ok" : ""), p: pDisc, sig: discUrg ? String(discVerm) : "" });
   if (hubRitmoAvisar || minUsado) {
     const usando = !!minUsado;
@@ -582,6 +588,15 @@ function hubPintarAgenda() {
    * diz quanto tempo levou. */
   const planejadoMin = linhas.reduce((a2, i) => a2 + edMinSemana(i), 0);
   const feitoMin = minutosDaSemana();
+  /* (19.152.0) as semanas da discursiva, da prova escrita mais próxima à mais distante */
+  let faixasDisc = [];
+  try {
+    if (typeof dagSemana === "function") {
+      faixasDisc = discs.map((q) => dagSemana(q.e, q.plano)).filter(Boolean)
+        .sort((a, b) => (a.sit.dias == null ? 1e6 : a.sit.dias) - (b.sit.dias == null ? 1e6 : b.sit.dias));
+    }
+  } catch (err) { faixasDisc = []; }
+  const reservaDiscMin = faixasDisc.reduce((a2, S) => a2 + S.reservaMin, 0);
 
   /* HORA DISPENSADA NÃO É HORA ESTUDADA NEM HORA PERDIDA.
    *
@@ -616,7 +631,8 @@ function hubPintarAgenda() {
   rot.textContent = t("hub_medidor", {
     f: horasTexto(feitoMin), p: horasTexto(planejadoMin), pct,
     falta: horasTexto(Math.max(0, planejadoMin - feitoMin)),
-  }) + (dispMin ? " · " + t("hub_medidor_disp", { h: horasTexto(dispMin) }) : "");
+  }) + (dispMin ? " · " + t("hub_medidor_disp", { h: horasTexto(dispMin) }) : "")
+    + (reservaDiscMin ? " · " + t("hub_medidor_disc", { h: horasTexto(reservaDiscMin) }) : "");
   med.append(barra, rot);
   med.title = t("hub_medidor_ajuda");
   cx.append(med);
@@ -624,6 +640,9 @@ function hubPintarAgenda() {
   const celsSemana = document.createElement("div");
   celsSemana.className = "ed-ag-semana";
   cx.append(celsSemana);
+  /* (19.152.0) A DISCURSIVA DA SEMANA, uma faixa por edital, entre os dias e a lista por peso: o caminho dela fica à
+   * vista sem entrar no rodízio das disciplinas */
+  faixasDisc.forEach((S, k) => { try { cx.append(dagPintar(S, hubPintarAgenda, dagAberta(S.id, k === 0))); } catch (err) {} });
 
   /* Agendar é o que transforma uma lista de tópicos em agenda: sem esta
    * chamada cada linha vem sem dia nem horário sugerido — foi o que a

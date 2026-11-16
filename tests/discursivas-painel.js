@@ -162,9 +162,11 @@ async function testes() {
     const e = api.edCriar("Agenda D", texto(25));
     api.hubPintarAgenda();
     const topo = api.$("edAgendaTopo");
-    const chip = achar(topo, (x) => x.id === "hubAviso_disc")[0];
-    ok(chip && /0 de \d+ tema\(s\) esta semana · 3 disciplina\(s\) pedem temas/.test(chip.textContent) && cls(chip, "alerta"),
-      "PG1 o chip conta temas e pendências, em alerta (disciplina sem tema a 25 dias): " + (chip && chip.className + " / " + chip.textContent));
+    /* (19.152.0) a discursiva é uma faixa da semana (não mais um chip de aviso): conta redações, e as etapas começam
+     * por preparar os temas; em alerta com disciplina sem tema a 25 dias */
+    const fx = achar(topo, (x) => x.id === "hubDiscTreino_" + e.id)[0];
+    ok(!achar(topo, (x) => x.id === "hubAviso_disc")[0] && fx && cls(fx, "dag") && cls(fx, "alerta") && /0 de \d+ redação\(ões\) nesta semana/.test(fx.textContent) && /Preparar os temas \(0\/\d+\)/.test(fx.textContent),
+      "PG1 a faixa conta redações e começa por preparar os temas, em alerta (disciplina sem tema a 25 dias): " + (fx && fx.className + " / " + fx.textContent.slice(0, 200)));
     const ln = achar(topo, (x) => x.id === "hubDiscTreino_" + e.id)[0];
     ok(ln && achar(ln, (x) => cls(x, "ds-pn-dot")).length === 3 && /Agora: Gere/.test(ln.textContent), "PG2 a linha: uma bolinha por disciplina e o passo de agora: " + (ln && ln.textContent));
     const falta = achar(ln, (x) => x.id === "btnHubDiscFalta_" + e.id)[0];

@@ -1328,7 +1328,8 @@ function montarPlanoBase(r, opcoes) {
   const mandaAFase = o.fase !== undefined || fase.so2;
   const horas = Math.max(0, Number(
     mandaAFase ? fase.horas : (o.horas !== undefined ? o.horas : fase.horas)) || 0);
-  const porSemana = horas * 60;
+  /* (19.152.0) em minutos inteiros: com a reserva da discursiva descontada, horas vem fracionada (6,333…) */
+  const porSemana = Math.round(horas * 60);
   const prazo = mandaAFase ? fase.prova
     : (o.prova !== undefined ? o.prova : fase.prova);
   const s = semanasAte(prazo, o.hoje);

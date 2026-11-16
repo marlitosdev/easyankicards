@@ -365,7 +365,8 @@ function dsCopiar(texto, aviso) {
 /* ---------------- a estratégia ---------------- */
 function dsRedacoesNaSemana(id) { const ini = dsSemanaIni(dsHoje()); return dsRedacoes(id).filter((x) => dsSemanaIni(x.d) === ini).length; }
 /* as redações desta semana; sem nenhuma registrada, o "treinei" marcado vale uma */
-function dsFeitasSemana(id) { const n = dsRedacoesNaSemana(id); return n || (dsTreinos(id)[dsSemanaIni(dsHoje())] ? 1 : 0); }
+/* (19.152.0) e as marcadas na faixa da agenda (discursiva-agenda.js): uma conta só, em redações */
+function dsFeitasSemana(id) { const n = Math.max(dsRedacoesNaSemana(id), typeof dagEscritasSemana === "function" ? dagEscritasSemana(id) : 0); return n || (dsTreinos(id)[dsSemanaIni(dsHoje())] ? 1 : 0); }
 function dsEstrategia(dias, res, dc, sit) {
   let fase, meta;
   if (dias == null) { fase = "sem_data"; meta = 1; }

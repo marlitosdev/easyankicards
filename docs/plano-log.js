@@ -773,7 +773,8 @@ function plContexto() {
   const s = typeof edSituacao === "function" ? edSituacao(e) : { prova: cfg.prova };
   /* (19.48.0) o mesmo modo de estudo da agenda: o raio-X explica a ordem que a pessoa vê */
   const plano = montarPlano(r, {
-    horas: cfg.horas || 10, prova: s.prova, feitos: e.progresso || {},
+    /* (19.152.0) a mesma reserva da discursiva que a agenda desconta */
+    horas: Math.max(0.5, (cfg.horas || 10) - (typeof dagReservaMin === "function" ? dagReservaMin(e) : 0) / 60), prova: s.prova, feitos: e.progresso || {},
     modos: typeof hubModosLer === "function" ? hubModosLer() : undefined,
   });
   return { plano, r, cfg, editalId: e.id, nome: e.nome || cfg.concurso || "",
@@ -800,7 +801,7 @@ function plTiras(d) {
   tira((p.fila || []).filter((i) => i.semana === 1).length, t("plog_t_semana"));
   tira((p.fora || []).length, t("plog_t_fora"));
   tira(p.semanas == null ? "?" : p.semanas, t("plog_t_semanas"));
-  tira(p.porSemana + "min", t("plog_t_orcamento"));
+  tira(Math.round(p.porSemana) + "min", t("plog_t_orcamento"));
   return cx;
 }
 

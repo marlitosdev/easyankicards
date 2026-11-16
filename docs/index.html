@@ -2355,6 +2355,22 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 .ep-no-bloco{font-size:12.5px;color:var(--info);font-weight:700}
 .ep-disc-lin{display:flex;flex-wrap:wrap;gap:8px 16px;margin:4px 0}
 .ep-disc-campo{display:flex;gap:6px;align-items:center;font-size:13px}
+/* (19.152.0) A DISCURSIVA NA SEMANA: uma faixa por edital, recolhível, com as etapas que se marcam */
+.dag{border:1px solid var(--borda);border-left:4px solid var(--acao);border-radius:var(--r-m);margin:var(--esp-2) 0;padding:0 var(--esp-3);background:var(--bg)}
+.dag.alerta{border-left-color:var(--erro)}
+.dag.ok{border-left-color:var(--ok)}
+.dag-cab{cursor:pointer;display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:baseline;padding:var(--esp-2) 0;list-style:none}
+.dag-cab::-webkit-details-marker{display:none}
+.dag-cab::before{content:"▸";color:var(--sutil);font-size:var(--fs-2)}
+.dag[open] > .dag-cab::before{content:"▾"}
+.dag-res{font-size:var(--fs-2);color:var(--sutil)}
+.dag-top{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin:0 0 var(--esp-2)}
+.dag-passo{font-size:var(--fs-2);flex:1 1 14em;min-width:0}
+.dag-etapas{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin:0 0 var(--esp-2)}
+.dag-etapa{appearance:none;border:1px solid var(--borda);background:transparent;color:var(--texto);border-radius:var(--r-pilula);padding:4px 10px;font-size:var(--fs-2);cursor:pointer}
+.dag-etapa.feita{border-color:var(--ok);color:var(--ok)}
+.dag-etapa.auto{border-style:dashed}
+.dag-nota{margin:0 0 var(--esp-2);font-size:var(--fs-2);color:var(--sutil)}
 .hub-disc-treino{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:6px 10px;margin:4px 0;border-radius:9px;
   border:1px solid var(--info);background:rgba(59,130,246,.08);font-size:12.5px}
 .hub-disc-treino.feito{opacity:.7;border-style:dashed}
@@ -13841,6 +13857,7 @@ window.__sqlPromise = initSqlJs({
 <script src="leis-edital.js"></script>
 <script src="edital-pontua.js"></script>
 <script src="discursivas.js"></script>
+<script src="discursiva-agenda.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

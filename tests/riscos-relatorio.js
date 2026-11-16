@@ -131,7 +131,7 @@ async function testes() {
     /* a agenda: meta da fase, próximo tema e o atalho para cá */
     try { api.hubPintarAgenda(); } catch (err) {}
     const ag = api.$("hubDiscTreino_" + e3.id) || api.$("hubDiscTreino_" + e1.id);
-    ok(!ag || (/tema\(s\) esta semana|meta da semana cumprida/.test(ag.textContent) && !!(api.$("btnHubDisc_" + e3.id) || api.$("btnHubDisc_" + e1.id))), "S34 a agenda mostra a meta e o atalho: " + (ag ? ag.textContent : "(agenda sem editais ativos no teste)"));
+    ok(!ag || (/tema\(s\) esta semana|meta da semana cumprida|redação\(ões\) nesta semana/.test(ag.textContent) && !!(api.$("btnHubDisc_" + e3.id) || api.$("btnHubDisc_" + e1.id))), "S34 a agenda mostra a meta e o atalho: " + (ag ? ag.textContent : "(agenda sem editais ativos no teste)"));
     const todas2 = [];
     Object.keys(api.BK_CHAVES).forEach((gk) => api.BK_CHAVES[gk].forEach((k) => todas2.push(k)));
     ok(todas2.indexOf("eac_disc_propostas") >= 0, "S35 o backup leva as propostas");
@@ -241,14 +241,19 @@ async function testes() {
     const cx3 = caixa();
     const ach = (f) => achar(cx3, f, []);
     const chips = ach((n) => /hub-aviso-chip/.test(n.className || ""));
-    const pDisc = ach((n) => n.id === "hubAvisoPainel_disc")[0];
-    ok(chips.some((b) => b.id === "hubAviso_disc" && /Discursivas: \d+ de \d+/.test(b.textContent)) && pDisc && pDisc.hidden === true, "RZ7 a discursiva vira um chip e o detalhe fica fechado: " + chips.map((b) => b.textContent).join(" | "));
+    /* (19.152.0) a discursiva saiu dos avisos: é uma faixa da semana, com as redações e o tempo reservado */
+    const faixa = ach((n) => /(^| )dag( |$)/.test(n.className || ""))[0];
+    ok(!chips.some((b) => b.id === "hubAviso_disc") && faixa && /redação\(ões\) nesta semana · reserva/.test(faixa.textContent), "RZ7 a discursiva é uma faixa da semana, não um aviso: " + (faixa ? faixa.children[0].textContent : chips.map((b) => b.textContent).join(" | ")));
     const aj = ach((n) => n.id === "hubAjustes")[0];
     const porD = ach((n) => n.id === "hubModoDisc")[0];
     ok(aj && aj.open === false && /Ajustes da agenda/.test(aj.children[0].textContent) && /1 disciplina\(s\) com modo próprio/.test(aj.children[0].textContent) && porD && porD.open === false, "RZ8 os ajustes ficam numa gaveta fechada, com o resumo; 'por disciplina' não abre sozinho");
-    chips.find((b) => b.id === "hubAviso_disc").onclick();
-    const pDisc2 = achar(caixa(), (n) => n.id === "hubAvisoPainel_disc", [])[0];
-    ok(pDisc2 && pDisc2.hidden === false && api.loja.getItem("eac_ag_aviso_aberto") === "disc", "RZ9 tocar no chip abre o detalhe e a escolha fica lembrada");
+    const outro = chips[0];
+    if (outro) {
+      outro.onclick();
+      const id = outro.id.replace("hubAviso_", "");
+      const p2 = achar(caixa(), (n) => n.id === "hubAvisoPainel_" + id, [])[0];
+      ok(p2 && p2.hidden === false && api.loja.getItem("eac_ag_aviso_aberto") === id, "RZ9 tocar num chip abre o detalhe e a escolha fica lembrada");
+    }
     api.hubModoDefinir("A", "geral");
     api.loja.removeItem("eac_ag_aviso_aberto");
     api.edApagar(er.id);
