@@ -1229,3 +1229,138 @@ if (typeof document !== "undefined" && $("btnRamSalvar")) {
   $("btnRamSalvar").onclick = ramSalvar;
   $("btnRamFechar").onclick = () => $("dlgRamos").close();
 }
+
+/* =====================================================================
+ * (19.142.0) O RAMO DE CADA CARTÃO — quando ele chega sem a etiqueta ram_
+ *
+ * O RELATO: 35 cartões salvos no tópico pela bancada, e cada ramo dizia "nenhum ainda neste ramo (o tópico tem 35)" —
+ * a ficha e a agenda contam os cartões do ramo pela etiqueta ram_, e o "Salvar neste tópico" gravava sem ela.
+ * Duas portas, uma regra só:
+ *  · ao salvar num tópico com ramos, cada cartão sem ram_ ganha o ramo sugerido (o tópico-alvo pode já trazer um ramo);
+ *  · na ficha, "Distribuir pelos ramos" faz o mesmo com os cartões que já estão no tópico sem ramo.
+ * A SUGESTÃO: o título do cartão diz o ramo quase sempre ("CTN > Suspensão da Exigibilidade > Moratória"): cada pedaço
+ * do título, do último ao primeiro, é comparado com o nome dos ramos; sem isso, as palavras da pergunta e da resposta
+ * (a mesma régua das questões: a maioria dos radicais do nome do ramo). Empate ou nada claro = fica no geral do tópico.
+ * ===================================================================== */
+
+/* os ramos de um tópico no edital: o aberto primeiro, depois os outros; [] quando o tópico não tem ramos */
+function ramRamosDoTopico(disciplina, topico) {
+  const lista = typeof editais !== "undefined" && Array.isArray(editais) ? editais.slice() : [];
+  const aberto = typeof edAberto === "function" && edAberto() ? String(edAberto().id) : "";
+  lista.sort((a, b) => (String(a.id) === aberto ? -1 : 0) - (String(b.id) === aberto ? -1 : 0));
+  const dN = cqNormal(disciplina), tN = cqNormal(topico);
+  for (const e of lista) {
+    let r = null;
+    try { r = lerEdital(e.texto || ""); } catch (x) { r = null; }
+    const d = ((r && r.disciplinas) || []).find((x) => cqNormal(x.nome) === dN);
+    const tp = d && (d.topicos || []).find((x) => cqNormal(x.nome) === tN);
+    if (tp && (tp.ramos || []).length) return tp.ramos.map((x) => ({ id: x.id, nome: x.nome }));
+  }
+  return [];
+}
+
+/* o ramo sugerido para UM cartão: { id, nome, via: "titulo"|"palavras" } ou null */
+function ramSugerirRamoDoCartao(card, ramos) {
+  const rs = (ramos || []).filter((r) => r && r.id && r.nome);
+  if (!card || !rs.length) return null;
+  /* 1. o título, do pedaço mais específico (o último) para o mais geral */
+  const pedacos = String(card.titulo || "").split(/\s*[>›»]\s*/).map((p) => cqNormal(p)).filter((p) => p.length >= 5).reverse();
+  for (const p of pedacos) {
+    const achados = rs.filter((r) => { const n = cqNormal(r.nome); return n === p || n.indexOf(p) >= 0 || p.indexOf(n) >= 0; });
+    if (achados.length === 1) return { id: achados[0].id, nome: achados[0].nome, via: "titulo" };
+    if (achados.length > 1) {
+      const exato = achados.filter((r) => cqNormal(r.nome) === p);
+      if (exato.length === 1) return { id: exato[0].id, nome: exato[0].nome, via: "titulo" };
+      break;
+    }
+    /* as mesmas palavras em outra ordem: "Prescrição e Decadência" é o ramo "Decadência e prescrição" */
+    const radP = ramRadicais(p);
+    if (radP.size) {
+      const porPalavras = rs.filter((r) => {
+        const radR = ramRadicais(r.nome);
+        if (!radR.size) return false;
+        let c = 0; radR.forEach((w) => { if (radP.has(w)) c++; });
+        return c === Math.min(radR.size, radP.size) && c >= Math.min(2, radR.size);
+      });
+      if (porPalavras.length === 1) return { id: porPalavras[0].id, nome: porPalavras[0].nome, via: "titulo" };
+    }
+  }
+  /* 2. as palavras do título, da pergunta e da resposta (as etiquetas ficam de fora: repetem o nome do tópico) */
+  const d = ramRadicais([card.titulo, card.front, card.back].filter(Boolean).join(" "));
+  if (!d.size) return null;
+  let melhor = null, empate = false;
+  rs.forEach((r) => {
+    const rad = ramRadicais(r.nome);
+    if (!rad.size) return;
+    let c = 0; rad.forEach((w) => { if (d.has(w)) c++; });
+    if (c < Math.max(1, Math.ceil(rad.size * 0.6))) return;
+    const nota = c / rad.size + c * 0.001;
+    if (!melhor || nota > melhor.nota) { melhor = { id: r.id, nome: r.nome, nota }; empate = false; }
+    else if (nota === melhor.nota) empate = true;
+  });
+  return melhor && !empate ? { id: melhor.id, nome: melhor.nome, via: "palavras" } : null;
+}
+
+/* a distribuição de uma lista de cartões: [{ card, id }] (id "" = geral) e o resumo { nomeDoRamo: n } */
+function ramDistribuicao(cards, ramos, fixo) {
+  const itens = (cards || []).map((c) => {
+    const ja = ramIdDoCartao(c);
+    if (ja) return { card: c, id: ja, ja: true };
+    if (fixo) return { card: c, id: fixo };
+    const s = ramSugerirRamoDoCartao(c, ramos);
+    return { card: c, id: s ? s.id : "" };
+  });
+  const nomeDe = {};
+  (ramos || []).forEach((r) => { nomeDe[r.id] = r.nome; });
+  const resumo = {};
+  itens.forEach((x) => { const k = x.id ? (nomeDe[x.id] || x.id) : ""; resumo[k] = (resumo[k] || 0) + 1; });
+  return { itens, resumo };
+}
+
+/* o resumo em linhas: "• Moratória · 2" …, o geral por último */
+function ramDistribuicaoTexto(resumo, rotGeral) {
+  const ks = Object.keys(resumo || {});
+  return ks.filter((k) => k).sort((a, b) => resumo[b] - resumo[a] || a.localeCompare(b)).map((k) => "• " + k + " · " + resumo[k])
+    .concat(resumo[""] ? ["• " + rotGeral + " · " + resumo[""]] : []).join("\n");
+}
+
+/* DISTRIBUIR os cartões que já estão no tópico sem ramo. Guarda o texto de antes para o "desfazer". */
+let ramDistUltima = null;
+function ramCartoesSemRamo(chave) {
+  let cards = [];
+  try { cards = parseText(String(((typeof matResumos !== "undefined" && matResumos[chave]) || {}).cartoes || ""), []).cards; } catch (e) { cards = []; }
+  return cards.filter((c) => !ramIdDoCartao(c));
+}
+async function ramDistribuirCartoes(chave, disciplina, topico, ramos, aoTerminar) {
+  const sem = ramCartoesSemRamo(chave);
+  const rs = ramos && ramos.length ? ramos : ramRamosDoTopico(disciplina, topico);
+  if (!sem.length || !rs.length) return 0;
+  const dist = ramDistribuicao(sem, rs, "");
+  const comRamo = dist.itens.filter((x) => x.id);
+  if (!comRamo.length) { await uiAlert(t("ram_dist_nada", { n: sem.length })); return 0; }
+  if (!(await uiConfirm(t("ram_dist_conf", { n: comRamo.length, t: topico, lista: ramDistribuicaoTexto(dist.resumo, t("ram_dist_geral")) }), { ok: t("ram_dist_ok", { n: comRamo.length }) }))) return 0;
+  const antes = cqTexto(chave);
+  let texto = antes, mudou = 0;
+  comRamo.forEach((x) => {
+    const t2 = ceSubstituir(texto, x.card, cardToLine(ramCartaoComRamo(x.card, x.id)));
+    if (t2 === null) return;
+    texto = t2; mudou++;
+  });
+  if (mudou) {
+    cqGravar(chave, texto, { disciplina, topico });
+    ramDistUltima = { chave, antes, n: mudou, em: Date.now() };
+    try { matReg("cartoes", "cartões distribuídos pelos ramos", topico + " · " + mudou + " de " + sem.length); } catch (e) {}
+    try { toastMsg(t("ram_dist_feito", { n: mudou }), 6000); } catch (e) {}
+  }
+  if (typeof aoTerminar === "function") { try { aoTerminar(mudou); } catch (e) {} }
+  return mudou;
+}
+function ramDistDesfazer(chave, aoTerminar) {
+  if (!ramDistUltima || ramDistUltima.chave !== chave) return false;
+  const r = matResumos[chave] || {};
+  cqGravar(chave, ramDistUltima.antes, { disciplina: r.disciplina, topico: r.topico });
+  try { matReg("cartoes", "distribuição pelos ramos desfeita", (r.topico || chave) + " · " + ramDistUltima.n); } catch (e) {}
+  ramDistUltima = null;
+  if (typeof aoTerminar === "function") { try { aoTerminar(); } catch (e) {} }
+  return true;
+}

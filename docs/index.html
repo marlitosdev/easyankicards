@@ -7348,8 +7348,15 @@ dialog.ger-ajuda[open]{display:flex;flex-direction:column;width:min(520px,94vw);
 .banc-alvo[hidden]{display:none}
 .banc-alvo-tit{font-size:14px}
 .banc-alvo-sub{font-size:12px;color:var(--sutil);margin:2px 0 8px}
-.banc-alvo-passos{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.banc-alvo-p{font-size:12px;color:var(--sutil);flex:1 1 200px}
+.banc-alvo-passos{display:flex;gap:var(--esp-2);flex-wrap:wrap;align-items:center;list-style:none;margin:0;padding:0}
+.banc-alvo-p{font-size:var(--fs-2);color:var(--sutil)}
+/* (19.142.0) os passos com estado: o ✓ ao lado do que já foi feito */
+.banc-alvo-passo{display:flex;flex-direction:column;align-items:flex-start;gap:2px;flex:1 1 160px;min-width:0}
+.banc-alvo-ok{font-size:var(--fs-1);font-weight:var(--peso-m);color:var(--ok);min-height:1em}
+.banc-alvo-passo.feito .banc-alvo-p{color:var(--texto)}
+.banc-alvo-feito{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2) var(--esp-3);margin-top:var(--esp-2);padding:var(--esp-2) var(--esp-3);border-radius:var(--r-m);border:1px solid var(--ok);font-size:var(--fs-3);font-weight:var(--peso-m)}
+.banc-alvo-feito[hidden]{display:none}
+.banc-alvo-feito-bts{display:flex;gap:var(--esp-2);flex-wrap:wrap;margin-left:auto}
 .banc-alvo-prompt{margin-top:8px}
 .banc-alvo-prompt textarea{width:100%;box-sizing:border-box;font-size:12px}
 .banc-alvo-fim{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
@@ -8129,10 +8136,25 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <div class="banc-alvo-tit"><span data-i18n="banc_alvo_tit"></span> <b id="bancAlvoNome"></b></div>
         <div class="banc-alvo-sub" id="bancAlvoSub"></div>
         <div class="cl-alvo" id="bancAlvoLei" hidden></div>
-        <div class="banc-alvo-passos">
-          <button type="button" class="btn btn-azul" id="btnBancAlvoPrompt" data-i18n="banc_alvo_p1" data-i18n-title="banc_alvo_tip_prompt"></button>
-          <span class="banc-alvo-p" data-i18n="banc_alvo_p2"></span>
-          <button type="button" class="btn btn-verde" id="btnBancAlvoSalvar" data-i18n="banc_alvo_p3" data-i18n-title="banc_alvo_tip_salvar"></button>
+        <!-- (19.142.0) OS PASSOS COM O ESTADO: cada um ganha ✓ quando feito (prompt copiado · N cartões na bancada · salvos às
+             hh:mm); e, depois de salvar, a confirmação fica aqui, com "Estudar agora" e "Limpar a bancada" -->
+        <ol class="banc-alvo-passos">
+          <li class="banc-alvo-passo" id="bancAlvoP1">
+            <button type="button" class="btn btn-azul" id="btnBancAlvoPrompt" data-i18n="banc_alvo_p1" data-i18n-title="banc_alvo_tip_prompt"></button>
+            <span class="banc-alvo-ok" id="bancAlvoP1Ok"></span></li>
+          <li class="banc-alvo-passo" id="bancAlvoP2">
+            <span class="banc-alvo-p" data-i18n="banc_alvo_p2"></span>
+            <span class="banc-alvo-ok" id="bancAlvoP2Ok"></span></li>
+          <li class="banc-alvo-passo" id="bancAlvoP3">
+            <button type="button" class="btn btn-verde" id="btnBancAlvoSalvar" data-i18n="banc_alvo_p3" data-i18n-title="banc_alvo_tip_salvar"></button>
+            <span class="banc-alvo-ok" id="bancAlvoP3Ok"></span></li>
+        </ol>
+        <div class="banc-alvo-feito" id="bancAlvoFeito" role="status" hidden>
+          <span id="bancAlvoFeitoTxt"></span>
+          <span class="banc-alvo-feito-bts">
+            <button type="button" class="btn-min btn-min-ok" id="btnBancAlvoEstudar" data-i18n="cm_estudar_agora"></button>
+            <button type="button" class="btn-min" id="btnBancAlvoLimpar" data-i18n="banc_alvo_limpar" data-i18n-title="banc_alvo_tip_limpar"></button>
+          </span>
         </div>
         <details class="banc-alvo-prompt" id="bancAlvoPromptVer" hidden>
           <summary data-i18n="banc_alvo_prompt_ver"></summary>
@@ -8661,6 +8683,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
            levar para fora. O cartão saía do app e não voltava: virava .apkg e sumia dentro do Anki. -->
       <span class="banc-passo-tit banc-passo-rod"><span class="banc-passo-n">4</span><span data-i18n="banc_p4_tit"></span></span>
       <button class="btn btn-verde" id="btnSalvarMaterial" data-i18n="cm_botao"></button>
+      <!-- (19.142.0) com um tópico escolhido, o botão acima salva NELE; a classificação por tópico fica aqui -->
+      <button class="btn-min" id="btnSalvarMaterialVarios" data-i18n="banc_alvo_varios" data-i18n-title="banc_alvo_varios_tip" hidden></button>
       <button class="btn btn-cinza" id="btnApkg" data-i18n="export_apkg_btn"></button>
       <button class="btn btn-cinza" id="btnTxt" data-i18n="export_txt_btn"></button>
     </div>

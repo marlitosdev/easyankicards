@@ -4338,18 +4338,44 @@ function matPintarFicha() {
   }
   /* 🃏 cartões — do ramo, pela etiqueta ram_ */
   const mexer = () => { mcApontarTopico(x.disciplina, x.topico); try { matCartoesAbrir(); matCartoesVer(); } catch (e) {} };
+  /* (19.142.0) CARTÕES DO TÓPICO SEM RAMO: "Distribuir pelos ramos" (o título do cartão diz o ramo quase sempre) e, logo
+   * depois, o desfazer. Não fecha a ficha: ela repinta com os cartões já em cada ramo. */
+  const semRamo = ramos.length && inf.nCart && typeof ramCartoesSemRamo === "function" ? ramCartoesSemRamo(x.chave).length : 0;
+  const extrasCartoes = () => {
+    const out = [];
+    /* (19.142.0) a PASTA do tópico na Biblioteca de cartões, a um toque: é lá que os cartões guardados se veem, se movem e se
+     * ligam a um ramo à mão ("Ramos do tópico…") */
+    if (inf.nCart && typeof gerAbrirNoTopico === "function") out.push(botao(t("mat_ficha_pasta"), "btn-min", () => gerAbrirNoTopico(x.disciplina, x.topico), t("mat_ficha_pasta_tip")));
+    if (semRamo) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-min btn-min-ok"; b.id = "btnMatFichaDistribuir";
+      b.textContent = t("ram_dist_bt", { n: semRamo });
+      b.title = t("ram_dist_bt_tip");
+      b.onclick = () => ramDistribuirCartoes(x.chave, x.disciplina, x.topico, ramos, () => matPintarFicha());
+      out.push(b);
+    }
+    if (typeof ramDistUltima !== "undefined" && ramDistUltima && ramDistUltima.chave === x.chave) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-min"; b.id = "btnMatFichaDistDesfazer";
+      b.textContent = t("ram_dist_desfazer", { n: ramDistUltima.n });
+      b.onclick = () => ramDistDesfazer(x.chave, () => matPintarFicha());
+      out.push(b);
+    }
+    return out;
+  };
   if (ramo) {
     let nR = 0;
     try { nR = ((typeof ramMaterialDoTopico === "function" ? ramMaterialDoTopico(x.chave, [ramo]) : {})[ramo.id] || {}).cartoes || 0; } catch (e) { nR = 0; }
     item("cartoes", t("mat_aba_cartoes"), nR > 0,
       nR ? t("mat_ficha_cartoes_ramo", { n: nR, t: inf.nCart }) : (inf.nCart ? t("mat_ficha_falta_ramo", { t: inf.nCart }) : t("mat_ficha_falta")),
-      nR ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: nR, tp: x.topico }))]
-        : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico), t("ed_crt_novo", { n: x.topico }))]);
+      nR ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: nR, tp: x.topico })),
+        botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico, { ramo: { id: ramo.id, nome: ramo.nome } }), t("ed_crt_novo", { n: x.topico }))].concat(extrasCartoes())
+        : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico, { ramo: { id: ramo.id, nome: ramo.nome } }), t("ed_crt_novo", { n: x.topico }))].concat(extrasCartoes()));
   } else {
     item("cartoes", t("mat_aba_cartoes"), inf.nCart > 0,
       inf.nCart ? t("mat_n_cartoes", { n: inf.nCart }) : t("mat_ficha_falta"),
       inf.nCart ? [botao(t("mat_ficha_estudar"), "btn-min mat-slot slot-cartoes", () => estcEstudarTopico(x.disciplina, x.topico), t("mat_ver_cartoes_ajuda", { n: inf.nCart, tp: x.topico })),
-        botao(t("mat_mexer_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))]
+        botao(t("mat_mexer_cartoes"), "btn-min", mexer, t("mat_mexer_cartoes_ajuda"))].concat(extrasCartoes())
         : [botao(t("mat_ficha_criar_cartoes"), "btn-min", () => bancAlvoDefinir(x.disciplina, x.topico), t("ed_crt_novo", { n: x.topico }))]);
   }
   /* ❓ questões — do ramo (ligadas a ele, Q1) ou do tópico inteiro; responder abre só as do escopo, criar já liga ao ramo */

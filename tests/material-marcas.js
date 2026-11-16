@@ -984,7 +984,7 @@ async function testes() {
     ok(it.length === 5 && ["slot-resumo", "slot-cartoes", "slot-questoes", "slot-lei", "slot-juris"].every((c, i) => cls(it[i]).indexOf(c) >= 0), "M4c cinco materiais, sempre na mesma ordem (resumo, cartões, questões, lei, julgados): " + it.map(cls).join(" | "));
     ok(!/falta/.test(cls(it[0])) && /17 caracteres/.test(it[0].textContent) && botoes(it[0]).join() === [api.t("mat_ficha_ler"), api.t("mat_ficha_editar"), api.t("ria_btn_ficha")].join(), "M4d resumo existente: diz o tamanho e oferece 'Ler', 'Editar' e 'Pedir à IA'");
     ok(/falta/.test(cls(it[2])) && botoes(it[2]).join() === api.t("mat_ficha_criar_questoes"), "M4d2 questões que faltam: 'Criar questões'");
-    ok(/2 cartão\(ões\)/.test(it[1].textContent) && botoes(it[1]).join() === [api.t("mat_ficha_estudar"), api.t("mat_mexer_cartoes")].join(), "M4e cartões: quantos, 'Estudar' e 'Mexer nos cartões'");
+    ok(/2 cartão\(ões\)/.test(it[1].textContent) && botoes(it[1]).join() === [api.t("mat_ficha_estudar"), api.t("mat_mexer_cartoes"), api.t("mat_ficha_pasta")].join(), "M4e cartões: quantos, 'Estudar', 'Mexer nos cartões' e (19.142.0) o atalho da pasta na Biblioteca: " + botoes(it[1]).join());
     ok(/carregada/.test(it[3].textContent) && botoes(it[3]).join() === api.t("mat_ficha_abrir"), "M4f lei seca carregada: 'Abrir'");
     ok(/falta/.test(cls(it[4])) && /ainda não tem/.test(it[4].textContent) && botoes(it[4]).join() === api.t("mat_ficha_guardar"), "M4g julgados que faltam: tracejado, 'ainda não tem' e 'Guardar o primeiro'");
     ok(api.$("matFichaEscopo").hidden === true, "M4g2 tópico sem ramos: sem a escolha de escopo");

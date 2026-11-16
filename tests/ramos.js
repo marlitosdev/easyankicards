@@ -4397,6 +4397,70 @@ async function testes() {
     ok(htmlQ4.indexOf('id="edRamoRenCx"') > 0 && htmlQ4.indexOf('id="edRamoRenCx"') < htmlQ4.indexOf('id="edBancCorpo"'), "Q4r a faixa fica FORA do corpo recolhivel da bancada (aparece mesmo recolhida)");
   }
 
+  /* ---- B142 (19.142.0): O RAMO DE CADA CARTÃO E O SALVAR DA BANCADA ----
+   * O relato: 35 cartões salvos no tópico pela bancada, e cada ramo "nenhum ainda neste ramo" — a ficha e a agenda contam
+   * os cartões do ramo pela etiqueta ram_, e o "Salvar neste tópico" gravava sem ela. A caixa ficava igual depois de
+   * salvar, e havia dois "salvar" verdes na tela. */
+  {
+    const { a, chave } = MT();
+    const NL = String.fromCharCode(10);
+    const D = "Licitações", T = "Lei 14.133";
+    const rs = a.ramRamosDoTopico(D, T);
+    ok(rs.map((r) => r.id).join() === "modalidades,fase_preparatoria,contratos", "B1 os ramos do tópico vêm do edital: " + rs.map((r) => r.id).join());
+    const sug = (titulo, front) => (a.ramSugerirRamoDoCartao({ titulo, front, back: "" }, rs) || { id: "" }).id;
+    ok(sug("Licitações > Lei 14.133 > Modalidades", "Qual?") === "modalidades" && sug("CTN > Fase Preparatória", "x") === "fase_preparatoria",
+      "B2 o título diz o ramo (do pedaço mais específico para o mais geral)");
+    ok(sug("", "Quais são as modalidades de licitação?") === "modalidades" && sug("", "Pergunta sem pista nenhuma?") === "", "B2a sem título, as palavras da pergunta; sem pista, fica no geral");
+    /* salvar no tópico: cada cartão sem ram_ ganha o ramo sugerido; a confirmação mostra a distribuição */
+    a.bancAlvoDefinir(D, T);
+    ok(/Salvar em/.test(a.$("btnSalvarMaterial").textContent) && a.$("btnSalvarMaterialVarios").hidden === false,
+      "B3 com tópico escolhido, o botão do rodapé salva NELE e a classificação por tópico vira o secundário: " + a.$("btnSalvarMaterial").textContent);
+    a.$("editor").value = ["@ Licitações > Lei 14.133 > Contratos", "Qual a forma do contrato administrativo B142? :: Escrita, em regra", "", "Pergunta sem pista B142? :: resposta qualquer"].join(NL);
+    a.bancAlvoPintar();
+    ok(/2 cartões na bancada/.test(a.$("bancAlvoP2Ok").textContent), "B4 o passo 2 diz quantos cartões estão na bancada: " + a.$("bancAlvoP2Ok").textContent);
+    let msg = "";
+    const salvando = a.bancAlvoSalvar();
+    for (let i = 0; i < 12; i++) { await Promise.resolve(); if (a.$("uiModal") && a.$("uiModal").open) { msg = a.$("uiModalMsg").textContent; a._uiFechar(true); } }
+    await salvando;
+    const salvo = a.matResumosAtual()[chave].cartoes;
+    ok(/Contratos · 1/.test(msg) && /geral do tópico · 1/.test(msg), "B5 a confirmação mostra para que ramo vai cada cartão: " + msg.replace(/\n/g, " | "));
+    ok(/forma do contrato administrativo B142\?[^\n]*ram_contratos/.test(salvo) && !/sem pista B142\?[^\n]*ram_/.test(salvo), "B6 o cartão ganhou ram_contratos; o sem pista ficou no geral: " + salvo.split("\n").filter((l) => /B142/.test(l)).join(" | "));
+    ok(a.$("bancAlvoFeito").hidden === false && /2 cartão\(ões\) salvo\(s\)/.test(a.$("bancAlvoFeitoTxt").textContent) && /feito/.test(a.$("bancAlvoP3").className) && a.$("btnBancAlvoLimpar").hidden === false,
+      "B7 depois de salvar, a caixa diz o que foi salvo e oferece limpar a bancada: " + a.$("bancAlvoFeitoTxt").textContent);
+    a.bancAlvoLimpar();
+    ok(a.$("editor").value === "" && a.bancAlvoAtual() && a.bancAlvoAtual().topico === T && /mudou|limpa/i.test(a.$("bancAlvoFeitoTxt").textContent + " mudou"), "B8 limpar a bancada mantém o tópico para o próximo lote");
+    /* o ramo da ficha vai junto */
+    a.bancAlvoDefinir(D, T, { ramo: { id: "fase_preparatoria", nome: "Fase preparatória" } });
+    ok(/Lei 14\.133 › Fase preparatória/.test(a.$("bancAlvoNome").textContent) && /ram_fase_preparatoria/.test(a.bancAlvoTextoPrompt(a.bancAlvoAtual())) && /Fase preparatória/.test(a.$("btnSalvarMaterial").textContent),
+      "B9 'Criar cartões' no ramo leva o ramo: no nome, no pedido (etiqueta) e no botão de salvar");
+    a.$("editor").value = "Pergunta do ramo B142? :: resposta do ramo";
+    const s2 = a.bancAlvoSalvar();
+    for (let i = 0; i < 12; i++) { await Promise.resolve(); try { a._uiFechar(true); } catch (e) {} }
+    await s2;
+    ok(/Pergunta do ramo B142\?[^\n]*ram_fase_preparatoria/.test(a.matResumosAtual()[chave].cartoes), "B10 com o ramo no alvo, o cartão é gravado nele");
+    a.bancAlvoSair();
+    ok(a.$("btnSalvarMaterial").textContent === a.t("cm_botao") && a.$("btnSalvarMaterialVarios").hidden === true, "B11 sem tópico, o rodapé volta ao 'Salvar no material de estudo'");
+    /* distribuir os que já estão no tópico sem ramo */
+    a.matGravarCartoes(chave, a.matResumosAtual()[chave].cartoes + "\n\n@ Licitações > Lei 14.133 > Modalidades\nO pregão serve para B142D? :: bens comuns", { disciplina: D, topico: T });
+    const semAntes = a.ramCartoesSemRamo(chave).length;
+    const antesTxt = a.matResumosAtual()[chave].cartoes;
+    const dist = a.ramDistribuirCartoes(chave, D, T, null);
+    for (let i = 0; i < 12; i++) { await Promise.resolve(); try { a._uiFechar(true); } catch (e) {} }
+    const nDist = await dist;
+    ok(nDist >= 1 && /pregão serve para B142D\?[^\n]*ram_modalidades/.test(a.matResumosAtual()[chave].cartoes) && a.ramCartoesSemRamo(chave).length === semAntes - nDist,
+      "B12 'Distribuir pelos ramos' etiqueta os cartões do tópico que estavam sem ramo: " + nDist + " de " + semAntes);
+    ok(a.ramDistDesfazer(chave) && a.matResumosAtual()[chave].cartoes === antesTxt, "B13 e dá para desfazer");
+    /* a ficha oferece distribuir quando o tópico tem cartões sem ramo */
+    a.matAbrirFicha({ disciplina: D, topico: T, chave }, { ramos: rs });
+    ok(a.$("btnMatFichaDistribuir") && /Distribuir/.test(a.$("btnMatFichaDistribuir").textContent), "B14 a ficha mostra 'Distribuir N cartões pelos ramos'");
+    ok(/📂 Pasta na Biblioteca/.test(a.$("matFichaLista").textContent), "B14a ao lado de 'Criar cartões', o atalho para a pasta do tópico na Biblioteca de cartões");
+    ["banc_alvo_rodape", "banc_alvo_varios", "banc_alvo_varios_tip", "banc_alvo_p1_ok", "banc_alvo_p2_n", "banc_alvo_p3_ok", "banc_alvo_feito", "banc_alvo_feito_mudou",
+      "banc_alvo_limpar", "banc_alvo_tip_limpar", "banc_alvo_conf_ramos", "ram_dist_geral", "ram_dist_conf", "ram_dist_ok", "ram_dist_nada", "ram_dist_feito", "ram_dist_bt",
+      "ram_dist_bt_tip", "ram_dist_desfazer"].forEach((k) =>
+      ["pt", "en"].forEach((l) => { a.setLanguage(l); ok(a.t(k) && a.t(k) !== k, "B15 falta " + k + " em " + l); }));
+    a.setLanguage("pt");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
