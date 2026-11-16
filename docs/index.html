@@ -5214,7 +5214,18 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .jcf-ver li.jcf-p3{border-left-color:var(--erro)}
 .jcf-ver li.jcf-p2{border-left-color:var(--atencao)}
 .jcf-ver li.jcf-p1{border-left-color:var(--sutil);color:var(--sutil)}
-.jcf-ver li.jcf-ok{border-left-color:var(--ok);color:var(--ok)}
+.jcf-ver li.jcf-ok,.jcf-ver li.jcf-p0{border-left-color:var(--ok);color:var(--ok)}
+/* (19.145.0) a IA conferindo na fonte */
+.jcf-ia{margin:var(--esp-3) 0;border:1px solid var(--info);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
+.jcf-ia>summary{cursor:pointer;font-weight:var(--peso-m);color:var(--info)}
+.jcf-ia .nota{margin:var(--esp-1) 0 var(--esp-2)}
+.jcf-ia-resp{width:100%;box-sizing:border-box;font-size:var(--fs-3);margin:var(--esp-2) 0;padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.jcf-ia-res{display:flex;flex-direction:column;gap:var(--esp-1);margin-top:var(--esp-2)}
+.jcf-ia-lin{font-size:var(--fs-3);line-height:1.45}
+.jcf-ia-confere,.jcf-ia-vigente{color:var(--ok)}
+.jcf-ia-diverge,.jcf-ia-outro,.jcf-ia-superada,.jcf-ia-cancelada{color:var(--erro)}
+.jcf-ia-nao_achei,.jcf-ia-x{color:var(--sutil)}
+.jcf-ia-campo{font-size:var(--fs-3)}
 dialog.jcf-dlg[open]{display:flex;flex-direction:column;width:min(1200px,98vw);max-width:min(1200px,98vw);max-height:94vh;max-height:94dvh;overflow:hidden}
 dialog.jcf-dlg[open]>*{flex:0 0 auto}
 dialog.jcf-dlg[open]>.jcf-corpo{flex:1 1 auto;min-height:0;overflow:auto}

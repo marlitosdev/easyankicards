@@ -89,6 +89,8 @@ function jcfVerificacoes(j) {
   if (!String(j.relator || "").trim()) add("sem_relator", 1, t("jcf_v_sem_relator"));
   if (!String(j.data || "").trim()) add("sem_data", 1, t("jcf_v_sem_data"));
   if (!String(j.orgao || "").trim()) add("sem_orgao", 1, t("jcf_v_sem_orgao"));
+  /* (19.145.0) o que a IA disse ao conferir na fonte */
+  if (typeof jcfIaVerificacoes === "function") jcfIaVerificacoes(j).forEach((x) => v.push(x));
   return v.sort((a, b) => b.peso - a.peso);
 }
 function jcfRisco(j) { return jcfVerificacoes(j).reduce((s, x) => s + x.peso, 0); }
@@ -126,7 +128,7 @@ function jcfLinks(j) {
 function jcfAbrir(ids, opc) {
   if (!$("dlgJcf")) return false;
   const lista = (ids && ids.length ? ids : jcfFila()).filter((id) => jurDe(id));
-  jcf = { ids: lista, i: 0, decisoes: {}, pilha: [], volta: (opc && opc.volta) || null };
+  jcf = { ids: lista, i: 0, decisoes: {}, pilha: [], volta: (opc && opc.volta) || null, ia: null };
   abrirModal("dlgJcf");
   jcfPintar();
   try { reg("JURIS", "conferir um a um: fila aberta", lista.length + " julgado(s)"); } catch (e) {}
@@ -179,6 +181,8 @@ function jcfPintar() {
   jcfLinks(j).forEach((l) => { const a = jcfEl("a", "btn-min jur-oficial-lnk", "↗ " + l.rot); a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.id = "jcfLink_" + l.id; lks.append(a); });
   if (!lks.childNodes.length) lks.append(jcfEl("p", "nota", t("jcf_sem_links")));
   dir.append(lks);
+  /* (19.145.0) a IA conferindo na fonte */
+  if (typeof jcfIaPintar === "function") jcfIaPintar(dir, j);
   /* corrigir aqui: os campos que mais faltam */
   const cor = jcfEl("details", "jcf-corrigir");
   cor.id = "jcfCorrigir";
@@ -368,4 +372,215 @@ function jcfIniciar() {
   });
   /* fechar a fila repinta a biblioteca (os selos novos aparecem) */
   if ($("dlgJcf").addEventListener) $("dlgJcf").addEventListener("close", () => { try { if ($("dlgJurBib") && $("dlgJurBib").open && typeof jurBibPintar === "function") jurBibPintar(); } catch (e) {} });
+}
+
+/* =====================================================================
+ * (19.145.0) A IA CONFERINDO NA FONTE
+ *
+ * Na fila, "🤖 Conferir com a IA": o pedido leva os dados do julgado (tribunal, classe, número, órgão, relator, data,
+ * tese, o começo da ementa e a fonte) e pede que a IA confira em fonte OFICIAL e responda num formato fixo — uma linha
+ * por item: PROCESSO, RELATOR, ORGAO, DATA, TESE, EMENTA, VIGENCIA, FONTE. Dois caminhos: copiar o pedido (qualquer
+ * IA) e colar a resposta, ou o Gemini direto com a busca do Google (a opção "usar a chave na jurisprudência").
+ * NADA É APLICADO SOZINHO: o veredito fica guardado no julgado (iaConf) e aparece nas verificações; os campos que a
+ * IA achou (relator, órgão, data, link da fonte) vêm marcados para você aplicar; e o selo continua sendo dado por você,
+ * depois de abrir a fonte — a IA pode errar, e a IA sozinha não é fonte.
+ * ===================================================================== */
+const JCF_IA_TEMPO = 180000;
+
+function jcfIaPedido(j) {
+  const ementa = String(j.texto || "").replace(/\s+/g, " ").trim();
+  const L = [t("jcf_ia_p_abre"), "",
+    t("jcf_ia_p_dados"),
+    "- " + t("jcf_ia_p_tribunal") + ": " + (j.tribunal || "—"),
+    "- " + t("jcf_ia_p_processo") + ": " + ([j.classe, j.numero].filter(Boolean).join(" ") || "—") + (j.tema ? " (Tema " + j.tema + ")" : ""),
+    "- " + t("jcf_ia_p_orgao") + ": " + (j.orgao || "—"),
+    "- " + t("jcf_ia_p_relator") + ": " + (j.relator || "—"),
+    "- " + t("jcf_ia_p_data") + ": " + (j.data || "—"),
+    "- " + t("jcf_ia_p_tese") + ": " + (String(j.tese || "").trim() || "—"),
+    "- " + t("jcf_ia_p_ementa") + ": " + (ementa ? ementa.slice(0, 1500) + (ementa.length > 1500 ? " […]" : "") : "—"),
+    "- " + t("jcf_ia_p_fonte") + ": " + ([j.fonte, j.fonteUrl].filter((x) => String(x || "").trim()).join(" · ") || "—"),
+    "", t("jcf_ia_p_tarefa"), "", t("jcf_ia_p_formato")];
+  return L.join("\n");
+}
+
+/* a resposta: "CHAVE: situação — detalhe" por linha (aceita negrito, marcador de lista e acento na chave) */
+const JCF_IA_CHAVES = { PROCESSO: "processo", RELATOR: "relator", ORGAO: "orgao", DATA: "data", TESE: "tese", EMENTA: "ementa", VIGENCIA: "vigencia", FONTE: "fonte" };
+function jcfIaSituacao(chave, v) {
+  const n = jcfNormal(v);
+  if (/^NAO ACHEI|^NAO ENCONTR|^NAO SEI|^SEM INFORMA/.test(n)) return "nao_achei";
+  if (chave === "vigencia") return /^SUPERAD/.test(n) ? "superada" : /^CANCELAD/.test(n) ? "cancelada" : /^VIGENTE|^VALE|^EM VIGOR/.test(n) ? "vigente" : "nao_achei";
+  if (chave === "ementa" && /OUTRO PROCESSO|OUTRO JULGADO|DE OUTRO/.test(n)) return "outro";
+  if (/^NAO CONFERE|^DIVERG|^DIFERENTE|^ERRAD|^INCORRET/.test(n)) return "diverge";
+  if (/^CONFERE|^CORRET|^CONFIRMAD|^OK\b|^SIM\b/.test(n)) return "confere";
+  return "";
+}
+function jcfIaLer(texto) {
+  const r = {};
+  String(texto || "").split(/\r?\n/).forEach((linha) => {
+    const s = linha.replace(/\*\*/g, "").replace(/^\s*(?:[-*•·]|\d{1,2}[.)])\s*/, "").trim();
+    const m = s.match(/^([A-Za-zÀ-ú]+)\s*:\s*(.+)$/);
+    if (!m) return;
+    const chave = JCF_IA_CHAVES[jcfNormal(m[1])];
+    if (!chave || r[chave]) return;
+    const corpo = m[2].trim();
+    const partes = corpo.split(/\s+[—–]\s+|\s+-\s+/);
+    const valor = partes[0].trim(), det = partes.slice(1).join(" — ").trim();
+    if (chave === "fonte") { const u = corpo.match(/https?:\/\/\S+/); r.fonte = u ? u[0].replace(/[).,;]+$/, "") : ""; return; }
+    if (chave === "relator" || chave === "orgao") { r[chave] = { v: /^n[ãa]o achei/i.test(valor) ? "" : valor.replace(/[.;]+$/, ""), det }; return; }
+    if (chave === "data") { const d = corpo.match(/(\d{4})-(\d{2})-(\d{2})/) || corpo.match(/(\d{2})\/(\d{2})\/(\d{4})/); r.data = { v: d ? (d[1].length === 4 ? d[0] : d[3] + "-" + d[2] + "-" + d[1]) : "", det }; return; }
+    r[chave] = { st: jcfIaSituacao(chave, valor), det: det || (jcfIaSituacao(chave, valor) ? "" : valor) };
+  });
+  return Object.keys(r).length >= 3 ? r : null;
+}
+
+/* guarda o veredito no julgado (fica para as verificações e para a próxima vez) */
+function jcfIaGuardar(id, res, via, fontes) {
+  if (!res) return null;
+  const v = { em: jurHojeISO(), via: via || "colado", processo: (res.processo || {}).st || "", tese: (res.tese || {}).st || "", ementa: (res.ementa || {}).st || "",
+    vigencia: (res.vigencia || {}).st || "", det: ["processo", "tese", "ementa", "vigencia"].map((k) => res[k] && res[k].det ? k + ": " + res[k].det : "").filter(Boolean).join(" · ").slice(0, 600),
+    fonte: res.fonte || "", fontes: (fontes || []).slice(0, 5) };
+  return jurGravar({ id, iaConf: v });
+}
+
+/* as linhas que o veredito acrescenta às verificações */
+function jcfIaVerificacoes(j) {
+  const v = j && j.iaConf;
+  if (!v || !v.em) return [];
+  const out = [], d = jurDataBr(v.em);
+  if (v.processo === "diverge") out.push({ k: "ia_processo", peso: 3, txt: t("jcf_v_ia_processo", { d }) });
+  if (v.ementa === "outro" || v.ementa === "diverge") out.push({ k: "ia_ementa", peso: 3, txt: t("jcf_v_ia_ementa", { d }) });
+  if (v.tese === "diverge") out.push({ k: "ia_tese", peso: 3, txt: t("jcf_v_ia_tese", { d }) });
+  if (v.vigencia === "superada" || v.vigencia === "cancelada") out.push({ k: "ia_vigencia", peso: 3, txt: t("jcf_v_ia_vigencia", { d, s: t("jcf_ia_st_" + v.vigencia) }) });
+  if (!out.length && v.processo === "confere" && v.tese === "confere") out.push({ k: "ia_ok", peso: 0, txt: t("jcf_v_ia_ok", { d }) });
+  return out;
+}
+
+/* ---------------- o painel na fila ---------------- */
+function jcfIaPintar(box, j) {
+  const ia = jcf.ia && jcf.ia.id === j.id ? jcf.ia : (jcf.ia = { id: j.id, res: null, fontes: [], rascunho: "", msg: "" });
+  const det = jcfEl("details", "jcf-ia");
+  det.id = "jcfIa";
+  det.open = !!(ia.res || ia.rascunho || ia.aberto);
+  if (det.addEventListener) det.addEventListener("toggle", () => { ia.aberto = det.open; });
+  det.append(jcfEl("summary", "", t("jcf_ia_tit")));
+  det.append(jcfEl("p", "nota", t("jcf_ia_expl")));
+  const bts = jcfEl("div", "qm-bts");
+  const bc = jcfEl("button", "btn-min", t("jcf_ia_copiar")); bc.type = "button"; bc.id = "btnJcfIaCopiar";
+  bc.onclick = () => jcfIaCopiar();
+  bts.append(bc);
+  if (typeof jurIaPronta === "function" && jurIaPronta()) {
+    const bg = jcfEl("button", "btn-min btn-min-ok", t("jcf_ia_gemini")); bg.type = "button"; bg.id = "btnJcfIaGemini"; bg.title = t("jcf_ia_gemini_aj");
+    bg.onclick = () => jcfIaGemini();
+    bts.append(bg);
+  } else {
+    const bk = jcfEl("button", "btn-link", t("jcf_ia_config")); bk.type = "button"; bk.id = "btnJcfIaConfig";
+    bk.onclick = () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); };
+    bts.append(bk);
+  }
+  det.append(bts);
+  const ta = jcfEl("textarea", "jcf-ia-resp");
+  ta.id = "jcfIaResp"; ta.rows = 4; ta.placeholder = t("jcf_ia_ph"); ta.value = ia.rascunho || "";
+  ta.oninput = () => { ia.rascunho = ta.value; };
+  det.append(ta);
+  const bl = jcfEl("button", "btn-min btn-min-ok", t("jcf_ia_ler")); bl.type = "button"; bl.id = "btnJcfIaLer";
+  bl.onclick = () => jcfIaAplicarTexto(($("jcfIaResp") || {}).value || "", "colado", []);
+  det.append(bl);
+  const msg = jcfEl("p", "nota"); msg.id = "jcfIaMsg"; msg.setAttribute("role", "status"); msg.textContent = ia.msg || "";
+  det.append(msg);
+  if (ia.res) det.append(jcfIaResultado(j, ia.res, ia.fontes));
+  box.append(det);
+}
+function jcfIaResultado(j, r, fontes) {
+  const cx = jcfEl("div", "jcf-ia-res");
+  cx.id = "jcfIaRes";
+  const ico = (st) => ({ confere: "✓", vigente: "✓", diverge: "✗", outro: "✗", superada: "✗", cancelada: "✗", nao_achei: "?" }[st] || "·");
+  const linha = (rot, st, det) => {
+    const li = jcfEl("div", "jcf-ia-lin jcf-ia-" + (st || "x"));
+    li.append(jcfEl("b", "", ico(st) + " " + rot + ": "), document.createTextNode(t("jcf_ia_st_" + (st || "x")) + (det ? " — " + det : "")));
+    cx.append(li);
+  };
+  if (r.processo) linha(t("jcf_ia_r_processo"), r.processo.st, r.processo.det);
+  if (r.ementa) linha(t("jcf_ia_r_ementa"), r.ementa.st, r.ementa.det);
+  if (r.tese) linha(t("jcf_ia_r_tese"), r.tese.st, r.tese.det);
+  if (r.vigencia) linha(t("jcf_ia_r_vigencia"), r.vigencia.st, r.vigencia.det);
+  /* os campos que a IA achou: marcados para aplicar quando o do julgado está vazio */
+  const campos = [["relator", r.relator && r.relator.v], ["orgao", r.orgao && r.orgao.v], ["data", r.data && r.data.v], ["fonteUrl", r.fonte]]
+    .filter(([k, v]) => v && String(v).trim() && String(v).trim() !== String(j[k] || "").trim());
+  if (campos.length) {
+    cx.append(jcfEl("div", "jcf-rot2", t("jcf_ia_campos")));
+    campos.forEach(([k, v]) => {
+      const lab = jcfEl("label", "diag-op jcf-ia-campo");
+      const c = jcfEl("input", ""); c.type = "checkbox"; c.id = "jcfIaUsar_" + k; c.checked = !String(j[k] || "").trim(); c.dataset.v = v;
+      lab.append(c, " ", jcfEl("span", "", t("jcf_c_" + (k === "fonteUrl" ? "fonte_url" : k)).replace(/\s*\(.*\)$/, "") + ": " + v + (String(j[k] || "").trim() ? " " + t("jcf_ia_antes", { a: j[k] }) : "")));
+      cx.append(lab);
+    });
+    const ba = jcfEl("button", "btn-min btn-min-ok", t("jcf_ia_aplicar")); ba.type = "button"; ba.id = "btnJcfIaAplicar";
+    ba.onclick = () => jcfIaAplicarCampos();
+    cx.append(ba);
+  }
+  const lks = [r.fonte].concat((fontes || []).map((f) => f.url)).filter(Boolean).filter((u, i, a) => a.indexOf(u) === i).slice(0, 5);
+  if (lks.length) {
+    cx.append(jcfEl("div", "jcf-rot2", t("jcf_ia_fontes")));
+    const lb = jcfEl("div", "jcf-links");
+    lks.forEach((u, i) => { const a = jcfEl("a", "btn-min jur-oficial-lnk", "↗ " + (u.replace(/^https?:\/\/(www\.)?/, "").split("/")[0])); a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; a.id = "jcfIaFonte_" + i; lb.append(a); });
+    cx.append(lb);
+  }
+  cx.append(jcfEl("p", "nota", t("jcf_ia_lembrete")));
+  return cx;
+}
+
+function jcfIaAplicarTexto(texto, via, fontes) {
+  const j = jcfAtual();
+  if (!j) return null;
+  const res = jcfIaLer(texto);
+  if (!res) { jcf.ia = Object.assign(jcf.ia || { id: j.id }, { id: j.id, msg: t("jcf_ia_nada"), rascunho: texto }); jcfPintar(); return null; }
+  jcfIaGuardar(j.id, res, via, fontes);
+  jcf.ia = { id: j.id, res, fontes: fontes || [], rascunho: texto, msg: t("jcf_ia_lida"), aberto: true };
+  try { reg("JURIS", "conferir um a um: resposta da IA lida", jurTitulo(j) + " · " + via + " · processo " + ((res.processo || {}).st || "?") + ", tese " + ((res.tese || {}).st || "?")); } catch (e) {}
+  jcfDepois();
+  jcfPintar();
+  return res;
+}
+function jcfIaAplicarCampos() {
+  const j = jcfAtual();
+  if (!j) return 0;
+  const mud = { id: j.id };
+  ["relator", "orgao", "data", "fonteUrl"].forEach((k) => { const c = $("jcfIaUsar_" + k); if (c && c.checked) mud[k] = c.dataset.v; });
+  if (Object.keys(mud).length === 1) return 0;
+  jcf.pilha.push({ id: j.id, antes: JSON.parse(JSON.stringify(j)), decisao: "corrigido", i: jcf.i });
+  jurGravar(mud);
+  try { reg("JURIS", "conferir um a um: campos da IA aplicados", jurTitulo(j) + " · " + Object.keys(mud).filter((k) => k !== "id").join(", ")); } catch (e) {}
+  jcfDepois();
+  jcfPintar();
+  if ($("jcfMsg")) $("jcfMsg").textContent = t("jcf_corr_ok", { n: Object.keys(mud).length - 1 });
+  return Object.keys(mud).length - 1;
+}
+async function jcfIaCopiar() {
+  const j = jcfAtual();
+  if (!j) return false;
+  const p = jcfIaPedido(j);
+  let ok = false;
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(p); ok = true; } } catch (e) { ok = false; }
+  jcf.ia = Object.assign(jcf.ia && jcf.ia.id === j.id ? jcf.ia : { id: j.id }, { msg: ok ? t("jcf_ia_copiado") : t("led_ia_nao_copiou"), aberto: true });
+  if ($("jcfIaMsg")) $("jcfIaMsg").textContent = jcf.ia.msg;
+  try { reg("JURIS", "conferir um a um: pedido à IA copiado", jurTitulo(j)); } catch (e) {}
+  return ok ? p : false;
+}
+async function jcfIaGemini() {
+  const j = jcfAtual();
+  if (!j || typeof jurIaPerguntar !== "function") return null;
+  if ($("btnJcfIaGemini")) $("btnJcfIaGemini").disabled = true;
+  if ($("jcfIaMsg")) $("jcfIaMsg").textContent = t("jcf_ia_esperando");
+  try {
+    const r = await jurIaPerguntar(jcfIaPedido(j), { modulo: "JURIS", busca: true, tempo: JCF_IA_TEMPO });
+    return jcfIaAplicarTexto(r.texto, "gemini", r.fontes || []);
+  } catch (e) {
+    const cod = (e && e.codigo) || "rede";
+    jcf.ia = Object.assign(jcf.ia && jcf.ia.id === j.id ? jcf.ia : { id: j.id }, { msg: t("jur_ia_erro_" + cod) + (e && e.detalhe && cod !== "cancelado" ? " (" + e.detalhe + ")" : ""), aberto: true });
+    if ($("jcfIaMsg")) $("jcfIaMsg").textContent = jcf.ia.msg;
+    try { reg("JURIS", "conferir um a um: Gemini falhou", cod); } catch (x) {}
+    return null;
+  } finally {
+    if ($("btnJcfIaGemini")) $("btnJcfIaGemini").disabled = false;
+  }
 }

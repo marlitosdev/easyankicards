@@ -17,6 +17,7 @@ async function testes() {
   const tique = () => new Promise((r) => setImmediate(r));
   const cls = (e) => String((e && e.className) || "");
   const D = "Tributário";
+  const NL2 = String.fromCharCode(10);
 
   /* B1: as portas */
   {
@@ -320,6 +321,51 @@ async function testes() {
       "jcf_v_sem_fonte", "jcf_v_vig_ia", "jcf_v_certeza", "jcf_v_campos", "jcf_v_sem_relator", "jcf_v_sem_data", "jcf_v_sem_orgao", "jcf_l_stf_proc", "jcf_l_stf_juris",
       "jcf_l_stj_juris", "jcf_l_stj_proc", "jcf_l_sua", "jur_q_m_pessoa_problema"].forEach((k2) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k2) && api.t(k2) !== k2, "C14 falta " + k2 + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
+  /* ---- I145 (19.145.0): A IA CONFERINDO NA FONTE — pedido, resposta colada ou Gemini, veredito nas verificações, campos ---- */
+  {
+    const r0 = rodar(); const api = r0.api, J = r0.janela;
+    api.matIniciar();
+    api.jcfIniciar();
+    const j = api.jurGravar({ tribunal: "STF", classe: "ADI", numero: "5135", tese: "A inclusão das CDAs no rol de títulos sujeitos a protesto é constitucional.", texto: "EMENTA AGRAVO INTERNO EM RECURSO EXTRAORDINÁRIO COM AGRAVO. PROTESTO DE CDA.", relator: "Min. Roberto Barroso", orgao: "Tribunal Pleno", data: "2016-11-09" });
+    const ped = api.jcfIaPedido(api.jurDe(j.id));
+    ok(/ADI 5135/.test(ped) && /CDAs no rol/.test(ped) && /PROCESSO: confere \| não confere/.test(ped) && /FONTE: <link oficial>/.test(ped), "I1 o pedido leva os dados do julgado e o formato fixo");
+    api.jcfAbrir([j.id]);
+    ok(api.$("jcfIa") && api.$("btnJcfIaCopiar") && api.$("btnJcfIaConfig") && !api.$("btnJcfIaGemini"), "I2 sem a opção da jurisprudência ligada, só copiar (e o link para configurar)");
+    const RESP = ["**PROCESSO:** não confere — 5135 é ADI de 2016, mas a ementa é do ARE 1.234 AgR", "RELATOR: Min. Roberto Barroso", "ORGAO: Primeira Turma", "DATA: 09/11/2016",
+      "TESE: diverge — a tese guardada mistura ARE e ADI", "EMENTA: é de outro processo — ARE 1.234 AgR", "VIGENCIA: vigente", "FONTE: https://portal.stf.jus.br/processos/detalhe.asp?incidente=4."].join(NL2);
+    api.$("jcfIaResp").value = RESP;
+    api.$("btnJcfIaLer").onclick();
+    const jc = api.jurDe(j.id);
+    ok(jc.iaConf && jc.iaConf.tese === "diverge" && jc.iaConf.ementa === "outro" && jc.iaConf.processo === "diverge" && !jc.selo, "I3 a resposta colada vira veredito guardado no julgado — e nenhum selo é dado");
+    const ks = api.jcfVerificacoes(jc).map((x) => x.k);
+    ok(ks.indexOf("ia_tese") >= 0 && ks.indexOf("ia_ementa") >= 0 && ks.indexOf("ia_processo") >= 0, "I4 o veredito entra nas verificações: " + ks.join());
+    ok(api.$("jcfIaRes") && /não confere/.test(api.$("jcfIaRes").textContent) && api.$("jcfIaUsar_fonteUrl") && api.$("jcfIaUsar_fonteUrl").checked === true && api.$("jcfIaUsar_orgao") && api.$("jcfIaUsar_orgao").checked === false && !api.$("jcfIaUsar_relator"),
+      "I5 os campos achados: o link (vazio no julgado) vem marcado; o órgão diferente vem desmarcado; o relator igual nem aparece");
+    api.$("btnJcfIaAplicar").onclick();
+    ok(/incidente=4$/.test(api.jurDe(j.id).fonteUrl) && api.jurDe(j.id).orgao === "Tribunal Pleno", "I6 aplicar grava só o que foi marcado (sem o ponto final colado no link)");
+    api.$("btnJcfDesfazer").onclick();
+    ok(!api.jurDe(j.id).fonteUrl, "I6a e dá para desfazer");
+    /* o Gemini direto, com a opção da jurisprudência ligada */
+    api.vzGuardarChave("AIzaTESTE123456");
+    api.jurIaLigar(true);
+    const j2 = api.jurGravar({ tribunal: "STJ", classe: "REsp", numero: "1.111", tese: "Tese do REsp de teste.", texto: "EMENTA: RECURSO ESPECIAL. TRIBUTÁRIO. Tese do REsp de teste e mais texto." });
+    let pedido = "", busca = false;
+    J.fetch = async (url, o) => { const c = JSON.parse(o.body); pedido = c.contents[0].parts[0].text; busca = !!c.tools; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: ["PROCESSO: confere", "RELATOR: Min. Fulano", "ORGAO: Segunda Turma", "DATA: 2020-05-05", "TESE: confere", "EMENTA: confere", "VIGENCIA: vigente", "FONTE: https://scon.stj.jus.br/x"].join(NL2) }] }, finishReason: "STOP", groundingMetadata: { groundingChunks: [{ web: { title: "STJ", uri: "https://scon.stj.jus.br/y" } }] } }] }) }; };
+    api.jcfAbrir([j2.id]);
+    ok(api.$("btnJcfIaGemini"), "I7 com a opção ligada, aparece '✨ Pedir ao Gemini'");
+    await api.jcfIaGemini();
+    const jg = api.jurDe(j2.id);
+    ok(/REsp 1\.111/.test(pedido) && busca && jg.iaConf && jg.iaConf.processo === "confere" && jg.iaConf.via === "gemini" && jg.iaConf.fontes.length === 1, "I8 o Gemini vai com a busca ligada; a resposta e as fontes ficam guardadas");
+    ok(api.jcfVerificacoes(jg).some((x) => x.k === "ia_ok" && x.peso === 0) && !jg.selo, "I9 'confere' da IA aparece como verificação positiva — o selo continua sendo seu");
+    ["jcf_ia_tit", "jcf_ia_expl", "jcf_ia_copiar", "jcf_ia_gemini", "jcf_ia_gemini_aj", "jcf_ia_config", "jcf_ia_ph", "jcf_ia_ler", "jcf_ia_nada", "jcf_ia_lida", "jcf_ia_copiado",
+      "jcf_ia_esperando", "jcf_ia_campos", "jcf_ia_antes", "jcf_ia_aplicar", "jcf_ia_fontes", "jcf_ia_lembrete", "jcf_ia_r_processo", "jcf_ia_r_ementa", "jcf_ia_r_tese",
+      "jcf_ia_r_vigencia", "jcf_ia_st_confere", "jcf_ia_st_diverge", "jcf_ia_st_outro", "jcf_ia_st_vigente", "jcf_ia_st_superada", "jcf_ia_st_cancelada", "jcf_ia_st_nao_achei",
+      "jcf_ia_st_x", "jcf_ia_p_abre", "jcf_ia_p_dados", "jcf_ia_p_tribunal", "jcf_ia_p_processo", "jcf_ia_p_orgao", "jcf_ia_p_relator", "jcf_ia_p_data", "jcf_ia_p_tese",
+      "jcf_ia_p_ementa", "jcf_ia_p_fonte", "jcf_ia_p_tarefa", "jcf_ia_p_formato", "jcf_v_ia_processo", "jcf_v_ia_ementa", "jcf_v_ia_tese", "jcf_v_ia_vigencia", "jcf_v_ia_ok"].forEach((k2) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k2) && api.t(k2) !== k2, "I10 falta " + k2 + " em " + l); }));
     api.setLanguage("pt");
   }
 
