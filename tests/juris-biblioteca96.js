@@ -45,12 +45,14 @@ async function testes() {
     a.$("jurBibTag").value = "imunidade"; a.$("jurBibTag").onchange();
     ok(a.jurBibFiltrados().map((j) => j.id).sort().join() === [j1.id, j3.id].sort().join(), "B1d pela etiqueta (de disciplinas diferentes)");
     a.$("jurBibTag").value = ""; a.$("jurBibTag").onchange();
-    /* a etiqueta na lista vira filtro */
-    const chip = a.$("jurBibLista").querySelectorAll(".jur-tag-chip").find((b) => b.textContent === "#IPTU");
-    ok(chip, "B2 a etiqueta aparece na lista da biblioteca");
+    /* a etiqueta vira filtro: (19.143.0) na linha ela aparece discreta; tocável, na LEITURA do julgado */
+    ok(/#IPTU/.test(a.$("jurBibLista").textContent), "B2 a etiqueta aparece na lista da biblioteca");
+    a.jurBibSelecionar(j1.id);
+    const chip = a.$("jurBibLeitor").querySelectorAll(".jur-tag-chip").find((b) => b.textContent === "#IPTU");
     chip.onclick();
     ok(a.jurBibFiltrados().map((j) => j.id).join() === j1.id && a.$("jurBibTag").value === "iptu", "B2a tocar na etiqueta filtra (e o seletor acompanha)");
-    a.$("jurBibLista").querySelectorAll(".jur-tag-chip").find((b) => b.textContent === "#IPTU").onclick();
+    ok(a.$("jurBibChips").hidden === false && /#IPTU|iptu/i.test(a.$("jurBibChips").textContent), "B2c o filtro ativo aparece como chip: " + a.$("jurBibChips").textContent);
+    a.$("jurBibLeitor").querySelectorAll(".jur-tag-chip").find((b) => b.textContent === "#IPTU").onclick();
     ok(a.jurBibFiltrados().length === 3, "B2b tocar de novo tira o filtro");
   }
 

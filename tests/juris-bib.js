@@ -146,16 +146,18 @@ async function testes() {
   {
     const { api, C, re } = montar();
     api.jurBibAbrir();
+    /* (19.143.0) as ações moram na LEITURA: tocar na linha abre */
     const li = itens(api).find((x) => /RE 111/.test(x.textContent));
-    const bL = li.querySelectorAll("button").find((b) => b.id === "btnJurBibLigar_" + re.id);
+    li.onclick();
+    ok(api.$("jurBibLeitor").hidden === false && /RE 111/.test(api.$("jurBibLeitor").textContent), "B7- tocar na linha abre a leitura do julgado");
+    const bL = api.$("jurBibLeitor").querySelectorAll("button").find((b) => b.id === "btnJurBibLigar_" + re.id);
     bL.onclick();
-    const sel = api.$("jurBibLista").querySelectorAll("select").find((s) => s.id === "jurBibLigarSel_" + re.id);
+    const sel = api.$("jurBibLeitor").querySelectorAll("select").find((s) => s.id === "jurBibLigarSel_" + re.id);
     const vals = sel ? sel.children.map((o) => o.value) : [];
     ok(sel && vals.indexOf(C) >= 0 && vals.indexOf(api.matChave(D, "Limitações")) < 0, "B8 '＋ outro tópico' oferece os tópicos onde ele ainda não está: " + vals.join(" | "));
     sel.value = C; sel.onchange();
     ok(api.jurDe(re.id).topicos.indexOf(C) >= 0 && grupos(api).some((g) => /Lançamento \(1\)/.test(g)), "B8a escolher liga o julgado ao tópico, e a lista já mostra");
-    const li2 = itens(api).find((x) => /RE 111/.test(x.textContent));
-    const top = li2.querySelectorAll("button").find((b) => /jur-bib-top/.test(cls(b)));
+    const top = api.$("jurBibLeitor").querySelectorAll("button").find((b) => /jur-bib-top/.test(cls(b)));
     top.onclick();
     ok(api.$("dlgJurBib").open === false && api.$("dlgJuris").open === true, "B7 tocar no tópico fecha a biblioteca e abre os julgados de lá");
   }
@@ -218,6 +220,46 @@ async function testes() {
     });
     api.setLanguage("pt");
   }
+  /* ---- J143 (19.143.0): três colunas — filtros recolhíveis com chips, lista compacta, leitura de um julgado ---- */
+  {
+    const { api, re, resp, adi } = montar();
+    try { api.loja.setItem("eac_jbb_filtros", "0"); } catch (e) {}
+    api.jurBibAbrir();
+    ok(!/jbb-filtros-aberto/.test(cls(api.$("dlgJurBib"))) && /Filtros/.test(api.$("btnJurBibFiltros").textContent), "J1 com os filtros fechados, o botão diz 'Filtros'");
+    api.$("btnJurBibFiltros").onclick();
+    ok(/jbb-filtros-aberto/.test(cls(api.$("dlgJurBib"))) && /Esconder/.test(api.$("btnJurBibFiltros").textContent), "J1a o botão abre o painel (e a escolha é lembrada)");
+    ok(api.$("jurBibChips").hidden === true, "J2 sem filtro ativo, sem chips");
+    api.$("jurBibTrib").value = "STF"; api.$("jurBibTrib").onchange();
+    ok(api.$("jurBibChips").hidden === false && api.$("btnJbbChip_trib") && /STF/.test(api.$("btnJbbChip_trib").textContent) && /· 1/.test(api.$("btnJurBibFiltros").textContent),
+      "J2a o filtro ativo vira chip, e o botão conta quantos: " + api.$("jurBibChips").textContent);
+    api.$("btnJbbChip_trib").onclick();
+    ok(!api.$("btnJbbChip_trib") || api.$("jurBibChips").hidden === true, "J2b tocar no chip tira o filtro");
+    ok(api.jurBibFiltrados().length === 3, "J2c e a lista volta inteira");
+    /* a linha é compacta: nenhum botão dentro dela */
+    const li = itens(api).find((x) => /ADI 333/.test(x.textContent));
+    ok(li && !li.querySelectorAll("button").length, "J3 a linha não tem botões (as ações moram na leitura)");
+    li.onclick();
+    const lt = api.$("jurBibLeitor");
+    ok(lt.hidden === false && /jbb-com-leitor/.test(cls(api.$("dlgJurBib"))) && /ementa da ADI/.test(lt.textContent) && /Tese da ADI/.test(lt.textContent), "J4 a leitura mostra a tese e a ementa inteira");
+    ok(/sel/.test(cls(itens(api).find((x) => /ADI 333/.test(x.textContent)))), "J4a a linha aberta fica marcada");
+    /* navegar pela lista filtrada */
+    const L = api.jurBibFiltrados();
+    const k = L.findIndex((j) => j.id === adi.id);
+    if (k < L.length - 1) { api.$("btnJurBibLtProx").onclick(); ok(api.$("jurBibLeitor").textContent.indexOf(L[k + 1].tese) >= 0, "J5 'próximo ›' abre o seguinte da lista"); }
+    else { api.$("btnJurBibLtAnt").onclick(); ok(api.$("jurBibLeitor").textContent.indexOf(L[k - 1].tese) >= 0, "J5 '‹ anterior' abre o de antes da lista"); }
+    api.$("btnJurBibLtX").onclick();
+    ok(api.$("jurBibLeitor").hidden === true && !/jbb-com-leitor/.test(cls(api.$("dlgJurBib"))), "J6 fechar a leitura volta à lista larga");
+    /* o julgado sem ementa diz isso na leitura */
+    api.jurBibSelecionar(re.id);
+    ok(/Ementa não guardada/.test(api.$("jurBibLeitor").textContent), "J7 sem ementa, a leitura avisa");
+    void resp;
+    ["jbb_rot_qualidade", "jbb_rot_assunto", "jbb_rot_trib", "jbb_rot_sit", "jbb_rot_tag", "jbb_rot_ano", "jbb_rot_rel", "jbb_rot_grupo", "jbb_rot_ordem", "jbb_rot_pastas",
+      "jbb_filtros_mostrar", "jbb_filtros_esconder", "jbb_chip_tirar", "jbb_item_aria", "jbb_lt_ant", "jbb_lt_prox", "jbb_lt_pos", "jbb_lt_fora", "jbb_lt_fechar", "jbb_lt_sem_dados",
+      "jbb_lt_tese", "jbb_lt_ementa", "jbb_lt_sem_ementa", "jbb_lt_resumo", "jbb_lt_precedentes", "jbb_lt_fonte", "jbb_lt_sem_fonte", "jbb_lt_topicos"].forEach((k2) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k2) && api.t(k2) !== k2, "J8 falta " + k2 + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   return falhas;
 }
 

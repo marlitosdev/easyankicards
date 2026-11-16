@@ -109,7 +109,8 @@ async function testes() {
     ok(chJ().indexOf("📋 ISS Caruaru · 1") >= 0 && chJ().indexOf("📁 Área fiscal · 1") >= 0, "U1 na biblioteca de julgados: a pasta do edital e a livre (com os julgados): " + chJ().join(" | "));
     api.$("jurBibPastas").querySelectorAll("button").filter((b) => /Área fiscal/.test(b.textContent))[0].onclick();
     ok(api.$("jurBibLista").querySelectorAll(".jur-bib-item").length === 1 && /160/.test(api.$("jurBibLista").textContent), "U2 a pasta filtra os julgados");
-    ok(api.$("jurBibLista").querySelectorAll("button").some((b) => b.id === "btnPas_jur_" + j2.id), "U3 cada julgado tem o 📁");
+    api.jurBibSelecionar(j2.id);
+    ok(api.$("jurBibLeitor").querySelectorAll("button").some((b) => b.id === "btnPas_jur_" + j2.id), "U3 cada julgado tem o 📁 (na leitura dele)");
     void j1;
 
     /* backup */

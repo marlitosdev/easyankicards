@@ -5153,6 +5153,71 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 /* (v18.96.0) a biblioteca em tela cheia (o padrão), como o Domínio */
 #dlgJurBib.jur-bib-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin:0;border:0;border-radius:0;box-sizing:border-box}
 #dlgJurBib.jur-bib-cheia[open] .jur-bib-lista{max-height:none}
+/* (19.143.0) a biblioteca em três colunas: filtros · lista · leitura (cada coluna rola sozinha) */
+#dlgJurBib[open]{display:flex;flex-direction:column;width:min(1400px,98vw);max-width:min(1400px,98vw);max-height:94vh;max-height:94dvh;overflow:hidden}
+#dlgJurBib[open]>*{flex:0 0 auto}
+#dlgJurBib[open]>.jbb-corpo{flex:1 1 auto;min-height:0}
+#dlgJurBib[open]>.jur-bib-estudo,#dlgJurBib[open]>.jur-bib-atual{flex:1 1 auto;min-height:0;overflow:auto}
+.jbb-conta{margin:0 0 var(--esp-2)}
+.jbb-topo{display:flex;gap:var(--esp-2);align-items:center;margin:0 0 var(--esp-2)}
+.jbb-topo[hidden]{display:none}
+.jbb-topo input[type=search]{flex:1 1 auto;min-width:0;box-sizing:border-box;font-size:var(--fs-4);padding:var(--esp-2) var(--esp-3);border-radius:var(--r-m);border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.jbb-filtros-bt{flex:none;white-space:nowrap}
+.jbb-chips{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin:0 0 var(--esp-2)}
+.jbb-chips[hidden]{display:none}
+.jbb-chip{display:inline-flex;align-items:center;gap:var(--esp-1);font-size:var(--fs-2);padding:2px 4px 2px 10px;border-radius:var(--r-pilula);border:1px solid var(--info);color:var(--info);background:transparent;cursor:pointer;font-family:inherit}
+.jbb-chip b{font-weight:var(--peso-f)}
+.jbb-chip-x{font-size:var(--fs-1);padding:0 6px;opacity:.8}
+.jbb-corpo{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--esp-3);position:relative}
+#dlgJurBib.jbb-filtros-aberto .jbb-corpo{grid-template-columns:250px minmax(0,1fr)}
+#dlgJurBib.jbb-com-leitor .jbb-corpo{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+#dlgJurBib.jbb-filtros-aberto.jbb-com-leitor .jbb-corpo{grid-template-columns:250px minmax(0,1fr) minmax(0,1.2fr)}
+.jbb-filtros,.jbb-col-lista,.jbb-leitor{min-height:0;overflow:auto}
+#dlgJurBib .jbb-filtros{display:none;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:var(--esp-2);margin:0;padding-right:var(--esp-1)}
+#dlgJurBib.jbb-filtros-aberto .jbb-filtros{display:flex}
+#dlgJurBib .jbb-filtros[hidden]{display:none}
+.jbb-campo{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
+.jbb-campo[hidden]{display:none}
+.jbb-campo select{width:100%;font-size:var(--fs-3);padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border:1px solid var(--borda);background:var(--campo);color:var(--texto);color-scheme:light dark}
+.jbb-sec{display:flex;flex-direction:column;gap:var(--esp-1)}
+.jbb-rot{font-size:var(--fs-2);color:var(--sutil);font-weight:var(--peso-m)}
+.jbb-filtros .jur-bib-qualidade{flex-direction:column;align-items:stretch;margin:0}
+.jbb-filtros .jur-bib-qualidade>.nota{display:none}
+.jbb-filtros .jur-bib-qualidade .btn-min{justify-content:flex-start;text-align:left}
+.jbb-filtros .pas-fileira{flex-direction:column;align-items:stretch}
+.jbb-col-lista{display:flex;flex-direction:column}
+.jbb-col-lista[hidden]{display:none}
+.jbb-acoes{margin:0 0 var(--esp-2)}
+.jbb-acoes[hidden]{display:none}
+#dlgJurBib .jur-bib-lista{max-height:none;flex:1 1 auto;min-height:0;overflow:auto}
+#dlgJurBib .jur-bib-item{cursor:pointer;padding:var(--esp-2) var(--esp-3);border-radius:var(--r-m);background:var(--panel)}
+#dlgJurBib .jur-bib-item:hover{border-color:var(--info)}
+#dlgJurBib .jur-bib-item.sel{border-color:var(--acao);box-shadow:inset 3px 0 0 var(--acao)}
+#dlgJurBib .jur-bib-tese{font-size:var(--fs-4);line-height:1.45;-webkit-line-clamp:2}
+.jbb-meta{font-size:var(--fs-2);color:var(--sutil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jbb-leitor{border:1px solid var(--borda);border-radius:var(--r-m);background:var(--panel);padding:var(--esp-3) var(--esp-4)}
+.jbb-leitor[hidden]{display:none}
+.jbb-lt-barra{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;justify-content:space-between;margin:0 0 var(--esp-2)}
+.jbb-lt-nav{display:flex;gap:var(--esp-1);align-items:center}
+.jbb-lt-tit{font-size:var(--fs-5);font-weight:var(--peso-f);margin:var(--esp-1) 0}
+.jbb-lt-dados{font-size:var(--fs-3);color:var(--sutil);margin:0 0 var(--esp-3)}
+.jbb-lt-sec{margin:0 0 var(--esp-3)}
+.jbb-lt-rot{font-size:var(--fs-2);font-weight:var(--peso-f);text-transform:uppercase;letter-spacing:.04em;color:var(--sutil);margin:0 0 var(--esp-1)}
+.jbb-lt-tese{font-size:var(--fs-4);line-height:1.55;margin:0;padding:var(--esp-2) var(--esp-3);border-left:3px solid var(--acao);background:var(--campo);border-radius:var(--r-p)}
+.jbb-lt-ementa{font-size:var(--fs-3);line-height:1.6;white-space:pre-wrap;margin:0}
+.jbb-lt-vazio{font-size:var(--fs-3);color:var(--atencao)}
+.jbb-leitor .jur-qpainel{display:block}
+.jbb-leitor .jur-bib-tags,.jbb-leitor .jur-bib-tops{margin:0}
+/* tela média: com a leitura aberta, o painel de filtros recolhe (o botão "⚙ Filtros" continua à mão) */
+@media (max-width:1250px){
+  #dlgJurBib.jbb-filtros-aberto.jbb-com-leitor .jbb-corpo{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
+  #dlgJurBib.jbb-filtros-aberto.jbb-com-leitor .jbb-filtros{display:none}
+}
+@media (max-width:900px){
+  #dlgJurBib.jbb-filtros-aberto .jbb-corpo,#dlgJurBib.jbb-com-leitor .jbb-corpo,#dlgJurBib.jbb-filtros-aberto.jbb-com-leitor .jbb-corpo{grid-template-columns:minmax(0,1fr)}
+  #dlgJurBib.jbb-filtros-aberto .jbb-filtros{max-height:45vh}
+  .jbb-leitor{position:absolute;inset:0;z-index:3}
+}
 .jur-bib-estudo[hidden]{display:none}
 .jur-bib-est-frente{font-size:16px;font-weight:700}
 .jur-bib-est-tese{white-space:pre-wrap;margin:0}
@@ -11037,11 +11102,24 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnJurBibCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
     <button type="button" class="dlg-x" id="btnJurBibX" data-i18n-title="help_close">✖</button>
   </div>
-  <p class="nota"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b> <button type="button" class="btn-quieto" id="btnJurBibLimpar" data-i18n="jur_bib_limpar" hidden></button></p>
-  <div id="jurBibBarra" class="jur-bib-barra">
+  <!-- (19.143.0) A BIBLIOTECA EM TRÊS COLUNAS: filtros (recolhíveis) · lista compacta · leitura de UM julgado.
+       Eram sete menus de seleção empilhados (metade da tela) e, em cada julgado, quatro ou cinco botões do mesmo peso —
+       sem um lugar para ler um só com calma. Os filtros (os mesmos campos, com rótulo) moram num painel; os ativos
+       aparecem como chips removíveis; tocar num julgado abre a leitura ao lado (no celular, por cima da lista). -->
+  <p class="nota jbb-conta"><span id="jurBibConta"></span> <b id="jurBibFiltro"></b> <button type="button" class="btn-quieto" id="btnJurBibLimpar" data-i18n="jur_bib_limpar" hidden></button></p>
+  <div class="jbb-topo" id="jurBibTopo">
     <input type="search" id="jurBibBusca" data-i18n-ph="jur_bib_busca_ph" placeholder="procurar">
-    <select id="jurBibTrib" data-i18n-title="jur_bib_trib_aj"></select>
-    <select id="jurBibSit" data-i18n-title="jur_bib_sit_aj">
+    <button type="button" class="btn-min jbb-filtros-bt" id="btnJurBibFiltros" aria-expanded="false" aria-controls="jurBibBarra"></button>
+  </div>
+  <div class="jbb-chips" id="jurBibChips" hidden></div>
+  <div class="jbb-corpo" id="jurBibCorpo">
+  <aside id="jurBibBarra" class="jur-bib-barra jbb-filtros">
+    <div class="jbb-sec"><div class="jbb-rot" data-i18n="jbb_rot_qualidade"></div>
+      <!-- (v18.95.0) a qualidade da coleção: um botão por selo, com a contagem (tocar filtra) -->
+      <div id="jurBibQualidade" class="jur-bib-qualidade"></div></div>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_assunto"></span><select id="jurBibAssunto" data-i18n-title="jur_bib_assunto_aj"></select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_trib"></span><select id="jurBibTrib" data-i18n-title="jur_bib_trib_aj"></select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_sit"></span><select id="jurBibSit" data-i18n-title="jur_bib_sit_aj">
       <option value="" data-i18n="jur_bib_sit_todos"></option>
       <option value="conferir" data-i18n="jur_bib_sit_conferir"></option>
       <option value="memoria" data-i18n="jur_bib_sit_memoria"></option>
@@ -11054,24 +11132,28 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <option value="q_vencido" data-i18n="jur_bib_sit_q_vencido"></option>
       <option value="q_conferido" data-i18n="jur_bib_sit_q_conferido"></option>
       <option value="q_oficial" data-i18n="jur_bib_sit_q_oficial"></option>
-    </select>
-    <select id="jurBibAssunto" data-i18n-title="jur_bib_assunto_aj"></select>
-    <select id="jurBibTag" data-i18n-title="jur_bib_tag_aj"></select>
+    </select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_tag"></span><select id="jurBibTag" data-i18n-title="jur_bib_tag_aj"></select></label>
     <!-- (19.126.0) ano do julgamento, relator e ordem -->
-    <select id="jurBibAno" data-i18n-title="jur_bib_ano_aj" hidden></select>
-    <select id="jurBibRelator" data-i18n-title="jur_bib_rel_aj" hidden></select>
-    <select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
+    <label class="jbb-campo"><span data-i18n="jbb_rot_ano"></span><select id="jurBibAno" data-i18n-title="jur_bib_ano_aj" hidden></select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_rel"></span><select id="jurBibRelator" data-i18n-title="jur_bib_rel_aj" hidden></select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_grupo"></span><select id="jurBibGrupo" data-i18n-title="jur_bib_grupo_aj">
       <option value="topico" data-i18n="jur_bib_grupo_topico"></option>
       <option value="tribunal" data-i18n="jur_bib_grupo_tribunal"></option>
       <option value="" data-i18n="jur_bib_grupo_nenhum"></option>
-    </select>
-    <select id="jurBibOrdem" data-i18n-title="jur_bib_ordem_aj">
+    </select></label>
+    <label class="jbb-campo"><span data-i18n="jbb_rot_ordem"></span><select id="jurBibOrdem" data-i18n-title="jur_bib_ordem_aj">
       <option value="" data-i18n="jur_bib_ordem_padrao"></option>
       <option value="recente" data-i18n="jur_bib_ordem_recente"></option>
       <option value="antigo" data-i18n="jur_bib_ordem_antigo"></option>
       <option value="verif" data-i18n="jur_bib_ordem_verif"></option>
-    </select>
-    <div class="qm-bts">
+    </select></label>
+    <div class="jbb-sec"><div class="jbb-rot" data-i18n="jbb_rot_pastas"></div>
+      <!-- (v19.12.0) as pastas: de edital (automáticas) e livres -->
+      <div id="jurBibPastas" class="pas-fileira" role="group"></div></div>
+  </aside>
+  <section class="jbb-col-lista" id="jurBibColLista">
+    <div class="qm-bts jbb-acoes" id="jurBibAcoes">
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibEstudar" data-i18n-title="jur_bib_estudar_aj"></button>
       <button type="button" class="btn-min" id="btnJurBibCartoes" data-i18n-title="jur_bib_cartoes_aj"></button>
       <button type="button" class="btn-min" id="btnJurBibDesfazer" data-i18n="jur_bib_desfazer" hidden></button>
@@ -11080,15 +11162,14 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibConferir" data-i18n-title="jur_conf_btn_aj"></button>
       <button type="button" class="btn-min btn-min-ok" id="btnJurBibAuditar" data-i18n-title="jur_aud_btn_aj" hidden></button>
     </div>
-    <!-- (v18.95.0) a qualidade da coleção: um botão por selo, com a contagem (tocar filtra) -->
-    <div id="jurBibQualidade" class="jur-bib-qualidade"></div>
     <p class="nota" id="jurBibMsg" role="status"></p>
-    <!-- (v19.12.0) as pastas: de edital (automáticas) e livres -->
-    <div id="jurBibPastas" class="pas-fileira" role="group"></div>
+    <div id="jurBibLista" class="jur-bib-lista"></div>
+    <!-- (19.126.0) "seu acervo, hoje": de onde vêm os números e o que a busca não alcança -->
+    <p class="nota jur-bib-acervo" id="jurBibAcervo" hidden></p>
+  </section>
+  <!-- (19.143.0) A LEITURA DE UM JULGADO: tese, ementa inteira, dados, fonte, qualidade e o que fazer com ele -->
+  <section class="jbb-leitor" id="jurBibLeitor" aria-live="polite" hidden></section>
   </div>
-  <div id="jurBibLista" class="jur-bib-lista"></div>
-  <!-- (19.126.0) "seu acervo, hoje": de onde vêm os números e o que a busca não alcança -->
-  <p class="nota jur-bib-acervo" id="jurBibAcervo" hidden></p>
   <!-- JM4: a jurisprudência continua valendo? -->
   <div id="jurBibAtual" class="jur-bib-atual" hidden>
     <p class="nota" id="jurBibAtualIntro"></p>
