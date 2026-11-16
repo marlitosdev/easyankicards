@@ -87,6 +87,8 @@ const BK_CHAVES = {
              "eac_pastas",
              /* (v19.97.0) o que foi posto à mão na pasta de um edital */
              "eac_pastas_ed",
+             /* (19.139.0) as leis do edital: as lacunas dispensadas e a última conferência da IA, por edital */
+             "eac_led_dispensadas", "eac_led_ia",
              /* (v19.102.0) o recibo da virada do edital: o backup leva junto o que permite desfazê-la */
              "eac_virada_recibos"],
   /* O HISTÓRICO DAS CÓPIAS FICA DE FORA, de propósito.

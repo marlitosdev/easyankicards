@@ -6649,6 +6649,8 @@ function vzAbrirChave(aba) {
   if ($("chkVzJurIa")) $("chkVzJurIa").checked = typeof jurIaLigada === "function" && jurIaLigada();
   /* (19.125.0) e no "preparar o tópico": outra escolha, também desligada por padrão */
   if ($("chkVzPrepIa")) $("chkVzPrepIa").checked = typeof prepIaLigada === "function" && prepIaLigada();
+  /* (19.139.0) e nas "Leis do edital": conferir a lista de leis, também desligada por padrão */
+  if ($("chkVzLedIa")) $("chkVzLedIa").checked = typeof ledIaLigada === "function" && ledIaLigada();
   /* (v18.99.0) as abas: chave · consumo · faturas (o selo do cabeçalho e a jurisprudência abrem no consumo) */
   if (typeof iacAba === "function") iacAba(aba === "consumo" || aba === "faturas" ? aba : "chave");
   abrirModal("dlgVzChave");
@@ -7964,6 +7966,12 @@ function vkIniciarTela() {
       const depoisP = prepIaLigar(!!$("chkVzPrepIa").checked);
       if (antesP !== depoisP) reg("PREPARAR", depoisP ? "Gemini direto no preparar o tópico: LIGADO pela pessoa" : "Gemini direto no preparar o tópico: desligado");
       try { if (typeof prepIaPintar === "function") prepIaPintar(); } catch (e) {}
+    }
+    if ($("chkVzLedIa") && typeof ledIaLigar === "function") {
+      const antesL = ledIaLigada();
+      const depoisL = ledIaLigar(!!$("chkVzLedIa").checked);
+      if (antesL !== depoisL) reg("LEI", depoisL ? "Gemini direto nas leis do edital: LIGADO pela pessoa" : "Gemini direto nas leis do edital: desligado");
+      try { if ($("dlgLeisEd") && $("dlgLeisEd").open && typeof ledPintar === "function") ledPintar(); } catch (e) {}
     }
     $("dlgVzChave").close();
     vzPintarChave();

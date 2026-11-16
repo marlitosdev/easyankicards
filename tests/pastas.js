@@ -168,6 +168,92 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---- G (19.139.0): O QUE FALTA NA BIBLIOTECA, AS CITADAS SEM LIGAÇÃO E A IA CONFERINDO A LISTA ---- */
+  {
+    const { api, janela: J } = rodar();
+    api.matIniciar(); api.edIniciar(); api.leiIniciar && api.leiIniciar();
+    api.ledIniciar();
+    const e = api.edCriar("ISS", ["# ISS Caruaru | prova: 2027-06-01 | horas: 20", "@ Direito Constitucional :: 3", "+ Repartição de receitas :: 3 :: Art. 3º da CF",
+      "@ Sistema Tributário :: 5", "+ Suspensão do crédito :: 5 :: Arts. 3 a 5 do CTN", "+ Imunidades :: 4 :: CF e LC 116/03, art. 2º", "+ Dívida ativa :: 3 :: Lei 6.830/80 e LEF"].join(NL));
+    const arts = (n) => Array.from({ length: n }, (_, i) => "Art. " + (i + 1) + "º Texto do artigo " + (i + 1) + ".").join(NL);
+    const chS = api.matChave("Sistema Tributário", "Suspensão do crédito");
+    const ctn = api.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", texto: arts(12), topicos: [chS] });
+    const cf = api.leiGuardar({ nome: "Constituição Federal", apelido: "CF", texto: arts(10), topicos: [] });
+    const lef = api.leiGuardar({ nome: "Lei 6.830/1980 - LEF", texto: arts(8), topicos: [] });
+    let M = api.ledModelo(e.id);
+    ok(M.lacunas.map((G) => G.chave).join() === "lc:116" && M.lacunas[0].topicos[0].nome === "Imunidades" && M.lacunas[0].nums.has("2"),
+      "G1 a lei citada que não está na biblioteca vira lacuna (e a sigla solta 'LEF' não): " + M.lacunas.map((G) => G.chave + "/" + G.rotulo).join());
+    ok(api.ledChaveLacuna("Lei Complementar 116/2003") === "lc:116" && api.ledChaveLacuna("LC 116/03") === "lc:116" && api.ledChaveLacuna("ISS") === "", "G1a a mesma lei escrita de dois jeitos tem a mesma chave");
+    api.ledAbrir(e.id);
+    ok(/Faltam na biblioteca · 1/.test(api.$("ledLac").textContent) && api.$("btnLedLacInc_lc_116") && /1 falta\(m\) na biblioteca/.test(api.$("ledResumo").textContent),
+      "G2 a faixa das lacunas, com '＋ incluir', e o resumo dizem o que falta: " + api.$("ledResumo").textContent);
+    api.$("btnLedLacDisp_lc_116").onclick();
+    ok(Object.keys(api.ledDispensadas(e.id)).join() === "lc:116" && /Faltam na biblioteca · 0/.test(api.$("ledLac").textContent) && api.$("btnLedLacDispVer"),
+      "G3 dispensar tira da lista (lembrado por edital) e deixa o 'mostrar'");
+    api.$("btnLedLacDispVer").onclick();
+    api.$("btnLedLacVolta_lc_116").onclick();
+    ok(!Object.keys(api.ledDispensadas(e.id)).length && /Faltam na biblioteca · 1/.test(api.$("ledLac").textContent), "G3a 'voltar à lista' desfaz");
+    /* citadas sem ligação: a CF é citada em dois tópicos e não está ligada a nenhum */
+    const cfSem = M.semLigacao.find((x) => x.id === cf.id);
+    ok(cfSem && cfSem.topicos.length === 2 && api.$("btnLedLig_" + cf.id), "G4 a lei da biblioteca citada em tópicos sem ligação aparece, com 'ligar'");
+    await conduzir(api, api.ledLigarCitada(cfSem), true);
+    M = api.ledModelo(e.id);
+    ok(!M.semLigacao.some((x) => x.id === cf.id) && api.leiDe(cf.id).topicos.length === 2, "G4a 'ligar' liga a lei aos tópicos que a citam");
+    /* a resposta da IA */
+    const resp = ["Aqui está:", "* **+ Lei Complementar 116/2003 | Sistema Tributário | é a lei do ISS**", "1. + Lei 9.999/2020 | Sistema Tributário | lei inventada",
+      "+ CTN | Sistema Tributário | já tenho", "− Lei 6.830/1980 | execução fiscal não cai na objetiva", "! CTN | o núcleo da prova"].join(NL);
+    const itens = api.ledIaLer(resp);
+    ok(itens.map((i) => i.tipo).join("") === "+++-!" && itens[0].lei === "Lei Complementar 116/2003" && itens[0].disc === "Sistema Tributário",
+      "G5 a resposta é lida com marcador de lista, negrito e o sinal de menos: " + JSON.stringify(itens.map((i) => [i.tipo, i.lei])));
+    api.ledIaAplicarTexto(resp);
+    M = api.ledModelo(e.id);
+    const g116 = M.lacunas.find((G) => G.chave === "lc:116"), g9999 = M.lacunas.find((G) => G.chave === "lei:9999");
+    ok(g116 && g116.ia && !g116.soIa && g9999 && g9999.soIa && g9999.noEdital === false, "G6 o '+' da IA junta-se à lacuna do edital; a lei que só a IA cita fica marcada");
+    ok(/Só a IA citou/.test(api.$("ledLac_lei_9999").textContent) && /🤖 IA/.test(api.$("ledLac_lc_116").textContent), "G6a a tela avisa que o edital não menciona a lei da IA");
+    ok(M.iaJa.length === 1 && M.iaJa[0].lei.id === ctn.id && M.iaNaoCai[lef.id] && M.iaPrioridade[ctn.id], "G7 '+' de lei que já existe, '−' e '!' viram notas na lei, não lacuna");
+    ok(/A IA acha que não cai/.test(api.$("ledCorpo").textContent) && /Prioridade \(IA\): o núcleo da prova/.test(api.$("ledCorpo").textContent), "G7a as notas aparecem no cartão da lei");
+    ok(api.ledIaGuardado(e.id).itens.length === 5, "G7b a conferência fica guardada para o edital");
+    /* o pedido */
+    const ped = api.ledIaPedido(M);
+    ok(/CONCURSO: ISS Caruaru/.test(ped) && /## Sistema Tributário \(peso 5\)/.test(ped) && /Suspensão do crédito \[5\] — cita: CTN \(art\. 3/.test(ped)
+      && /Lei 5\.172\/1966/.test(ped) && /LC 116\/03/.test(ped) && /\+ <nome oficial da lei> \| <disciplina>/.test(ped) && !/Texto do artigo/.test(ped),
+      "G8 o pedido leva disciplinas com peso, o que cada tópico cita, as leis que tenho, as lacunas e o formato — nunca o texto das leis: " + ped.slice(0, 300));
+    /* o Gemini direto, só com a opção ligada */
+    ok(!api.$("btnLedIaGemini") && api.$("btnLedIaConfig"), "G9 sem a opção ligada, só o copiar (e o link para configurar)");
+    api.vzGuardarChave("AIzaTESTE123456");
+    api.ledIaLigar(true);
+    api.ledPintar();
+    ok(api.$("btnLedIaGemini"), "G9a com a chave e a opção, aparece '✨ Pedir ao Gemini'");
+    let pedidoIa = "";
+    J.fetch = async (url, o) => { pedidoIa = JSON.parse(o.body).contents[0].parts[0].text; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: "+ Lei 10.257/2001 | Sistema Tributário | Estatuto da Cidade (IPTU progressivo)" }] }, finishReason: "STOP" }] }) }; };
+    await api.ledIaGemini();
+    M = api.ledModelo(e.id);
+    ok(/CONCURSO: ISS Caruaru/.test(pedidoIa) && M.lacunas.some((G) => G.chave === "lei:10257"), "G9b o Gemini recebe o pedido e a resposta vira lacuna");
+    api.ledIaLigar(false);
+    /* incluir: a lei nova que É a da lacuna é ligada aos tópicos que a citam */
+    const lc116 = api.leiGuardar({ nome: "Lei Complementar 116/2003", texto: arts(5), topicos: [] });
+    const n = api.ledIncluida(api.ledModelo(e.id).lacunas.find((G) => G.chave === "lc:116") || g116, lc116.id);
+    ok(n === 1 && api.leiDe(lc116.id).topicos.length === 1 && !api.ledModelo(e.id).lacunas.some((G) => G.chave === "lc:116" && !G.soIa && G.topicos.length),
+      "G10 a lei incluída é ligada ao tópico que a cita e sai das lacunas");
+    const outra = api.leiGuardar({ nome: "Lei 8.987/1995", texto: arts(3), topicos: [] });
+    ok(api.ledIncluida({ rotulo: "Lei 10.257/2001", topicos: [{ disciplina: "Sistema Tributário", nome: "Imunidades" }] }, outra.id) === 0 && !api.leiDe(outra.id).topicos.length,
+      "G10a outra lei (não a da lacuna) não é ligada a nada");
+    /* backup, opção na tela da chave, textos */
+    const bk = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "backup.js"), "utf8");
+    ok(/"eac_led_dispensadas", "eac_led_ia"/.test(bk), "G11 as dispensadas e a conferência da IA vão no backup");
+    api.vzAbrirChave();
+    ok(api.$("chkVzLedIa") && api.$("chkVzLedIa").checked === false, "G12 a opção nas leis do edital está na tela da chave, desligada");
+    ["led_resumo_lac", "led_lac_tit", "led_lac_expl", "led_lac_em", "led_lac_incluir", "led_lac_incluir_aj", "led_lac_dispensar", "led_lac_dispensar_aj", "led_lac_voltar",
+      "led_lac_nenhuma", "led_lac_disp_ver", "led_lac_disp_esconder", "led_lac_so_ia", "led_tag_ia", "led_tag_prio", "led_inc_ligada", "led_inc_outra", "led_lig_tit",
+      "led_lig_expl", "led_lig_meta", "led_lig_bt", "led_lig_conf", "led_lig_ok", "led_lig_feito", "led_ia_tit", "led_ia_expl", "led_ia_copiar", "led_ia_gemini",
+      "led_ia_gemini_aj", "led_ia_config", "led_ia_ph", "led_ia_ler", "led_ia_nada", "led_ia_lida", "led_ia_copiado", "led_ia_nao_copiou", "led_ia_esperando",
+      "led_ia_ultima", "led_ia_limpar", "led_ia_ja", "led_ia_motivo", "led_ia_prio", "led_ia_nao_cai", "led_ia_optin", "led_ia_optin_aj", "led_ia_p_abre",
+      "led_ia_p_concurso", "led_ia_p_disciplinas", "led_ia_p_peso", "led_ia_p_cita", "led_ia_p_tenho", "led_ia_p_nenhuma", "led_ia_p_em", "led_ia_p_faltam",
+      "led_ia_p_tarefa", "led_ia_p_formato", "iac_mod_leis"].forEach((k) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "G13 falta " + k + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   /* ---- textos ---- */
   {
     const { api } = rodar();

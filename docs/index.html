@@ -1745,6 +1745,23 @@ dialog.led-dlg[open] #ledCorpo{flex:1 1 auto;min-height:0;overflow:auto;padding-
 .led-lei-acoes{flex:none;display:flex;gap:var(--esp-1);flex-wrap:wrap;justify-content:flex-end}
 .led-tag{margin-left:var(--esp-2);font-size:var(--fs-1);font-weight:var(--peso-m);color:var(--atencao);border:1px solid var(--atencao);border-radius:var(--r-pilula);padding:0 6px;white-space:nowrap}
 .led-lei-ok .led-lei-nome{color:var(--sutil)}
+/* (19.139.0) o que falta, as citadas sem ligação e a IA */
+.led-lac{border:1px solid var(--atencao);border-radius:var(--r-m);padding:var(--esp-3) var(--esp-4);margin:0 0 var(--esp-3);background:var(--panel)}
+.led-lac-tit,.led-lig-tit,.led-ia-tit{font-size:var(--fs-3);font-weight:var(--peso-f)}
+.led-lac-tit{color:var(--atencao)}
+.led-lac .nota,.led-lig .nota,.led-ia .nota{margin:var(--esp-1) 0 var(--esp-2)}
+.led-lac-lin{display:flex;align-items:center;gap:var(--esp-3);padding:var(--esp-2) 0;border-top:1px dashed var(--borda)}
+.led-lac-disp{opacity:.7}
+.led-lac-ver{margin-top:var(--esp-2)}
+.led-lig,.led-ia{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-4);margin:0 0 var(--esp-3);background:var(--panel)}
+.led-lig>summary,.led-ia>summary{cursor:pointer;padding:var(--esp-1) 0}
+.led-ia-bts{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin:0 0 var(--esp-2)}
+.led-ia-resp{width:100%;box-sizing:border-box;margin:0 0 var(--esp-2);font-size:var(--fs-3)}
+.led-ia-nota{color:var(--info)}
+.led-aviso{color:var(--atencao)}
+.led-tag-ia{color:var(--info);border-color:var(--info)}
+.led-tag-prio{color:var(--ok);border-color:var(--ok)}
+@media (max-width:600px){.led-lac-lin{flex-wrap:wrap}.led-lac-lin .led-lei-acoes{padding-left:0}}
 .led-anel{--p:0;flex:none;position:relative;width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
   background:conic-gradient(var(--led-cor,var(--info)) calc(var(--p) * 1%),var(--campo) 0)}
 .led-anel::before{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--panel)}
@@ -9485,6 +9502,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <!-- (19.125.0) a chave no "preparar o tópico": outra escolha, porque vai outro dado (o resumo ou o texto da aula) -->
     <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzPrepIa"> <span data-i18n="prep_ia_optin"></span></label>
     <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="prep_ia_optin_aj"></p></details>
+    <!-- (19.139.0) a chave nas "Leis do edital": conferir a lista de leis do edital -->
+    <label class="diag-op jur-ia-optin"><input type="checkbox" id="chkVzLedIa"> <span data-i18n="led_ia_optin"></span></label>
+    <details class="vz-det"><summary data-i18n="vz_o_que_vai"></summary><p class="nota" data-i18n="led_ia_optin_aj"></p></details>
     <p class="nota vz-uso-salvar" data-i18n="vz_bloco_uso_salvar"></p>
   </section>
   <section class="vz-bloco" aria-labelledby="vzBlocoLinks">

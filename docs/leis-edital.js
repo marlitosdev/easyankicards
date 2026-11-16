@@ -142,6 +142,19 @@ function ledModelo(edId) {
   /* MEMÓRIA DA MONTAGEM: o edital do ISS tem 409 linhas e cita o CTN 74 vezes; reconhecer o mesmo rótulo a cada vez
    * custava 1,6 s com a biblioteca real. Cada rótulo é reconhecido uma vez. */
   const casados = new Map();
+  /* (etapa 2) AS LACUNAS: lei citada no edital que não está na biblioteca, por espécie e número ("LC 116/03" e "Lei
+   * Complementar 116/2003" são a mesma); e, para o pedido à IA, o que cada tópico cita */
+  const lac = {};
+  const citas = [];
+  const lacunar = (rot, D0, tp, num) => {
+    const k = ledChaveLacuna(rot);
+    if (!k) return;
+    const G = lac[k] = lac[k] || { chave: k, rotulo: rot, topicos: [], disciplinas: [], peso: 0, nums: new Set() };
+    if (String(rot).length > String(G.rotulo).length) G.rotulo = rot;
+    if (!G.topicos.some((x) => x.disciplina === D0.nome && x.nome === tp.nome)) { G.topicos.push({ disciplina: D0.nome, nome: tp.nome, peso: tp.peso || 0 }); G.peso += tp.peso || 0; }
+    if (G.disciplinas.indexOf(D0.nome) < 0) G.disciplinas.push(D0.nome);
+    if (num) G.nums.add(leiNumNormal(num));
+  };
   const casar = (rot) => {
     const k = String(rot || "");
     if (!casados.has(k)) { let l = null; try { l = leiCasarRotulo(k, lista); } catch (x) { l = null; } casados.set(k, l); }
@@ -155,7 +168,10 @@ function ledModelo(edId) {
       const achadas = {};
       dt.forEach((l) => { achadas[l.id] = new Set(); });
       const txt = ledTextoDoTopico(tp);
+      const cita = new Map();   /* rótulo → números, para o pedido à IA */
+      const anotar = (rot, num) => { const k = String(rot || "").trim(); if (!k) return; if (!cita.has(k)) cita.set(k, []); if (num && cita.get(k).length < 8 && cita.get(k).indexOf(num) < 0) cita.get(k).push(num); };
       ledCitacoes(txt).forEach((c) => {
+        if (c.rotulo && !c.meioDaFaixa) anotar(c.rotulo, c.numCru || c.num);
         /* o caminho comum (o rótulo casa com uma lei que tem o artigo) pela memória; o resto, pela regra inteira */
         let lei = c.rotulo ? casar(c.rotulo) : null;
         if (!lei || !leiTemArtigo(lei, c.num)) {
@@ -163,13 +179,17 @@ function ledModelo(edId) {
           try { r = leiResolverCitacao(c, lista, dt); } catch (x) { r = null; }
           lei = r && r.lei;
         }
+        if (!lei && c.rotulo && !casar(c.rotulo)) { lacunar(c.rotulo, D, tp, c.num); return; }
         if (!lei || !leiTemArtigo(lei, c.num)) return;
         (achadas[lei.id] = achadas[lei.id] || new Set()).add(leiNumNormal(c.num));
       });
       ledMencoes(txt).forEach((rot) => {
         const l = casar(rot);
-        if (l && !achadas[l.id]) achadas[l.id] = new Set();
+        if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); anotar(rot); }
+        else if (ledChaveLacuna(rot)) { lacunar(rot, D, tp); anotar(rot); }
       });
+      citas.push({ disciplina: d.nome, peso: d.peso || 0, nome: tp.nome, tpPeso: tp.peso || 0,
+        cita: Array.from(cita.entries()).map(([r, ns]) => r + (ns.length ? " (art. " + ns.join(", ") + ")" : "")) });
       Object.keys(achadas).forEach((id) => {
         const T = { disciplina: d.nome, nome: tp.nome, chave: ch, peso: tp.peso || 0, nums: Array.from(achadas[id]), ligada: dt.some((x) => x.id === id) };
         const DL = D.leis[id] = D.leis[id] || { id, peso: 0, topicos: [] };
@@ -206,8 +226,23 @@ function ledModelo(edId) {
     });
     D.total = t2; D.lidos = l2; D.pct = t2 ? Math.round((l2 / t2) * 100) : 0;
   });
-  return { edId: e.id, nome: (L.cfg && L.cfg.concurso) || e.nome || "", disciplinas: discs, leis: porLei,
-    total: tot, lidos: lid, pct: tot ? Math.round((lid / tot) * 100) : 0, n: Object.keys(porLei).length };
+  /* as lacunas, da disciplina mais pesada para a mais leve; as dispensadas ficam à parte */
+  const pesoDisc = {};
+  discs.forEach((D) => { pesoDisc[D.nome] = D.peso; });
+  (L.disciplinas || []).forEach((d) => { if (pesoDisc[d.nome] == null) pesoDisc[d.nome] = d.peso || 0; });
+  const disp = ledDispensadas(e.id);
+  const lacunas = Object.keys(lac).map((k) => lac[k]).map((G) => Object.assign(G, {
+    pesoDisc: Math.max(0, ...G.disciplinas.map((n) => pesoDisc[n] || 0)), dispensada: !!disp[G.chave], noEdital: true }))
+    .sort((a, b) => b.pesoDisc - a.pesoDisc || b.peso - a.peso || String(a.rotulo).localeCompare(String(b.rotulo)));
+  /* as leis da biblioteca citadas em tópicos a que ainda não estão ligadas */
+  const semLigacao = Object.keys(porLei).map((id) => ({ id, lei: porLei[id].lei,
+    topicos: porLei[id].topicos.filter((T) => !T.ligada) })).filter((x) => x.topicos.length)
+    .sort((a, b) => b.topicos.length - a.topicos.length);
+  const M = { edId: e.id, nome: (L.cfg && L.cfg.concurso) || e.nome || "", disciplinas: discs, leis: porLei,
+    total: tot, lidos: lid, pct: tot ? Math.round((lid / tot) * 100) : 0, n: Object.keys(porLei).length,
+    lacunas, semLigacao, citas, pesos: (L.disciplinas || []).filter((d) => !d.inativa).map((d) => ({ nome: d.nome, peso: d.peso || 0 })) };
+  ledAplicarIa(M, casar, e.texto || "");
+  return M;
 }
 
 function ledEstado(leit) {
@@ -321,7 +356,8 @@ function ledPintar() {
   /* o resumo do edital: quanto do que ele cobra já foi lido */
   const rs = ledEl("div", "led-resumo");
   rs.id = "ledResumo";
-  rs.append(ledEl("span", "led-resumo-txt", t("led_resumo", { n: M.n, l: M.lidos, t: M.total, p: M.pct })));
+  const nLac = (M.lacunas || []).filter((G) => !G.dispensada).length;
+  rs.append(ledEl("span", "led-resumo-txt", t("led_resumo", { n: M.n, l: M.lidos, t: M.total, p: M.pct }) + (nLac ? " · " + t("led_resumo_lac", { n: nLac }) : "")));
   const barra = ledEl("span", "led-barra");
   const fill = ledEl("span", "led-barra-fill");
   fill.style.width = M.pct + "%";
@@ -361,6 +397,9 @@ function ledPintar() {
     });
     corpo.append(fc);
   }
+
+  /* (etapa 2) o que falta na biblioteca, as citadas sem ligação e a IA */
+  ledPintarLacunas(M, corpo);
 
   /* os filtros: todas · falta ler · concluídas */
   /* os filtros contam LEIS (uma lei em duas disciplinas conta uma vez); "falta ler" vale se falta em alguma delas */
@@ -412,6 +451,8 @@ function ledPintar() {
       const outras = P.disciplinas.filter((n) => n !== D.nome);
       if (outras.length) meta.push(t("led_tambem", { d: outras.join(", ") }));
       tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
+      if (M.iaPrioridade && M.iaPrioridade[x.id]) tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_prio", { m: M.iaPrioridade[x.id] })));
+      if (M.iaNaoCai && M.iaNaoCai[x.id]) tx.append(ledEl("div", "led-lei-meta led-aviso", t("led_ia_nao_cai", { m: M.iaNaoCai[x.id] })));
       if (L2.modo === "cobrados" && L2.cobrados.length) tx.append(ledEl("div", "led-lei-arts", t("led_arts", { f: ledFaixas(L2.cobrados, P.leit, 14) })));
       const det = ledEl("details", "led-lei-tops");
       det.append(ledEl("summary", "", t("led_topicos_n", { n: x.topicos.length })));
@@ -439,7 +480,380 @@ function ledIniciar() {
   if ($("btnLedX")) $("btnLedX").onclick = () => $("dlgLeisEd").close();
   if ($("btnLedCheia")) $("btnLedCheia").onclick = () => ledCheiaTrocar(undefined, true);
   if ($("btnEdLeis")) $("btnEdLeis").onclick = () => ledAbrir();
+  /* (etapa 2) a lei nova pode ter saído do assistente sem passar pela "volta" (fechou no meio): repinta ao voltar */
+  const dn = $("dlgLeiNova");
+  if (dn && dn.addEventListener) dn.addEventListener("close", () => { if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar(); });
   /* voltar da leitura repinta: o marcador e os vistos mudaram */
   const dl = $("dlgLeiSeca");
   if (dl && dl.addEventListener) dl.addEventListener("close", () => { if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar(); });
+}
+
+/* =====================================================================
+ * ETAPA 2 (19.139.0) — O QUE FALTA NA BIBLIOTECA, E A IA CONFERINDO A LISTA
+ *
+ * · LACUNA: lei citada no texto do edital (nome, nota ou ramo de um tópico) que não está na biblioteca. A chave é a
+ *   espécie e o número ("LC 116/03" = "Lei Complementar 116/2003"); sigla solta que não casa ("LEF", "ISS") não vira
+ *   lacuna — é o mais faminto dos rótulos, e daria uma lista de ruído. Cada lacuna tem "＋ incluir" (o assistente de
+ *   lei; pronta, ela é ligada aos tópicos que a citam) e "dispensar" (lembrado por edital, e vai no backup).
+ * · CITADA SEM LIGAÇÃO: lei da biblioteca citada num tópico a que não está ligada — "ligar" põe o ⚖ nesses tópicos.
+ * · A IA: o app monta o pedido (as disciplinas com peso, o que cada tópico cita, as leis que você tem e as lacunas que
+ *   o app achou) e lê a resposta num formato fixo: "+ lei | disciplina | por quê" (falta), "- lei | por quê" (não cai),
+ *   "! lei | por quê" (prioridade). Nada é aplicado sozinho: a sugestão vira item da lista, e a lei que a IA cita e
+ *   o edital NÃO menciona vem com aviso — a IA pode inventar uma lei ou errar o número.
+ * ===================================================================== */
+const LED_DISP_CH = "eac_led_dispensadas";   /* {edId: {chaveDaLacuna: "AAAA-MM-DD"}} */
+const LED_IA_CH = "eac_led_ia";              /* {edId: {em, itens: [{tipo, lei, disc, motivo}]}} */
+const LED_IA_DIRETA = "eac_led_ia_direta";   /* "1": o Gemini direto pode ser usado aqui (opção da tela da chave) */
+let ledIaRascunho = "";
+let ledIaAberta = false;
+let ledVerDispensadas = false;
+
+/* a chave de uma lei citada: "lc:116", "lei:4320", "constituicao:" — "" para sigla solta e o que não é lei */
+function ledChaveLacuna(rot) {
+  let k = null;
+  try { k = leiRotuloChave(rot); } catch (e) { k = null; }
+  if (!k) return "";
+  if (k.especie === "constituicao") return "constituicao:";
+  if (!k.especie || !k.numero) return "";
+  return k.especie + ":" + k.numero;
+}
+
+function ledLerMapa(ch) { try { const v = JSON.parse(localStorage.getItem(ch) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
+function ledGravarMapa(ch, o) { try { localStorage.setItem(ch, JSON.stringify(o || {})); return true; } catch (e) { return false; } }
+function ledDispensadas(edId) { return ledLerMapa(LED_DISP_CH)[String(edId)] || {}; }
+function ledDispensar(edId, chave, sim) {
+  const o = ledLerMapa(LED_DISP_CH);
+  const m = Object.assign({}, o[String(edId)] || {});
+  if (sim === false) delete m[chave]; else m[chave] = typeof leisHojeISO === "function" ? leisHojeISO() : new Date().toISOString().slice(0, 10);
+  o[String(edId)] = m;
+  ledGravarMapa(LED_DISP_CH, o);
+  try { reg("LEI", sim === false ? "leis do edital: lacuna de volta" : "leis do edital: lacuna dispensada", chave); } catch (e) {}
+  return true;
+}
+
+/* ---------------- a IA ---------------- */
+function ledIaLigada() { try { return localStorage.getItem(LED_IA_DIRETA) === "1"; } catch (e) { return false; } }
+function ledIaLigar(sim) { try { if (sim) localStorage.setItem(LED_IA_DIRETA, "1"); else localStorage.removeItem(LED_IA_DIRETA); } catch (e) {} return ledIaLigada(); }
+function ledIaPronta() { return ledIaLigada() && typeof jurIaPerguntar === "function" && typeof vzChaveApi === "function" && !!vzChaveApi(); }
+
+function ledIaGuardado(edId) { return ledLerMapa(LED_IA_CH)[String(edId)] || null; }
+function ledIaGuardar(edId, itens) {
+  const o = ledLerMapa(LED_IA_CH);
+  if (itens && itens.length) o[String(edId)] = { em: new Date().toISOString(), itens: itens.slice(0, 80) };
+  else delete o[String(edId)];
+  return ledGravarMapa(LED_IA_CH, o);
+}
+
+/* O PEDIDO. Vai só o que está no edital e na biblioteca: nomes de disciplinas, de tópicos e de leis — nunca o texto das leis. */
+function ledIaPedido(M) {
+  const L = [];
+  L.push(t("led_ia_p_abre"));
+  L.push("");
+  L.push(t("led_ia_p_concurso", { c: M.nome }));
+  L.push("");
+  L.push(t("led_ia_p_disciplinas"));
+  const porDisc = {};
+  (M.citas || []).forEach((c) => { (porDisc[c.disciplina] = porDisc[c.disciplina] || []).push(c); });
+  (M.pesos || []).slice().sort((a, b) => b.peso - a.peso).forEach((d) => {
+    L.push("## " + d.nome + " (" + t("led_ia_p_peso", { p: d.peso }) + ")");
+    (porDisc[d.nome] || []).forEach((c) => {
+      L.push("- " + c.nome + " [" + c.tpPeso + "]" + (c.cita.length ? " — " + t("led_ia_p_cita") + " " + c.cita.join("; ") : ""));
+    });
+  });
+  L.push("");
+  L.push(t("led_ia_p_tenho"));
+  const ids = Object.keys(M.leis || {});
+  if (!ids.length) L.push("- " + t("led_ia_p_nenhuma"));
+  ids.forEach((id) => {
+    const P = M.leis[id];
+    L.push("- " + P.lei.nome + " — " + t("led_ia_p_em", { n: P.topicos.length, d: P.disciplinas.join(", ") }));
+  });
+  const lac = (M.lacunas || []).filter((G) => G.noEdital && G.topicos.length);
+  if (lac.length) {
+    L.push("");
+    L.push(t("led_ia_p_faltam"));
+    lac.forEach((G) => L.push("- " + G.rotulo + " — " + G.topicos.slice(0, 4).map((x) => x.nome).join("; ")));
+  }
+  L.push("");
+  L.push(t("led_ia_p_tarefa"));
+  L.push("");
+  L.push(t("led_ia_p_formato"));
+  return L.join("\n");
+}
+
+/* A RESPOSTA: uma linha por lei. Aceita a lista com marcador ("* + Lei…", "1. + Lei…"), negrito e o sinal de menos. */
+function ledIaLer(texto) {
+  const itens = [];
+  String(texto || "").split(/\r?\n/).forEach((linha) => {
+    const s = linha.replace(/\*\*/g, "").replace(/^\s*(?:[*•·]|\d{1,2}[.)])\s+/, "").trim();
+    const m = s.match(/^([+\-−!])\s*(.+)$/);
+    if (!m) return;
+    const tipo = m[1] === "−" ? "-" : m[1];
+    const partes = m[2].split(/\s*\|\s*/).map((x) => x.trim());
+    const lei = (partes[0] || "").replace(/[.;:,]+$/, "").trim();
+    if (lei.length < 3 || lei.length > 140) return;
+    let disc = "", motivo = "";
+    if (partes.length >= 3) { disc = partes[1]; motivo = partes.slice(2).join(" | "); }
+    else motivo = partes[1] || "";
+    itens.push({ tipo, lei, disc, motivo: motivo.slice(0, 240) });
+  });
+  return itens;
+}
+
+/* a sugestão da IA sobre o modelo: "+" vira lacuna (ou "já está na biblioteca"), "-" e "!" viram nota na lei */
+function ledAplicarIa(M, casar, textoEdital) {
+  M.iaNaoCai = {}; M.iaPrioridade = {}; M.iaJa = []; M.iaEm = "";
+  const g = ledIaGuardado(M.edId);
+  if (!g || !g.itens) return M;
+  M.iaEm = g.em || "";
+  const disp = ledDispensadas(M.edId);
+  /* o que o texto INTEIRO do edital nomeia (cabeçalho e linhas de disciplina também) */
+  const noTexto = new Set();
+  ledMencoes(textoEdital).forEach((r) => { const k = ledChaveLacuna(r); if (k) noTexto.add(k); });
+  const pesoDe = {};
+  (M.pesos || []).forEach((d) => { pesoDe[leisChaveComparavel(d.nome)] = d.peso; });
+  g.itens.forEach((it) => {
+    const l = casar(it.lei);
+    if (it.tipo === "+") {
+      if (l) { if (!M.iaJa.some((x) => x.lei.id === l.id)) M.iaJa.push({ lei: l, motivo: it.motivo }); return; }
+      const k = ledChaveLacuna(it.lei);
+      if (!k) return;
+      let G = M.lacunas.find((x) => x.chave === k);
+      if (!G) {
+        G = { chave: k, rotulo: it.lei, topicos: [], disciplinas: it.disc ? [it.disc] : [], peso: 0, nums: new Set(),
+          pesoDisc: pesoDe[leisChaveComparavel(it.disc)] || 0, dispensada: !!disp[k], noEdital: noTexto.has(k), soIa: true };
+        M.lacunas.push(G);
+      }
+      G.ia = it.motivo || "—";
+      return;
+    }
+    if (l) {
+      if (it.tipo === "-") M.iaNaoCai[l.id] = it.motivo || "—";
+      if (it.tipo === "!") M.iaPrioridade[l.id] = it.motivo || "—";
+      return;
+    }
+    if (it.tipo === "!") {
+      const G = M.lacunas.find((x) => x.chave === ledChaveLacuna(it.lei));
+      if (G) G.prioridade = it.motivo || "—";
+    }
+  });
+  /* as do edital primeiro; depois as que só a IA apontou */
+  M.lacunas.sort((a, b) => (a.soIa ? 1 : 0) - (b.soIa ? 1 : 0) || (b.prioridade ? 1 : 0) - (a.prioridade ? 1 : 0) || b.pesoDisc - a.pesoDisc || b.peso - a.peso);
+  return M;
+}
+
+function ledIaAplicarTexto(texto) {
+  const itens = ledIaLer(texto);
+  if (!itens.length) { if ($("ledIaMsg")) $("ledIaMsg").textContent = t("led_ia_nada"); return 0; }
+  ledIaGuardar(ledCtx.edId, itens);
+  ledIaRascunho = "";
+  try { reg("LEI", "leis do edital: resposta da IA lida", itens.length + " sugestões · " + ["+", "-", "!"].map((x) => x + itens.filter((i) => i.tipo === x).length).join(" ")); } catch (e) {}
+  ledPintar();
+  if ($("ledIaMsg")) $("ledIaMsg").textContent = t("led_ia_lida", { n: itens.length, f: itens.filter((i) => i.tipo === "+").length,
+    nc: itens.filter((i) => i.tipo === "-").length, p: itens.filter((i) => i.tipo === "!").length });
+  return itens.length;
+}
+
+async function ledIaCopiar() {
+  const M = ledUltimo;
+  if (!M) return false;
+  const pedido = ledIaPedido(M);
+  let ok = false;
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(pedido); ok = true; } } catch (e) { ok = false; }
+  if ($("ledIaMsg")) $("ledIaMsg").textContent = ok ? t("led_ia_copiado", { n: pedido.length }) : t("led_ia_nao_copiou");
+  try { reg("LEI", "leis do edital: pedido à IA copiado", pedido.length + " caracteres"); } catch (e) {}
+  return ok ? pedido : false;
+}
+
+async function ledIaGemini() {
+  const M = ledUltimo;
+  if (!M || !ledIaPronta()) return null;
+  const pedido = ledIaPedido(M);
+  if ($("btnLedIaGemini")) $("btnLedIaGemini").disabled = true;
+  if ($("ledIaMsg")) $("ledIaMsg").textContent = t("led_ia_esperando");
+  try { reg("LEI", "leis do edital: Gemini direto", pedido.length + " caracteres"); } catch (e) {}
+  try {
+    const r = await jurIaPerguntar(pedido, { modulo: "LEIS", tempo: 180000 });
+    ledIaRascunho = r.texto;
+    if ($("ledIaResp")) $("ledIaResp").value = r.texto;
+    ledIaAplicarTexto(r.texto);
+    return r;
+  } catch (e) {
+    const cod = (e && e.codigo) || "rede";
+    if ($("ledIaMsg")) $("ledIaMsg").textContent = t("jur_ia_erro_" + cod) + (e && e.detalhe && cod !== "cancelado" ? " (" + e.detalhe + ")" : "");
+    try { reg("LEI", "leis do edital: Gemini falhou", cod); } catch (x) {}
+    return null;
+  } finally {
+    if ($("btnLedIaGemini")) $("btnLedIaGemini").disabled = false;
+  }
+}
+
+/* ---------------- incluir e ligar ---------------- */
+function ledIncluir(G) {
+  if (typeof leiNovaAbrir !== "function") return false;
+  try { reg("LEI", "leis do edital: incluir lacuna", G.rotulo); } catch (e) {}
+  return leiNovaAbrir({ volta: (id) => ledIncluida(G, id) });
+}
+
+/* a lei nova ficou pronta: se ela É a que faltava, liga aos tópicos que a citam; senão, só avisa */
+function ledIncluida(G, id) {
+  const l = leiDe(id);
+  let casou = null;
+  try { casou = leiCasarRotulo(G.rotulo, leisLista()); } catch (e) { casou = null; }
+  let n = 0;
+  if (l && casou && casou.id === id && G.topicos.length) {
+    G.topicos.forEach((T) => { try { if (leiLigar(id, typeof matChaveViva === "function" ? matChaveViva(T.disciplina, T.nome) : matChave(T.disciplina, T.nome))) n++; } catch (e) {} });
+    try { toastMsg(t("led_inc_ligada", { l: l.nome, n }), 6000); } catch (e) {}
+  } else if (l) {
+    try { toastMsg(t("led_inc_outra", { l: l.nome, r: G.rotulo }), 7000); } catch (e) {}
+  }
+  if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar();
+  return n;
+}
+
+async function ledLigarCitada(x) {
+  const n = x.topicos.length;
+  if (!(await uiConfirm(t("led_lig_conf", { l: x.lei.nome, n, lista: x.topicos.slice(0, 8).map((T) => "• " + T.nome).join("\n") + (n > 8 ? "\n…" : "") }), { ok: t("led_lig_ok", { n }) }))) return 0;
+  x.topicos.forEach((T) => { try { leiLigar(x.id, T.chave); } catch (e) {} });
+  try { reg("LEI", "leis do edital: lei ligada aos tópicos que a citam", x.lei.nome + " · " + n + " tópico(s)"); } catch (e) {}
+  try { toastMsg(t("led_lig_feito", { l: x.lei.nome, n }), 5000); } catch (e) {}
+  ledPintar();
+  return n;
+}
+
+function ledIdSeguro(k) { return String(k).replace(/[^A-Za-z0-9]/g, "_"); }
+
+/* ---------------- a tela das lacunas e da IA ---------------- */
+function ledPintarLacunas(M, corpo) {
+  const ativas = M.lacunas.filter((G) => !G.dispensada);
+  const disp = M.lacunas.filter((G) => G.dispensada);
+  if (ativas.length || disp.length) {
+    const sec = ledEl("section", "led-lac");
+    sec.id = "ledLac";
+    sec.append(ledEl("div", "led-lac-tit", t("led_lac_tit", { n: ativas.length })));
+    sec.append(ledEl("p", "nota", t("led_lac_expl")));
+    const linha = (G, dispensada) => {
+      const k = ledIdSeguro(G.chave);
+      const lin = ledEl("div", "led-lac-lin" + (dispensada ? " led-lac-disp" : ""));
+      lin.id = "ledLac_" + k;
+      const tx = ledEl("div", "led-lei-txt");
+      const nm = ledEl("div", "led-lei-nome", G.rotulo);
+      if (G.prioridade) nm.append(ledEl("span", "led-tag led-tag-prio", t("led_tag_prio")));
+      if (G.ia) nm.append(ledEl("span", "led-tag led-tag-ia", t("led_tag_ia")));
+      tx.append(nm);
+      const meta = [];
+      if (G.topicos.length) meta.push(t("led_lac_em", { n: G.topicos.length, d: G.disciplinas.join(", ") }));
+      else if (G.disciplinas.length) meta.push(G.disciplinas.join(", "));
+      if (G.nums && G.nums.size) meta.push(t("led_arts", { f: Array.from(G.nums).slice(0, 8).join(", ") }));
+      if (meta.length) tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
+      if (G.ia && G.ia !== "—") tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_motivo", { m: G.ia })));
+      if (G.prioridade && G.prioridade !== "—") tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_prio", { m: G.prioridade })));
+      if (G.soIa && !G.noEdital) tx.append(ledEl("div", "led-lei-meta led-aviso", t("led_lac_so_ia")));
+      lin.append(tx);
+      const ac = ledEl("div", "led-lei-acoes");
+      if (dispensada) {
+        const b = ledEl("button", "btn-min", t("led_lac_voltar"));
+        b.type = "button"; b.id = "btnLedLacVolta_" + k;
+        b.onclick = () => { ledDispensar(M.edId, G.chave, false); ledPintar(); };
+        ac.append(b);
+      } else {
+        const bi = ledEl("button", "btn-min btn-min-ok", t("led_lac_incluir"));
+        bi.type = "button"; bi.id = "btnLedLacInc_" + k;
+        bi.title = t("led_lac_incluir_aj");
+        bi.onclick = () => ledIncluir(G);
+        const bd = ledEl("button", "btn-min", t("led_lac_dispensar"));
+        bd.type = "button"; bd.id = "btnLedLacDisp_" + k;
+        bd.title = t("led_lac_dispensar_aj");
+        bd.onclick = () => { ledDispensar(M.edId, G.chave, true); ledPintar(); };
+        ac.append(bi, bd);
+      }
+      lin.append(ac);
+      return lin;
+    };
+    ativas.forEach((G) => sec.append(linha(G, false)));
+    if (!ativas.length) sec.append(ledEl("p", "nota", t("led_lac_nenhuma")));
+    if (disp.length) {
+      const b = ledEl("button", "btn-link led-lac-ver", t(ledVerDispensadas ? "led_lac_disp_esconder" : "led_lac_disp_ver", { n: disp.length }));
+      b.type = "button"; b.id = "btnLedLacDispVer";
+      b.onclick = () => { ledVerDispensadas = !ledVerDispensadas; ledPintar(); };
+      sec.append(b);
+      if (ledVerDispensadas) disp.forEach((G) => sec.append(linha(G, true)));
+    }
+    corpo.append(sec);
+  }
+
+  /* citadas e sem ligação */
+  if (M.semLigacao.length) {
+    const det = ledEl("details", "led-lig");
+    det.id = "ledLig";
+    det.append(ledEl("summary", "led-lig-tit", t("led_lig_tit", { n: M.semLigacao.length })));
+    det.append(ledEl("p", "nota", t("led_lig_expl")));
+    M.semLigacao.forEach((x) => {
+      const lin = ledEl("div", "led-lac-lin");
+      lin.id = "ledLig_" + x.id;
+      const tx = ledEl("div", "led-lei-txt");
+      tx.append(ledEl("div", "led-lei-nome", x.lei.nome));
+      tx.append(ledEl("div", "led-lei-meta", t("led_lig_meta", { n: x.topicos.length, t: x.topicos.slice(0, 3).map((T) => T.nome).join("; ") + (x.topicos.length > 3 ? "…" : "") })));
+      lin.append(tx);
+      const ac = ledEl("div", "led-lei-acoes");
+      const b = ledEl("button", "btn-min btn-min-ok", t("led_lig_bt", { n: x.topicos.length }));
+      b.type = "button"; b.id = "btnLedLig_" + x.id;
+      b.onclick = () => ledLigarCitada(x);
+      ac.append(b);
+      lin.append(ac);
+      det.append(lin);
+    });
+    corpo.append(det);
+  }
+
+  /* a IA */
+  const ia = ledEl("details", "led-ia");
+  ia.id = "ledIa";
+  ia.open = ledIaAberta;
+  if (ia.addEventListener) ia.addEventListener("toggle", () => { ledIaAberta = ia.open; });
+  ia.append(ledEl("summary", "led-ia-tit", t("led_ia_tit")));
+  ia.append(ledEl("p", "nota", t("led_ia_expl")));
+  if (M.iaEm) {
+    const ult = ledEl("p", "nota led-ia-ult", t("led_ia_ultima", { d: new Date(M.iaEm).toLocaleDateString() }) + " ");
+    const bl = ledEl("button", "btn-link", t("led_ia_limpar"));
+    bl.type = "button"; bl.id = "btnLedIaLimpar";
+    bl.onclick = () => { ledIaGuardar(M.edId, []); ledPintar(); };
+    ult.append(bl);
+    ia.append(ult);
+    if (M.iaJa.length) ia.append(ledEl("p", "nota", t("led_ia_ja", { l: M.iaJa.map((x) => x.lei.nome).join("; ") })));
+  }
+  const bts = ledEl("div", "led-ia-bts");
+  const bc = ledEl("button", "btn-min", t("led_ia_copiar"));
+  bc.type = "button"; bc.id = "btnLedIaCopiar";
+  bc.onclick = () => ledIaCopiar();
+  bts.append(bc);
+  if (ledIaPronta()) {
+    const bg = ledEl("button", "btn-min btn-min-ok", t("led_ia_gemini"));
+    bg.type = "button"; bg.id = "btnLedIaGemini";
+    bg.title = t("led_ia_gemini_aj");
+    bg.onclick = () => ledIaGemini();
+    bts.append(bg);
+  } else {
+    const bk = ledEl("button", "btn-link", t("led_ia_config"));
+    bk.type = "button"; bk.id = "btnLedIaConfig";
+    bk.onclick = () => { if (typeof vzAbrirChave === "function") vzAbrirChave(); };
+    bts.append(bk);
+  }
+  ia.append(bts);
+  const ta = ledEl("textarea", "led-ia-resp");
+  ta.id = "ledIaResp";
+  ta.rows = 5;
+  ta.placeholder = t("led_ia_ph");
+  ta.value = ledIaRascunho;
+  ta.oninput = () => { ledIaRascunho = ta.value; };
+  ia.append(ta);
+  const bl2 = ledEl("button", "btn-min btn-min-ok", t("led_ia_ler"));
+  bl2.type = "button"; bl2.id = "btnLedIaLer";
+  bl2.onclick = () => ledIaAplicarTexto(($("ledIaResp") || {}).value || "");
+  ia.append(bl2);
+  const msg = ledEl("p", "nota led-ia-msg");
+  msg.id = "ledIaMsg";
+  msg.setAttribute("role", "status");
+  ia.append(msg);
+  corpo.append(ia);
 }
