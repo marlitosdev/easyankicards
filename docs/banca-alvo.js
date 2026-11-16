@@ -89,7 +89,11 @@ function bancAlvoPintar() {
       if ($("btnBancAlvoLimpar")) $("btnBancAlvoLimpar").hidden = !(igual && nB);
     }
   }
-  $("btnBancAlvoDesfazer").hidden = !(typeof cmUltimoRecibo !== "undefined" && cmUltimoRecibo && cmUltimoRecibo.recibo && cmUltimoRecibo.recibo.length);
+  /* (19.147.0) cmUltimoRecibo é um "let" de edital-ui.js, que carrega DEPOIS deste arquivo: ao abrir o app com um tópico
+   * na bancada, até o typeof dava ReferenceError e a pintura parava aqui (sem "Voltar" e sem a navegação dos lotes) */
+  let rec = null;
+  try { rec = cmUltimoRecibo; } catch (e) { rec = null; }
+  $("btnBancAlvoDesfazer").hidden = !(rec && rec.recibo && rec.recibo.length);
   if ($("btnBancAlvoVoltar")) $("btnBancAlvoVoltar").hidden = bancAlvo.volta !== "biblioteca";
   if (typeof clPintarNoAlvo === "function") clPintarNoAlvo();
 }
@@ -104,6 +108,7 @@ function bancAlvoDefinir(disciplina, topico, opc) {
   bancAlvo = { disciplina, topico, chave, concurso: r.concurso || (typeof concursoAtual === "function" ? concursoAtual().nome : ""),
     volta: daBiblioteca ? "biblioteca" : "", ramo };
   try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {}
+  try { bancVigiaGravou(($("editor") || {}).value); } catch (e) {}
   ["dlgGerEstudo", "dlgCobertura", "dlgGerCartoes", "dlgMatCartoes"].forEach((id) => { const d = $(id); if (d && d.open) d.close(); });
   trocarModo("cartoes");
   bancAlvoPintar();
@@ -124,8 +129,11 @@ function bancAlvoLimpar() {
   const ed = $("editor");
   if (!ed || !ed.value.trim()) return false;
   try { guardarVersao("antes de limpar (lote salvo no tópico)"); } catch (e) {}
+  const antes = ed.value;
   ed.value = "";
+  try { textoAnterior = ""; } catch (e) {}
   try { localStorage.removeItem("eac_texto"); } catch (e) {}
+  bancVigiaLimpou("Limpar a bancada (lote salvo no tópico)", antes);
   try { preview(); } catch (e) {}
   try { matReg("cartoes", "bancada limpa depois de salvar no tópico", bancAlvo ? bancAlvo.topico : ""); } catch (e) {}
   bancAlvoPintar();
@@ -133,11 +141,18 @@ function bancAlvoLimpar() {
   return true;
 }
 
-function bancAlvoGuardar() { try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {} }
+function bancAlvoGuardar() {
+  try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {}
+  try { bancVigiaGravou(($("editor") || {}).value); } catch (e) {}
+}
 
 function bancAlvoSair() {
+  const era = bancAlvo;
   bancAlvo = null;
   try { localStorage.removeItem(BANC_ALVO_CHAVE); } catch (e) {}
+  /* (19.147.0) sair do tópico agora deixa evento: antes, o alvo sumir e o "Sair" eram indistinguíveis */
+  if (era) { try { reg("BANCADA", "saiu do tópico da bancada", bancVigiaAlvoTxt(era)); } catch (e) {} }
+  try { bancVigiaGravou(($("editor") || {}).value); } catch (e) {}
   bancAlvoPintar();
 }
 
@@ -202,6 +217,112 @@ async function bancAlvoSalvar() {
   if (ir === "estudar") estcEstudarTopico(bancAlvo.disciplina, bancAlvo.topico);
 }
 
+/* =====================================================================
+ * (19.147.0) A VIGIA DA BANCADA
+ *
+ * Na noite de 13/11 a bancada e o tópico-alvo se esvaziaram entre 22:23 e 22:45, e o registro não tinha NADA: limpar
+ * depois de salvar, trocar de lote da lei e "Sair" do tópico não deixavam evento, e o app não guardava como a bancada
+ * estava. Os cartões estavam salvos no tópico, mas não havia como saber o que tinha acontecido.
+ *
+ * AGORA:
+ *  · todo caminho que esvazia a bancada ou tira o tópico deixa evento BANCADA no registro, com o motivo;
+ *  · a cada gravação do texto, um SELO pequeno (quantos cartões, quantos caracteres, qual tópico, quando) e, no máximo a
+ *    cada 20 s (ou quando o número de cartões muda), uma CÓPIA do texto — fora das Versões, para não empurrar nenhuma
+ *    delas para fora. A cópia nunca é trocada por uma bancada vazia;
+ *  · ao abrir, se o selo diz que havia cartões, a bancada está vazia e ninguém limpou: evento no registro, a cópia entra
+ *    nas Versões do texto e a faixa de recuperar aparece. Se o tópico sumiu sem "Sair", ele volta (e o aviso diz).
+ * O selo e a cópia não vão para o backup: valem só para este aparelho, como as Versões.
+ * ===================================================================== */
+const BANC_SELO_CH = "eac_banc_selo";
+const BANC_COPIA_CH = "eac_banc_copia";
+const BANC_COPIA_MAX = 400000;
+const BANC_COPIA_INTERVALO = 20000;
+let bancVigiaRelogio = () => Date.now();
+function bancVigiaRelogioDefinir(f) { bancVigiaRelogio = f || (() => Date.now()); }
+
+function bancVigiaContar(txt) { return (String(txt || "").match(/^(?!\s*#)[^\n]*::/gm) || []).length; }
+function bancVigiaEhExemplo(txt) {
+  try { return String(txt || "").trim() === String(t("example")).trim(); } catch (e) { return false; }
+}
+function bancVigiaLerJ(ch) { try { return JSON.parse(localStorage.getItem(ch) || "null"); } catch (e) { return null; } }
+function bancVigiaAlvoTxt(a) { return a ? a.disciplina + " › " + a.topico : ""; }
+
+/* chamada depois de cada gravação do texto (autoSalvar) e quando o tópico muda */
+function bancVigiaGravou(txt) {
+  txt = String(txt == null ? "" : txt);
+  const vazio = !txt.trim() || bancVigiaEhExemplo(txt);
+  const agora = bancVigiaRelogio();
+  const selo = { t: agora, c: vazio ? 0 : txt.length, n: vazio ? 0 : bancVigiaContar(txt), alvo: bancVigiaAlvoTxt(bancAlvo) };
+  if (bancAlvo) { try { if (JSON.stringify(bancAlvo).length < 20000) selo.alvoObj = bancAlvo; } catch (e) {} }
+  try { localStorage.setItem(BANC_SELO_CH, JSON.stringify(selo)); } catch (e) {}
+  if (vazio || txt.length > BANC_COPIA_MAX) return selo;
+  const c = bancVigiaLerJ(BANC_COPIA_CH);
+  if (!c || c.n !== selo.n || agora - (c.t || 0) >= BANC_COPIA_INTERVALO) {
+    try { localStorage.setItem(BANC_COPIA_CH, JSON.stringify({ t: agora, n: selo.n, alvo: selo.alvo, txt })); } catch (e) {}
+  }
+  return selo;
+}
+
+/* um caminho do app esvaziou a bancada A PEDIDO: fica no registro, e o selo passa a dizer "vazia" */
+function bancVigiaLimpou(motivo, antes) {
+  const a = String(antes || "");
+  try { reg("BANCADA", "bancada esvaziada: " + motivo, bancVigiaContar(a) + " cartões · " + a.length + " caracteres" + (bancAlvo ? " · " + bancVigiaAlvoTxt(bancAlvo) : "")); } catch (e) {}
+  bancVigiaGravou("");
+}
+
+/* ao abrir: o selo diz que havia cartões e a bancada está vazia sem ninguém ter limpado? */
+function bancVigiaAbrir() {
+  const r = { vazia: false, copia: false, alvo: false };
+  const selo = bancVigiaLerJ(BANC_SELO_CH);
+  const ed = typeof $ === "function" ? $("editor") : null;
+  if (selo && typeof selo === "object") {
+    let salvo = null;
+    try { salvo = localStorage.getItem("eac_texto"); } catch (e) {}
+    const vaziaAgora = salvo === null || !salvo.trim() || bancVigiaEhExemplo(salvo);
+    const quando = new Date(selo.t || 0).toLocaleString();
+    if (selo.c > 0 && vaziaAgora) {
+      r.vazia = true;
+      r.n = selo.n || 0;
+      r.quando = quando;
+      const cp = bancVigiaLerJ(BANC_COPIA_CH);
+      r.copia = !!(cp && cp.txt && String(cp.txt).trim());
+      try {
+        reg("BANCADA", "a bancada abriu vazia sem ninguém ter limpado",
+          "antes: " + (selo.n || 0) + " cartões · " + selo.c + " caracteres · " + quando + (selo.alvo ? " · " + selo.alvo : "")
+          + (r.copia ? " · cópia de " + new Date(cp.t || 0).toLocaleString() + " (" + (cp.n || 0) + " cartões) posta nas Versões do texto" : " · sem cópia"));
+      } catch (e) {}
+      if (r.copia && typeof guardarVersao === "function") {
+        try { guardarVersao("cópia da vigia: a bancada abriu vazia", String(cp.txt)); } catch (e) {}
+        /* guardarVersao marca "foi o app": aqui ninguém mexeu no texto, e a próxima digitação precisa continuar vigiada */
+        try { appMexendo = false; } catch (e) {}
+      }
+    }
+    const ao = selo.alvoObj;
+    if (selo.alvo && !bancAlvo && ao && ao.disciplina && ao.topico) {
+      bancAlvo = ao;
+      try { localStorage.setItem(BANC_ALVO_CHAVE, JSON.stringify(bancAlvo)); } catch (e) {}
+      r.alvo = selo.alvo;
+      try { reg("BANCADA", "o tópico da bancada sumiu sem Sair: trazido de volta", selo.alvo); } catch (e) {}
+    }
+  }
+  if (r.vazia || r.alvo) bancVigiaAviso(r);
+  /* o aviso sai UMA vez: dali em diante o selo descreve a bancada como ela está (a cópia continua guardada) */
+  bancVigiaGravou(ed ? ed.value : "");
+  return r;
+}
+
+function bancVigiaAviso(r) {
+  if (typeof $ !== "function") return;
+  const alvoTxt = r.alvo ? " " + t("banc_vigia_alvo", { t: r.alvo }) : "";
+  if (!r.vazia) { try { toastMsg(t("banc_vigia_alvo", { t: r.alvo }), 8000); } catch (e) {} return; }
+  const bar = $("barraRecuperar");
+  if (!bar) return;
+  if ($("recuperarTxt")) $("recuperarTxt").textContent = t("banc_vigia_tit", { n: r.n, q: r.quando });
+  if ($("recuperarCorpo")) $("recuperarCorpo").textContent = t(r.copia ? "banc_vigia_corpo" : "banc_vigia_sem_copia") + alvoTxt;
+  if ($("btnRecuperar")) $("btnRecuperar").hidden = !r.copia;
+  bar.hidden = false;
+}
+
 if (typeof document !== "undefined" && $("bancAlvoBox")) {
   $("btnBancAlvoPrompt").onclick = bancAlvoPrompt;
   $("btnBancAlvoSalvar").onclick = bancAlvoSalvar;
@@ -216,5 +337,6 @@ if (typeof document !== "undefined" && $("bancAlvoBox")) {
     $("editor").addEventListener("input", () => { if (!bancAlvo) return; clearTimeout(tm); tm = setTimeout(bancAlvoPintar, 400); });
   }
   bancAlvo = bancAlvoLer();
+  try { bancVigiaAbrir(); } catch (e) {}
   bancAlvoPintar();
 }

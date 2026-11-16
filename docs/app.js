@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.146.0";
+const VERSAO = "19.147.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1735,6 +1735,9 @@ function mostrarBarraRecuperar(de, para) {
   const bar = $("barraRecuperar");
   if (!bar) return;
   $("recuperarTxt").textContent = t("hist_shrunk", { de, para });
+  /* (19.147.0) a mesma faixa serve à vigia da bancada, que troca o corpo e pode esconder o botão */
+  if ($("recuperarCorpo")) $("recuperarCorpo").textContent = t("hist_bar_corpo");
+  if ($("btnRecuperar")) $("btnRecuperar").hidden = false;
   bar.hidden = false;
 }
 
@@ -1742,8 +1745,9 @@ function mostrarBarraRecuperar(de, para) {
  * qualquer caixa sem ler. Em vez disso, o app avisa ONDE a cópia ficou —
  * que é a informação de que a pessoa vai precisar depois. */
 function dispensarRecuperar() {
+  const semCopia = !!($("btnRecuperar") && $("btnRecuperar").hidden);
   esconderBarraRecuperar();
-  uiAlert(t("hist_dispensado"));
+  if (!semCopia) uiAlert(t("hist_dispensado"));
   reg("TEXTO", "aviso de encolhimento dispensado pelo usuário");
 }
 
@@ -1788,6 +1792,8 @@ function autoSalvar() {
    * IndexedDB ela é em segundo plano e a última linha poderia se perder. Ver idb-recibo.js. */
   saveTimer = setTimeout(() => {
     guardar("eac_texto", atual);
+    /* (19.147.0) o selo e a cópia da vigia da bancada (banca-alvo.js) */
+    if (typeof bancVigiaGravou === "function") { try { bancVigiaGravou(atual); } catch (e) {} }
   }, 400);
 }
 
@@ -3941,6 +3947,7 @@ $("btnApagarTudo").onclick = async () => {
   textoAnterior = "";
   respostasFechadas.clear();
   localStorage.removeItem("eac_texto");
+  if (typeof bancVigiaGravou === "function") { try { bancVigiaGravou(""); } catch (e) {} }
   /* APAGAR TUDO É COMEÇAR DE NOVO — a origem de uma geração anterior (e o
    * convite a colar a resposta dela) não podem sobreviver a essa decisão
    * e rotular um lote seguinte, sem relação nenhuma, com um tópico velho. */

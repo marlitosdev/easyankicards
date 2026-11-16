@@ -444,10 +444,12 @@ function clIrLote(k) {
   const ed = $("editor");
   if (ed && ed.value.trim()) {
     try { if (typeof guardarVersao === "function") guardarVersao("antes do próximo lote da lei"); } catch (e) {}
+    const antes = ed.value;
     ed.value = "";
     try { textoAnterior = ""; } catch (e) {}
     try { if (typeof respostasFechadas !== "undefined") respostasFechadas.clear(); } catch (e) {}
     try { localStorage.removeItem("eac_texto"); } catch (e) {}
+    try { if (typeof bancVigiaLimpou === "function") bancVigiaLimpou("lote " + (k + 1) + " da lei " + (L.nome || ""), antes); } catch (e) {}
     try { if (typeof preview === "function") preview(); } catch (e) {}
   }
   L.k = k;

@@ -19,7 +19,7 @@ const ABAS_SINAL = 10000;
 const ABAS_SOME = 25000;
 /* as chaves que são DADO (e não preferência ou estado de tela): outra aba gravar uma destas deixa esta desatualizada */
 const ABAS_CHAVES = { eac_editais: "editais e progresso", eac_edital_progresso: "progresso do edital", eac_edital_diario: "diário de estudo",
-  eac_edital_texto: "texto do edital", eac_resumos: "resumos", eac_questoes: "questões", eac_texto: "cartões", eac_juris: "julgados", eac_leis: "leis" };
+  eac_edital_texto: "texto do edital", eac_resumos: "resumos", eac_questoes: "questões", eac_texto: "cartões", eac_banca_alvo: "tópico da bancada", eac_juris: "julgados", eac_leis: "leis" };
 
 let abasId = Math.random().toString(36).slice(2, 8);
 let abasOutras = {};          /* id -> quando deu sinal pela última vez (ms) */
