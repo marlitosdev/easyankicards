@@ -1311,7 +1311,10 @@ dialog.ui-modal.lei-cita-dlg[open]{display:flex;flex-direction:column}
 /* ---- LEI SECA ------------------------------------------------------
  * A fila de leis, a procedência e o "onde parei" ficam ACIMA do texto e
  * não crescem: são referência, não conteúdo. O que rola é a lei. */
-.lei-fila{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+.lei-fila{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin:2px 0 4px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+/* (19.140.0) uma linha: os chips não quebram nem encolhem; a linha rola para o lado */
+.lei-fila>*{flex:none}
+.lei-chip-ed{border-color:var(--info);color:var(--info)}
 /* O CABEÇALHO, A FAIXA DE INFORMAÇÃO E A BARRA DE TRABALHO: cada uma é UMA linha (quebra só
    se a janela for estreita). O que era referência não compete mais com a lei pelo espaço. */
 .lei-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -1782,6 +1785,12 @@ dialog.lb-dlg.lb-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100
 .lb-linha{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 12px}
 .lb-txt{flex:1 1 320px;min-width:0}
 .lb-acoes{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto;position:relative}
+/* (19.140.0) o anel e a leitura na biblioteca */
+.lb-linha>.led-anel{align-self:center}
+.lb-ok .lei-bib-tit{color:var(--sutil)}
+.lb-estados{margin-top:var(--esp-1)}
+.lb-ed-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2) var(--esp-3);margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--info);border-radius:var(--r-m);font-size:var(--fs-3)}
+.lb-ed-faixa[hidden]{display:none}
 .lb-lida{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--campo);border:1px solid var(--borda)}
 .lb-sem-chip{border-style:dotted}
 .ed-menu-perigo{color:var(--erro);font-weight:700}
@@ -11700,6 +11709,13 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   </div>
   <!-- (v19.12.0) as pastas: de edital (automáticas) e livres; (19.98.0) e o filtro "sem tópico" no fim -->
   <div id="leiBibPastas" class="pas-fileira" role="group"></div>
+  <!-- (19.140.0) a leitura: todas · não começadas · em leitura · lidas -->
+  <div id="leiBibEstados" class="pas-fileira lb-estados" role="group"></div>
+  <!-- (19.140.0) escolhida a pasta de um edital: o caminho para as "Leis do edital" -->
+  <div id="leiBibEdFaixa" class="lb-ed-faixa" hidden>
+    <span id="leiBibEdFaixaTxt"></span>
+    <button type="button" class="btn-min btn-min-ok" id="btnLeiBibLed" data-i18n="lei_bib_ed_bt"></button>
+  </div>
   <p class="nota" id="leiBibResumo"></p>
   <div id="leiBibDup" hidden>
     <button class="btn-min btn-min-perigo" id="btnLeiBibDup"></button>

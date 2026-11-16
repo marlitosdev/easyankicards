@@ -924,6 +924,9 @@ function leiPintarFila() {
   }
   const lista = leisDoTopico(leiAtual.chave);
 
+  /* (19.140.0) A FILA EM UMA LINHA. Com duas leis, os nomes inteiros ("CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE
+   * 1988 · 412 artigos") e os dois botões longos ocupavam duas fileiras do cabeçalho. Agora o chip leva o nome curto
+   * (o nome inteiro fica no balão), e a linha rola para o lado em vez de quebrar. */
   lista.forEach((l) => {
     const wrap = document.createElement("span");
     wrap.className = "lei-chip-wrap";
@@ -931,9 +934,9 @@ function leiPintarFila() {
     b.type = "button";
     b.className = "lei-chip" + (l.id === leiIdAtual ? " lei-chip-on" : "");
     const p = leiProgresso(l.id) || { total: 0, pct: 0 };
-    b.textContent = l.nome + " · " + t("lei_n_artigos", { n: p.total })
+    b.textContent = leiNomeCurto(l) + " · " + t("lei_n_artigos", { n: p.total })
       + (p.pct ? " · " + p.pct + "%" : "");
-    b.title = t("lei_chip_ajuda", { n: (l.topicos || []).length });
+    b.title = l.nome + " — " + t("lei_chip_ajuda", { n: (l.topicos || []).length });
     b.onclick = () => leiTrocarPara(l.id);
     /* DESVINCULAR ESTE TÓPICO DESTA LEI — não apagar a lei, que segue na
      * biblioteca e ligada a quem mais a usa. Existe porque o link entre
@@ -1030,6 +1033,11 @@ function leiPintarFila() {
    * já servido, a urgência de não duplicar já passou e os dois voltam ao
    * mesmo peso visual. */
   const vazio = !lista.length;
+  /* com a lei já ligada, os dois botões encolhem: a frase inteira fica no balão */
+  if (!vazio) {
+    bNova.textContent = t("lei_colar_nova_curto");
+    if (bV) bV.textContent = t("lei_vincular_curto", { n: outras.length });
+  }
   if (vazio && bV) {
     bV.classList.add("lei-chip-destaque");
     cx.append(bV, bNova);
@@ -1037,6 +1045,18 @@ function leiPintarFila() {
     if (bV) bV.classList.remove("lei-chip-destaque");
     cx.append(bNova);
     if (bV) cx.append(bV);
+  }
+  /* (19.140.0) AS LEIS DO EDITAL a um toque: as do tópico, as do resto do edital por disciplina e peso, e o que falta */
+  const edT = typeof ledEditalDoTopico === "function" ? ledEditalDoTopico(leiAtual.disciplina, leiAtual.topico) : "";
+  if (edT) {
+    const be = document.createElement("button");
+    be.type = "button";
+    be.className = "lei-chip lei-chip-ed";
+    be.id = "btnLeiFilaEdital";
+    be.textContent = t("lei_fila_edital");
+    be.title = t("lei_fila_edital_aj");
+    be.onclick = () => { if (typeof ledAbrir === "function") ledAbrir(edT, { disciplina: leiAtual.disciplina, topico: leiAtual.topico }); };
+    cx.append(be);
   }
 
   const ajuda = $("leiTextoAjuda");
@@ -1481,6 +1501,17 @@ function leiJanelaMudar(delta) {
  * Biblioteca) ela repetia o título. O botão "leis" da barra a abre — para trocar, colar uma nova ou
  * usar uma guardada. Com duas ou mais leis, ou nenhuma, a fila fica à vista: aí ela é a escolha. */
 let leiFilaAberta = false;
+/* O NOME CURTO de uma lei, para o chip: a parte antes do " - " ("Lei 5.172/1966"), "Constituição" para a CF, e no
+ * máximo 30 letras — o nome inteiro continua no balão */
+function leiNomeCurto(l) {
+  const nome = String((l && l.nome) || "").trim();
+  let k = null;
+  try { k = leiRotuloChave(nome); } catch (e) { k = null; }
+  if (k && k.especie === "constituicao" && /constitui/i.test(nome) && !/estad|municip|org[aâ]nica/i.test(nome)) return t("lei_nome_cf");
+  const corte = nome.split(/\s+[-–—]\s+/)[0].trim() || nome;
+  return corte.length > 30 ? corte.slice(0, 29).trim() + "…" : corte;
+}
+
 function leiFilaColapsavel() {
   if (!leiAtual || !leiIdAtual) return false;
   if (!leiAtual.chave) return true;
@@ -6321,11 +6352,19 @@ function leiBibMetaDe(l) {
   return leiBibMeta[k];
 }
 
+/* (19.140.0) o estado de leitura de uma lei na biblioteca: "nao" (sem marcador), "lendo", "ok" (marcador no fim) */
+let leiBibEstado = "todas";
+function leiBibEstadoDe(l) {
+  const m = leiBibMetaDe(l);
+  if (m.pct >= 100) return "ok";
+  return m.parei ? "lendo" : "nao";
+}
 function leiBibLista() {
   const idx = (typeof matIndiceConcursos === "function") ? matIndiceConcursos() : null;
   const atual = leiConcursoAtualNome();
   const q = leiTxtChave(leiBibTexto);
   return leisLista().map((l) => ({ l, usos: leiUsosDaLei(l, idx) })).filter(({ l, usos }) => {
+    if (leiBibEstado !== "todas" && leiBibEstadoDe(l) !== leiBibEstado) return false;
     if (leiBibPasta && typeof pasContem === "function" && !pasContem(leiBibPasta, { t: "lei", id: l.id, topicos: l.topicos || [] }, idx)) return false;
     if (leiBibFiltro === "sem" && usos.length) return false;
     if (leiBibFiltro === "concurso" && !(atual && usos.some((u) => u.concurso === atual))) return false;
@@ -6404,6 +6443,34 @@ function leiBibPintar() {
       $("leiBibPastas").append(b);
     }
   }
+  /* (19.140.0) A LEITURA, numa fileira própria: todas · não começadas · em leitura · lidas */
+  if ($("leiBibEstados")) {
+    const cxE = $("leiBibEstados");
+    cxE.innerHTML = "";
+    const conta = { nao: 0, lendo: 0, ok: 0 };
+    todas.forEach((l) => { conta[leiBibEstadoDe(l)]++; });
+    [["todas", t("lei_bib_e_todas", { n: todas.length })], ["nao", t("lei_bib_e_nao", { n: conta.nao })], ["lendo", t("lei_bib_e_lendo", { n: conta.lendo })], ["ok", t("lei_bib_e_ok", { n: conta.ok })]].forEach(([k, rot]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "btnLeiBibE_" + k;
+      b.className = "btn-min pas-chip" + (leiBibEstado === k ? " mat-ligado" : "");
+      b.setAttribute("aria-pressed", String(leiBibEstado === k));
+      b.textContent = rot;
+      b.onclick = () => { leiBibEstado = k; leiBibPintar(); };
+      cxE.append(b);
+    });
+  }
+  /* (19.140.0) A PASTA DE UM EDITAL leva às "Leis do edital": a mesma lista, por disciplina e peso, com o que falta */
+  if ($("leiBibEdFaixa")) {
+    let edP = null;
+    try { edP = leiBibPasta && /^ed:/.test(leiBibPasta) && typeof pasEdAchar === "function" ? pasEdAchar(leiBibPasta) : null; } catch (e) { edP = null; }
+    const temLed = !!(edP && typeof ledEdital === "function" && ledEdital(edP.id));
+    $("leiBibEdFaixa").hidden = !temLed;
+    if (temLed) {
+      $("leiBibEdFaixaTxt").textContent = t("lei_bib_ed_faixa", { e: edP.nome });
+      $("btnLeiBibLed").onclick = () => { $("dlgLeiBib").close(); ledAbrir(edP.id); };
+    }
+  }
   const lista = leiBibLista();
   const semVinculo = todas.filter((l) => !(l.topicos || []).length).length;
   $("leiBibResumo").textContent = t("lei_bib_resumo", { n: lista.length, v: semVinculo });
@@ -6443,8 +6510,11 @@ function leiBibPintar() {
 function leiBibCartao({ l, usos }) {
   const m = leiBibMetaDe(l);
   const card = document.createElement("div");
-  card.className = "lei-bib-card lb-linha";
+  const est = leiBibEstadoDe(l);
+  card.className = "lei-bib-card lb-linha lb-" + est;
   card.id = "leiBib_" + l.id;
+  /* (19.140.0) o anel do quanto já foi lido, o mesmo das "Leis do edital" */
+  if (typeof ledAnel === "function") card.append(ledAnel(m.pct || 0, est, t("lei_bib_anel_aj", { p: m.pct || 0 })));
   const txt = document.createElement("div");
   txt.className = "lb-txt";
   card.append(txt);

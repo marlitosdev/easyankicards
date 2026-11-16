@@ -254,6 +254,54 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---- R (19.140.0): A FILA DA LEITURA EM UMA LINHA, COM AS LEIS DO EDITAL A UM TOQUE; A BIBLIOTECA COM ANEL E LEITURA ---- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar(); api.leiIniciar && api.leiIniciar();
+    api.ledIniciar();
+    const e = api.edCriar("ISS", ["# ISS Caruaru | prova: 2027-06-01 | horas: 20", "@ Sistema Tributário :: 5", "+ Suspensão do crédito :: 5 :: Arts. 3 a 5 do CTN e art. 2º da CF"].join(NL));
+    const arts = (n) => Array.from({ length: n }, (_, i) => "Art. " + (i + 1) + "º Texto do artigo " + (i + 1) + ".").join(NL);
+    const chS = api.matChave("Sistema Tributário", "Suspensão do crédito");
+    api.matGravar(chS, "x", { disciplina: "Sistema Tributário", topico: "Suspensão do crédito" });
+    const ctn = api.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", texto: arts(12), topicos: [chS] });
+    const cf = api.leiGuardar({ nome: "CONSTITUIÇÃO DA REPÚBLICA FEDERATIVA DO BRASIL DE 1988", apelido: "CF", texto: arts(10), topicos: [chS] });
+    api.leiGuardar({ nome: "Lei 6.830/1980 - LEF", texto: arts(8), topicos: [] });
+    ok(api.leiNomeCurto(ctn) === "Lei 5.172/1966" && api.leiNomeCurto(cf) === "Constituição", "R1 o nome curto do chip: " + api.leiNomeCurto(ctn) + " / " + api.leiNomeCurto(cf));
+    api.leiAbrir("Sistema Tributário", "Suspensão do crédito", ctn.id);
+    const fila = api.$("leiFila");
+    const txt = (fila.textContent || "");
+    ok(/Lei 5\.172\/1966 · 12 artigos/.test(txt) && /Constituição · 10 artigos/.test(txt) && !/CONSTITUIÇÃO DA REPÚBLICA/.test(txt) && api.$("btnLeiNova").textContent === "＋ colar",
+      "R2 a fila com nomes curtos e os botões encolhidos: " + txt);
+    ok(api.ledEditalDoTopico("Sistema Tributário", "Suspensão do crédito") === e.id && api.$("btnLeiFilaEdital"), "R3 a fila oferece '📚 leis do edital' quando o tópico é de um edital");
+    api.$("btnLeiFilaEdital").onclick();
+    ok(api.$("dlgLeisEd").open && api.$("dlgLeiSeca").open && /Suspensão do crédito/.test(api.$("ledFoco").textContent), "R3a abre as Leis do edital por cima da leitura, com o tópico em destaque");
+    api.$("btnLedFocoLer_" + cf.id).onclick();
+    ok(!api.$("dlgLeisEd").open && api.$("dlgLeiSeca").open && api.leiIdAtualValor() === cf.id, "R3b escolher uma lei ali fecha a tela de cima e a leitura troca para ela");
+    api.$("dlgLeiSeca").close();
+    /* a biblioteca */
+    api.leiParar(ctn.id, "3", 2);
+    api.leiParar(cf.id, "10", 9);
+    api.leiBibAbrir();
+    const est = () => ["todas", "nao", "lendo", "ok"].map((k) => api.$("btnLeiBibE_" + k).textContent).join(" | ");
+    ok(est() === "Todas · 3 | Não começadas · 1 | Em leitura · 1 | ✓ Lidas · 1", "R4 a fileira da leitura conta as leis: " + est());
+    const nomes = () => api.$("leiBibLista").querySelectorAll(".lei-bib-tit").map((x) => x.textContent.replace(/\s*\d+% lida.*$/, "")).join(" | ");
+    api.$("btnLeiBibE_lendo").onclick();
+    ok(/^Lei 5\.172/.test(nomes()) && nomes().split(" | ").length === 1, "R4a 'em leitura' mostra só a lei com marcador no meio: " + nomes());
+    api.$("btnLeiBibE_todas").onclick();
+    ok(api.$("leiBib_" + ctn.id).querySelectorAll(".led-anel").length === 1 && /lb-ok/.test(api.$("leiBib_" + cf.id).className), "R5 cada lei com o anel; a lida com cara de concluída");
+    ok(api.$("leiBibEdFaixa").hidden === true, "R6 sem pasta de edital escolhida, nada de faixa");
+    const chipEd = api.$("leiBibPastas").querySelectorAll("button").filter((x) => /📋/.test(x.textContent))[0];
+    ok(chipEd, "R6- a pasta do edital na fileira: " + api.$("leiBibPastas").querySelectorAll("button").map((x) => x.textContent).join(" | "));
+    if (chipEd) chipEd.onclick();
+    ok(api.$("leiBibEdFaixa").hidden === false && /📋 ISS/.test(api.$("leiBibEdFaixaTxt").textContent), "R6a a pasta do edital mostra o caminho para as Leis do edital: " + api.$("leiBibEdFaixa").hidden + " " + api.$("leiBibEdFaixaTxt").textContent + " · " + chipEd.textContent);
+    api.$("btnLeiBibLed").onclick();
+    ok(api.$("dlgLeisEd").open && !api.$("dlgLeiBib").open, "R6b o botão abre as Leis do edital");
+    ["lei_nome_cf", "lei_colar_nova_curto", "lei_vincular_curto", "lei_fila_edital", "lei_fila_edital_aj", "lei_bib_e_todas", "lei_bib_e_nao", "lei_bib_e_lendo", "lei_bib_e_ok",
+      "lei_bib_anel_aj", "lei_bib_ed_faixa", "lei_bib_ed_bt"].forEach((k) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "R7 falta " + k + " em " + l); }));
+    api.setLanguage("pt");
+  }
+
   /* ---- textos ---- */
   {
     const { api } = rodar();

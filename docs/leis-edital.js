@@ -19,6 +19,20 @@
 let ledCtx = { edId: "", disciplina: "", topico: "" };
 let ledFiltro = "todas";
 let ledUltimo = null;
+let ledPorCimaDaLeitura = false;
+
+/* O EDITAL DE UM TÓPICO (o da leitura não diz de qual edital veio): o aberto, se tiver o tópico; senão o primeiro com
+ * prova por vir; senão qualquer um. "" quando nenhum edital tem esse tópico. */
+function ledEditalDoTopico(disciplina, topico) {
+  if (!topico || typeof pasEdIndice !== "function") return "";
+  const ch = typeof pasNormChave === "function" ? pasNormChave(matChave(disciplina, topico)) : matChave(disciplina, topico);
+  let ix = null;
+  try { ix = pasEdIndice(); } catch (e) { ix = null; }
+  const com = ((ix && ix.lista) || []).filter((e) => e.chaves && e.chaves.has(ch));
+  if (!com.length) return "";
+  const aberto = typeof edAberto === "function" && edAberto() ? String(edAberto().id) : (typeof editalAtual !== "undefined" && editalAtual ? String(editalAtual) : "");
+  return (com.find((e) => e.id === aberto) || com.find((e) => !e.encerrado) || com[0]).id;
+}
 
 function ledEdital(id) {
   const lista = typeof editais !== "undefined" ? editais : [];
@@ -271,6 +285,9 @@ function ledDoTopico(M, disciplina, topico) {
 /* Com um tópico ligado à lei, abre pelo tópico (registrar leitura, cartões e a fila de leis dele funcionam); sem tópico
  * ligado, abre a lei solta, como a biblioteca. O artigo, quando há, manda; sem artigo, a lei retoma no marcador. */
 function ledLer(id, prox, T) {
+  /* aberta a partir da leitura (o "📚 leis do edital" da fila), esta tela está POR CIMA da lei: fecha, e a leitura de
+   * baixo troca de lei. Aberta pela agenda, ela fica embaixo e volta quando a leitura fecha. */
+  if ($("dlgLeiSeca") && $("dlgLeiSeca").open && $("dlgLeisEd") && $("dlgLeisEd").open && ledPorCimaDaLeitura) $("dlgLeisEd").close();
   const P = ledUltimo && ledUltimo.leis[id];
   const lig = T && T.ligada ? T : (P ? P.topicos.find((x) => x.ligada && (!prox || x.nums.indexOf(prox.num) >= 0)) || P.topicos.find((x) => x.ligada) : null);
   try { reg("LEI", "leis do edital: abrir", ((P && P.lei && P.lei.nome) || id) + (prox ? " · art. " + prox.numCru : "")); } catch (e) {}
@@ -288,6 +305,7 @@ function ledAbrir(edId, opc) {
   const id = edId || (typeof edAberto === "function" && edAberto() ? edAberto().id : "") || (typeof editalAtual !== "undefined" ? editalAtual : "");
   if (!ledEdital(id)) return false;
   ledCtx = { edId: id, disciplina: o.disciplina || "", topico: o.topico || "" };
+  ledPorCimaDaLeitura = !!($("dlgLeiSeca") && $("dlgLeiSeca").open);
   ledFiltro = "todas";
   /* a janela abre antes da lista: a primeira montagem lê os artigos de cada lei (a CF, o CTM…) e pode levar um instante */
   if ($("ledCorpo")) { $("ledCorpo").innerHTML = ""; $("ledCorpo").append(ledEl("p", "nota", t("led_carregando"))); }
