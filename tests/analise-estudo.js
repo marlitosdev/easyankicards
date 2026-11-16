@@ -307,6 +307,36 @@ async function testes() {
     api.vzGuardarChave(""); api.aeIaLigar(false);
   }
 
+  /* ================= 19.155.0: REVISÕES DE CARTÕES NO TEMPO (livro de fatos) ================= */
+  {
+    const { api } = rodar();
+    /* o fato passa a dizer o estado do cartão */
+    const fNovo = api.fatoDeCartao({ id: "x#c1" }, 3, AGORA, { chave: "a›b", antes: null });
+    const fRev = api.fatoDeCartao({ id: "x#c1" }, 1, AGORA, { chave: "a›b", antes: { s: "review", iv: 12 } });
+    const fVelho = api.fatoDeCartao({ id: "x#c1" }, 3, AGORA, { chave: "a›b" });
+    ok(fNovo.s === "novo" && fRev.s === "review" && fRev.iv === 12 && fVelho.s === undefined, "V1 o fato diz o estado (novo · em revisão) e o intervalo; quem não passa 'antes' não diz");
+    const fato = (k, nota, s) => { const d = dia(k); const o = { k: "c", d, t: d + "T10:00:00.000Z", nota, ok: nota >= 3 }; if (s !== undefined) o.s = s; return o; };
+    const fatos = [
+      fato(0, 3, "review"), fato(0, 1, "review"), fato(0, 3, "learn"),
+      fato(-1, 2, "review"), fato(-1, 4, "review"),
+      fato(-10, 1),            /* antigo: sem o estado */
+      fato(-40, 3, "review"),  /* período anterior */
+    ];
+    const R = api.aeRevisoesModelo({ fatos, agora: AGORA, periodo: "30" });
+    ok(R.total === 7 && R.porDia.length === 30 && R.porDia[29].n === 3 && R.porDia[28].n === 2 && R.porDia[19].n === 1, "V2 as revisões por dia: hoje 3, ontem 2, há 10 dias 1");
+    ok(R.periodoN === 6 && R.revisoesPeriodo === 5 && R.retencao === 60 && R.retencaoAnt === 100,
+      "V3 retenção no período: entre os em revisão (e os antigos sem estado), lembrou = nota ≥ 2 → 3 de 5 = 60%: " + JSON.stringify({ n: R.periodoN, f: R.revisoesPeriodo, r: R.retencao, a: R.retencaoAnt }));
+    ok(R.aprox === true && R.semanas[12].f === 4 && R.semanas[12].pct === 75 && R.semanas[12].aprox === false, "V4 a semana atual: 3 de 4 em revisão = 75%; o período tem semana aproximada: " + JSON.stringify(R.semanas[12]));
+    const vazio = api.aeRevisoesModelo({ fatos: [], agora: AGORA, periodo: "30" });
+    ok(vazio.total === 0 && vazio.retencao === null, "V5 sem fatos: nada a mostrar");
+    /* na tela */
+    api.plIniciar();
+    api.plAbrir({ aba: "sinais" });
+    ok(!!api.$("aeDesRevisoes"), "V6 o cartão das revisões aparece no Desempenho");
+    const src = fs.readFileSync(path.join(raiz, "estudo-cartoes.js"), "utf8");
+    ok(/fatoDeCartao\(u, n, Date\.now\(\), \{[^}]*antes: antes \|\| null/.test(src), "V7 o 'Estudar' passa o estado de antes ao fato");
+  }
+
   /* R1: o registro para relatar — botão no cabeçalho, a aba vista no registro, e a aba que falha diz onde está o erro */
   {
     const { api } = rodar();

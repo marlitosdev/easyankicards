@@ -151,8 +151,16 @@ function fatoDeCartao(u, nota, agoraMs, ctx) {
   if (!u || !u.id || !nota) return null;
   const t0 = new Date(agoraMs || Date.now()).toISOString();
   const c = ctx || {};
-  return { id: "c|" + u.id + "|" + t0, k: "c", t: t0, d: fatoDia(t0), ch: fatoChave(c.chave || u.chave || ""),
+  const f = { id: "c|" + u.id + "|" + t0, k: "c", t: t0, d: fatoDia(t0), ch: fatoChave(c.chave || u.chave || ""),
     disc: c.disciplina || u.disciplina || "", top: c.topico || u.topico || "", cid: u.id, nota: Number(nota) || 0, ok: Number(nota) >= 3 };
+  /* (19.155.0) o ESTADO do cartão naquela hora (novo · aprendendo · reaprendendo · em revisão) e o intervalo: a retenção
+   * só faz sentido entre os que já estavam em revisão. Quem chama sem "antes" não diz o estado (fica de fora). */
+  if (Object.prototype.hasOwnProperty.call(c, "antes")) {
+    const a = c.antes;
+    f.s = a ? (a.s || "learn") : "novo";
+    f.iv = a && a.iv ? Number(a.iv) || 0 : 0;
+  }
+  return f;
 }
 
 /* O HISTÓRICO QUE JÁ EXISTE: cada tentativa guardada nas questões vira um fato (a mesma identidade — rodar de novo

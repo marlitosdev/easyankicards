@@ -776,6 +776,8 @@ function aePintarDesemp(box, d) {
   }
   lado.append(c2, c3);
   box.append(lado);
+  /* (19.155.0) as revisões de cartões no tempo: por dia e a retenção por semana, do livro de fatos */
+  try { aePintarRevisoes(box, m.periodo); } catch (e) {}
   return m;
 }
 
@@ -1239,6 +1241,12 @@ function aeRelatorio(o) {
         + (C.respostas ? " | respostas: de novo " + Math.round((C.notas[0] / C.respostas) * 100) + "%, dificil " + Math.round((C.notas[1] / C.respostas) * 100) + "%, bom " + Math.round((C.notas[2] / C.respostas) * 100) + "%, facil " + Math.round((C.notas[3] / C.respostas) * 100) + "%" : "")
         + (C.dificeis ? " | esquecidos " + C.limiar + "+ vezes: " + C.dificeis : ""));
     }
+    try {
+      const RV = aeRevisoesModelo(Object.assign({}, base));
+      if (RV.total) L.push("revisoes de cartoes feitas: " + RV.periodoN + " no periodo (media de " + RV.mediaDia + " por dia nos ultimos 30) | retencao (lembrou, entre os ja em revisao): "
+        + pct(RV.retencao) + (RV.retencaoAnt != null ? ", periodo anterior " + pct(RV.retencaoAnt) : "") + " | por semana: " + RV.semanas.map((s) => (s.pct == null ? "-" : s.pct)).join(",")
+        + (RV.aprox ? " (semanas antigas aproximadas: sem o estado do cartao)" : ""));
+    } catch (e) {}
     L.push("");
   }
   if (S.cob && d) {
@@ -1389,9 +1397,149 @@ function aeIaIniciar() {
   if ($("aeIaPergunta")) $("aeIaPergunta").oninput = () => { clearTimeout(tm); tm = setTimeout(aeIaAtualizar, 300); };
 }
 
+/* =====================================================================
+ * (19.155.0) AS REVISÕES DE CARTÕES NO TEMPO — do livro de fatos
+ *
+ * Cada nota dada a um cartão já entrava no livro de fatos (fatos.js, desde a 19.122.0) com o instante, o dia, o
+ * tópico e a nota — um registro que só cresce e vai no backup. Faltava saber em que ESTADO o cartão estava (ainda
+ * aprendendo ou já em revisão): agora o fato leva isso (s) e o intervalo (iv). Daqui saem:
+ *  · as REVISÕES FEITAS POR DIA nos últimos 30 dias;
+ *  · a RETENÇÃO de cada semana: dos cartões que já estavam em revisão, quantos você lembrou (qualquer nota que não
+ *    "De novo" — a mesma conta do Anki). Os fatos de antes desta versão não dizem o estado: entram todos, e a tela avisa
+ *    que aquelas semanas são aproximadas.
+ * ===================================================================== */
+function aeRevisoesModelo(opc) {
+  const o = opc || {};
+  const agora = o.agora || aeRelogio();
+  const hoje = aeDiaDe(agora);
+  const periodo = AE_PERIODOS.indexOf(String(o.periodo)) >= 0 ? String(o.periodo) : aePeriodoLer();
+  let fatos = o.fatos;
+  if (!fatos) { try { fatos = typeof fatosLista === "function" ? fatosLista({ tipo: "c" }) : []; } catch (e) { fatos = []; } }
+  fatos = (fatos || []).filter((f) => f && f.k === "c" && f.d && f.d <= hoje);
+  const I = aeIntervalo(periodo, agora, o.diario || []);
+  /* "tudo" vai do primeiro fato, não do primeiro registro do diário */
+  const ini = periodo === "tudo" && fatos.length ? fatos.reduce((m, f) => (f.d < m ? f.d : m), hoje) : I.ini;
+  const nDias = aeDiasEntre(ini, hoje) + 1;
+  const antIni = aeSomarDias(ini, -nDias), antFim = aeSomarDias(ini, -1);
+  const lembrou = (f) => Number(f.nota) >= 2;
+  const ehRevisao = (f) => f.s === "review";
+  const semEstado = (f) => f.s == null;
+  /* por dia, nos últimos 30 */
+  const porDia = Array.from({ length: 30 }, (_, i) => ({ d: aeSomarDias(hoje, i - 29), n: 0, lembrou: 0 }));
+  const idx = {};
+  porDia.forEach((x, i) => { idx[x.d] = i; });
+  /* por semana, nas 13 da análise */
+  const iniSem = aeSomarDias(aeSegunda(hoje), -7 * (AE_SEMANAS - 1));
+  const sem = Array.from({ length: AE_SEMANAS }, (_, k) => ({ ini: aeSomarDias(iniSem, 7 * k), n: 0, f: 0, ok: 0, aprox: false }));
+  let pN = 0, pF = 0, pOk = 0, aF = 0, aOk = 0, aprox = false;
+  fatos.forEach((f) => {
+    if (idx[f.d] != null) { porDia[idx[f.d]].n++; if (lembrou(f)) porDia[idx[f.d]].lembrou++; }
+    const conta = ehRevisao(f) || semEstado(f);
+    if (f.d >= iniSem) {
+      const k = Math.floor(aeDiasEntre(iniSem, f.d) / 7);
+      if (sem[k]) {
+        sem[k].n++;
+        if (conta) { sem[k].f++; if (lembrou(f)) sem[k].ok++; if (semEstado(f)) sem[k].aprox = true; }
+      }
+    }
+    if (f.d >= ini && f.d <= hoje) {
+      pN++;
+      if (conta) { pF++; if (lembrou(f)) pOk++; if (semEstado(f)) aprox = true; }
+    } else if (f.d >= antIni && f.d <= antFim && conta) { aF++; if (lembrou(f)) aOk++; }
+  });
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+  return {
+    periodo, total: fatos.length, desde: fatos.length ? fatos.reduce((m, f) => (f.d < m ? f.d : m), hoje) : "",
+    porDia, semanas: sem.map((s) => Object.assign(s, { pct: pct(s.ok, s.f) })),
+    periodoN: pN, retencao: pct(pOk, pF), retencaoAnt: periodo === "tudo" ? null : pct(aOk, aF), revisoesPeriodo: pF, aprox,
+    mediaDia: Math.round((porDia.reduce((a, x) => a + x.n, 0) / 30) * 10) / 10,
+  };
+}
+
+let aeFatosPedidos = false;
+function aePintarRevisoes(box, periodo) {
+  /* o livro de fatos vem do IndexedDB: se ainda não chegou, pede UMA vez e repinta a aba quando chegar */
+  try {
+    if (typeof _fatosCarregou !== "undefined" && !_fatosCarregou && !aeFatosPedidos && typeof fatosPronto === "function") {
+      aeFatosPedidos = true;
+      Promise.resolve(fatosPronto()).then(() => { if (typeof plAba !== "undefined" && plAba === "sinais" && typeof plPintar === "function") plPintar(); });
+    }
+  } catch (e) {}
+  const R = aeRevisoesModelo({ periodo });
+  const c = aeCartao(t("ae_r_tit"), "aeDesRevisoes");
+  if (!R.total) {
+    c.append(aeEl("div", "ae-alerta vazio", t("ae_r_vazio")));
+    box.append(c);
+    return R;
+  }
+  const lado = aeEl("div", "ae-graficos");
+  /* as revisões por dia (30 dias) */
+  const g1 = aeEl("div", "");
+  g1.append(aeEl("div", "ae-cartao-tit", t("ae_r_dia_tit", { m: String(R.mediaDia).replace(".", ",") })));
+  const W = 300, H = 90, base = 76;
+  const maxN = Math.max(5, ...R.porDia.map((x) => x.n));
+  const svg = aeSvg("svg", { viewBox: "0 0 " + W + " " + H, class: "ae-sem", role: "img", "aria-label": t("ae_r_dia_aria") });
+  svg.id = "aeRevDia";
+  const passo = W / 30, larg = Math.max(3, passo - 2);
+  svg.append(aeSvg("line", { x1: 0, x2: W, y1: base + 0.5, y2: base + 0.5, class: "ae-eixo" }));
+  R.porDia.forEach((x, i) => {
+    const h = (x.n / maxN) * (base - 8);
+    const g = aeSvg("g", { class: "ae-barra" });
+    const [a, mm, dd] = x.d.split("-");
+    const tt = aeSvg("title", {}); tt.textContent = t("ae_r_dia_barra", { d: dd + "/" + mm, n: x.n, l: x.lembrou });
+    g.append(tt);
+    if (h > 0) g.append(aeSvg("rect", { x: (i * passo + 1).toFixed(1), y: (base - h).toFixed(1), width: larg.toFixed(1), height: h.toFixed(1), rx: 1.5, class: "ae-b-est" }));
+    if (i === 0 || i === 10 || i === 20 || i === 29) {
+      const tx = aeSvg("text", { x: (i * passo + larg / 2 + 1).toFixed(1), y: H - 2, "text-anchor": i === 29 ? "end" : "start", class: "ae-rot" });
+      tx.textContent = i === 29 ? t("ae_d_hoje") : dd + "/" + mm;
+      g.append(tx);
+    }
+    svg.append(g);
+  });
+  g1.append(svg);
+  /* a retenção por semana (13 semanas), com a linha de 85% */
+  const g2 = aeEl("div", "");
+  g2.append(aeEl("div", "ae-cartao-tit", t("ae_r_ret_tit")));
+  const W2 = 300, H2 = 90, top = 6, bot = 76;
+  const y = (p) => (top + (1 - p / 100) * (bot - top)).toFixed(1);
+  const x2 = (k) => (8 + (k / (AE_SEMANAS - 1)) * (W2 - 16)).toFixed(1);
+  const sv2 = aeSvg("svg", { viewBox: "0 0 " + W2 + " " + H2, class: "ae-sem", role: "img", "aria-label": t("ae_r_ret_aria") });
+  sv2.id = "aeRevRet";
+  sv2.append(aeSvg("line", { x1: 0, x2: W2, y1: y(85), y2: y(85), class: "ae-meta" }));
+  /* o rótulo à esquerda: a semana atual (o ponto mais recente) fica na ponta direita */
+  const rot85 = aeSvg("text", { x: 2, y: Number(y(85)) - 3, "text-anchor": "start", class: "ae-rot" }); rot85.textContent = "85%";
+  sv2.append(rot85);
+  const pts = R.semanas.map((s, k) => (s.pct == null ? null : [x2(k), y(s.pct), s])).filter(Boolean);
+  if (pts.length > 1) sv2.append(aeSvg("polyline", { points: pts.map((p) => p[0] + "," + p[1]).join(" "), class: "ae-pl" }));
+  pts.forEach((p) => {
+    const cc = aeSvg("circle", { cx: p[0], cy: p[1], r: 3, class: "ae-ponto" + (p[2].aprox ? " aprox" : "") });
+    const tt = aeSvg("title", {});
+    const [a, mm, dd] = p[2].ini.split("-");
+    tt.textContent = t("ae_r_ret_ponto", { d: dd + "/" + mm, p: p[2].pct, f: p[2].f }) + (p[2].aprox ? " " + t("ae_r_aprox_curto") : "");
+    cc.append(tt);
+    sv2.append(cc);
+  });
+  g2.append(sv2);
+  lado.append(g1, g2);
+  c.append(lado);
+  const dl = R.retencao != null && R.retencaoAnt != null ? R.retencao - R.retencaoAnt : null;
+  c.append(aeEl("p", "ae-r-resumo", t("ae_r_resumo", { n: R.periodoN, r: R.retencao == null ? "—" : R.retencao + "%", f: R.revisoesPeriodo })
+    + (dl == null ? "" : " · " + (dl > 0 ? "+" : dl < 0 ? "−" : "") + Math.abs(dl) + " pp " + t("ae_vs_antes"))));
+  const nota = aeEl("p", "nota ae-fonte", t("ae_r_nota", { d: R.desde.split("-").reverse().join("/") }) + (R.aprox ? " " + t("ae_r_aprox") : ""));
+  if (typeof fatosUiAbrir === "function") {
+    const b = aeEl("button", "btn-min", t("ae_r_livro"));
+    b.type = "button"; b.id = "btnAeRevLivro";
+    b.onclick = () => fatosUiAbrir();
+    nota.append(document.createTextNode(" "), b);
+  }
+  c.append(nota);
+  box.append(c);
+  return R;
+}
+
 if (typeof document !== "undefined") { try { aeIaIniciar(); } catch (e) {} }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { aeRelatorio, aeIaAbrir, aeIaCopiar, aeIaGemini, aeIaLigar, aeIaLigada, aeIaPronta, aeIaSecoesLer, aeCoberturaModelo, aePintarCobertura, aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
+  module.exports = { aeRevisoesModelo, aePintarRevisoes, aeRelatorio, aeIaAbrir, aeIaCopiar, aeIaGemini, aeIaLigar, aeIaLigada, aeIaPronta, aeIaSecoesLer, aeCoberturaModelo, aePintarCobertura, aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
     aeTempoModelo, aeDesempModelo, aePintarTempo, aePintarDesemp, aeChaveDisc };
 }

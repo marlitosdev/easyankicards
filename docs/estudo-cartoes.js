@@ -296,7 +296,7 @@ function estcNota(n) {
     if (typeof fatoGravar === "function") {
       const ch = (u.nota && u.nota.chave) || "";
       const m = (typeof matResumos !== "undefined" && matResumos && matResumos[ch]) || {};
-      const f = fatoDeCartao(u, n, Date.now(), { chave: ch, disciplina: m.disciplina, topico: m.topico });
+      const f = fatoDeCartao(u, n, Date.now(), { chave: ch, disciplina: m.disciplina, topico: m.topico, antes: antes || null });
       if (f && fatoGravar(f)) estcUltima.fato = f.id;
     }
   } catch (e) {}
