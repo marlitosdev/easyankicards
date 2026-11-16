@@ -1003,7 +1003,10 @@ function plPintarSinais(box, d) {
     tr.append(plEl("td", "", s.humorRuim + " / " + s.humorBom));
     tbody.append(tr);
   });
-  box.append(tab);
+  /* (19.150.0) seis colunas não cabem no celular: a tabela rola de lado dentro da caixa, a página não */
+  const cx = plEl("div", "plog-tab-cx");
+  cx.append(tab);
+  box.append(cx);
 }
 
 /* ---- aba: armazenamento ---- */
@@ -1134,7 +1137,25 @@ function plPintar() {
   if (avLeit) box.append(avLeit);
   /* A VISÃO GERAL não depende de edital: o diário, as questões e os cartões são seus, com ou sem prova marcada */
   if (plAba === "geral") {
-    if (typeof aePintar === "function") aePintar(box, d);
+    plRede(box, () => { if (typeof aePintar === "function") aePintar(box, d); });
+    plAbasPintar();
+    return;
+  }
+  /* (19.150.0) TEMPO e DESEMPENHO também valem sem edital (o diário, as questões e os cartões são seus); a tabela por
+   * disciplina do desempenho, essa sim, é do edital em vista */
+  if (plAba === "tempo") {
+    plRede(box, () => { if (typeof aePintarTempo === "function") aePintarTempo(box, d); });
+    plAbasPintar();
+    return;
+  }
+  if (plAba === "sinais") {
+    plRede(box, () => {
+      if (typeof aePintarDesemp === "function") aePintarDesemp(box, d);
+      if (d) {
+        box.append(plEl("h4", "plog-sec-tit", t("plog_sinais_sec")));
+        plPintarSinais(box, d);
+      }
+    });
     plAbasPintar();
     return;
   }
@@ -1173,8 +1194,33 @@ function plPintar() {
   plAbasPintar();
 }
 
+/* (19.150.0) A REDE DE CADA ABA. Um número estranho nos seus dados não pode deixar a análise em branco e calada: o
+ * erro vai para o registro (Diagnóstico e registro), com a aba e a versão, e a aba diz o que houve e abre o registro
+ * num toque — é de lá que se copia para relatar. */
+function plRede(box, fn) {
+  try { fn(); return true; } catch (e) {
+    const msg = (e && e.message) || String(e);
+    const pilha = e && e.stack ? String(e.stack).split("\n").slice(0, 3).join(" | ") : "";
+    try { if (typeof reg === "function") reg("ERRO", "análise do estudo: a aba «" + plAba + "» falhou ao desenhar", msg + (pilha ? " · " + pilha : "")); } catch (e2) {}
+    const av = plEl("div", "plog-aviso plog-falha");
+    av.append(plEl("b", "", t("plog_falha_tit") + " "), document.createTextNode(t("plog_falha_txt", { m: msg })));
+    const b = plEl("button", "btn-min", t("plog_registro"));
+    b.type = "button";
+    b.onclick = plRegistroAbrir;
+    av.append(document.createTextNode(" "), b);
+    box.append(av);
+    return false;
+  }
+}
+/* o registro do app (Diagnóstico e registro): o que aconteceu, com copiar · baixar · compartilhar para relatar */
+function plRegistroAbrir() {
+  try { if (typeof reg === "function") reg("ANALISE", "abriu o registro pela análise do estudo", "aba " + plAba); } catch (e) {}
+  if (typeof abrirDiagnostico === "function") { abrirDiagnostico(); return true; }
+  return false;
+}
+
 /* as três abas principais, pelos ids (a busca por classe não enxerga a marcação estática no simulador dos testes) */
-const PL_ABAS_IDS = { btnPlogAbaGeral: "geral", btnPlogAbaPlano: "plano", btnPlogAbaSinais: "sinais" };
+const PL_ABAS_IDS = { btnPlogAbaGeral: "geral", btnPlogAbaTempo: "tempo", btnPlogAbaSinais: "sinais", btnPlogAbaPlano: "plano" };
 function plAbasBotoes() {
   return Object.keys(PL_ABAS_IDS).map((id) => document.getElementById(id)).filter(Boolean);
 }
@@ -1311,6 +1357,7 @@ function plTelaAlternar() {
 
 function plAbrir(opc) {
   if (opc && opc.aba) plAba = opc.aba === "armazem" ? "geral" : opc.aba;
+  try { if (typeof reg === "function") reg("ANALISE", "análise do estudo aberta", "aba " + plAba); } catch (e) {}
   /* a largura manda; a preferência só decide o que a largura não decide */
   try {
     plTelaCheia = plTelaEstreita()
@@ -1346,6 +1393,8 @@ function plCopiar() {
 function plAbaTrocar(nome) {
   if (nome === "armazem") { plArmazemAbrir(); return plAba; }
   plAba = nome === "plano" ? "disc" : (nome || "geral");
+  /* (19.150.0) a aba vista fica no registro: quem relata um número estranho já leva onde ele estava */
+  try { if (typeof reg === "function") reg("ANALISE", "aba da análise do estudo", plAba); } catch (e) {}
   plPintar();
   return plAba;
 }
@@ -1362,6 +1411,7 @@ function plIniciar() {
   liga("btnPlogCopiar", plCopiar);
   liga("btnPlogTela", plTelaAlternar);
   liga("btnCfgArmazem", plArmazemAbrir);
+  liga("btnPlogRegistro", plRegistroAbrir);
   liga("btnArmazemFechar", () => { const d = document.getElementById("dlgArmazem"); if (d) d.close(); });
   /* GIRAR O APARELHO É TROCAR DE TELA.
    * Sem isto, quem abre o painel em pé (estreito, portanto em tela
@@ -1390,6 +1440,6 @@ if (typeof module !== "undefined" && module.exports) {
     plPodaSnaps, plTamanho, plBytes, PL_GAVETAS,
     plTelaAplicar, plTelaAlternar, plTelaEstreita, plColCls, plAbaTrocar,
     plTabela, plLinha, PL_TELA_ESTREITA, PL_TELA_CHAVE,
-    plTelaCheiaAtual: () => plTelaCheia, plArmazemAbrir, plContaTxt, plAbaAtual: () => plAba,
+    plTelaCheiaAtual: () => plTelaCheia, plArmazemAbrir, plContaTxt, plAbaAtual: () => plAba, plRede, plRegistroAbrir,
   };
 }

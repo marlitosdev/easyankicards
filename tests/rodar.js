@@ -474,7 +474,7 @@ async function main() {
                     ["corrigir erros: o recorte das repetidas aparece, troca no lugar, versão e desfazer, parecidas e travessão", cerT],
                     ["vigia da bancada: limpar e sair deixam evento, abrir vazia sem ninguém limpar avisa e põe a cópia nas versões, o tópico sumido volta", bvgT],
                     ["prévia da lei citada: letra do leitor com A−/A+, sem recuo nem linhas vazias, artigos vizinhos, links de dentro e voltar", cpaT],
-                    ["análise do estudo: visão geral (horas × meta, dias, acerto, cartões, mapa, semanas, alertas), abas novas e armazenamento nas configurações", aesT],
+                    ["análise do estudo: visão geral, Tempo (disciplina × prova, formas, dias da semana), Desempenho (acerto semanal, chute, cartões) e armazenamento nas configurações", aesT],
                     ["edital verticalizado (motor): disciplinas por questões ou peso, numeração 1/1.1, ramos, 2ª fase, progresso nas caixas e fatia igual à do plano", vtT],
                     ["edital verticalizado (tela): faixas e colunas do modelo, opções que mexem na folha e ficam guardadas, caixinhas do progresso, imprimir só a folha e o CSS de impressão", vuT],
                     ["texto errado não vira edital: o prompt colado gera zero disciplinas, nomes de exemplo e texto cru são avisados, e o Novo edital tem semáforo, chips do que foi entendido e 'antes de criar'", wgT],

@@ -5696,7 +5696,47 @@ dialog.arm-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 .ae-alerta.info .ae-alerta-ic{color:var(--info)}
 .ae-alerta-txt{flex:1 1 auto;min-width:0}
 .ae-alerta-ir{flex:0 0 auto}
-.ae-fonte{margin:var(--esp-1) 0 0}
+.ae-fonte{margin:var(--esp-1) 0 0;font-size:var(--fs-2);color:var(--sutil)}
+/* (19.150.0) TEMPO e DESEMPENHO: linhas de barra, a marca da prova, a linha do acerto, a previsão e as notas */
+.plog-corpo > .ae-cartao{margin:0 0 var(--esp-3)}
+.ae-linha{display:grid;grid-template-columns:minmax(0,13em) minmax(60px,1fr) 7.5em 4.2em;align-items:center;gap:var(--esp-2);padding:5px 0;border-top:1px solid var(--borda);font-size:var(--fs-2)}
+.ae-cartao-tit + .ae-linha{border-top:0}
+.ae-linha.fora{color:var(--sutil)}
+.ae-linha-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ae-trilho{position:relative;display:flex;height:10px;background:color-mix(in srgb,var(--texto) 7%,var(--bg));border-radius:var(--r-p)}
+.ae-seg{display:block;height:100%}
+.ae-seg.est{background:var(--acao)}
+.ae-seg.rev{background:color-mix(in srgb,var(--acao) 40%,var(--bg))}
+.ae-marca{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--texto)}
+.ae-linha-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ae-linha-dv{text-align:right;font-variant-numeric:tabular-nums;color:var(--sutil);white-space:nowrap}
+.ae-linha-dv.ruim{color:var(--erro)}
+.ae-linha-dv.ok{color:var(--ok)}
+.ae-linha-dv.mais{color:var(--atencao)}
+.ae-linha-q{color:var(--sutil);white-space:nowrap;text-align:right}
+.ae-linha-acerto{grid-template-columns:minmax(0,1fr) 140px 3.5em 4.2em 6.5em}
+.ae-linha-acerto.pouco{color:var(--sutil)}
+.ae-linha-forma{grid-template-columns:minmax(0,7.5em) minmax(40px,1fr) 3.8em 7.2em}
+.ae-faisca{width:140px;height:34px;display:block}
+.ae-faisca .ae-ref{stroke:var(--borda);stroke-width:1;stroke-dasharray:3 3}
+.ae-faisca .ae-pl{fill:none;stroke:var(--acao);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.ae-faisca .ae-ponto{fill:var(--acao)}
+.ae-linha-acerto.pouco .ae-pl{stroke:var(--sutil)}
+.ae-linha-acerto.pouco .ae-ponto{fill:var(--sutil)}
+.ae-sem .ae-b-hoje{fill:var(--atencao)}
+.ae-notas{display:flex;height:12px;border-radius:var(--r-p);overflow:hidden;margin:var(--esp-1) 0}
+.ae-nota{display:block;height:100%}
+.ae-nota.n1,.ae-leg-q.n1{background:var(--erro)}
+.ae-nota.n2,.ae-leg-q.n2{background:var(--atencao)}
+.ae-nota.n3,.ae-leg-q.n3{background:var(--ok)}
+.ae-nota.n4,.ae-leg-q.n4{background:var(--info)}
+.ae-leg-q.prova{width:2px;height:12px;background:var(--texto);border-radius:0}
+.ae-sub-tit{margin-top:var(--esp-3)}
+.plog-sec-tit{font-size:var(--fs-3);margin:var(--esp-3) 0 var(--esp-2)}
+.plog-tab-cx{overflow-x:auto;max-width:100%}
+.plog-falha{margin:0 0 var(--esp-3)}
+@media (max-width:640px){.ae-linha,.ae-linha-acerto{grid-template-columns:minmax(0,1fr) auto auto;row-gap:2px}
+  .ae-linha-nome{grid-column:1/-1}.ae-linha-q{display:none}}
 @media (max-width:640px){.ae-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ae-graficos{grid-template-columns:minmax(0,1fr)}
   .ae-mapa{max-width:none}.ae-alerta{flex-wrap:wrap}.ae-alerta-ir{margin-left:auto}}
 .plog-naoentra{font-size:10.5px;color:var(--sutil);font-style:italic}
@@ -12221,6 +12261,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
            aninhadas e nada legível. A tela cheia não é um luxo aqui, é
            a única forma de o painel funcionar — e por isso ele já ABRE
            assim quando a tela é estreita. -->
+      <!-- (19.150.0) o registro do app, para relatar um número estranho ou um erro desta tela -->
+      <button class="btn-min" id="btnPlogRegistro" data-i18n="plog_registro" data-i18n-title="plog_registro_aj"></button>
       <button class="btn-min" id="btnPlogTela"></button>
       <button class="btn-min" id="btnPlogFechar" data-i18n="help_close"></button>
     </span>
@@ -12230,10 +12272,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="plog-abas" role="tablist">
     <button class="plog-aba" id="btnPlogAbaGeral" data-plog-aba="geral" role="tab"
       data-i18n="plog_aba_geral" data-i18n-title="plog_aba_geral_aj"></button>
-    <button class="plog-aba" id="btnPlogAbaPlano" data-plog-aba="plano" role="tab"
-      data-i18n="plog_aba_plano" data-i18n-title="plog_aba_plano_aj"></button>
+    <button class="plog-aba" id="btnPlogAbaTempo" data-plog-aba="tempo" role="tab"
+      data-i18n="plog_aba_tempo" data-i18n-title="plog_aba_tempo_aj"></button>
     <button class="plog-aba" id="btnPlogAbaSinais" data-plog-aba="sinais" role="tab"
       data-i18n="plog_aba_sinais" data-i18n-title="plog_aba_sinais_aj"></button>
+    <button class="plog-aba" id="btnPlogAbaPlano" data-plog-aba="plano" role="tab"
+      data-i18n="plog_aba_plano" data-i18n-title="plog_aba_plano_aj"></button>
     <span class="plog-cab-dir">
       <button class="btn-min" id="btnPlogCopiar" data-i18n="plog_copiar"
         title="Copia o relatorio inteiro em texto, para colar numa conversa."></button>

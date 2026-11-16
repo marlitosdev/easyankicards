@@ -251,18 +251,8 @@ function aeDelta(atual, ant, unidade, inverso) {
 function aePintar(box, d) {
   const m = aeModelo({ plano: d && d.plano, r: d && d.r });
   box.dataset && (box.dataset.aePeriodo = m.periodo);
-  /* o período */
-  const per = aeEl("div", "ae-periodo");
-  per.append(aeEl("span", "ae-periodo-rot", t("ae_periodo")));
-  AE_PERIODOS.forEach((p) => {
-    const b = aeEl("button", "ae-chip" + (p === m.periodo ? " ativo" : ""), t("ae_per_" + p));
-    b.type = "button";
-    b.id = "btnAePer_" + p;
-    b.setAttribute("aria-pressed", p === m.periodo ? "true" : "false");
-    b.onclick = () => aePeriodoDefinir(p);
-    per.append(b);
-  });
-  box.append(per);
+  /* o período (o mesmo nas três abas: Visão geral, Tempo e Desempenho) */
+  box.append(aePeriodoBarra(m.periodo));
 
   /* os indicadores */
   const kpis = aeEl("div", "ae-kpis");
@@ -393,6 +383,401 @@ function aePintarSemanas(m) {
   return c;
 }
 
+
+/* =====================================================================
+ * (19.150.0) AS ABAS "TEMPO" E "DESEMPENHO"
+ *
+ * TEMPO responde "para onde foi o meu tempo de verdade": o diário do período por disciplina, contra o quanto ela vale
+ * na prova (a aba "Prova × tempo" compara o PLANO com a prova; aqui é o que você FEZ), separado em estudo e revisão;
+ * as formas de estudo, com o quanto cada uma rendeu na sua avaliação; e os dias da semana em que você estuda.
+ *
+ * DESEMPENHO responde "estou acertando mais?": o acerto de cada disciplina semana a semana (com as linhas de 60% e
+ * 85%, as mesmas que a agenda usa para subir ou descer um tópico), o chute contra a certeza, e os cartões — as
+ * revisões dos próximos 30 dias e como você tem respondido (De novo · Difícil · Bom · Fácil). A tabela de antes
+ * continua embaixo.
+ *
+ * Disciplina casa pelo nome sem acento e sem caixa: o diário, o banco de questões e o edital nem sempre escrevem igual.
+ * ===================================================================== */
+const AE_FORMAS = ["leitura", "videoaula", "questoes", "leiseca", "flashcards", "resumo", "mapa", "revisao", "juris"];
+function aeChaveDisc(s) {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+/* as disciplinas do plano em vista (nome, fatia da prova, fatia planejada), na ordem do peso */
+function aeDiscDoPlano(plano, r) {
+  if (!plano) return [];
+  let pd = [];
+  try { pd = typeof plPorDisciplina === "function" ? plPorDisciplina(plano, r) : []; } catch (e) { pd = []; }
+  return pd.map((x) => ({ nome: x.disciplina, k: aeChaveDisc(x.disciplina), prova: x.fatiaProva, plano: x.fatiaTempo }));
+}
+/* o intervalo do período (o mesmo da visão geral) */
+function aeIntervalo(periodo, agora, diario) {
+  const hoje = aeDiaDe(agora);
+  let primeiro = hoje;
+  (diario || []).forEach((x) => { const d = aeDiaDe(x && x.d); if (d && d < primeiro) primeiro = d; });
+  const nDias = periodo === "tudo" ? Math.max(1, aeDiasEntre(primeiro, hoje) + 1) : Number(periodo);
+  const ini = aeSomarDias(hoje, -(nDias - 1));
+  return { hoje, ini, nDias, antIni: aeSomarDias(ini, -nDias), antFim: aeSomarDias(ini, -1) };
+}
+
+/* ---------------- TEMPO ---------------- */
+function aeTempoModelo(opc) {
+  const o = opc || {};
+  const F = aeFontes(o);
+  const agora = o.agora || aeRelogio();
+  const periodo = AE_PERIODOS.indexOf(String(o.periodo)) >= 0 ? String(o.periodo) : aePeriodoLer();
+  const I = aeIntervalo(periodo, agora, F.diario);
+  const base = aeDiscDoPlano(o.plano, o.r);
+  const porK = {};
+  base.forEach((b) => { porK[b.k] = { nome: b.nome, prova: b.prova, plano: b.plano, est: 0, rev: 0, n: 0, doPlano: true }; });
+  const outros = { nome: t("ae_t_outros"), prova: null, plano: null, est: 0, rev: 0, n: 0, doPlano: false };
+  const formas = {};
+  AE_FORMAS.forEach((f) => { formas[f] = { forma: f, min: 0, n: 0, boa: 0, media: 0, ruim: 0 }; });
+  const semana = [0, 0, 0, 0, 0, 0, 0];
+  let total = 0, sessoes = 0;
+  F.diario.forEach((x) => {
+    if (!x || x.a === "pendente") return;
+    const d = aeDiaDe(x.d);
+    if (!d || d < I.ini || d > I.hoje) return;
+    const m = Math.max(0, Number(x.m) || 0);
+    const rev = x.a === "revisado";
+    const k = aeChaveDisc(x.disc);
+    const L = porK[k] || (base.length ? outros : (porK[k] = { nome: x.disc || "?", prova: null, plano: null, est: 0, rev: 0, n: 0, doPlano: false }));
+    if (rev) L.rev += m; else L.est += m;
+    L.n++;
+    total += m; sessoes++;
+    /* uma sessão com duas formas divide os minutos entre elas */
+    const fs = (Array.isArray(x.f) ? x.f : []).filter((f) => formas[f]);
+    const lista = fs.length ? fs : (rev ? ["revisao"] : []);
+    lista.forEach((f) => {
+      const F2 = formas[f];
+      F2.min += m / lista.length; F2.n++;
+      if (x.hu === "boa") F2.boa++; else if (x.hu === "ruim") F2.ruim++; else if (x.hu) F2.media++;
+    });
+    const [a, mm, dd] = d.split("-").map(Number);
+    semana[(new Date(a, mm - 1, dd).getDay() + 6) % 7] += m;
+  });
+  const discs = Object.keys(porK).map((k) => porK[k]);
+  /* "outros editais" só aparece se teve tempo (registro de 0 minuto não vira linha) */
+  if (outros.est + outros.rev > 0) discs.push(outros);
+  /* a fatia REAL é sobre o tempo das disciplinas do edital (é com a prova dele que se compara) */
+  const totPlano = discs.filter((x) => x.doPlano).reduce((s, x) => s + x.est + x.rev, 0);
+  discs.forEach((x) => {
+    x.min = x.est + x.rev;
+    x.real = x.doPlano && totPlano ? Math.round((x.min / totPlano) * 100) : null;
+    x.desvio = x.real != null && x.prova != null ? x.real - x.prova : null;
+  });
+  discs.sort((a, b) => (b.doPlano - a.doPlano) || ((b.prova || 0) - (a.prova || 0)) || (b.min - a.min));
+  /* a média de cada dia da semana: o total dividido por quantas vezes aquele dia apareceu no período */
+  const vezes = [0, 0, 0, 0, 0, 0, 0];
+  for (let d = I.ini; d <= I.hoje; d = aeSomarDias(d, 1)) {
+    const [a, mm, dd] = d.split("-").map(Number);
+    vezes[(new Date(a, mm - 1, dd).getDay() + 6) % 7]++;
+  }
+  return {
+    periodo, total, sessoes, temPlano: base.length > 0, discs,
+    formas: AE_FORMAS.map((f) => formas[f]).filter((f) => f.n).sort((a, b) => b.min - a.min),
+    diaSemana: semana.map((m, i) => ({ i, media: vezes[i] ? Math.round(m / vezes[i]) : 0, total: Math.round(m) })),
+  };
+}
+
+/* ---------------- DESEMPENHO ---------------- */
+function aeDesempModelo(opc) {
+  const o = opc || {};
+  const F = aeFontes(o);
+  const agora = o.agora || aeRelogio();
+  const periodo = AE_PERIODOS.indexOf(String(o.periodo)) >= 0 ? String(o.periodo) : aePeriodoLer();
+  const I = aeIntervalo(periodo, agora, F.diario);
+  const hoje = I.hoje;
+  const iniSem = aeSomarDias(aeSegunda(hoje), -7 * (AE_SEMANAS - 1));
+  const base = aeDiscDoPlano(o.plano, o.r);
+  const porK = {};
+  const nova = (nome) => ({ nome, sem: Array.from({ length: AE_SEMANAS }, () => ({ f: 0, c: 0 })), f: 0, c: 0, fAnt: 0, cAnt: 0 });
+  base.forEach((b) => { porK[b.k] = nova(b.nome); });
+  const pega = (nome) => {
+    const k = aeChaveDisc(nome);
+    if (porK[k]) return porK[k];
+    if (base.length) return null;          /* com edital: só as disciplinas dele */
+    return (porK[k] = nova(nome || "?"));
+  };
+  const chute = { com: { f: 0, c: 0 }, sem: { f: 0, c: 0 } };
+  const somar = (L, d, f, c) => {
+    if (d >= I.ini && d <= hoje) { L.f += f; L.c += c; }
+    else if (d >= I.antIni && d <= I.antFim) { L.fAnt += f; L.cAnt += c; }
+    if (d >= iniSem && d <= hoje) { const k = Math.floor(aeDiasEntre(iniSem, d) / 7); if (L.sem[k]) { L.sem[k].f += f; L.sem[k].c += c; } }
+  };
+  F.banco.forEach((q) => {
+    const L = pega(q.disciplina);
+    (q.tentativas || []).forEach((tt) => {
+      const d = aeDiaDe(tt && tt.q);
+      if (!d || d > hoje) return;
+      const v = typeof qsValorAcerto === "function" ? qsValorAcerto(tt) : (tt.acertou ? 1 : 0);
+      if (L) somar(L, d, 1, v);
+      /* no chute × certeza vale o ACERTOU OU NÃO (no acerto da disciplina, o chute certo vale o crédito parcial do app) */
+      if (d >= I.ini) { const ch = tt.chute ? chute.com : chute.sem; ch.f++; ch.c += tt.acertou ? 1 : 0; }
+    });
+  });
+  F.diario.forEach((x) => {
+    if (!x || x.a === "pendente" || !x.q || !x.q.feitas) return;
+    const d = aeDiaDe(x.d);
+    const L = d && d <= hoje ? pega(x.disc) : null;
+    if (L) somar(L, d, Number(x.q.feitas) || 0, Number(x.q.certas) || 0);
+  });
+  const pct = (c, f) => (f ? Math.round((c / f) * 100) : null);
+  const discs = Object.keys(porK).map((k) => {
+    const L = porK[k];
+    return { nome: L.nome, feitas: L.f, certas: Math.round(L.c), pct: pct(L.c, L.f), pctAnt: periodo === "tudo" ? null : pct(L.cAnt, L.fAnt),
+      sem: L.sem.map((s) => ({ f: s.f, pct: pct(s.c, s.f) })) };
+  });
+  /* com mais questões primeiro: é onde o número já diz alguma coisa */
+  discs.sort((a, b) => b.feitas - a.feitas);
+
+  /* os cartões: as revisões dos próximos 30 dias (o que já venceu entra em "hoje") e as notas dadas */
+  const regs = Object.keys(F.regs || {}).map((k) => F.regs[k]).filter((r) => r && typeof r === "object");
+  const dt = new Date(agora);
+  const iniHoje = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  const previsao = Array.from({ length: 30 }, (_, i) => ({ d: aeSomarDias(hoje, i), n: 0 }));
+  regs.forEach((r) => {
+    if (r.due == null) return;
+    const i = r.due < iniHoje ? 0 : Math.floor((r.due - iniHoje) / 86400000);
+    if (i >= 0 && i < 30) previsao[i].n++;
+  });
+  const notas = [0, 0, 0, 0];
+  regs.forEach((r) => (Array.isArray(r.h) ? r.h : []).forEach((n) => { if (n >= 1 && n <= 4) notas[n - 1]++; }));
+  const limiar = typeof ESTC_LEECH_LIMIAR !== "undefined" ? ESTC_LEECH_LIMIAR : 8;
+  const cartoes = { total: regs.length, previsao, notas, respostas: notas.reduce((a, b) => a + b, 0),
+    dificeis: regs.filter((r) => (Number(r.l) || 0) >= limiar).length, limiar };
+  return { periodo, discs, chute: { com: { f: chute.com.f, pct: pct(chute.com.c, chute.com.f) }, sem: { f: chute.sem.f, pct: pct(chute.sem.c, chute.sem.f) } }, cartoes, iniSem };
+}
+
+/* ---------------- desenho ---------------- */
+function aePeriodoBarra(periodo) {
+  const per = aeEl("div", "ae-periodo");
+  per.append(aeEl("span", "ae-periodo-rot", t("ae_periodo")));
+  AE_PERIODOS.forEach((p) => {
+    const b = aeEl("button", "ae-chip" + (p === periodo ? " ativo" : ""), t("ae_per_" + p));
+    b.type = "button";
+    b.id = "btnAePer_" + p;
+    b.setAttribute("aria-pressed", p === periodo ? "true" : "false");
+    b.onclick = () => aePeriodoDefinir(p);
+    per.append(b);
+  });
+  return per;
+}
+function aeSvg(tag, at) {
+  const e = document.createElementNS ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
+  Object.keys(at || {}).forEach((k) => e.setAttribute(k, at[k]));
+  return e;
+}
+function aeCartao(tit, id) {
+  const c = aeEl("div", "ae-cartao");
+  if (id) c.id = id;
+  c.append(aeEl("div", "ae-cartao-tit", tit));
+  return c;
+}
+
+function aePintarTempo(box, d) {
+  const m = aeTempoModelo({ plano: d && d.plano, r: d && d.r });
+  box.append(aePeriodoBarra(m.periodo));
+  if (!m.sessoes) { box.append(aeEl("div", "plog-vazio", t("ae_t_vazio"))); return m; }
+
+  /* 1. por disciplina: a fatia real (estudo + revisão) e a marca da fatia da prova */
+  const c1 = aeCartao(t(m.temPlano ? "ae_t_disc_tit" : "ae_t_disc_tit_sem"), "aeTempoDisc");
+  const maxPct = Math.max(1, ...m.discs.map((x) => Math.max(x.real || 0, x.prova || 0, x.doPlano ? 0 : 0)));
+  const maxMin = Math.max(1, ...m.discs.map((x) => x.min));
+  m.discs.forEach((x, k) => {
+    const li = aeEl("div", "ae-linha" + (x.doPlano ? "" : " fora"));
+    li.id = "aeTd_" + k;
+    li.append(aeEl("span", "ae-linha-nome", x.nome));
+    const trilho = aeEl("span", "ae-trilho");
+    const escala = (v) => Math.max(0, Math.min(100, x.doPlano ? (v / maxPct) * 100 : (v / maxMin) * 100));
+    const tot = x.doPlano ? (x.real || 0) : x.min;
+    const pE = x.min ? (x.est / x.min) : 0;
+    const larg = escala(tot);
+    const be = aeEl("span", "ae-seg est"), br = aeEl("span", "ae-seg rev");
+    if (be.style) { be.style.width = (larg * pE).toFixed(1) + "%"; br.style.width = (larg * (1 - pE)).toFixed(1) + "%"; }
+    trilho.append(be, br);
+    if (x.prova != null) {
+      const mk = aeEl("span", "ae-marca");
+      if (mk.style) mk.style.left = escala(x.prova).toFixed(1) + "%";
+      mk.title = t("ae_t_marca", { p: x.prova });
+      trilho.append(mk);
+    }
+    li.append(trilho);
+    const num = aeEl("span", "ae-linha-num", x.doPlano ? t("ae_t_real_prova", { r: x.real == null ? "—" : x.real, p: x.prova == null ? "—" : x.prova }) : aeHorasTxt(x.min));
+    li.append(num);
+    const dv = aeEl("span", "ae-linha-dv" + (x.desvio == null ? "" : x.desvio <= -5 ? " ruim" : x.desvio >= 5 ? " mais" : " ok"),
+      x.desvio == null ? "" : (x.desvio > 0 ? "+" : x.desvio < 0 ? "−" : "") + Math.abs(x.desvio) + " pp");
+    li.append(dv);
+    li.title = t("ae_t_linha_aj", { d: x.nome, t: aeHorasTxt(x.min), e: aeHorasTxt(x.est), r: aeHorasTxt(x.rev), n: x.n });
+    c1.append(li);
+  });
+  const leg = aeEl("div", "ae-leg");
+  const it = (cls, txt) => { const s = aeEl("span", "ae-leg-it"); s.append(aeEl("span", "ae-leg-q " + cls), document.createTextNode(txt)); leg.append(s); };
+  it("est", t("ae_leg_estudo")); it("rev", t("ae_leg_revisao"));
+  if (m.temPlano) it("prova", t("ae_t_leg_prova"));
+  c1.append(leg);
+  box.append(c1);
+
+  const lado = aeEl("div", "ae-graficos");
+  /* 2. as formas de estudo e o quanto renderam */
+  const c2 = aeCartao(t("ae_t_formas_tit"), "aeTempoFormas");
+  const maxF = Math.max(1, ...m.formas.map((f) => f.min));
+  m.formas.forEach((f) => {
+    const li = aeEl("div", "ae-linha ae-linha-forma");
+    const rot = t("ed_forma_" + f.forma);
+    li.append(aeEl("span", "ae-linha-nome", rot.charAt(0).toUpperCase() + rot.slice(1)));
+    const trilho = aeEl("span", "ae-trilho");
+    const b = aeEl("span", "ae-seg est");
+    if (b.style) b.style.width = ((f.min / maxF) * 100).toFixed(1) + "%";
+    trilho.append(b);
+    li.append(trilho, aeEl("span", "ae-linha-num", aeHorasTxt(f.min)));
+    const aval = f.boa + f.media + f.ruim;
+    li.append(aeEl("span", "ae-linha-dv" + (aval && f.ruim > f.boa ? " ruim" : ""), aval ? t("ae_t_rendeu", { b: Math.round((f.boa / aval) * 100) }) : ""));
+    li.title = t("ae_t_forma_aj", { n: f.n, b: f.boa, m: f.media, r: f.ruim });
+    c2.append(li);
+  });
+  c2.append(aeEl("p", "nota ae-fonte", t("ae_t_formas_nota")));
+  /* 3. os dias da semana */
+  const c3 = aeCartao(t("ae_t_dias_tit"), "aeTempoDias");
+  const W = 280, H = 110, base = 92;
+  const maxD = Math.max(30, ...m.diaSemana.map((x) => x.media));
+  const svg = aeSvg("svg", { viewBox: "0 0 " + W + " " + H, class: "ae-sem", role: "img", "aria-label": t("ae_t_dias_aria") });
+  const passo = W / 7, larg = Math.min(22, passo - 10);
+  svg.append(aeSvg("line", { x1: 0, x2: W, y1: base + 0.5, y2: base + 0.5, class: "ae-eixo" }));
+  m.diaSemana.forEach((x) => {
+    const h = (x.media / maxD) * (base - 14);
+    const xx = x.i * passo + (passo - larg) / 2;
+    const g = aeSvg("g", { class: "ae-barra" });
+    const tit = aeSvg("title", {}); tit.textContent = t("ae_t_dia_barra", { d: t("ae_dia_" + x.i), m: aeHorasTxt(x.media), t: aeHorasTxt(x.total) });
+    g.append(tit);
+    if (h > 0) g.append(aeSvg("rect", { x: xx.toFixed(1), y: (base - h).toFixed(1), width: larg.toFixed(1), height: h.toFixed(1), rx: 2, class: "ae-b-est" }));
+    const tx = aeSvg("text", { x: (xx + larg / 2).toFixed(1), y: H - 4, "text-anchor": "middle", class: "ae-rot" });
+    tx.textContent = t("ae_dia_" + x.i);
+    g.append(tx);
+    if (x.media) { const v = aeSvg("text", { x: (xx + larg / 2).toFixed(1), y: (base - h - 3).toFixed(1), "text-anchor": "middle", class: "ae-rot" }); v.textContent = aeHorasTxt(x.media); g.append(v); }
+    svg.append(g);
+  });
+  c3.append(svg, aeEl("p", "nota ae-fonte", t("ae_t_dias_nota")));
+  lado.append(c2, c3);
+  box.append(lado);
+  box.append(aeEl("p", "nota ae-fonte", t("ae_t_fonte")));
+  return m;
+}
+
+/* a linha do acerto de 13 semanas: pontos onde houve questão, as linhas de 60% e 85% ao fundo */
+function aeFaisca(sem) {
+  const W = 130, H = 34, pad = 3;
+  const svg = aeSvg("svg", { viewBox: "0 0 " + W + " " + H, class: "ae-faisca", role: "img" });
+  const y = (p) => (pad + (1 - p / 100) * (H - 2 * pad)).toFixed(1);
+  const x = (i) => (pad + (i / (sem.length - 1)) * (W - 2 * pad)).toFixed(1);
+  [60, 85].forEach((v) => svg.append(aeSvg("line", { x1: 0, x2: W, y1: y(v), y2: y(v), class: "ae-ref" })));
+  const pts = sem.map((s, i) => (s.pct == null ? null : [x(i), y(s.pct), s])).filter(Boolean);
+  if (pts.length > 1) svg.append(aeSvg("polyline", { points: pts.map((p) => p[0] + "," + p[1]).join(" "), class: "ae-pl" }));
+  pts.forEach((p) => {
+    const c = aeSvg("circle", { cx: p[0], cy: p[1], r: 2.6, class: "ae-ponto" });
+    const tt = aeSvg("title", {}); tt.textContent = p[2].pct + "% (" + p[2].f + ")";
+    c.append(tt);
+    svg.append(c);
+  });
+  svg.setAttribute("aria-label", t("ae_d_faisca_aria", { n: pts.length }));
+  return svg;
+}
+
+function aePintarDesemp(box, d) {
+  const m = aeDesempModelo({ plano: d && d.plano, r: d && d.r });
+  box.append(aePeriodoBarra(m.periodo));
+  /* 1. acerto por disciplina, semana a semana */
+  const c1 = aeCartao(t("ae_d_disc_tit"), "aeDesDisc");
+  if (!m.discs.length) c1.append(aeEl("div", "ae-alerta vazio", t("ae_d_vazio")));
+  m.discs.forEach((x, k) => {
+    const li = aeEl("div", "ae-linha ae-linha-acerto" + (x.feitas < 10 ? " pouco" : ""));
+    li.id = "aeDd_" + k;
+    li.append(aeEl("span", "ae-linha-nome", x.nome), aeFaisca(x.sem));
+    li.append(aeEl("span", "ae-linha-num", x.pct == null ? "—" : x.pct + "%"));
+    const dl = x.pct != null && x.pctAnt != null ? x.pct - x.pctAnt : null;
+    li.append(aeEl("span", "ae-linha-dv" + (dl == null ? "" : dl <= -5 ? " ruim" : dl >= 5 ? " ok" : ""),
+      dl == null ? "" : (dl > 0 ? "+" : dl < 0 ? "−" : "") + Math.abs(dl) + " pp"));
+    li.append(aeEl("span", "ae-linha-q", t("ae_d_q", { n: x.feitas })));
+    li.title = x.feitas < 10 ? t("ae_d_pouco_aj") : t("ae_d_linha_aj", { c: x.certas, f: x.feitas });
+    c1.append(li);
+  });
+  c1.append(aeEl("p", "nota ae-fonte", t("ae_d_disc_nota")));
+  box.append(c1);
+
+  const lado = aeEl("div", "ae-graficos");
+  /* 2. os cartões: as revisões dos próximos 30 dias e as notas */
+  const C = m.cartoes;
+  const c2 = aeCartao(t("ae_d_cart_tit"), "aeDesCartoes");
+  if (!C.total) c2.append(aeEl("div", "ae-alerta vazio", t("ae_d_cart_vazio")));
+  else {
+    const W = 300, H = 96, base = 80;
+    const maxN = Math.max(5, ...C.previsao.map((x) => x.n));
+    const svg = aeSvg("svg", { viewBox: "0 0 " + W + " " + H, class: "ae-sem", role: "img", "aria-label": t("ae_d_prev_aria") });
+    svg.id = "aeDesPrev";
+    const passo = W / 30, larg = Math.max(3, passo - 2);
+    svg.append(aeSvg("line", { x1: 0, x2: W, y1: base + 0.5, y2: base + 0.5, class: "ae-eixo" }));
+    C.previsao.forEach((x, i) => {
+      const h = (x.n / maxN) * (base - 10);
+      const g = aeSvg("g", { class: "ae-barra" + (i === 0 ? " hoje" : "") });
+      const [a, mm, dd] = x.d.split("-");
+      const tt = aeSvg("title", {}); tt.textContent = (i === 0 ? t("ae_d_prev_hoje", { n: x.n }) : dd + "/" + mm + ": " + x.n);
+      g.append(tt);
+      if (h > 0) g.append(aeSvg("rect", { x: (i * passo + 1).toFixed(1), y: (base - h).toFixed(1), width: larg.toFixed(1), height: h.toFixed(1), rx: 1.5, class: i === 0 ? "ae-b-hoje" : "ae-b-est" }));
+      if (i === 0 || i === 7 || i === 14 || i === 21 || i === 29) {
+        const tx = aeSvg("text", { x: (i * passo + larg / 2 + 1).toFixed(1), y: H - 2, "text-anchor": i === 29 ? "end" : "start", class: "ae-rot" });
+        tx.textContent = i === 0 ? t("ae_d_hoje") : dd + "/" + mm;
+        g.append(tx);
+      }
+      svg.append(g);
+    });
+    c2.append(svg);
+    c2.append(aeEl("p", "nota ae-fonte", t("ae_d_prev_nota", { n: C.previsao[0].n })));
+    /* as notas dadas: uma barra só, em quatro partes */
+    if (C.respostas) {
+      const barra = aeEl("div", "ae-notas");
+      barra.id = "aeDesNotas";
+      ["n1", "n2", "n3", "n4"].forEach((cls, i) => {
+        const pc = Math.round((C.notas[i] / C.respostas) * 100);
+        const s = aeEl("span", "ae-nota " + cls);
+        if (s.style) s.style.width = ((C.notas[i] / C.respostas) * 100).toFixed(1) + "%";
+        s.title = t("ae_d_nota_" + (i + 1)) + ": " + C.notas[i] + " (" + pc + "%)";
+        barra.append(s);
+      });
+      c2.append(aeEl("div", "ae-cartao-tit ae-sub-tit", t("ae_d_notas_tit", { n: C.respostas })), barra);
+      const leg = aeEl("div", "ae-leg");
+      ["n1", "n2", "n3", "n4"].forEach((cls, i) => {
+        const s = aeEl("span", "ae-leg-it");
+        s.append(aeEl("span", "ae-leg-q " + cls), document.createTextNode(t("ae_d_nota_" + (i + 1)) + " " + Math.round((C.notas[i] / C.respostas) * 100) + "%"));
+        leg.append(s);
+      });
+      c2.append(leg);
+    }
+    if (C.dificeis) c2.append(aeEl("p", "nota ae-fonte", t("ae_d_dificeis", { n: C.dificeis, l: C.limiar })));
+  }
+  /* 3. o chute */
+  const c3 = aeCartao(t("ae_d_chute_tit"), "aeDesChute");
+  const ch = m.chute;
+  if (!ch.com.f && !ch.sem.f) c3.append(aeEl("div", "ae-alerta vazio", t("ae_d_chute_vazio")));
+  else {
+    const linha = (rot, x) => {
+      const li = aeEl("div", "ae-linha ae-linha-forma");
+      li.append(aeEl("span", "ae-linha-nome", rot));
+      const trilho = aeEl("span", "ae-trilho");
+      const b = aeEl("span", "ae-seg est");
+      if (b.style) b.style.width = (x.pct || 0) + "%";
+      trilho.append(b);
+      li.append(trilho, aeEl("span", "ae-linha-num", x.pct == null ? "—" : x.pct + "%"), aeEl("span", "ae-linha-q", t("ae_d_q", { n: x.f })));
+      return li;
+    };
+    c3.append(linha(t("ae_d_chute_sem"), ch.sem), linha(t("ae_d_chute_com"), ch.com));
+    c3.append(aeEl("p", "nota ae-fonte", t("ae_d_chute_nota")));
+  }
+  lado.append(c2, c3);
+  box.append(lado);
+  return m;
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt };
+  module.exports = { aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
+    aeTempoModelo, aeDesempModelo, aePintarTempo, aePintarDesemp, aeChaveDisc };
 }

@@ -120,6 +120,87 @@ async function testes() {
     ok(/id = "btnAnaliseAbrir"/.test(hub) && /plAbrir\(\{ aba: "geral" \}\)/.test(hub) && /plAbrir\(\{ aba: "disc" \}\)/.test(hub), "G4f a agenda tem o botão da análise (visão geral) e o 'Por que isto?' (conta do plano)");
   }
 
+  /* ================= ETAPA 2 (19.150.0): TEMPO e DESEMPENHO ================= */
+  /* T1: o tempo de verdade, por disciplina, contra a prova */
+  {
+    const { api } = rodar();
+    const dT = [
+      { d: dia(0), disc: "A", a: "feito", m: 60, f: ["leitura", "questoes"], hu: "boa" },
+      { d: dia(-1), disc: "a", a: "revisado", m: 30 },
+      { d: dia(-2), disc: "B", a: "feito", m: 90, f: ["videoaula"], hu: "ruim" },
+      { d: dia(-3), disc: "Z", a: "feito", m: 15 },
+      { d: dia(-4), disc: "A", a: "pendente", m: 500 },
+    ];
+    const plano = { porSemana: 600, fora: [],
+      itens: [{ disciplina: "A", fatiaDisc: 70, disciplinaPeso: 5, chave: "a1" }, { disciplina: "B", fatiaDisc: 30, disciplinaPeso: 2, chave: "b1" }],
+      fila: [{ disciplina: "A", minutos: 30 }, { disciplina: "B", minutos: 70 }] };
+    const m = api.aeTempoModelo({ diario: dT, banco: [], regs: {}, agora: AGORA, periodo: "7", plano });
+    const A = m.discs.filter((x) => x.nome === "A")[0], B = m.discs.filter((x) => x.nome === "B")[0], O = m.discs.filter((x) => !x.doPlano)[0];
+    ok(A && A.min === 90 && A.est === 60 && A.rev === 30 && A.real === 50 && A.prova === 70 && A.desvio === -20, "T1a A: o nome casa sem caixa, estudo × revisão, 50% real contra 70% da prova: " + JSON.stringify(A));
+    ok(B && B.real === 50 && B.desvio === 20 && O && O.min === 15 && O.real === null && m.discs[m.discs.length - 1] === O, "T1b B e 'outros editais' (fora da conta da fatia, por último)");
+    const f = (k) => m.formas.filter((x) => x.forma === k)[0];
+    ok(f("leitura").min === 30 && f("questoes").min === 30 && f("videoaula").min === 90 && f("revisao").min === 30 && f("leitura").boa === 1 && f("videoaula").ruim === 1,
+      "T1c as formas dividem os minutos e guardam o rendimento; revisão sem forma conta como revisão: " + JSON.stringify(m.formas));
+    ok(m.diaSemana[2].media === 60 && m.diaSemana[1].media === 30 && m.diaSemana[0].media === 90 && m.diaSemana[6].media === 15 && m.diaSemana[3].media === 0,
+      "T1d a média de cada dia da semana: " + m.diaSemana.map((x) => x.media).join(","));
+    const semPlano = api.aeTempoModelo({ diario: dT, banco: [], regs: {}, agora: AGORA, periodo: "7" });
+    ok(!semPlano.temPlano && semPlano.discs.length === 3 && semPlano.discs.every((x) => x.real === null), "T1e sem edital: só os minutos por disciplina");
+  }
+
+  /* D1: o acerto semana a semana, o chute e os cartões */
+  {
+    const { api } = rodar();
+    const bD = [{ disciplina: "A", tentativas: [{ q: iso(-1), acertou: true }, { q: iso(-3), acertou: false }, { q: iso(-40), acertou: true }, { q: iso(-1), acertou: true, chute: true }] }];
+    const rD = {
+      a: { s: "review", due: AGORA + 3 * H, l: 1, h: [3, 4] },
+      b: { s: "review", due: AGORA - 3 * H, l: 0, h: [1, 3] },
+      c: { s: "learn", due: AGORA + 20 * H },
+      d: { s: "review", due: AGORA + 10 * H, l: 9 },
+    };
+    const m = api.aeDesempModelo({ diario, banco: bD, regs: rD, agora: AGORA, periodo: "30" });
+    const A = m.discs.filter((x) => x.nome === "A")[0], B = m.discs.filter((x) => x.nome === "B")[0];
+    ok(A && A.feitas === 3 && A.pct === 42 && A.pctAnt === 100, "D1a A: o período e o anterior (o chute certo vale o crédito parcial do app, 0,25): " + JSON.stringify(A && { f: A.feitas, p: A.pct, a: A.pctAnt }));
+    ok(B && B.feitas === 10 && B.pct === 60 && m.discs[0] === B, "D1b B vem das contagens do diário, e quem tem mais questões vem primeiro");
+    ok(A.sem.length === 13 && A.sem[12].f === 2 && A.sem[12].pct === 63 && A.sem[11].f === 1 && A.sem[11].pct === 0, "D1c as semanas: domingo é da semana anterior: " + JSON.stringify(A.sem.slice(11)));
+    ok(m.chute.com.f === 1 && m.chute.com.pct === 100 && m.chute.sem.f === 2 && m.chute.sem.pct === 50, "D1d chute × certeza: " + JSON.stringify(m.chute));
+    const P = m.cartoes.previsao;
+    ok(P.length === 30 && P[0].n === 1 && P[3].n === 1 && P[10].n === 1 && P[20].n === 1 && P.reduce((a, x) => a + x.n, 0) === 4, "D1e a previsão: o atrasado entra em hoje: " + P.map((x) => x.n).join(","));
+    ok(m.cartoes.respostas === 4 && m.cartoes.notas.join(",") === "1,0,2,1" && m.cartoes.dificeis === 1, "D1f as notas dadas e os cartões esquecidos muitas vezes: " + JSON.stringify(m.cartoes.notas));
+    ok(api.aeChaveDisc("Noções de DIREITO  Tributário") === "nocoes de direito tributario", "D1g a disciplina casa sem acento, caixa e espaço duplo");
+  }
+
+  /* T2 + D2: as abas na tela */
+  {
+    const { api } = rodar();
+    api.plIniciar();
+    api.plAbrir({ aba: "tempo" });
+    ok(api.plAbaAtual() === "tempo" && /ativa/.test(api.$("btnPlogAbaTempo").className) && !!api.$("btnAePer_30"), "T2a a aba Tempo abre (sem edital: o aviso do diário vazio)");
+    api.plAbaTrocar("sinais");
+    ok(!!api.$("aeDesDisc") && !!api.$("aeDesCartoes") && !!api.$("aeDesChute") && /ativa/.test(api.$("btnPlogAbaSinais").className), "D2a Desempenho desenha acerto, cartões e chute");
+    ok(/data-plog-aba="tempo"/.test(html) && html.indexOf('id="btnPlogAbaTempo"') < html.indexOf('id="btnPlogAbaSinais"') && html.indexOf('id="btnPlogAbaSinais"') < html.indexOf('id="btnPlogAbaPlano"'),
+      "D2b a ordem das abas: Visão geral, Tempo, Desempenho, Como o plano decide");
+  }
+
+  /* R1: o registro para relatar — botão no cabeçalho, a aba vista no registro, e a aba que falha diz onde está o erro */
+  {
+    const { api } = rodar();
+    api.plIniciar();
+    api.plAbrir({ aba: "tempo" });
+    const regs = () => api.registroAtual() || [];
+    ok(regs().some((e) => e.tipo === "ANALISE" && /aberta/.test(e.msg) && /tempo/.test(String(e.extra))), "R1a abrir a análise fica no registro, com a aba");
+    api.plAbaTrocar("sinais");
+    ok(regs().some((e) => e.tipo === "ANALISE" && /aba da análise/.test(e.msg) && e.extra === "sinais"), "R1b trocar de aba também");
+    ok(/id="btnPlogRegistro"/.test(html) && api.t("plog_registro") === "🩺 Registro", "R1c o botão do registro no cabeçalho");
+    api.$("btnPlogRegistro").onclick();
+    for (let i = 0; i < 20 && !api.$("dlgDiagnostico").open; i++) await new Promise((r) => setImmediate(r));
+    ok(api.$("dlgDiagnostico").open === true, "R1d o botão abre o Diagnóstico e registro (de onde se copia para relatar)");
+    const box = api.$("plogCorpo");
+    box.innerHTML = "";
+    const r = api.plRede(box, () => { throw new Error("número estranho"); });
+    ok(r === false && regs().some((e) => e.tipo === "ERRO" && /análise do estudo/.test(e.msg) && /número estranho/.test(String(e.extra))), "R1e a aba que falha deixa o erro no registro");
+    ok(/não conseguiu se desenhar/.test(box.textContent) && /número estranho/.test(box.textContent) && /Registro/.test(box.textContent), "R1f e diz o que houve, com o botão do registro");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
