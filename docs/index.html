@@ -5735,6 +5735,18 @@ dialog.arm-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
 .plog-sec-tit{font-size:var(--fs-3);margin:var(--esp-3) 0 var(--esp-2)}
 .plog-tab-cx{overflow-x:auto;max-width:100%}
 .plog-falha{margin:0 0 var(--esp-3)}
+/* (19.151.0) as orientações: o que fazer, com o número que justifica; a discursiva por edital */
+.ae-orient{display:flex;align-items:flex-start;gap:var(--esp-2);padding:var(--esp-2) 0 var(--esp-2) var(--esp-2);border-top:1px solid var(--borda);border-left:3px solid var(--borda)}
+.ae-cartao-tit + .ae-orient{border-top:0}
+.ae-orient.agir{border-left-color:var(--atencao)}
+.ae-orient.ajustar{border-left-color:var(--info)}
+.ae-orient.manter,.ae-orient.disc.ok{border-left-color:var(--ok)}
+.ae-orient.disc{border-left-color:var(--acao)}
+.ae-orient-tx{flex:1 1 auto;min-width:0}
+.ae-orient-tit{font-size:var(--fs-3);font-weight:var(--peso-m)}
+.ae-orient-txt{font-size:var(--fs-2);color:var(--sutil);margin-top:2px}
+.ae-orient .btn-min{flex:0 0 auto}
+@media (max-width:640px){.ae-orient{flex-wrap:wrap}.ae-orient .btn-min{margin-left:auto}}
 @media (max-width:640px){.ae-linha,.ae-linha-acerto{grid-template-columns:minmax(0,1fr) auto auto;row-gap:2px}
   .ae-linha-nome{grid-column:1/-1}.ae-linha-q{display:none}}
 @media (max-width:640px){.ae-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ae-graficos{grid-template-columns:minmax(0,1fr)}

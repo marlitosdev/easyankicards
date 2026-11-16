@@ -181,6 +181,46 @@ async function testes() {
       "D2b a ordem das abas: Visão geral, Tempo, Desempenho, Como o plano decide");
   }
 
+  /* ================= 19.151.0: ORIENTAÇÕES ================= */
+  {
+    const { api } = rodar();
+    const m = api.aeModelo({ diario, banco, regs, metaMin: 600, agora: AGORA, periodo: "30" });
+    const T = { temPlano: true, discs: [
+      { nome: "A", doPlano: true, prova: 70, real: 50, desvio: -20 },
+      { nome: "B", doPlano: true, prova: 20, real: 45, desvio: 25 },
+      { nome: "C", doPlano: true, prova: 10, real: 5, desvio: -5 },
+    ], diaSemana: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ i, media: i === 4 ? 5 : 60 })) };
+    const D = { discs: [
+      { nome: "A", feitas: 12, pct: 50 }, { nome: "B", feitas: 40, pct: 90 }, { nome: "C", feitas: 3, pct: 100 },
+    ] };
+    const o = api.aeOrientacoes({ m, T, D, diasProva: 10 });
+    const ks = o.map((x) => x.k);
+    ok(ks[0] === "reta" && /faltam 10 dias/.test(o[0].tit), "O1 a reta final vem primeiro: " + ks.join(","));
+    ok(ks.indexOf("trocar") >= 0 && /Passe tempo de B para A/.test(o.filter((x) => x.k === "trocar")[0].tit), "O2 a que sobra (com 85%+ de acerto) cede tempo à que falta");
+    ok(ks.indexOf("acerto") >= 0 && /Reforce a teoria de A/.test(o.filter((x) => x.k === "acerto")[0].tit), "O3 acerto baixo pede teoria antes de mais questões");
+    ok(o.length <= 5 && o.every((x, i) => i === 0 || ({ agir: 0, ajustar: 1, manter: 2 })[o[i - 1].nivel] <= ({ agir: 0, ajustar: 1, manter: 2 })[x.nivel]), "O4 no máximo cinco, do agir ao ajustar: " + o.map((x) => x.nivel).join(","));
+    const o2 = api.aeOrientacoes({ m, T, D: { discs: [{ nome: "A", feitas: 12, pct: 70 }, { nome: "B", feitas: 40, pct: 70 }, { nome: "C", feitas: 3, pct: 100 }] }, diasProva: 90 });
+    ok(o2.some((x) => x.k === "falta" && /Dê mais tempo a A/.test(x.tit)) && o2.some((x) => x.k === "questoes" && /C \(10%\)/.test(x.txt)) && o2.some((x) => x.k === "ritmo"),
+      "O5 sem acerto alto na que sobra: só 'dê mais tempo'; disciplina de peso sem questão; ritmo abaixo da meta: " + o2.map((x) => x.k).join(","));
+    const mOk = api.aeModelo({ diario: [], banco: [], regs: {}, metaMin: 0, agora: AGORA, periodo: "30" });
+    mOk.dias = Object.assign({}, mOk.dias, { estudados: 30 });
+    const o3 = api.aeOrientacoes({ m: mOk, T: null, D: null, diasProva: null });
+    ok(o3.length === 1 && o3[0].k === "seguir" && o3[0].nivel === "manter", "O6 sem nada a corrigir: siga o plano");
+    const L = api.aeOrientDiscursiva({ est: { fase: "intensivo", nome: "Intensivo (22 a 60 dias)", meta: 3, foco: "3 redações por semana.", ajustes: ["aj1", "aj2", "aj3"] }, feitas: 1,
+      tema: { tema: "ICMS e substituição", disc: "Tributário" }, semFormato: true });
+    ok(/Fase: Intensivo.*Meta: 3 redação\(ões\) por semana — nesta semana, 1/.test(L[0]) && L.indexOf("3 redações por semana.") >= 0 && L.indexOf("aj1") >= 0 && L.indexOf("aj2") < 0 && L.some((l) => /Próximo tema: ICMS e substituição \(Tributário\)/.test(l)) && L.some((l) => /formato da prova/.test(l)),
+      "O7 a discursiva: fase, meta da semana, o que fez, um ajuste, o próximo tema e o formato a cadastrar: " + L.join(" | "));
+    const L2 = api.aeOrientDiscursiva({ est: { fase: "intensivo", nome: "Intensivo", meta: 1, foco: "3 redações por semana.", ajustes: ["até a objetiva, 1 por semana"] }, feitas: 0, tema: null });
+    ok(L2.indexOf("3 redações por semana.") < 0 && L2.indexOf("até a objetiva, 1 por semana") >= 0, "O7b meta ajustada: a frase padrão da fase sai, o ajuste explica");
+    ["reta", "falta", "trocar", "acerto", "questoes", "muita_rev"].forEach((k) => {
+      const o9 = { reta: "sinais", falta: "tempo", trocar: "tempo", acerto: "sinais", questoes: "sinais", muita_rev: "fila" }[k];
+      ok(api.t("ae_ver_" + o9) !== "ae_ver_" + o9, "O9 o botão de '" + k + "' tem texto: ae_ver_" + o9);
+    });
+    api.plIniciar();
+    api.plAbrir({ aba: "geral" });
+    ok(!!api.$("aeOrient") && !!api.$("aeOr_seguir") || !!api.$("aeOrient") && api.$("aeOrient").children.length > 1, "O8 a visão geral desenha as orientações");
+  }
+
   /* R1: o registro para relatar — botão no cabeçalho, a aba vista no registro, e a aba que falha diz onde está o erro */
   {
     const { api } = rodar();

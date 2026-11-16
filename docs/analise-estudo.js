@@ -306,6 +306,8 @@ function aePintar(box, d) {
     al.append(li);
   });
   box.append(al);
+  /* (19.151.0) depois do diagnóstico, o que fazer com ele — inclusive a discursiva */
+  aePintarOrient(box, m, d);
   box.append(aeEl("p", "nota ae-fonte", t("ae_fonte")));
   return m;
 }
@@ -777,7 +779,162 @@ function aePintarDesemp(box, d) {
   return m;
 }
 
+/* =====================================================================
+ * (19.151.0) ORIENTAÇÕES — o que fazer com o diagnóstico
+ *
+ * "Junto com o diagnóstico do estudo, deve haver orientações para o estudante, inclusive quanto às discursivas."
+ *
+ * O diagnóstico diz o que está fora do lugar; a orientação diz O QUE FAZER, com o número que a justifica e um botão
+ * para começar. As regras são poucas e explícitas (nada de "IA" escondida): reta final, ritmo contra a meta, tempo
+ * contra o peso, acerto baixo, disciplina sem questão, revisões acumuladas, constância e a proporção de revisão.
+ * No máximo cinco, da mais urgente à menos; sem nada a corrigir, uma só: "siga o plano".
+ *
+ * A DISCURSIVA usa a estratégia que a tela das discursivas já calcula (dsEstrategia): a fase (fundação, construção,
+ * intensivo, reta final), a meta de redações por semana, quantas você fez nesta, a média das últimas contra o mínimo
+ * e o próximo tema — uma linha por edital ativo que tem discursiva.
+ * ===================================================================== */
+const AE_ORIENT_MAX = 5;
+
+/* a discursiva de cada edital ativo (o que a tela das discursivas mostra, resumido) */
+function aeDiscursivasInfo(plano) {
+  const out = [];
+  if (typeof editais === "undefined" || !Array.isArray(editais) || typeof dsDiscursivaDe !== "function") return out;
+  editais.forEach((e) => {
+    try {
+      if (typeof edSituacao === "function" && edSituacao(e).grupo === "encerrado") return;
+      const { dc } = dsDiscursivaDe(e);
+      if (!dc) return;
+      const sit = dsDiasProva(e);
+      if (sit.dias != null && sit.dias < 0) return;
+      const res = dsRedacoesResumo(e.id, dc);
+      const est = dsEstrategia(sit.dias, res, dc, sit);
+      let tema = null;
+      try { tema = dsProximoTema(e, plano, dc); } catch (err) { tema = null; }
+      out.push({ id: e.id, nome: e.nome || "", est, feitas: dsFeitasSemana(e.id), res, tema, semFormato: !!dc.semFormato });
+    } catch (err) {}
+  });
+  return out;
+}
+
+/* as orientações de estudo: { k, nivel ("agir" | "ajustar" | "manter"), tit, txt, ir } */
+function aeOrientacoes(o) {
+  const m = o.m, T = o.T || null, D = o.D || null;
+  const out = [];
+  const add = (k, nivel, vars, ir) => out.push({ k, nivel, tit: t("ae_o_" + k + "_tit", vars || {}), txt: t("ae_o_" + k, vars || {}), ir: ir || null });
+  /* 1. reta final */
+  if (o.diasProva != null && o.diasProva >= 0 && o.diasProva <= 21) add("reta", "agir", { n: o.diasProva }, { aba: "sinais" });
+  /* 2. o ritmo contra a meta: a média das últimas 4 semanas fechadas */
+  const fechadas = (m.semanas || []).filter((s) => !s.atual).slice(-4);
+  const ritmo = fechadas.length ? Math.round(fechadas.reduce((a, s) => a + s.estudo + s.revisao, 0) / fechadas.length) : 0;
+  if (m.horas.metaSemana && m.horas.metaPeriodo && m.horas.min < 0.8 * m.horas.metaPeriodo) {
+    add("ritmo", "ajustar", { r: aeHorasTxt(ritmo), m: aeHorasTxt(m.horas.metaSemana) }, null);
+  }
+  /* 3. o tempo contra o peso: a mais esquecida e, se houver, a que leva tempo demais */
+  if (T && T.temPlano) {
+    const falta = T.discs.filter((x) => x.doPlano && x.desvio != null && x.desvio <= -8 && (x.prova || 0) >= 8).sort((a, b) => a.desvio - b.desvio)[0];
+    const sobra = T.discs.filter((x) => x.doPlano && x.desvio != null && x.desvio >= 15).sort((a, b) => b.desvio - a.desvio)[0];
+    if (falta) {
+      const acS = sobra && D ? (D.discs.filter((y) => aeChaveDisc(y.nome) === aeChaveDisc(sobra.nome))[0] || {}).pct : null;
+      if (sobra && acS != null && acS >= 85) add("trocar", "agir", { d: falta.nome, p: falta.prova, r: falta.real, s: sobra.nome, sr: sobra.real, sp: sobra.prova, a: acS }, { aba: "tempo" });
+      else add("falta", "agir", { d: falta.nome, p: falta.prova, r: falta.real }, { aba: "tempo" });
+    }
+  }
+  /* 4. acerto baixo: teoria antes de mais questões */
+  if (D) {
+    const baixo = D.discs.filter((x) => x.feitas >= 10 && x.pct != null && x.pct < 60).sort((a, b) => a.pct - b.pct)[0];
+    if (baixo) add("acerto", "agir", { d: baixo.nome, p: baixo.pct, n: baixo.feitas }, { aba: "sinais" });
+    /* 5. disciplina de peso sem questão */
+    if (T && T.temPlano) {
+      const pesos = {};
+      T.discs.forEach((x) => { if (x.doPlano) pesos[aeChaveDisc(x.nome)] = x.prova || 0; });
+      const sem = D.discs.filter((x) => x.feitas < 10 && (pesos[aeChaveDisc(x.nome)] || 0) >= 8);
+      if (sem.length) add("questoes", "ajustar", { l: sem.slice(0, 3).map((x) => x.nome + " (" + pesos[aeChaveDisc(x.nome)] + "%)").join(", ") }, { aba: "sinais" });
+    }
+  }
+  /* 6. revisões de cartões acumuladas */
+  if (m.cartoes.hoje >= 40 || m.cartoes.atrasados >= 20) add("cartoes", "ajustar", { n: m.cartoes.hoje, a: m.cartoes.atrasados }, null);
+  /* 7. constância */
+  if (m.dias.total >= 7 && m.dias.estudados / m.dias.total < 0.5) {
+    let fraco = "";
+    if (T && T.diaSemana) { const f = T.diaSemana.slice().sort((a, b) => a.media - b.media)[0]; fraco = f ? t("ae_dia_" + f.i) : ""; }
+    add("constancia", "ajustar", { n: m.dias.estudados, t: m.dias.total, d: fraco }, null);
+  }
+  /* 8. a proporção de revisão */
+  if (m.horas.min >= 600) {
+    const pr = Math.round((m.horas.revisao / m.horas.min) * 100);
+    if (pr < 15) add("pouca_rev", "ajustar", { p: pr }, null);
+    else if (pr > 50) add("muita_rev", "ajustar", { p: pr }, { aba: "fila" });
+  }
+  const ordem = { agir: 0, ajustar: 1, manter: 2 };
+  out.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]);
+  if (!out.length) add("seguir", "manter", {}, null);
+  return out.slice(0, AE_ORIENT_MAX);
+}
+
+/* a orientação da discursiva de um edital, em frases */
+function aeOrientDiscursiva(x) {
+  const E = x.est;
+  const linhas = [];
+  linhas.push(t("ae_od_meta", { f: E.nome, m: E.meta, s: x.feitas }));
+  /* a frase da fase traz a meta PADRÃO dela; quando a estratégia ajustou a meta (discursiva em data própria, notas
+   * abaixo do mínimo), quem explica é o ajuste — a frase da fase contradiria o número logo acima */
+  const PADRAO = { sem_data: 1, reta: 2, intensivo: 3, construcao: 2, fundacao: 1 };
+  if (E.foco && PADRAO[E.fase] === E.meta) linhas.push(E.foco);
+  (E.ajustes || []).slice(0, 1).forEach((a) => linhas.push(a));
+  if (x.tema && x.tema.tema) linhas.push(t("ae_od_tema", { t: x.tema.tema, d: x.tema.disc ? " (" + x.tema.disc + ")" : "" }));
+  if (x.semFormato) linhas.push(t("ae_od_formato"));
+  return linhas;
+}
+
+function aePintarOrient(box, m, d) {
+  let T = null, D = null;
+  try { T = aeTempoModelo({ plano: d && d.plano, r: d && d.r, periodo: m.periodo }); } catch (e) { T = null; }
+  try { D = aeDesempModelo({ plano: d && d.plano, r: d && d.r, periodo: m.periodo }); } catch (e) { D = null; }
+  const prazo = d && d.plano && d.plano.prazo;
+  const diasProva = prazo && /^\d{4}-\d{2}-\d{2}$/.test(prazo) ? aeDiasEntre(m.fim, prazo) : null;
+  const lista = aeOrientacoes({ m, T, D, diasProva });
+  const c = aeCartao(t("ae_o_tit"), "aeOrient");
+  lista.forEach((o, k) => {
+    const li = aeEl("div", "ae-orient " + o.nivel);
+    li.id = "aeOr_" + o.k;
+    const tx = aeEl("div", "ae-orient-tx");
+    tx.append(aeEl("div", "ae-orient-tit", (k + 1) + ". " + o.tit), aeEl("div", "ae-orient-txt", o.txt));
+    li.append(tx);
+    if (o.ir && o.ir.aba) {
+      const b = aeEl("button", "btn-min", t("ae_ver_" + o.ir.aba));
+      b.type = "button";
+      b.onclick = () => { if (typeof plAbaTrocar === "function") plAbaTrocar(o.ir.aba); };
+      li.append(b);
+    }
+    c.append(li);
+  });
+  /* a discursiva, por edital */
+  const ds = aeDiscursivasInfo(d && d.plano);
+  if (ds.length) {
+    c.append(aeEl("div", "ae-cartao-tit ae-sub-tit", t("ae_od_tit")));
+    ds.forEach((x) => {
+      const li = aeEl("div", "ae-orient disc" + (x.feitas >= x.est.meta ? " ok" : ""));
+      li.id = "aeOrDs_" + x.id;
+      const tx = aeEl("div", "ae-orient-tx");
+      tx.append(aeEl("div", "ae-orient-tit", x.nome + (x.est.dias != null ? " · " + t("ae_od_dias", { n: x.est.dias }) : "")));
+      aeOrientDiscursiva(x).forEach((l) => tx.append(aeEl("div", "ae-orient-txt", l)));
+      li.append(tx);
+      const b = aeEl("button", "btn-min", t("ae_od_abrir"));
+      b.type = "button";
+      b.onclick = () => {
+        try { const dl = document.getElementById("dlgPlanoLog"); if (dl && dl.open) dl.close(); } catch (e) {}
+        if (typeof dsIrPara === "function") dsIrPara(x.id);
+      };
+      li.append(b);
+      c.append(li);
+    });
+  }
+  c.append(aeEl("p", "nota ae-fonte", t("ae_o_nota")));
+  box.append(c);
+  return { lista, ds };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
+  module.exports = { aeOrientacoes, aeDiscursivasInfo, aeOrientDiscursiva, aeModelo, aeAlertas, aePintar, aePeriodoLer, aePeriodoDefinir, aeDiaDe, aeSegunda, aeHorasTxt,
     aeTempoModelo, aeDesempModelo, aePintarTempo, aePintarDesemp, aeChaveDisc };
 }
