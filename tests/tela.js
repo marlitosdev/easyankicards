@@ -200,7 +200,7 @@ async function testes() {
       const reps = api.$("focoGrupo").children;
       ok(reps.length === 3, `F9 esperava 3 repetidas no foco, veio ${reps.length}`);
       const acoes = (i) => reps[i].children.find((x) => x.className === "acoes-rep");
-      ok(acoes(0).children.length === 2, "F10 faltam as ações por cartão");
+      ok(acoes(0).children.length === 3, "F10 faltam as ações por cartão (Recortar, Excluir, Ficar com esta)");
       const pEx = acoes(2).children[1].onclick();
       api._uiFechar(true);
       return Promise.resolve(pEx).then(() => {
@@ -216,7 +216,7 @@ async function testes() {
     }
 
     function quartaParte() {
-    // frentes repetidas: grupos inteiros, e o recorte mantém a primeira
+    // frentes repetidas: grupos inteiros, e o recorte mantém a mais completa (19.141.0)
     {
       const fs2 = require("fs");
       const path2 = require("path");

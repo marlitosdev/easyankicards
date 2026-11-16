@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.140.0";
+const VERSAO = "19.141.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -65,13 +65,12 @@ function blocoDoTexto(linhaCartao) {
 }
 
 /* Tira o bloco do editor. Guarda o texto anterior para o "Desfazer". */
-function tirarBlocoDoEditor(linhaCartao) {
-  colagemAnterior = { texto: $("editor").value };
+function tirarBlocoDoEditor(linhaCartao, rotulo) {
+  marcarDesfazer(rotulo || "undo_recorte");
   const linhas = $("editor").value.split("\n");
   removerBlocoCartao(linhas, linhaCartao);
   $("editor").value = linhas.join("\n")
     .replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
-  $("btnDesfazerColagem").disabled = false;
   autoSalvar();
   preview();
 }
@@ -98,7 +97,7 @@ async function excluirCartao(c) {
   }
   reg("EXCLUIR", "cartão da linha " + c.line, resumo);
   try { lixJogar({ tipo: "cartao", via: "editor", rotulo: resumo, onde: t("lix_onde_editor"), dados: paraLixo }); } catch (e) {}
-  tirarBlocoDoEditor(c.line);
+  tirarBlocoDoEditor(c.line, "undo_excluir");
   toast("toast_excluido");
 }
 
@@ -1346,9 +1345,11 @@ function renderSugestoes(r, raw) {
     itens.push({ dot: "dot-org", txt: t("crit_dup_total", { g: grupos.length, n: extras }),
                  fixTxt: t("fix_dup_cut"), acao: () => recortarDuplicados(grupos) });
   }
+  /* "você decide", não "precisa da IA": "Ver no texto" abre as versões lado a lado com Recortar,
+   * Excluir e "Ficar com esta" — quem resolve é quem estuda, sem IA nenhuma (19.141.0) */
   grupos.slice(0, 4).forEach((g) => {
     itens.push({
-      dot: "dot-org", linha: g[0].line, grupo: true,
+      dot: "dot-org", linha: g[0].line, grupo: true, quem: "voce",
       txt: t("crit_dup", {
         n: g.length,
         linhas: g.map((c) => c.line).join(", "),
@@ -1385,6 +1386,16 @@ function renderSugestoes(r, raw) {
     if (detector(raw)) itens.push({ dot, txt: t(critKey), fixTxt: t(fixKey), fix });
   });
 
+  /* As parecidas vêm DEPOIS das correções: a lista mostra só 8 itens, e um aviso que só pede
+   * conferência não pode empurrar para fora um que o app arruma num clique. */
+  const parecidas = gruposParecidos(r);
+  if (parecidas.length) {
+    itens.push({ dot: "dot-org", linha: parecidas[0][0].line, quem: "voce", parecidas: true,
+      txt: t("crit_parecidas", { g: parecidas.length,
+        linhas: parecidas.slice(0, 3).map((g) => g.map((c) => c.line).join(" e ")).join("; ")
+          + (parecidas.length > 3 ? "; …" : "") }) });
+  }
+
   if (!itens.length) itens.push({ dot: "dot-green", txt: t("sug_none") });
 
   // o botão só fica ativo se houver correção automática OU cartão/linha
@@ -1400,7 +1411,7 @@ function renderSugestoes(r, raw) {
   /* Quando sobra trabalho que o app não faz, o caminho é o prompt — e o
    * botão passa a pedir passagem. Sem isso o usuário fica olhando para um
    * "Nada a corrigir" apagado e conclui que não há mais o que fazer. */
-  const paraIA = itens.some((it) => !it.fix && !it.acao && it.dot !== "dot-green");
+  const paraIA = itens.some((it) => !it.fix && !it.acao && it.quem !== "voce" && it.dot !== "dot-green");
   $("btnPromptCorrigir").classList.toggle("pulsa", paraIA);
   /* O CONVITE PARA COMEÇAR. Bancada vazia, o primeiro gesto de 90% das
    * sessões é colar/gerar com IA — o mesmo pulso que já guia para o
@@ -1421,37 +1432,49 @@ function renderSugestoes(r, raw) {
      * arruma sozinho (formato) e o que só a IA arruma (dividir um cartão
      * longo, encurtar alternativa). Sem essa marca o usuário clica em
      * "Corrigir" esperando que resolva tudo — e conclui que está quebrado. */
-    const daIA = !(it.fix || it.acao);
+    /* três donos: o app (tem botão que arruma), você (comparar e escolher) e a IA (reescrever) */
+    const doApp = !!(it.fix || it.acao);
+    const deVoce = !doApp && it.quem === "voce";
+    const daIA = !doApp && !deVoce;
     const quem = document.createElement("span");
-    quem.className = "sug-quem " + (daIA ? "quem-ia" : "quem-app");
-    quem.textContent = t(daIA ? "quem_ia" : "quem_app");
-    if (daIA) {
+    quem.className = "sug-quem " + (doApp ? "quem-app" : deVoce ? "quem-voce" : "quem-ia");
+    quem.textContent = t(doApp ? "quem_app" : deVoce ? "ed_ach_quem_voce" : "quem_ia");
+    if (!doApp) {
       /* O crachá diz QUEM resolve; o ícone diz COMO. Passar o mouse mostra
        * a dica; tocar (celular, onde não existe "passar o mouse") abre o
        * mesmo texto num aviso. */
+      const dica = t(daIA ? "quem_ia_dica" : "quem_voce_dica");
       const info = document.createElement("button");
       info.className = "sug-info";
       info.type = "button";
       info.textContent = "?";
-      info.title = t("quem_ia_dica");
-      info.setAttribute("aria-label", t("quem_ia_dica"));
-      info.onclick = (e) => { e.stopPropagation(); uiAlert(t("quem_ia_dica")); };
+      info.title = dica;
+      info.setAttribute("aria-label", dica);
+      info.onclick = (e) => { e.stopPropagation(); uiAlert(dica); };
       quem.append(info);
     }
     div.append(dot, quem, sp);
-    // Ações em linha própria (antes ficavam espremidas ao lado do texto)
-    if (it.linha || it.fix) {
+    // Ações em linha própria (antes ficavam espremidas ao lado do texto).
+    /* it.acao entra na condição (19.141.0): o resumo das repetidas tem ação e não tem linha, e
+     * o botão "Recortar as repetidas" nunca era desenhado — o selo dizia "o app corrige" sobre
+     * um aviso sem botão nenhum. */
+    if (it.linha || it.fix || it.acao) {
       const acoes = document.createElement("div");
       acoes.className = "sug-acao";
       if (it.linha)
-        acoes.append(botaoMini("goto_error", "btn-cinza", () => abrirFoco(it.linha, it.txt)));
+        acoes.append(botaoMini("goto_error", "btn-cinza", () => abrirFoco(it.linha, it.txt, it.parecidas)));
       if (it.acao) {
         acoes.append(botaoMini(it.fixTxt ? null : "fix_now", "btn-azul", it.acao, it.fixTxt));
       } else if (it.fix) {
         // NÃO corrige direto: abre o Normalizar, onde o usuário vê
         // antes/depois de cada mudança e escolhe o que aplicar.
+        /* pela mesma rede do "Corrigir erros" (19.141.0): guarda versão e trava se perder
+         * cartão, "Saiba mais" ou etiqueta. Antes ia a função crua — "Remover as linhas do
+         * prompt" apagava sem versão guardada. */
+        const fixSeguro = Object.defineProperty(
+          (txt, simular) => corrigirComSeguranca(it.fix, txt, simular), "name", { value: it.fix.name });
         acoes.append(botaoMini(it.fixTxt ? null : "fix_now", "btn-azul",
-                              () => abrirNormalizar(it.fix), it.fixTxt));
+                              () => abrirNormalizar(fixSeguro), it.fixTxt));
         const rot = document.createElement("span");
         rot.className = "rot";
         rot.textContent = t("use_normalize");
@@ -1795,6 +1818,7 @@ function preview() {
   previewTimer = null;
   const r = parseAtual();
   ultimoResult = r;
+  pintarDesfazer();   /* o nome do "Desfazer" acompanha a última ação (a colagem só grava o texto) */
   const box = $("cartoes");
   box.innerHTML = "";
   cardDivs = [];
@@ -2903,13 +2927,14 @@ function abrirNormalizar(ajusteEstrutural) {
     lista.append(div);
   }
 
-  r.cards.forEach((c) => {
-    const canon = cardToLine(c);
-    const mudou = (c.raw || "").replace(/\s+/g, " ").trim()
-               !== canon.replace(/\s+/g, " ").trim();
-    const item = { card: c, canon, mudou, chk: null };
+  /* (19.141.0) O item de cada cartão compara a LINHA do cartão com a forma canônica da linha
+   * (cardToLineBase) — a mesma régua do botão (precisaNormalizar). Comparava com cardToLine, que
+   * acrescenta "@ título" e as linhas "+": todo cartão com título ou "Saiba mais" aparecia como
+   * alterado sem estar ("mudança fantasma"). E só entra o cartão que se acha no texto: é ele que
+   * será trocado NO LUGAR. */
+  planoNoLugar($("editor").value).forEach((item) => {
     normPlano.push(item);
-    if (!mudou) return;
+    const c = item.card;
     mudancas++;
     const div = document.createElement("div");
     div.className = "norm-item";
@@ -2929,7 +2954,7 @@ function abrirNormalizar(ajusteEstrutural) {
     const r2 = document.createElement("div");
     r2.className = "rot"; r2.textContent = t("norm_after");
     const depois = document.createElement("div");
-    depois.className = "depois"; depois.textContent = canon;
+    depois.className = "depois"; depois.textContent = item.canon;
     div.append(r1, antes, r2, depois);
     lista.append(div);
   });
@@ -2946,29 +2971,110 @@ function abrirNormalizar(ajusteEstrutural) {
 
 let normIgnorados = [];
 
+/* ===================================================================
+ * TROCA NO LUGAR  (19.141.0)
+ * O "Aplicar" por cartão remontava o texto inteiro só com os cartões (blocos.join("\n\n")): os
+ * comentários "#" sumiam, as linhas não reconhecidas iam para o fim do texto e nada era guardado
+ * para desfazer. Agora cada cartão troca só as SUAS linhas; o resto do texto não é tocado.
+ * =================================================================== */
+
+/* As linhas que formaram o texto de um cartão (ou de um trecho ignorado): a linha onde ele começa
+ * e as de baixo que o parser juntou a ele (continuação), até uma linha em branco, um "@", um "+",
+ * um "* " ou o começo do próximo trecho. Os "#" no meio ficam de fora do texto, mas dentro da faixa.
+ * CONFERE antes de devolver: se as linhas não reconstroem o texto lido pelo parser, devolve null
+ * e quem chamou não mexe — trocar a faixa errada apagaria conteúdo. */
+function faixaDoTrecho(linhas, linha, texto, limite) {
+  const ini = linha - 1;
+  if (ini < 0 || ini >= linhas.length) return null;
+  let fim = ini;
+  for (let k = ini + 1; k < limite; k++) {
+    const s = linhas[k].trim();
+    if (!s || s.startsWith("@") || s.startsWith("+") || /^\*\s+\S/.test(s)) break;
+    fim = k;
+  }
+  while (fim > ini && linhas[fim].trim().startsWith("#")) fim--;
+  const usadas = linhas.slice(ini, fim + 1).filter((l) => !l.trim().startsWith("#"));
+  const so = (x) => String(x || "").replace(/::/g, "").replace(/\s+/g, "");
+  if (so(usadas.join(" ")) !== so(texto)) return null;
+  return { ini, fim, comentarios: linhas.slice(ini + 1, fim + 1).filter((l) => l.trim().startsWith("#")) };
+}
+
+/* Onde começa o próximo trecho (cartão ou linha ignorada) depois de `ini` (índice 0). */
+function limiteDosTrechos(r, nLinhas) {
+  const inicios = r.cards.map((c) => c.line - 1)
+    .concat((r.ignorados || []).map((i) => i.line - 1)).sort((a, b) => a - b);
+  return (ini) => { const p = inicios.find((x) => x > ini); return p === undefined ? nLinhas : p; };
+}
+
+/* Os cartões cuja linha difere da forma canônica E que se acham no texto. */
+function planoNoLugar(texto) {
+  const r = parseText(texto, []);
+  const linhas = texto.split("\n");
+  const limite = limiteDosTrechos(r, linhas.length);
+  const plano = [];
+  r.cards.forEach((c) => {
+    const canon = cardToLineBase(c);
+    if ((c.raw || "").replace(/\s+/g, " ").trim() === canon.replace(/\s+/g, " ").trim()) return;
+    const faixa = faixaDoTrecho(linhas, c.line, c.raw, limite(c.line - 1));
+    if (!faixa) return;
+    plano.push({ card: c, canon, faixa, chk: null });
+  });
+  return plano;
+}
+
+/* Aplica no texto as trocas aceitas: aceita(card) diz se aquele cartão vai; `comentar` põe "# "
+ * na frente das linhas não reconhecidas, onde elas estão. De baixo para cima, para a troca de um
+ * trecho não mexer na posição dos de cima. */
+function aplicarNoLugar(texto, aceita, comentar) {
+  const linhas = texto.split("\n");
+  const trocas = planoNoLugar(texto).filter((it) => aceita(it.card))
+    .map((it) => ({ ini: it.faixa.ini, fim: it.faixa.fim, novas: [it.canon].concat(it.faixa.comentarios) }));
+  if (comentar) {
+    const r = parseText(texto, []);
+    const limite = limiteDosTrechos(r, linhas.length);
+    (r.ignorados || []).forEach((ig) => {
+      const faixa = faixaDoTrecho(linhas, ig.line, ig.texto, limite(ig.line - 1));
+      if (!faixa) return;
+      trocas.push({ ini: faixa.ini, fim: faixa.fim, novas: linhas.slice(faixa.ini, faixa.fim + 1)
+        .map((l) => (l.trim().startsWith("#") ? l : "# " + l)) });
+    });
+  }
+  trocas.sort((a, b) => b.ini - a.ini)
+    .forEach((tr) => linhas.splice(tr.ini, tr.fim - tr.ini + 1, ...tr.novas));
+  return linhas.join("\n");
+}
+
+/* Como um cartão marcado na janela é reconhecido depois do ajuste de estrutura, que pode mudar a
+ * numeração das linhas: pelo texto que ele tinha. */
+function chaveNorm(c) { return String(c.raw || "").replace(/\s+/g, " ").trim(); }
+
 function aplicarNormalizacao() {
-  // ajuste estrutural primeiro (muda o texto todo) e reabre para revisão
-  if (normAjuste && normAjuste.chk && normAjuste.chk.checked) {
-    $("editor").value = normAjuste.fn($("editor").value, false);   // agora vale
-    normAjuste = null;
-    $("dlgNormalizar").close();
-    preview();
-    toast("toast_fixed");
-    return;
-  }
-  const blocos = normPlano.map((it) =>
-    (it.mudou && it.chk && it.chk.checked) ? it.canon : (it.card.raw || it.canon));
-  let texto = blocos.join("\n\n");
-  if (normIgnorados.length) {
-    const comentar = $("chkNormWarn").checked;
-    texto += "\n\n" + (comentar ? t("norm_ignored_header") + "\n" : "")
-      + normIgnorados.map((i) => (comentar ? "# " : "") + i.texto).join("\n");
-  }
-  $("editor").value = texto + "\n";
+  const original = $("editor").value;
+  /* (19.141.0) ESTRUTURA E CARTÕES NA MESMA VEZ. Antes, com o ajuste de estrutura marcado, só ele
+   * era aplicado e a janela fechava: os cartões marcados embaixo eram descartados sem aviso.
+   * Agora a estrutura vai primeiro (ela pode mudar a linha do cartão — tirar a explicação do campo
+   * das etiquetas, por exemplo) e, no texto já ajustado, cada cartão que estava marcado é trocado
+   * no lugar. O cartão que a estrutura já mudou não casa mais e fica como ela deixou. */
+  const marcados = new Set(normPlano.filter((it) => it.chk && it.chk.checked)
+    .map((it) => chaveNorm(it.card)));
+  const comentar = normIgnorados.length > 0 && $("chkNormWarn").checked;
+  const estrutural = !!(normAjuste && normAjuste.chk && normAjuste.chk.checked);
+  /* uma versão do texto de antes, sempre — a que o ajuste estrutural guarda (corrigirComSeguranca)
+   * é o mesmo texto, e o histórico não repete */
+  guardarVersao("antes de normalizar", original);
+  let texto = estrutural ? normAjuste.fn(original, false) : original;
+  texto = aplicarNoLugar(texto, (c) => marcados.has(chaveNorm(c)), comentar);
+  normAjuste = null;
   $("dlgNormalizar").close();
+  if (texto === original) { preview(); return; }
+  $("editor").value = texto;
+  marcarDesfazer("undo_correcao", original);
+  reg("NORMALIZAR", (estrutural ? "estrutura + " : "") + marcados.size + " cartão(ões)",
+      original.length + " -> " + texto.length + " caracteres");
+  autoSalvar();
   $("status").textContent = t("applied_status");
   preview();
-  toast("toast_normalized");
+  toast(estrutural ? "toast_fixed" : "toast_normalized");
 }
 
 /* --------------------------- exportação ---------------------------- */
@@ -3466,20 +3572,41 @@ async function colarMaisTexto() {
   }
 }
 
+/* UM "DESFAZER" PARA TODA AÇÃO QUE TROCA O TEXTO DE UMA VEZ  (19.141.0)
+ * O botão sempre desfez também recorte e exclusão, mas se chamava "Desfazer última colagem" — e a
+ * correção da janela "Normalizar" nem passava por ele. Agora quem troca o texto diz O QUE fez
+ * (o rótulo), e o botão se chama pelo que vai desfazer. Quem só grava { texto } (as colagens) fica
+ * com o nome de sempre. */
+function marcarDesfazer(rotulo, texto) {
+  colagemAnterior = { texto: texto === undefined ? $("editor").value : texto, rotulo: rotulo || "undo_paste" };
+  $("btnDesfazerColagem").disabled = false;
+  pintarDesfazer();
+}
+function pintarDesfazer() {
+  const b = $("btnDesfazerColagem");
+  if (!b) return;
+  const k = (colagemAnterior && colagemAnterior.rotulo) || "undo_paste";
+  b.setAttribute("data-i18n", k);
+  if (b.dataset) b.dataset.i18n = k;
+  b.textContent = t(k);
+}
+
 function desfazerColagem() {
   if (!colagemAnterior) return;
+  const rotulo = colagemAnterior.rotulo || "undo_paste";
   $("editor").value = colagemAnterior.texto;
   colagemAnterior = null;
   linhaNovaColada = null;
   $("btnDesfazerColagem").disabled = true;
+  autoSalvar();
   preview();
-  toast("toast_paste_undone");
+  toast(rotulo === "undo_paste" ? "toast_paste_undone" : "toast_desfeito");
 }
 
 $("btnColarMais").onclick = colarMaisTexto;
 $("btnDesfazerColagem").onclick = desfazerColagem;
 attachTip($("btnColarMais"), "paste_more");
-attachTip($("btnDesfazerColagem"), "undo_paste");
+attachTip($("btnDesfazerColagem"), "undo_tip");
 
 
 /* ---------------- Importar arquivo (gaveta retrátil) ---------------- */
@@ -3765,7 +3892,7 @@ window.addEventListener("pywebviewready", () => {
 
 /* Dicas de funcionamento — cobertura completa dos botões visíveis. */
 [["btnSelecionarTudo","select_all"],["btnCopiarTudo","copy_all"],["btnApagarTudo","clear_all"],
- ["btnColarMais","paste_more"],["btnDesfazerColagem","undo_paste"],["btnNovoCartao","tip_new"],
+ ["btnColarMais","paste_more"],["btnDesfazerColagem","undo_tip"],["btnNovoCartao","tip_new"],
  ["btnMCRapido","tip_mc"],["btnPromptIA","tip_prompt"],["btnApkgImport","tip_apkg_import"],
  ["btnNormalizar","normalize_tooltip"],
  ["btnTxt","export_txt_tooltip"],["btnApkg","export_apkg_tooltip"],
@@ -5145,16 +5272,25 @@ $("btnDlgTextoCopiar").onclick = async () => {
 attachTip($("btnDiagnostico"), "tip_diag");
 
 
-/* Mantém a PRIMEIRA de cada grupo e manda as demais para a gaveta.
- * Não apaga: a repetida costuma ter uma explicação melhor que a primeira,
- * e quem decide qual fica é o usuário, olhando com calma depois. */
+/* Mantém a versão MAIS COMPLETA de cada grupo (mais resposta e mais "Saiba mais"; empate fica com
+ * a primeira) e manda as demais para a gaveta. Até a 19.140 ficava sempre a PRIMEIRA — e a segunda
+ * rodada da IA, muitas vezes a de explicação melhor, ia para a gaveta (19.141.0). Não apaga: a
+ * gaveta guarda, o "Desfazer recorte" volta, e "Ver no texto" no grupo deixa escolher outra. */
 async function recortarDuplicados(grupos) {
-  const extras = grupos.flatMap((g) => g.slice(1));
+  const extras = grupos.flatMap((g) => { const fica = versaoMaisCompleta(g); return g.filter((c) => c !== fica); });
   if (!extras.length) return;
   if (!(await uiConfirm(t("confirm_dup_cut", { n: extras.length, g: grupos.length })))) return;
+  recortarExtras(extras);
+  reg("RECORTAR", extras.length + " repetida(s) de " + grupos.length + " grupo(s)",
+      recortes.length + " na gaveta");
+  toast(t("toast_dup_cut", { n: extras.length }));
+}
+
+/* Tira do texto, de uma vez, os cartões dados e guarda cada bloco na gaveta. */
+function recortarExtras(extras) {
   // de baixo para cima: tirar um bloco muda a numeração dos de cima
   const ordenados = [...extras].sort((a, b) => b.line - a.line);
-  colagemAnterior = { texto: $("editor").value };
+  marcarDesfazer("undo_recorte");
   const linhas = $("editor").value.split("\n");
   ordenados.forEach((c) => {
     const b = blocoDoCartao(linhas, c.line);
@@ -5162,13 +5298,19 @@ async function recortarDuplicados(grupos) {
     linhas.splice(b.ini, b.fim - b.ini + 1);
   });
   $("editor").value = linhas.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
-  reg("RECORTAR", extras.length + " repetida(s) de " + grupos.length + " grupo(s)",
-      recortes.length + " na gaveta");
   salvarRecortes();
-  $("btnDesfazerColagem").disabled = false;
   autoSalvar();
   preview();
-  toast(t("toast_dup_cut", { n: extras.length }));
+}
+
+/* "Ficar com esta" no painel do grupo: a escolhida fica, as outras do grupo vão para a gaveta. */
+function ficarComVersao(grupo, escolhida) {
+  const extras = grupo.filter((c) => c !== escolhida);
+  if (!extras.length) return;
+  recortarExtras(extras);
+  reg("RECORTAR", "ficou a da linha " + escolhida.line + "; " + extras.length + " na gaveta",
+      recortes.length + " na gaveta");
+  toast(t("toast_ficou", { n: extras.length }));
 }
 
 
@@ -5202,6 +5344,11 @@ function problemasNavegaveis() {
       msg: t("crit_dup", { n: g.length, linhas: g.map((c) => c.line).join(", "),
         f: g[0].front.slice(0, 60) }) });
   });
+  /* as parecidas também entram como grupo, no mesmo painel lado a lado (19.141.0) */
+  gruposParecidos(r).forEach((g) => {
+    lista.push({ tipo: "grupo", parecidas: true, linha: g[0].line, fronts: g.map((c) => c.front),
+      msg: t("foco_parecidas_aviso", { n: g.length, linhas: g.map((c) => c.line).join(", ") }) });
+  });
   return lista.sort((a, b) => a.linha - b.linha);
 }
 
@@ -5233,9 +5380,11 @@ function blocoMarcado(bloco) {
   return saida + escaparHtml(bloco.slice(pos));
 }
 
-function abrirFoco(linha, msg) {
+function abrirFoco(linha, msg, soParecidas) {
   focoLista = problemasNavegaveis();
-  focoAtual = focoLista.findIndex((p) => p.linha === linha);
+  /* o grupo de parecidas pode começar na mesma linha de um de idênticas: o aviso diz qual quer */
+  focoAtual = focoLista.findIndex((p) => p.linha === linha && !!p.parecidas === !!soParecidas);
+  if (focoAtual < 0) focoAtual = focoLista.findIndex((p) => p.linha === linha);
   if (focoAtual < 0) focoLista.unshift({ linha, msg: msg || "" }), focoAtual = 0;
   mostrarFoco();
 }
@@ -5303,12 +5452,12 @@ function aplicarFoco() {
   toast("foco_aplicado");
 }
 
-/* Modo grupo: as repetidas empilhadas, a primeira marcada como a que fica.
- * Cada uma tem Recortar (guarda na bandeja) e Excluir. A escolha é do
- * usuário: a repetição mais nova costuma ter a explicação melhor. */
+/* Modo grupo: as repetidas (ou as parecidas) empilhadas, marcada como FICA a mais completa — a
+ * mesma que o recorte em lote manteria. Cada uma tem "Ficar com esta" (as outras do grupo vão
+ * para a gaveta), Recortar (só ela vai para a gaveta) e Excluir. A escolha é do usuário. */
 function mostrarFocoGrupo(item) {
   const r = parseAtual();
-  const grupo = gruposDuplicados(r)
+  const grupo = (item.parecidas ? gruposParecidos(r) : gruposDuplicados(r))
     .find((g) => g.some((c) => item.fronts.includes(c.front)));
   if (!grupo) {                       // resolvido enquanto o painel estava aberto
     focoLista = problemasNavegaveis();
@@ -5318,7 +5467,8 @@ function mostrarFocoGrupo(item) {
     return;
   }
   item.fronts = grupo.map((c) => c.front);
-  $("focoTitulo").textContent = t("foco_grupo_titulo", { n: grupo.length });
+  $("focoTitulo").textContent = t(item.parecidas ? "foco_parecidas_titulo" : "foco_grupo_titulo", { n: grupo.length });
+  const fica = item.parecidas ? null : versaoMaisCompleta(grupo);
   $("focoAviso").textContent = item.msg;
   $("focoMarcado").style.display = "none";
   $("focoEditor").style.display = "none";
@@ -5328,16 +5478,20 @@ function mostrarFocoGrupo(item) {
   box.innerHTML = "";
   box.style.display = "";
   const linhas = $("editor").value.split("\n");
-  grupo.forEach((c, i) => {
+  grupo.forEach((c) => {
     const b = blocoDoCartao(linhas, c.line);
     const div = document.createElement("div");
-    div.className = "foco-rep" + (i === 0 ? " fica" : "");
+    div.className = "foco-rep" + (c === fica ? " fica" : "");
     const cab = document.createElement("div");
     cab.className = "cab-rep";
-    const selo = document.createElement("span");
-    selo.className = "selo " + (i === 0 ? "selo-fica" : "selo-rep");
-    selo.textContent = t(i === 0 ? "foco_fica" : "foco_repetida");
-    cab.append(selo, document.createTextNode(t("card_line") + " " + c.line));
+    /* nas parecidas não há "a que fica": nem se sabe se são a mesma pergunta */
+    if (!item.parecidas) {
+      const selo = document.createElement("span");
+      selo.className = "selo " + (c === fica ? "selo-fica" : "selo-rep");
+      selo.textContent = t(c === fica ? "foco_fica" : "foco_repetida");
+      cab.append(selo);
+    }
+    cab.append(document.createTextNode(t("card_line") + " " + c.line));
     const pre = document.createElement("pre");
     pre.textContent = linhas.slice(b.ini, b.fim + 1).join("\n");
     const acoes = document.createElement("div");
@@ -5350,7 +5504,12 @@ function mostrarFocoGrupo(item) {
     bDel.className = "btn btn-del btn-min";
     bDel.textContent = t("del_btn");
     bDel.onclick = async () => { await excluirCartao(c); aposMexerNoGrupo(); };
-    acoes.append(bRec, bDel);
+    const bFica = document.createElement("button");
+    bFica.className = "btn btn-azul btn-min";
+    bFica.textContent = t("foco_ficar_com");
+    bFica.onclick = () => { ficarComVersao(grupo, c); aposMexerNoGrupo(); };
+    /* por último: Recortar e Excluir continuam nas mesmas posições de sempre */
+    acoes.append(bRec, bDel, bFica);
     div.append(cab, pre, acoes);
     box.append(div);
   });

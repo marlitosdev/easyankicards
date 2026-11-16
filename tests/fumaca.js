@@ -650,7 +650,7 @@ function rodar(opc) {
     matRepararChaves, matPintarMarcador,
     matModoAtual: () => matModo, matTrocarModo,
     matCartoesIniciar, matCartoesAbrir, matCartoesPrompt, matCartoesConferir, mcVirarExplicacao, mcIrParaLinha, mcMotivoCurto,
-    matCartoesSalvar, matCartoesVer, matEtiquetasTopico, matContarCartoes, parseAtual, gruposDuplicados, recortarDuplicados, renderRecortes,
+    matCartoesSalvar, matCartoesVer, matEtiquetasTopico, matContarCartoes, parseAtual, gruposDuplicados, recortarDuplicados, renderRecortes, gruposParecidos, versaoMaisCompleta, ficarComVersao, recortarExtras, planoNoLugar, aplicarNoLugar, faixaDoTrecho, marcarDesfazer, desfazerColagem, abrirNormalizar, aplicarNormalizacao, palavrasDaFrente, _higienizarLinha, temEspacosRuins,
     abrirFoco, fecharFoco, mostrarFoco, blocoMarcado, problemasNavegaveis,
     renderSugestoes, detectoresAtivos, resumoTexto, t, correcaoDeTudo, temLixoIA, corrigirLixoIA,
     cartoesDependentes, cartaoLongo, limiteLongo, problemasDoTexto, MODOS, trocarModo, montarBarraModos, montarDiagnostico,

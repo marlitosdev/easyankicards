@@ -1190,6 +1190,10 @@ function _higienizarLinha(l) {
     .replace(/[ \t]{2,}/g, " ")                     // espaços repetidos
     .replace(/\s+([,;.!?])/g, "$1")                 // espaço antes de pontuação
     .replace(/([^\s—])—([^\s—])/g, "$1 — $2")       // travessão grudado
+    /* (19.141.0) grudado de UM lado só: "Errado— ele" e "ele —suspende". O aviso prometia arrumar
+     * "travessão sem espaço" e só arrumava o grudado dos dois lados. */
+    .replace(/([^\s—])—(?=\s)/g, "$1 —")
+    .replace(/(\s)—([^\s—])/g, "$1— $2")
     .replace(/\s*\.\.\.\s*/g, "… ")                 // reticências
     .replace(/\s+$/, "");                           // espaço no fim da linha
 }
@@ -1326,6 +1330,66 @@ function gruposDuplicados(r) {
   });
   return [...mapa.values()].filter((g) => g.length > 1)
     .sort((a, b) => a[0].line - b[0].line);
+}
+
+/* ===================================================================
+ * PERGUNTAS PARECIDAS  (19.141.0)
+ * O CASO: o mesmo bloco de 10 cartões colado duas vezes, com a redação um pouco mudada. A frente
+ * idêntica pegou 7; as outras 3 ("o depósito do montante integral extingue o crédito?" × "o depósito
+ * integral extingue o crédito tributário?") passaram caladas e iriam para o Anki em dobro.
+ * A medida: as palavras de 3+ letras da frente, sem acento e sem a marca de lacuna; duas frentes são
+ * parecidas quando dividem 70% das palavras (Jaccard) e cada uma tem ao menos 4. É AVISO, nunca
+ * corte automático: "prazo do recurso especial" × "prazo do recurso extraordinário" também casa, e
+ * só quem estuda sabe se é a mesma pergunta. As idênticas ficam com gruposDuplicados — aqui não
+ * entram pares de mesma frente.
+ * =================================================================== */
+const PARECIDAS_LIMIAR = 0.7;
+const PARECIDAS_MAX_CARTOES = 1500;   /* acima disso a comparação par a par pesa a cada tecla */
+function palavrasDaFrente(front) {
+  return new Set(String(front || "")
+    .replace(/\{\{c\d+::([^}]*?)(::[^}]*)?\}\}/g, "$1")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+}
+function gruposParecidos(r) {
+  const cards = (r && r.cards) || [];
+  if (cards.length < 2 || cards.length > PARECIDAS_MAX_CARTOES) return [];
+  const chave = (c) => (c.front || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const info = cards.map((c) => ({ c, k: chave(c), p: palavrasDaFrente(c.front) }));
+  const pai = info.map((_, i) => i);
+  const raiz = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+  let algum = false;
+  for (let i = 0; i < info.length; i++) {
+    const a = info[i];
+    if (a.p.size < 4) continue;
+    for (let j = i + 1; j < info.length; j++) {
+      const b = info[j];
+      if (b.p.size < 4 || a.k === b.k) continue;
+      let comum = 0;
+      a.p.forEach((w) => { if (b.p.has(w)) comum++; });
+      if (comum / (a.p.size + b.p.size - comum) >= PARECIDAS_LIMIAR) {
+        pai[raiz(j)] = raiz(i); algum = true;
+      }
+    }
+  }
+  if (!algum) return [];
+  const mapa = new Map();
+  info.forEach((x, i) => {
+    const rz = raiz(i);
+    if (!mapa.has(rz)) mapa.set(rz, []);
+    mapa.get(rz).push(x.c);
+  });
+  /* um grupo só de frentes idênticas já é aviso de gruposDuplicados */
+  return [...mapa.values()]
+    .filter((g) => g.length > 1 && new Set(g.map(chave)).size > 1)
+    .sort((a, b) => a[0].line - b[0].line);
+}
+
+/* Das versões de uma mesma pergunta, a mais completa: mais resposta e mais "Saiba mais".
+ * Empate fica com a primeira. É a que o recorte em lote mantém no texto. */
+function versaoMaisCompleta(grupo) {
+  const peso = (c) => String(c.back || "").length + String(c.more || "").length;
+  return (grupo || []).reduce((m, c) => (m === null || peso(c) > peso(m) ? c : m), null);
 }
 
 /* ===================================================================
