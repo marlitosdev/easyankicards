@@ -2030,9 +2030,17 @@ function hubControlesAgenda() {
   raio.className = "ed-agenda-cfg-item plog-gatilho";
   raio.textContent = t("plog_gatilho");
   raio.title = t("plog_gatilho_aj");
-  raio.onclick = () => { if (typeof plAbrir === "function") plAbrir(); };
+  raio.onclick = () => { if (typeof plAbrir === "function") plAbrir({ aba: "disc" }); };
+  /* (19.149.0) a análise do estudo inteira: tempo, constância, acerto, cartões e o que está fora do lugar */
+  const ana = document.createElement("button");
+  ana.type = "button";
+  ana.id = "btnAnaliseAbrir";
+  ana.className = "ed-agenda-cfg-item plog-gatilho";
+  ana.textContent = t("ae_gatilho");
+  ana.title = t("ae_gatilho_aj");
+  ana.onclick = () => { if (typeof plAbrir === "function") plAbrir({ aba: "geral" }); };
 
-  cx.append(lh, raio);
+  cx.append(lh, ana, raio);
   return cx;
 }
 

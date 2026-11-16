@@ -5643,6 +5643,62 @@ dialog.jcf-dlg[open]>.jcf-corpo{flex:1 1 auto;min-height:0;overflow:auto}
 .plog-poda-total{border-top:1px solid var(--borda);padding-top:9px;margin-top:2px;
   font-size:12px;font-weight:700;text-align:right}
 .plog-vazio{color:var(--sutil);font-size:12px;padding:18px 2px}
+/* (19.149.0) as sub-abas de "Como o plano decide" e a janela do armazenamento */
+.plog-sub-abas{display:flex;gap:var(--esp-1);flex-wrap:wrap;margin:0 0 var(--esp-3)}
+.plog-sub-aba{appearance:none;border:1px solid var(--borda);background:transparent;color:var(--sutil);border-radius:var(--r-pilula);padding:4px 12px;font-size:var(--fs-2);cursor:pointer}
+.plog-sub-aba.ativa{border-color:var(--acao);color:var(--acao);font-weight:var(--peso-m)}
+dialog.arm-modal{max-width:min(760px,96vw);width:min(760px,96vw)}
+.arm-corpo{max-height:66vh}
+/* (19.149.0) A VISÃO GERAL da análise do estudo */
+.ae-periodo{display:flex;align-items:center;gap:var(--esp-1);flex-wrap:wrap;margin:0 0 var(--esp-3)}
+.ae-periodo-rot{font-size:var(--fs-2);color:var(--sutil);margin-right:var(--esp-1)}
+.ae-chip{appearance:none;border:1px solid var(--borda);background:transparent;color:var(--texto);border-radius:var(--r-pilula);padding:4px 12px;font-size:var(--fs-2);cursor:pointer}
+.ae-chip.ativo{border-color:var(--acao);color:var(--acao);font-weight:var(--peso-m)}
+.ae-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--esp-2);margin:0 0 var(--esp-3)}
+.ae-kpi{background:var(--bg);border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3);min-width:0}
+.ae-kpi-rot{font-size:var(--fs-2);color:var(--sutil)}
+.ae-kpi-val{font-size:var(--fs-6);font-weight:var(--peso-m);line-height:1.2;font-variant-numeric:tabular-nums}
+.ae-kpi-sub{font-size:var(--fs-2);color:var(--sutil)}
+.ae-kpi-delta{font-size:var(--fs-2);color:var(--sutil)}
+.ae-kpi-delta.ok{color:var(--ok)}
+.ae-kpi-delta.ruim{color:var(--erro)}
+.ae-graficos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:var(--esp-2);margin:0 0 var(--esp-3)}
+.ae-cartao{background:var(--bg);border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3);min-width:0}
+.ae-cartao-tit{font-size:var(--fs-2);color:var(--sutil);margin:0 0 var(--esp-2)}
+.ae-mapa{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;max-width:340px}
+/* o dia sem estudo é o mais apagado nos dois temas: uma pitada do texto sobre o fundo; os níveis sobem do azul fraco ao cheio */
+.ae-dia{aspect-ratio:1;border-radius:var(--r-p);background:color-mix(in srgb,var(--texto) 9%,var(--bg));min-width:8px}
+.ae-dia.n1{background:color-mix(in srgb,var(--acao) 35%,var(--bg))}
+.ae-dia.n2{background:color-mix(in srgb,var(--acao) 55%,var(--bg))}
+.ae-dia.n3{background:color-mix(in srgb,var(--acao) 75%,var(--bg))}
+.ae-dia.n4{background:var(--acao)}
+.ae-dia.hoje{outline:2px solid var(--texto);outline-offset:-1px}
+.ae-leg{display:flex;align-items:center;gap:var(--esp-1);flex-wrap:wrap;font-size:var(--fs-1);color:var(--sutil);margin-top:var(--esp-2)}
+.ae-leg .ae-dia{width:10px;min-width:10px;display:inline-block}
+.ae-leg-it{display:inline-flex;align-items:center;gap:4px;margin-right:var(--esp-2)}
+.ae-leg-q{width:10px;height:10px;border-radius:var(--r-p);display:inline-block}
+.ae-leg-q.est{background:var(--acao)}
+.ae-leg-q.rev{background:color-mix(in srgb,var(--acao) 40%,var(--bg))}
+.ae-leg-q.meta{height:0;border-top:2px dashed var(--sutil);border-radius:0}
+.ae-sem{width:100%;height:auto;display:block}
+.ae-sem .ae-b-est{fill:var(--acao)}
+.ae-sem .ae-b-rev{fill:color-mix(in srgb,var(--acao) 40%,var(--bg))}
+.ae-sem .ae-barra.atual rect{opacity:.65}
+.ae-sem .ae-eixo{stroke:var(--borda);stroke-width:1}
+.ae-sem .ae-meta{stroke:var(--sutil);stroke-width:1;stroke-dasharray:4 3}
+.ae-sem .ae-rot{fill:var(--sutil);font-size:9px}
+.ae-alertas{margin:0 0 var(--esp-2)}
+.ae-alerta{display:flex;align-items:baseline;gap:var(--esp-2);padding:6px 0;border-top:1px solid var(--borda);font-size:var(--fs-3)}
+.ae-alerta:first-of-type{border-top:0}
+.ae-alerta.vazio{color:var(--sutil)}
+.ae-alerta-ic{flex:0 0 auto}
+.ae-alerta.atencao .ae-alerta-ic{color:var(--atencao)}
+.ae-alerta.info .ae-alerta-ic{color:var(--info)}
+.ae-alerta-txt{flex:1 1 auto;min-width:0}
+.ae-alerta-ir{flex:0 0 auto}
+.ae-fonte{margin:var(--esp-1) 0 0}
+@media (max-width:640px){.ae-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ae-graficos{grid-template-columns:minmax(0,1fr)}
+  .ae-mapa{max-width:none}.ae-alerta{flex-wrap:wrap}.ae-alerta-ir{margin-left:auto}}
 .plog-naoentra{font-size:10.5px;color:var(--sutil);font-style:italic}
 
 /* o gatilho, na barra da agenda: discreto ate o ponteiro chegar */
@@ -8225,6 +8281,14 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <button class="btn-min" id="btnHistorico" title=""></button>
       </div>
       <p class="nota" data-i18n="hist_ajuda"></p>
+    </div>
+    <!-- (19.149.0) o armazenamento saiu da análise do estudo: é manutenção do app, não estudo -->
+    <div class="cfg-bloco">
+      <div class="cfg-linha">
+        <span class="cfg-rot" data-i18n="arm_titulo"></span>
+        <button class="btn-min" id="btnCfgArmazem" data-i18n="arm_abrir" data-i18n-title="arm_abrir_aj"></button>
+      </div>
+      <p class="nota" data-i18n="arm_ajuda"></p>
     </div>
     <div class="cfg-bloco" id="cfgImportar" hidden>
       <div class="gaveta-importar">
@@ -12161,28 +12225,31 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <button class="btn-min" id="btnPlogFechar" data-i18n="help_close"></button>
     </span>
   </div>
-  <div class="plog-abas">
-    <button class="plog-aba" id="btnPlogAbaFila" data-plog-aba="fila"
-      data-i18n="plog_aba_fila"
-      title="A semana de hoje, item a item, com a conta que pos cada um naquela posicao."></button>
-    <button class="plog-aba" id="btnPlogAbaDisc" data-plog-aba="disc"
-      data-i18n="plog_aba_disc"
-      title="Quanto cada disciplina vale na prova contra quanto de tempo ela recebe."></button>
-    <button class="plog-aba" id="btnPlogAbaSinais" data-plog-aba="sinais"
-      data-i18n="plog_aba_sinais"
-      title="O que o app ja mede sobre o seu desempenho e nao usa para decidir nada."></button>
-    <button class="plog-aba" id="btnPlogAbaHist" data-plog-aba="hist"
-      data-i18n="plog_aba_hist"
-      title="Como a agenda mudou de um dia para o outro."></button>
-    <button class="plog-aba" id="btnPlogAbaArmazem" data-plog-aba="armazem"
-      data-i18n="plog_aba_armazem"
-      title="Quanto cada coisa ocupa no navegador e o que da para liberar sem perder nada."></button>
+  <!-- (19.149.0) a ANÁLISE DO ESTUDO: a visão geral, a conta da agenda (com sub-abas) e o desempenho; o armazenamento
+       foi para ⚙ Configurações -->
+  <div class="plog-abas" role="tablist">
+    <button class="plog-aba" id="btnPlogAbaGeral" data-plog-aba="geral" role="tab"
+      data-i18n="plog_aba_geral" data-i18n-title="plog_aba_geral_aj"></button>
+    <button class="plog-aba" id="btnPlogAbaPlano" data-plog-aba="plano" role="tab"
+      data-i18n="plog_aba_plano" data-i18n-title="plog_aba_plano_aj"></button>
+    <button class="plog-aba" id="btnPlogAbaSinais" data-plog-aba="sinais" role="tab"
+      data-i18n="plog_aba_sinais" data-i18n-title="plog_aba_sinais_aj"></button>
     <span class="plog-cab-dir">
       <button class="btn-min" id="btnPlogCopiar" data-i18n="plog_copiar"
         title="Copia o relatorio inteiro em texto, para colar numa conversa."></button>
     </span>
   </div>
   <div class="plog-corpo" id="plogCorpo"></div>
+</dialog>
+
+<!-- (19.149.0) o armazenamento, aberto por ⚙ Configurações (era a aba "Armazenamento" do Raio-X) -->
+<dialog id="dlgArmazem" class="ui-modal arm-modal">
+  <h3 data-i18n="arm_titulo"></h3>
+  <p class="nota" data-i18n="arm_ajuda"></p>
+  <div class="plog-corpo arm-corpo" id="armazemCorpo"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnArmazemFechar" data-i18n="help_close"></button>
+  </div>
 </dialog>
 
 <dialog id="dlgGerLog" class="ui-modal diag-modal">
@@ -13692,6 +13759,7 @@ window.__sqlPromise = initSqlJs({
 <script src="pacote.js"></script>
 <script src="dificuldade.js"></script>
 <script src="plano-log.js"></script>
+<script src="analise-estudo.js"></script>
 <script src="questoes-hist.js"></script>
 <script src="questoes-ui.js"></script>
 <script src="edital.js"></script>

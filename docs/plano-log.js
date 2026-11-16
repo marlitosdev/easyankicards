@@ -748,7 +748,11 @@ function plPodasDisponiveis() {
 /* ------------------------------------------------------------------
  * 7. A TELA
  * ------------------------------------------------------------------ */
-let plAba = "disc";      /* abre na comparação: é o que o painel veio dizer */
+/* (19.149.0) A ANÁLISE DO ESTUDO: "geral" (a visão geral, analise-estudo.js), "fila" · "disc" · "hist" (como o plano
+ * decide) e "sinais" (desempenho por disciplina). O armazenamento saiu daqui: ⚙ Configurações (plArmazemAbrir).
+ * O "Por que isto?" da agenda abre em "disc"; o botão da análise, em "geral". */
+const PL_ABAS_PLANO = ["fila", "disc", "hist"];
+let plAba = "geral";
 let plDados = null;      /* { plano, r, cfg, editalId } do último abrir */
 
 /* De onde saem os dados: o edital em vista na agenda. Se houver mais de
@@ -888,7 +892,7 @@ function plPintarFila(box, d) {
       c.rodada == null ? "?" : "r" + c.rodada,
       c.disciplina,
       cel,
-      c.pesoDisc + " × " + c.pesoTop + " = " + c.bruto,
+      plContaTxt(c),
       (c.fator === 1 ? "—" : "×" + String(c.fator).replace(".", ","))
         + (c.fatorOrigem === "acerto" && c.acertoPct != null ? " · " + t("plog_fator_acerto", { p: c.acertoPct }) : ""),
       c.prioridade,
@@ -992,7 +996,7 @@ function plPintarSinais(box, d) {
     const tr = plEl("tr");
     tr.append(plEl("td", "", s.disciplina));
     tr.append(plEl("td", "plog-num", s.pct == null ? "—"
-      : s.pct + "% (" + s.qCertas + "/" + s.qFeitas + ")"));
+      : s.pct + "% (" + Math.round(s.qCertas) + "/" + s.qFeitas + ")"));
     tr.append(plEl("td", "plog-num", s.pctAnotado == null ? "—" : s.pctAnotado + "%"));
     tr.append(plEl("td", "plog-num", s.sessoes));
     tr.append(plEl("td", "plog-num", s.minutos));
@@ -1045,7 +1049,7 @@ function plPintarArmazem(box) {
           : true;
         if (!ok) return;
         p2.fazer();
-        plPintar();
+        plArmazemRepintar();
         if (typeof toast === "function") toast(t("plog_poda_ok", { tam: plTamanho(p2.bytes) }));
       };
       dir.append(b);
@@ -1117,49 +1121,101 @@ function plPintar() {
   const box = document.getElementById("plogCorpo");
   if (!box) return;
   box.innerHTML = "";
+  if (plAba === "armazem") plAba = "geral";
   const d = plDados;
   const sub = document.getElementById("plogSub");
+  if (sub) {
+    sub.textContent = d ? t("plog_sub", {
+      c: d.nome || "?", p: d.plano.prazo || "?",
+      f: d.plano.fase ? d.plano.fase.n : 1,
+    }) + (d.quantos > 1 ? " · " + t("plog_sub_varios", { n: d.quantos }) : "") : "";
+  }
+  const avLeit = d && d.r && typeof edAvisoLeitura === "function" ? edAvisoLeitura(d.r, { semBotao: true }) : null;
+  if (avLeit) box.append(avLeit);
+  /* A VISÃO GERAL não depende de edital: o diário, as questões e os cartões são seus, com ou sem prova marcada */
+  if (plAba === "geral") {
+    if (typeof aePintar === "function") aePintar(box, d);
+    plAbasPintar();
+    return;
+  }
   if (!d) {
-    if (sub) sub.textContent = "";
-    /* O ARMAZENAMENTO NAO DEPENDE DE EDITAL. Quem chegou aqui justamente
-     * porque o app reclamou de espaco pode nao ter edital ativo nenhum —
-     * e era a unica aba que ele precisava. */
-    if (plAba === "armazem") { plPintarArmazem(box); plAbasPintar(); return; }
     box.append(plEl("div", "plog-vazio", t("plog_sem_edital")));
     plAbasPintar();
     return;
   }
-  if (sub) {
-    sub.textContent = t("plog_sub", {
-      c: d.nome || "?", p: d.plano.prazo || "?",
-      f: d.plano.fase ? d.plano.fase.n : 1,
-    }) + (d.quantos > 1 ? " · " + t("plog_sub_varios", { n: d.quantos }) : "");
+  if (PL_ABAS_PLANO.indexOf(plAba) >= 0) {
+    /* as três vistas da conta da agenda, como sub-abas */
+    const sa = plEl("div", "plog-sub-abas");
+    sa.setAttribute("role", "tablist");
+    PL_ABAS_PLANO.forEach((a) => {
+      const b = plEl("button", "plog-sub-aba" + (a === plAba ? " ativa" : ""), t("plog_aba_" + a));
+      b.type = "button";
+      b.id = "btnPlogSub_" + a;
+      b.setAttribute("aria-selected", a === plAba ? "true" : "false");
+      b.onclick = () => plAbaTrocar(a);
+      sa.append(b);
+    });
+    box.append(sa);
+    box.append(plTiras(d));
+    /* O SELO DA FATIA. "Exata" e "estimada" mudam o significado de toda a
+     * coluna da prova, e sem dizer qual é a tabela mente por omissão. */
+    const selo = plEl("div");
+    selo.append(plEl("span", "plog-selo" + (d.plano.fatiaExata ? "" : " estimada"),
+      t(d.plano.fatiaExata ? "plog_exata" : "plog_estimada")));
+    box.append(selo);
+    box.append(plEl("div", "", " "));
   }
-  const avLeit = d.r && typeof edAvisoLeitura === "function" ? edAvisoLeitura(d.r, { semBotao: true }) : null;
-  if (avLeit) box.append(avLeit);
-  box.append(plTiras(d));
-  /* O SELO DA FATIA. "Exata" e "estimada" mudam o significado de toda a
-   * coluna da prova, e sem dizer qual é a tabela mente por omissão. */
-  const selo = plEl("div");
-  const sp = plEl("span", "plog-selo" + (d.plano.fatiaExata ? "" : " estimada"),
-    t(d.plano.fatiaExata ? "plog_exata" : "plog_estimada"));
-  selo.append(sp);
-  box.append(selo);
-  box.append(plEl("div", "", " "));
-
   if (plAba === "fila") plPintarFila(box, d);
   else if (plAba === "sinais") plPintarSinais(box, d);
   else if (plAba === "hist") plPintarHist(box, d);
-  else if (plAba === "armazem") plPintarArmazem(box);
   else plPintarDisc(box, d);
 
   plAbasPintar();
 }
 
+/* as três abas principais, pelos ids (a busca por classe não enxerga a marcação estática no simulador dos testes) */
+const PL_ABAS_IDS = { btnPlogAbaGeral: "geral", btnPlogAbaPlano: "plano", btnPlogAbaSinais: "sinais" };
+function plAbasBotoes() {
+  return Object.keys(PL_ABAS_IDS).map((id) => document.getElementById(id)).filter(Boolean);
+}
+/* a aba principal acende pelo grupo: "Como o plano decide" vale para a semana, a prova × tempo e o histórico */
 function plAbasPintar() {
-  document.querySelectorAll(".plog-aba").forEach((b) => {
-    b.classList.toggle("ativa", b.dataset.plogAba === plAba);
+  const grupo = PL_ABAS_PLANO.indexOf(plAba) >= 0 ? "plano" : plAba;
+  plAbasBotoes().forEach((b) => {
+    const ativa = PL_ABAS_IDS[b.id] === grupo;
+    b.classList.toggle("ativa", ativa);
+    if (b.setAttribute) b.setAttribute("aria-selected", ativa ? "true" : "false");
   });
+}
+
+/* (19.149.0) a conta do item: "5 × 5 = 25". Quando o tópico tem ramos, o peso dele se divide entre eles (e na 2ª fase
+ * vale o peso dela) — antes saía "5 × 5 = 10.384615384615385", conta que parecia errada e número sem arredondar */
+function plContaTxt(c) {
+  const prod = (Number(c.pesoDisc) || 0) * (Number(c.pesoTop) || 0);
+  const b = Number(c.bruto) || 0;
+  const fmt = (x) => String(Math.round(x * 10) / 10).replace(".", ",");
+  if (Math.abs(prod - b) < 0.05) return c.pesoDisc + " × " + c.pesoTop + " = " + fmt(prod);
+  return c.pesoDisc + " × " + c.pesoTop + " → " + fmt(b) + " " + t("plog_conta_ramo");
+}
+
+/* =====================================================================
+ * (19.149.0) O ARMAZENAMENTO, EM ⚙ CONFIGURAÇÕES
+ *
+ * Era a quinta aba da análise — e não é estudo, é manutenção do app. Mora numa janela própria, aberta pelas
+ * Configurações; quem pedir a aba antiga (plAbaTrocar("armazem")) é levado até ela.
+ * ===================================================================== */
+function plArmazemRepintar() {
+  const box = document.getElementById("armazemCorpo");
+  if (!box) return false;
+  box.innerHTML = "";
+  plPintarArmazem(box);
+  return true;
+}
+function plArmazemAbrir() {
+  if (!plArmazemRepintar()) return false;
+  if (typeof abrirModal === "function") abrirModal("dlgArmazem");
+  try { if (typeof reg === "function") reg("ARMAZEN", "armazenamento aberto pelas configurações", ""); } catch (e) {}
+  return true;
 }
 
 /* =====================================================================
@@ -1253,7 +1309,8 @@ function plTelaAlternar() {
   plTelaAplicar();
 }
 
-function plAbrir() {
+function plAbrir(opc) {
+  if (opc && opc.aba) plAba = opc.aba === "armazem" ? "geral" : opc.aba;
   /* a largura manda; a preferência só decide o que a largura não decide */
   try {
     plTelaCheia = plTelaEstreita()
@@ -1287,7 +1344,8 @@ function plCopiar() {
  * teste precisa poder pedir a aba da semana sem depender de o
  * simulador achar o botão por seletor de classe. */
 function plAbaTrocar(nome) {
-  plAba = nome || "disc";
+  if (nome === "armazem") { plArmazemAbrir(); return plAba; }
+  plAba = nome === "plano" ? "disc" : (nome || "geral");
   plPintar();
   return plAba;
 }
@@ -1303,6 +1361,8 @@ function plIniciar() {
   });
   liga("btnPlogCopiar", plCopiar);
   liga("btnPlogTela", plTelaAlternar);
+  liga("btnCfgArmazem", plArmazemAbrir);
+  liga("btnArmazemFechar", () => { const d = document.getElementById("dlgArmazem"); if (d) d.close(); });
   /* GIRAR O APARELHO É TROCAR DE TELA.
    * Sem isto, quem abre o painel em pé (estreito, portanto em tela
    * cheia) e deita o telefone fica com uma janela de 100vh dentro de
@@ -1315,8 +1375,8 @@ function plIniciar() {
       plTelaAplicar();
     });
   }
-  document.querySelectorAll(".plog-aba").forEach((b) => {
-    b.onclick = () => plAbaTrocar(b.dataset.plogAba);
+  plAbasBotoes().forEach((b) => {
+    b.onclick = () => plAbaTrocar(PL_ABAS_IDS[b.id]);
   });
 }
 
@@ -1330,6 +1390,6 @@ if (typeof module !== "undefined" && module.exports) {
     plPodaSnaps, plTamanho, plBytes, PL_GAVETAS,
     plTelaAplicar, plTelaAlternar, plTelaEstreita, plColCls, plAbaTrocar,
     plTabela, plLinha, PL_TELA_ESTREITA, PL_TELA_CHAVE,
-    plTelaCheiaAtual: () => plTelaCheia,
+    plTelaCheiaAtual: () => plTelaCheia, plArmazemAbrir, plContaTxt, plAbaAtual: () => plAba,
   };
 }
