@@ -3269,10 +3269,10 @@ function jurBibOrdenar(L) {
   return c;
 }
 function jurBibTemFiltro() {
-  return !!(String(jurBib.busca || "").trim() || jurBib.trib || jurBib.sit || jurBib.assunto || jurBib.tag || jurBib.ano || jurBib.relator || jurBib.pasta);
+  return !!(String(jurBib.busca || "").trim() || jurBib.trib || jurBib.sit || jurBib.assunto || jurBib.tag || jurBib.ano || jurBib.anos || jurBib.relator || jurBib.pasta);
 }
 function jurBibLimparFiltros() {
-  Object.assign(jurBib, { busca: "", trib: "", sit: "", assunto: "", tag: "", ano: "", relator: "", pasta: "" });
+  Object.assign(jurBib, { busca: "", trib: "", sit: "", assunto: "", tag: "", ano: "", anos: "", relator: "", pasta: "" });
   if ($("jurBibBusca")) $("jurBibBusca").value = "";
   if ($("jurBibSit")) $("jurBibSit").value = "";
   jurBibPintar();
@@ -3347,6 +3347,8 @@ function jurBibFiltrados() {
   const todos = jurLista();
   return jurBibOrdenar(todos.filter((j) => {
     if (jurBib.ano && (jurBib.ano === "sem" ? !!jurBibAno(j) : jurBibAno(j) !== jurBib.ano)) return false;
+    /* (19.146.0) o período escolhido na linha do tempo do mapa: "2018-2021" */
+    if (jurBib.anos) { const p = String(jurBib.anos).split("-"), a = jurBibAno(j); if (!a || a < p[0] || a > p[1]) return false; }
     if (jurBib.relator && jurBibRelatorChave(j.relator) !== jurBib.relator) return false;
     /* (v18.95.0) pelo selo de qualidade */
     if (/^q_/.test(jurBib.sit || "") && jurQualidade(j, { lista: todos }).nivel !== jurBib.sit.slice(2)) return false;
@@ -3377,7 +3379,7 @@ function jurBibAbrir(opc) {
   if (!$("dlgJurBib")) return false;
   const o = opc || {};
   jurBib = { busca: o.busca || "", trib: "", sit: o.sit || "", assunto: o.assunto || "", tag: o.tag || "", grupo: "topico", estudo: null, ligando: "", atual: false,
-    ano: "", relator: "", ordem: (jurBib && jurBib.ordem) || "",
+    ano: "", anos: "", relator: "", ordem: (jurBib && jurBib.ordem) || "",
     pasta: o.pasta || (jurBib && jurBib.pasta) || "", sel: o.sel || "" };
   /* (v18.96.0) tela cheia por padrão (a escolha é lembrada) */
   jurBibCheiaTrocar(jurBibCheiaPreferida(), false);
@@ -3464,6 +3466,18 @@ function jurBibPintar() {
   if (est) { jurBibPintarEstudo(); return; }
   if (atu) { jurBibAtualPintar(); return; }
 
+  /* (19.146.0) LISTA OU MAPA: o mapa (temas e linha do tempo) no lugar da lista; a leitura continua ao lado */
+  const vMapa = typeof jmpVista === "function" && jmpVista() === "mapa";
+  [["btnJurBibVistaLista", !vMapa], ["btnJurBibVistaMapa", vMapa]].forEach(([id, on]) => {
+    const b = $(id);
+    if (!b) return;
+    b.setAttribute("aria-pressed", String(on));
+    if (b.classList) b.classList.toggle("ativa", on);
+  });
+  if ($("jurBibMapa")) $("jurBibMapa").hidden = !vMapa;
+  $("jurBibLista").hidden = vMapa;
+  if (vMapa) { jmpPintar(); jurBibPintarLeitor(L); return; }
+
   const cx = $("jurBibLista");
   cx.innerHTML = "";
   if (!L.length) {
@@ -3527,6 +3541,7 @@ function jurBibChipsAtivos() {
   if (jurBib.assunto) out.push({ k: "assunto", rot: txtSel("jurBibAssunto", jurBib.assunto) });
   if (jurBib.tag) out.push({ k: "tag", rot: txtSel("jurBibTag", jurBib.tag) });
   if (jurBib.ano) out.push({ k: "ano", rot: t("jbb_rot_ano") + ": " + txtSel("jurBibAno", jurBib.ano) });
+  if (jurBib.anos) { const p = String(jurBib.anos).split("-"); out.push({ k: "anos", rot: t("jmp_chip_periodo", { a: p[0] === p[1] ? p[0] : p[0] + "–" + p[1] }) }); }
   if (jurBib.relator) out.push({ k: "relator", rot: txtSel("jurBibRelator", jurBib.relator) });
   if (jurBib.pasta) {
     let nome = jurBib.pasta;
@@ -3979,7 +3994,10 @@ if (typeof document !== "undefined" && $("dlgJurBib")) {
   $("jurBibTrib").onchange = () => { jurBib.trib = $("jurBibTrib").value; jurBibPintar(); };
   $("jurBibSit").onchange = () => { jurBib.sit = $("jurBibSit").value; jurBibPintar(); };
   $("jurBibGrupo").onchange = () => { jurBib.grupo = $("jurBibGrupo").value; jurBibPintar(); };
-  if ($("jurBibAno")) $("jurBibAno").onchange = () => { jurBib.ano = $("jurBibAno").value; jurBibPintar(); };
+  if ($("jurBibAno")) $("jurBibAno").onchange = () => { jurBib.ano = $("jurBibAno").value; jurBib.anos = ""; jurBibPintar(); };
+  /* (19.146.0) lista ou mapa */
+  if ($("btnJurBibVistaLista")) $("btnJurBibVistaLista").onclick = () => jmpVistaTrocar("lista");
+  if ($("btnJurBibVistaMapa")) $("btnJurBibVistaMapa").onclick = () => jmpVistaTrocar("mapa");
   if ($("jurBibRelator")) $("jurBibRelator").onchange = () => { jurBib.relator = $("jurBibRelator").value; jurBibPintar(); };
   if ($("jurBibOrdem")) $("jurBibOrdem").onchange = () => { jurBib.ordem = $("jurBibOrdem").value; jurBibPintar(); };
   if ($("btnJurBibLimpar")) $("btnJurBibLimpar").onclick = () => jurBibLimparFiltros();

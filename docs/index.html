@@ -5226,6 +5226,50 @@ dialog.vz-chave-dlg[open]{max-width:min(720px,96vw)}
 .jcf-ia-diverge,.jcf-ia-outro,.jcf-ia-superada,.jcf-ia-cancelada{color:var(--erro)}
 .jcf-ia-nao_achei,.jcf-ia-x{color:var(--sutil)}
 .jcf-ia-campo{font-size:var(--fs-3)}
+/* (19.146.0) o mapa dos julgados: a linha do tempo e os temas */
+.jbb-vistas{display:inline-flex;flex:none;border:1px solid var(--borda);border-radius:var(--r-pilula);overflow:hidden}
+.jbb-vista{background:transparent;border:0;color:var(--sutil);font:inherit;font-size:var(--fs-2);font-weight:var(--peso-m);padding:var(--esp-1) var(--esp-3);cursor:pointer}
+.jbb-vista.ativa{background:var(--acao);color:#fff}
+.jmp{flex:1 1 auto;min-height:0;overflow:auto}
+.jmp[hidden]{display:none}
+.jmp-sec{border:1px solid var(--borda);border-radius:var(--r-m);background:var(--panel);padding:var(--esp-3) var(--esp-4);margin:0 0 var(--esp-3)}
+.jmp-tit{font-size:var(--fs-4);font-weight:var(--peso-f)}
+.jmp-sec>.nota{margin:var(--esp-1) 0 var(--esp-2)}
+.jmp-barras{display:flex;align-items:stretch;gap:2px;height:140px;padding:var(--esp-2) 0 0;touch-action:none;user-select:none}
+.jmp-barra{flex:1 1 0;min-width:10px;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;background:transparent;border:0;padding:0;cursor:pointer;font:inherit;position:relative}
+.jmp-col{display:block;width:100%;border-radius:var(--r-p);background:var(--campo);overflow:hidden;position:relative}
+.jmp-barra:hover .jmp-col{outline:2px solid var(--info)}
+.jmp-barra.sel .jmp-col,.jmp-barra.arrasto .jmp-col{outline:2px solid var(--acao)}
+.jmp-barra.vazia{cursor:default}
+.jmp-col .jmp-faixa{position:absolute;inset:0;flex-direction:column-reverse;height:100%}
+.jmp-col .jmp-faixa .jmp-q{width:100% !important}
+.jmp-rot{display:block;font-size:var(--fs-1);color:var(--sutil);text-align:center;height:1.4em;white-space:nowrap}
+.jmp-rodape{margin:var(--esp-2) 0 0}
+.jmp-faixa{display:flex;height:6px;width:100%;border-radius:var(--r-pilula);overflow:hidden;background:var(--campo)}
+.jmp-q{display:block;height:100%;flex:none}
+.jmp-q-oficial{background:var(--ok)}
+.jmp-q-conferido{background:var(--info)}
+.jmp-q-aconferir{background:var(--atencao)}
+.jmp-q-vencido{background:var(--sutil)}
+.jmp-q-problema{background:var(--erro)}
+.jmp-legenda{display:flex;flex-wrap:wrap;gap:var(--esp-3);font-size:var(--fs-2);color:var(--sutil);margin:0 0 var(--esp-2)}
+.jmp-leg{display:inline-flex;align-items:center;gap:var(--esp-1)}
+.jmp-leg .jmp-q{width:10px;height:10px;border-radius:var(--r-p)}
+.jmp-disc{margin:0 0 var(--esp-3)}
+.jmp-disc-cab{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--esp-2);width:100%;background:transparent;border:0;padding:var(--esp-1) 0;color:var(--texto);font:inherit;text-align:left;cursor:pointer}
+.jmp-disc-cab:disabled{cursor:default}
+.jmp-disc-cab.sel .jmp-disc-nome{color:var(--acao)}
+.jmp-disc-nome{font-weight:var(--peso-f);font-size:var(--fs-3)}
+.jmp-disc-n{font-weight:var(--peso-f);font-size:var(--fs-3);color:var(--sutil)}
+.jmp-volume{grid-column:1/-1;height:4px;border-radius:var(--r-pilula);background:var(--campo);overflow:hidden}
+.jmp-volume-b{display:block;height:100%;background:var(--info)}
+.jmp-tiles{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin-top:var(--esp-1)}
+.jmp-tile{flex:1 1 140px;display:flex;flex-direction:column;align-items:stretch;gap:var(--esp-1);min-width:120px;text-align:left;background:var(--campo);border:1px solid var(--borda);border-radius:var(--r-p);padding:var(--esp-2);color:var(--texto);font:inherit;cursor:pointer}
+.jmp-tile:hover{border-color:var(--info)}
+.jmp-tile.sel{border-color:var(--acao);box-shadow:inset 3px 0 0 var(--acao)}
+.jmp-tile-nome{font-size:var(--fs-2);line-height:1.35}
+.jmp-tile-n{font-size:var(--fs-4);font-weight:var(--peso-f)}
+.jmp-fonte{margin:var(--esp-2) 0 0;font-size:var(--fs-2)}
 dialog.jcf-dlg[open]{display:flex;flex-direction:column;width:min(1200px,98vw);max-width:min(1200px,98vw);max-height:94vh;max-height:94dvh;overflow:hidden}
 dialog.jcf-dlg[open]>*{flex:0 0 auto}
 dialog.jcf-dlg[open]>.jcf-corpo{flex:1 1 auto;min-height:0;overflow:auto}
@@ -11151,6 +11195,11 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="jbb-topo" id="jurBibTopo">
     <input type="search" id="jurBibBusca" data-i18n-ph="jur_bib_busca_ph" placeholder="procurar">
     <button type="button" class="btn-min jbb-filtros-bt" id="btnJurBibFiltros" aria-expanded="false" aria-controls="jurBibBarra"></button>
+    <!-- (19.146.0) lista ou mapa (temas e linha do tempo) -->
+    <span class="jbb-vistas" role="group" data-i18n-title="jmp_vistas_aj">
+      <button type="button" class="jbb-vista" id="btnJurBibVistaLista" aria-pressed="true" data-i18n="jmp_vista_lista"></button>
+      <button type="button" class="jbb-vista" id="btnJurBibVistaMapa" aria-pressed="false" data-i18n="jmp_vista_mapa"></button>
+    </span>
   </div>
   <div class="jbb-chips" id="jurBibChips" hidden></div>
   <div class="jbb-corpo" id="jurBibCorpo">
@@ -11207,6 +11256,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </div>
     <p class="nota" id="jurBibMsg" role="status"></p>
     <div id="jurBibLista" class="jur-bib-lista"></div>
+    <!-- (19.146.0) o mapa: a linha do tempo por ano e os temas (disciplinas e tópicos) com o volume e a qualidade -->
+    <div id="jurBibMapa" class="jmp" hidden></div>
     <!-- (19.126.0) "seu acervo, hoje": de onde vêm os números e o que a busca não alcança -->
     <p class="nota jur-bib-acervo" id="jurBibAcervo" hidden></p>
   </section>
@@ -13631,6 +13682,7 @@ window.__sqlPromise = initSqlJs({
 <script src="ia-consumo.js"></script>
 <script src="juris-ui.js"></script>
 <script src="juris-conferir.js"></script>
+<script src="juris-mapa.js"></script>
 <script src="pastas.js"></script>
 <script src="pre-edital.js"></script>
 <script src="prompts-cartao.js"></script>

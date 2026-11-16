@@ -369,6 +369,43 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---- M146 (19.146.0): O MAPA — linha do tempo (tocar e período) e temas (tocar filtra e volta à lista) ---- */
+  {
+    const { api, A, B } = montar();
+    const g = (dados, ch, tp) => { const j = api.jurGravar(dados); api.jurLigar(j.id, ch, D, tp); return j; };
+    g({ tribunal: "STF", classe: "RE", numero: "901", tese: "Tese 2018.", data: "2018-05-01" }, A, "Limitações");
+    g({ tribunal: "STF", classe: "RE", numero: "902", tese: "Tese 2020 a.", data: "2020-03-02" }, A, "Limitações");
+    g({ tribunal: "STJ", classe: "REsp", numero: "903", tese: "Tese 2020 b.", data: "2020-07-07" }, B, "Princípios");
+    try { api.loja.setItem("eac_jbb_vista", "lista"); } catch (e) {}
+    api.jurBibAbrir();
+    ok(api.$("jurBibMapa").hidden === true && api.$("btnJurBibVistaLista").getAttribute("aria-pressed") === "true", "M1 a biblioteca abre na lista");
+    api.$("btnJurBibVistaMapa").onclick();
+    ok(api.$("jurBibMapa").hidden === false && api.$("jurBibLista").hidden === true && api.$("btnJurBibVistaMapa").getAttribute("aria-pressed") === "true", "M2 'Mapa' troca a lista pelo mapa");
+    ok(api.$("jmpAno_2018") && api.$("jmpAno_2019") && /vazia/.test(cls(api.$("jmpAno_2019"))) && api.$("jmpAno_2020") && /2 julgado/.test(api.$("jmpAno_2020").title),
+      "M3 uma barra por ano, inclusive o ano sem julgado no meio: " + api.$("jmpAno_2020").title);
+    ok(/sem ano guardado/.test(api.$("jurBibMapa").textContent), "M3a os sem ano são ditos (fora da linha)");
+    api.$("jmpAno_2020").onclick();
+    ok(api.jmpPeriodo().de === "2020" && api.jurBibFiltrados().length === 2 && /Período: 2020/.test(api.$("jurBibChips").textContent), "M4 tocar num ano filtra por ele (e vira chip)");
+    api.$("jmpAno_2018").onclick();
+    ok(api.jmpPeriodo().de === "2018" && api.jmpPeriodo().ate === "2020" && api.jurBibFiltrados().length === 3, "M5 tocar num segundo ano escolhe o período");
+    api.$("btnJbbChip_anos").onclick();
+    ok(!api.jmpPeriodo() && api.jurBibFiltrados().length > 3, "M6 o chip tira o período");
+    /* os temas */
+    const tile = api.$("jurBibMapa").querySelectorAll(".jmp-tile").find((b) => /Limitações/.test(b.textContent));
+    ok(tile && /\d/.test(tile.textContent), "M7 os tópicos viram blocos com o número de julgados");
+    tile.onclick();
+    ok(api.$("jurBibMapa").hidden === true && api.$("jurBibLista").hidden === false && /^t:/.test(api.jurBibAtual().assunto || "") && api.jurBibFiltrados().every((j) => (j.topicos || []).indexOf(A) >= 0),
+      "M8 tocar num tópico filtra por ele e volta para a lista");
+    api.$("btnJurBibVistaMapa").onclick();
+    ok(/não é o acervo do tribunal/.test(api.$("jurBibMapa").textContent), "M9 o mapa diz de onde vêm os números");
+    ok(api.$("jurBibMapa").querySelectorAll(".jmp-tile.sel").length === 1, "M9a o tópico escolhido aparece marcado no mapa");
+    ["jmp_vista_lista", "jmp_vista_mapa", "jmp_vistas_aj", "jmp_tempo_tit", "jmp_tempo_expl", "jmp_tempo_vazio", "jmp_ano_aj", "jmp_periodo", "jmp_sem_ano", "jmp_chip_periodo",
+      "jmp_temas_tit", "jmp_temas_expl", "jmp_temas_vazio", "jmp_sem_topico", "jmp_disc_aj", "jmp_top_aj", "jmp_fonte"].forEach((k2) =>
+      ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k2) && api.t(k2) !== k2, "M10 falta " + k2 + " em " + l); }));
+    api.setLanguage("pt");
+    api.jmpVistaTrocar("lista");
+  }
+
   return falhas;
 }
 
