@@ -524,7 +524,7 @@ async function testes() {
        "U6a a revisao so de numeracao devia ter titulo proprio e nao oferecer 'usar o texto original'");
     ok(a.$("leiPreNumeracao").hidden === false && /NÃO está em sequência/.test(achar(a.$("leiPreNumeracao"), () => true).concat([a.$("leiPreNumeracao")]).map((c) => c.textContent).join(" ")),
        "U6b a critica da numeracao nao apareceu");
-    ok(achar(a.$("leiPreNumeracao"), (c) => c.className === "grave").some((c) => /Art\. 90/.test(c.textContent)),
+    ok(achar(a.$("leiPreNumeracao"), (c) => /(^| )grave( |$)/.test(c.className || "")).some((c) => /Art\. 90/.test(c.textContent)),
        "U6c a critica nao aponta o Art. 90 como isolado");
     a.$("btnLeiPreConfirmar").onclick();
     ok(a.leisLista().length === 1 && a.$("dlgLeiPre").open === false, "U6d a critica nao pode TRAVAR: 'continuar' devia criar a lei");

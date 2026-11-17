@@ -332,10 +332,10 @@ async function testes() {
     const pn = api.$("leiPreNumeracao");
     const lis = achar(pn, (c) => String(c.tag || c.tagName).toLowerCase() === "li");
     ok(!pn.hidden && lis.length >= 1 && /40/.test(pn.textContent), "S6 o ponto do 40 fora do lugar aparece: " + pn.textContent.slice(0, 140));
-    const det = achar(lis[0], (c) => /lei-dup-ctx-det/.test(c.className || ""))[0];
-    ok(!!det, "S6a com o 'ver no texto' no ponto");
-    if (det && det.encher) det.encher();
-    ok(det && /Art\. 40 - A isenção/.test(det.textContent), "S6b e ele mostra a linha do texto: " + (det ? det.textContent.slice(0, 160) : "?"));
+    /* (19.157.0) o trecho do texto vem ALI MESMO (sem o "ver no texto" recolhido nem caixa com rolagem própria) */
+    const det = achar(lis[0], (c) => /lei-pre-ctxi(\s|$)/.test(c.className || ""))[0];
+    ok(!!det, "S6a com o trecho do texto no ponto");
+    ok(det && /Art\. 40 - A isenção/.test(det.textContent) && achar(det, (c) => /alvo/.test(c.className || "")).length >= 1, "S6b e ele mostra a linha do texto, destacada: " + (det ? det.textContent.slice(0, 160) : "?"));
   }
 
   /* ---- textos ---- */

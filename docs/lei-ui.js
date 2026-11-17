@@ -7523,6 +7523,141 @@ function leiPreAjudaEl(c, cab, card, chave, texto) {
   return aj;
 }
 /* A SEQUÊNCIA EM VOLTA de um ponto da numeração: os números de antes e de depois, o fora do lugar pintado */
+
+/* =====================================================================
+ * (19.157.0) CONSERTAR O PROBLEMA ONDE ELE APARECE
+ *
+ * O RELATO (LC 116/2003, do Planalto): "Art. 8o-A" e "Art. 8º-B" não eram lidos (o ordinal antes da letra); o Art. 9
+ * que vinha depois parecia voltar na numeração, virava "remissão", era juntado à linha de cima e SUMIA; e a "Lista de
+ * serviços anexa à Lei Complementar nº 116" ficava dentro do Art. 10 (29 mil caracteres). A tela dizia que havia
+ * problema, mas não dizia a causa nem como corrigir — e o trecho do texto vinha numa caixinha com rolagem própria.
+ *
+ * AGORA, em cada problema de numeração:
+ *  · a CAUSA PROVÁVEL: a sugestão aceita que junta um "Art. N" (com N na faixa do problema) à linha de cima — com o
+ *    botão "É artigo — não juntar", que recusa aquela sugestão e refaz a conta na hora;
+ *  · o TRECHO do texto ali mesmo: duas linhas antes e depois, sem rolagem dentro de rolagem, e "mostrar mais linhas".
+ * E no "Art. N ficaria com X mil caracteres": as linhas com cara de TÍTULO dentro dele ("Lista…", "Tabela…", "ANEXO…"),
+ * cada uma com "Separar daqui como anexo" — o anexo entra no grupo Anexos, onde dá para voltar a "manter".
+ * ===================================================================== */
+function leiPreBaseNum(num) { const o = leiNumOrdem(num); return o >= 999999 ? null : Math.floor(o / 100); }
+/* as sugestões aceitas que juntam um "Art. N" à linha de cima, com N na faixa do problema */
+function leiPreCausasNum(c, q) {
+  const L = String(c.texto || "").split("\n");
+  const n = leiPreBaseNum(q.numCru), de = leiPreBaseNum(q.de);
+  const faltam = (q.faltam || []).map(Number);
+  let lo = null, hi = null;
+  if (n != null && de != null) { lo = Math.min(n, de); hi = Math.max(n, de); }
+  return (c.pre.mudancas || []).filter((m) => m.grupo === "remissao" && leiPreAceita(c, m)).map((m) => {
+    const l = (m.linhas || [])[0];
+    const txt = leiPreLinhaLimpa(L[(l || 1) - 1] || "").trim();
+    const mm = txt.match(/^[\s>*]*Art\.?\s*(\d{1,4})/i);
+    return mm ? { m, linha: l, txt, num: Number(mm[1]) } : null;
+  }).filter((x) => x && (faltam.indexOf(x.num) >= 0 || (lo != null && x.num >= lo && x.num <= hi)));
+}
+function leiPreNumCausaEl(c, q) {
+  const box = leiPreEl("div", "lei-pre-causa");
+  const causas = leiPreCausasNum(c, q);
+  if (!causas.length) { box.append(leiPreEl("p", "lei-pre-causa-tx", t("lei_pre_causa_nenhuma"))); return box; }
+  causas.slice(0, 3).forEach((x) => {
+    const p = leiPreEl("p", "lei-pre-causa-tx", t("lei_pre_causa_remissao", { t: x.txt.length > 90 ? x.txt.slice(0, 89) + "…" : x.txt, l: x.linha }));
+    const b = leiPreEl("button", "btn-min btn-min-ok", t("lei_pre_causa_bt"));
+    b.type = "button"; b.id = "btnLeiPreNaoJuntar_" + x.m.id;
+    b.onclick = () => {
+      c.decisoes[x.m.id] = false;
+      try { leiReg("gravar", "numeração: 'é artigo — não juntar'", "linha " + x.linha + " · " + x.txt.slice(0, 60)); } catch (e) {}
+      leiPrePintar();
+    };
+    const v = leiPreEl("button", "btn-min", t("lei_pre_causa_ver"));
+    v.type = "button";
+    v.onclick = () => leiPreIrPara(c, x.m, x.linha);
+    const acoes = leiPreEl("div", "lei-pre-causa-acoes");
+    acoes.append(b, v);
+    box.append(p, acoes);
+  });
+  return box;
+}
+/* o trecho do texto, sem caixa com rolagem: 2 linhas em volta; "mostrar mais linhas" abre 8 */
+function leiPreCtxInline(texto, linha, linhaFim) {
+  const box = leiPreEl("div", "lei-pre-ctxi");
+  let mais = false;
+  const pintar = () => {
+    box.innerHTML = "";
+    leiContextoDeLinhas(texto, linha, linhaFim || linha, mais ? 8 : 2, mais ? 8 : 2).forEach((x) => {
+      const s = leiPreEl("div", "lei-pre-ctxi-l" + (x.alvo ? " alvo" : "") + (String(x.texto || "").trim() ? "" : " vazia"));
+      s.append(leiPreEl("span", "lei-pre-ctxi-n", String(x.n)), document.createTextNode(String(x.texto || "").slice(0, 400)));
+      box.append(s);
+    });
+    const b = leiPreEl("button", "btn-min lei-pre-ctxi-bt", t(mais ? "lei_pre_ctx_menos" : "lei_pre_ctx_mais"));
+    b.type = "button";
+    b.onclick = () => { mais = !mais; pintar(); };
+    box.append(b);
+  };
+  pintar();
+  return box;
+}
+/* AS LINHAS COM CARA DE TÍTULO dentro de um artigo grande demais: onde um anexo pode começar */
+const LEI_PRE_ANX_PALAVRA = /\b(anex[oa]s?|lista|tabela|quadro|rela[çc][ãa]o|planilha|modelo|formul[áa]rio)\b/i;
+function leiPreAnexoCandidatos(c, res, arts, num) {
+  const T = String(res.texto || "").split("\n");
+  const i = arts.findIndex((a) => a.numCru === num || leiNumNormal(a.numCru) === leiNumNormal(num));
+  if (i < 0) return [];
+  const ini = arts[i].linha, fim = i + 1 < arts.length ? arts[i + 1].linha - 1 : T.length;
+  const out = [];
+  for (let k = ini; k < fim; k++) {
+    const s = String(T[k] || "").trim();
+    if (s.length < 6 || s.length > 180) continue;
+    if (/[;,]$/.test(s) || /^[a-zà-ú]/.test(s)) continue;
+    if (LEI_RE_INCISO.test(s) || LEI_RE_ALINEA.test(s) || LEI_RE_PARAGRAFO.test(s) || /^\d+(?:\.\d+)*\s*[–\-.)]/.test(s)) continue;
+    const ant = String(T[k - 1] || "").trim();
+    let nota = 0;
+    if (LEI_PRE_ANX_PALAVRA.test(s)) nota += 3;
+    if (/^ANEXO\b/.test(s)) nota += 3;
+    if (!ant) nota += 1;
+    if (nota >= 3) out.push({ txt: s, nota, linhaRes: k + 1 });
+  }
+  return out.sort((a, b) => b.nota - a.nota || a.linhaRes - b.linhaRes).slice(0, 4);
+}
+/* marca um anexo à mão: da linha do título (no texto ORIGINAL) até antes do próximo "Art." ou o fim */
+function leiPreAnexoManual(c, cand) {
+  const L = String(c.texto || "").split("\n");
+  const alvo = cand.txt.trim();
+  let ini = -1;
+  for (let k = 0; k < L.length; k++) { if (leiPreLinhaLimpa(L[k]).trim() === alvo) { ini = k; break; } }
+  if (ini < 0) return null;
+  let fim = L.length - 1;
+  for (let j = ini + 1; j < L.length; j++) { if (/^[\s>*]*Art\.?\s*\d/i.test(leiPreLinhaLimpa(L[j]))) { fim = j - 1; break; } }
+  while (fim > ini && !String(L[fim]).trim()) fim--;
+  const id = "anx:m" + (ini + 1);
+  if ((c.pre.mudancas || []).some((m) => m.id === id || (m.grupo === "anexo" && m.linhas[0] === ini + 1))) return null;
+  let tam = 0;
+  for (let j = ini; j <= fim; j++) tam += String(L[j]).length;
+  const mud = { id, grupo: "anexo", linhas: [ini + 1, fim + 1], titulo: alvo.slice(0, 140), tamanho: tam, decisaoPadrao: "separar", antes: alvo.slice(0, 140), depois: "", manual: true };
+  c.pre.mudancas.push(mud);
+  /* nasce escolhido como "guardar à parte" (a escolha que quem tocou fez), e não como "para você decidir" */
+  c.decisoes[id] = "separar";
+  try { leiReg("gravar", "anexo marcado à mão na revisão", alvo.slice(0, 80) + " · linhas " + (ini + 1) + "–" + (fim + 1)); } catch (e) {}
+  return mud;
+}
+function leiPreAnexoAcoesEl(c, res, arts, p) {
+  const box = leiPreEl("div", "lei-pre-causa");
+  const cs = leiPreAnexoCandidatos(c, res, arts, p.num);
+  if (!cs.length) { box.append(leiPreEl("p", "lei-pre-causa-tx", t("lei_pre_anx_nada"))); return box; }
+  box.append(leiPreEl("p", "lei-pre-causa-tx", t("lei_pre_anx_tit")));
+  cs.forEach((x, k) => {
+    const lin = leiPreEl("div", "lei-pre-causa-acoes");
+    const b = leiPreEl("button", "btn-min btn-min-ok", t("lei_pre_anx_bt"));
+    b.type = "button"; b.id = "btnLeiPreAnexoDaqui_" + k;
+    b.onclick = () => {
+      const m = leiPreAnexoManual(c, x);
+      leiPreAvisar(m ? t("lei_pre_anx_ok", { t: m.titulo, a: m.linhas[0], b: m.linhas[1] }) : t("lei_pre_anx_ja"));
+      leiPrePintar();
+    };
+    lin.append(b, leiPreEl("span", "lei-pre-causa-tit", "«" + (x.txt.length > 110 ? x.txt.slice(0, 109) + "…" : x.txt) + "»"));
+    box.append(lin);
+  });
+  return box;
+}
+
 function leiPreSeqEl(arts, q) {
   const box = leiPreEl("div", "lei-pre-seq");
   const i = (arts || []).findIndex((a) => a.linha === q.linha);
@@ -7832,7 +7967,8 @@ function leiPreComoPintar(c, res, arts) {
     .forEach(([k, ch]) => { if (div[k]) partes.push(t(ch, { n: div[k] })); });
   if (como.anexos.length) {
     const roms = como.anexos.map((a) => a.rom).filter(Boolean);
-    partes.push(t("lei_como_anexos", { n: como.anexos.length, f: roms.length ? roms[0] + (roms.length > 1 ? "–" + roms[roms.length - 1] : "") : "" }));
+    /* (19.157.0) anexo sem número romano ("Lista de serviços…"): sem os parênteses vazios */
+    partes.push(roms.length ? t("lei_como_anexos", { n: como.anexos.length, f: roms[0] + (roms.length > 1 ? "–" + roms[roms.length - 1] : "") }) : t("lei_como_anexos_sem", { n: como.anexos.length }));
   }
   est.textContent = partes.join(" · ");
   box.append(cab, est);
@@ -7842,6 +7978,8 @@ function leiPreComoPintar(c, res, arts) {
       const li = document.createElement("li");
       li.className = "lei-como-" + p.gravidade;
       li.textContent = (p.gravidade === "grave" ? "✖ " : p.gravidade === "aviso" ? "⚠ " : "· ") + leiComoTexto(p);
+      /* (19.157.0) o artigo grande demais: onde um anexo pode começar, com "separar daqui" */
+      if ((p.tipo === "gigante" || p.tipo === "longo") && p.num) { try { li.append(leiPreAnexoAcoesEl(c, res, arts, p)); } catch (e) {} }
       ul.append(li);
     });
     box.append(ul);
@@ -8086,11 +8224,12 @@ function leiPrePintar() {
       ord.slice(0, 12).forEach((q) => {
         const p = leiNumeracaoLinhas([q])[0];
         const li = document.createElement("li");
-        li.className = p.gravidade;
-        li.textContent = p.texto;
+        li.className = "lei-pre-numq " + p.gravidade;
+        li.append(leiPreEl("div", "lei-pre-numq-tit", (p.gravidade === "grave" ? "✖ " : "⚠ ") + p.texto));
         li.append(leiPreSeqEl(arts, q));
-        /* (v19.132.0) VER NO TEXTO: o ponto apontado com as linhas em volta — antes só havia a frase */
-        li.append(leiDupContextoEl(res.texto, { linha: q.linha, linhaFim: q.linhaFim || q.linha }));
+        /* (19.157.0) a causa provável, com a correção na mão; e o trecho do texto ali mesmo (sem caixa com rolagem) */
+        li.append(leiPreNumCausaEl(c, q));
+        li.append(leiPreCtxInline(res.texto, q.linha, q.linhaFim || q.linha));
         ul.append(li);
       });
       if (ord.length > 12) {

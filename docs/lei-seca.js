@@ -97,7 +97,11 @@ function leiNumNormal(bruto) {
  * assim que a lei numera artigo acrescentado por emenda, e ordenar como
  * texto ("10" antes de "5") embaralharia a lei inteira. */
 function leiNumOrdem(num) {
-  const n = leiNumNormal(num);
+  /* (19.157.0) o ordinal ANTES do sufixo não conta para a ORDEM: "8o-A" e "8º-B" (o Planalto escreve assim) são o 8-A e
+   * o 8-B. Sem isto os dois ficavam sem ordem (999999): o Art. 9 que vem depois parecia voltar na numeração, era lido
+   * como remissão, juntado à linha de cima — e sumia da lei. Só a ORDEM: a identidade do artigo (leiNumNormal, chave de
+   * notas, marcador e vínculos já guardados) continua a mesma. */
+  const n = leiNumNormal(num).replace(/(\d)[ºO°ª](?=-)/, "$1");
   const m = n.match(/^(\d+)(?:-([A-Z]))?(?:-([A-Z]))?$/);
   if (!m) return 999999;
   return Number(m[1]) * 100 + (m[2] ? (m[2].charCodeAt(0) - 64) : 0) + (m[3] ? (m[3].charCodeAt(0) - 64) / 100 : 0);
@@ -1244,8 +1248,14 @@ const LEI_RE_ANEXO_SOZINHO = /^\s*Anexo\s+([IVXLCDM]+|\d{1,3}|[úu]nico)\s*$/;
 /* (v19.23.0) "A N E X O I I": o PDF da LC 15/2009 de Caruaru traz os títulos dos Anexos I a IX com as letras
  * espaçadas — não reconhecidos, as ~11 mil linhas de tabela iam parar dentro do último artigo */
 const LEI_RE_ANEXO_ESPACADO = /^(\s*)A\s+N\s+E\s+X\s+O\s+((?:[IVXLCDM]\s*)+|Ú\s*N\s*I\s*C\s*O|\d(?:\s*\d){0,2})\s*$/;
+/* (19.157.0) O ANEXO COM NOME: "Lista de serviços anexa à Lei Complementar nº 116, de 31 de julho de 2003." — é assim
+ * que o Planalto intitula a lista da LC 116 (e "Tabela anexa à Lei…", "Quadro anexo ao Decreto…"). Sem reconhecer, as
+ * ~200 linhas da lista iam parar dentro do último artigo (o Art. 10 com 29 mil caracteres). Só vale como linha de
+ * TÍTULO: começa com a palavra da lista e é curta — "no subitem 7.02 da lista anexa" no meio de um inciso não é. */
+const LEI_RE_ANEXO_NOMEADO = /^\s*(?:Lista|Tabela|Quadro|Rela[çc][ãa]o|Rol|Mapa|Planilha|Modelo|Formul[áa]rio)\b[^\n]{0,80}?\banex[ao]s?\s+(?:[àa]|ao|aos|[àa]s)\s+(?:presente\s+|esta\s+|este\s+)?(?:Lei|Decreto|Medida|Resolu[çc][ãa]o|Emenda|Portaria|Instru[çc][ãa]o)\b[^\n]{0,120}$/i;
+function leiEhAnexoNomeado(x) { const s = String(x || ""); return s.trim().length <= 220 && LEI_RE_ANEXO_NOMEADO.test(s); }
 function leiEhTituloDeAnexo(x) {
-  return LEI_RE_ANEXO_MAIUSCULO.test(x) || LEI_RE_ANEXO_SOZINHO.test(x) || LEI_RE_ANEXO_ESPACADO.test(x);
+  return LEI_RE_ANEXO_MAIUSCULO.test(x) || LEI_RE_ANEXO_SOZINHO.test(x) || LEI_RE_ANEXO_ESPACADO.test(x) || leiEhAnexoNomeado(x);
 }
 const LEI_RE_INVISIVEIS = /[­​-‍⁠﻿]/g;
 
@@ -1286,7 +1296,7 @@ function leiLinhaEstrutural(linha) {
   return LEI_RE_ARTIGO.test(s) || LEI_RE_DIVISAO.test(s)
     || LEI_RE_PARAGRAFO.test(s) || LEI_RE_INCISO.test(s) || LEI_RE_ALINEA.test(s)
     || LEI_RE_ANOTACAO_SOZINHA.test(s)
-    || LEI_RE_ANEXO_MAIUSCULO.test(s) || LEI_RE_ANEXO_SOZINHO.test(s);
+    || LEI_RE_ANEXO_MAIUSCULO.test(s) || LEI_RE_ANEXO_SOZINHO.test(s) || leiEhAnexoNomeado(s);
 }
 
 /* números de página: só as formas que não deixam dúvida ("Página 3 de 296",
@@ -1992,7 +2002,7 @@ function leiPreprocessar(texto, opc) {
   efetiva.forEach((x, i) => {
     if (remover[i + 1] || protegidas.has(i + 1)) return;
     if (opc && opc.semAnexos) return;     /* lei que ALTERA: os anexos são lidos por leiAnexosDaAlteradora */
-    const m = x.match(LEI_RE_ANEXO_MAIUSCULO) || x.match(LEI_RE_ANEXO_SOZINHO);
+    const m = x.match(LEI_RE_ANEXO_MAIUSCULO) || x.match(LEI_RE_ANEXO_SOZINHO) || (leiEhAnexoNomeado(x) ? [x] : null);
     if (m) anx.push(i);
   });
   anx.forEach((ini, k) => {
@@ -3398,6 +3408,12 @@ function leiNumeracaoTrecho(artigos) {
         for (let x = E[p] + 1; x < B[i] && faltam.length < 8; x++) faltam.push(x);
         problemas.push({ tipo: "salto", gravidade: d - 1 >= 3 && !recorte ? "grave" : "leve", num: a.num,
           numCru: a.numCru, linha: a.linha, de: A[p].numCru, faltam, nFaltam: d - 1 });
+      } else if (d === 1 && a.ordem % 100 !== 0) {
+        /* (19.157.0) ARTIGO COM LETRA SEM O ARTIGO-BASE: depois do 2º vem o 3º-A, sem o 3º. É a assinatura da letra lida
+         * errado ("Art. 3º - A Dívida…" lido como 3º-A) — o 3º-A só existe depois do 3º */
+        /* num RECORTE (só alguns artigos da lei), faltar o artigo-base é normal: vale como os saltos, leve */
+        problemas.push({ tipo: "sem_base", gravidade: recorte ? "leve" : "grave", num: a.num, numCru: a.numCru, linha: a.linha,
+          de: A[p].numCru, faltam: [B[i]], nFaltam: 1 });
       } else if (d < 0) {
         const recomeco = B[i] <= 2;
         problemas.push({ tipo: recomeco ? "recomeco" : "volta", gravidade: recomeco ? "leve" : "grave",
@@ -3475,7 +3491,9 @@ function leiDiagnosticarLei(texto, opc) {
     const a = porLinha[p.linha] || daLinha(p.linha);
     return Object.assign({}, p, { indice: a ? a.indice : -1, linhaFim: a ? a.linhaFim : p.linha });
   };
-  num.problemas.forEach((p) => { itens.push(comIndice(p)); });
+  /* (19.157.0) o "sem_base" da numeração não entra aqui: no mapa, o "sufixo_sem_base" (logo acima) já aponta o mesmo,
+   * com os vizinhos conferidos */
+  num.problemas.forEach((p) => { if (p.tipo !== "sem_base" || !itens.some((x) => x.tipo === "sufixo_sem_base" && x.linha === p.linha)) itens.push(comIndice(p)); });
   const numeracaoInfo = alteradora ? numReal.problemas.map((p) => Object.assign(comIndice(p), { gravidade: "leve" })) : [];
 
   itens.sort((x, y) => x.linha - y.linha);
