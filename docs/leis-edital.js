@@ -46,6 +46,282 @@ function ledDiscursivas(edId) {
     .map((p) => ({ id: p.id, tema: p.tema || "", disc: p.disc || "", txt: [p.espelho, p.modelo].filter(Boolean).join("\n") }));
 }
 
+/* =====================================================================
+ * (19.164.0) A INTEGRIDADE DA LISTA "FALTAM NA BIBLIOTECA"
+ *
+ * "Abri e havia 2 leis pendentes; abri de novo e havia 4. Qual o critério, e como não deixar nada de fora?"
+ * O que se viu no edital do ISS: a lista mudava sem dizer por quê (uma lei incluída saiu, três das discursivas
+ * entraram); "LGPD" num tópico de Informática não contava (sigla solta não vira lacuna); "LEF" não se ligava à Lei
+ * 6.830 que estava na biblioteca; e a EC 131/2023 aparecia como "falta" mas já está dentro da Constituição consolidada.
+ *  · O CATÁLOGO (abaixo): siglas e nomes populares das leis mais cobradas, com espécie e número. Uma menção pelo nome
+ *    ("LGPD", "Estatuto da Cidade", "Lei de Improbidade") vale como a lei: casa com a da biblioteca ou vira lacuna;
+ *  · A LEI QUE SÓ ALTERA OUTRA: se uma lei da biblioteca traz "(Redação dada pela EC 131/2023)" (ou a fila de
+ *    alterações tem a norma), a EC fica em "já dentro de leis que você tem", e não em "faltam";
+ *  · A ORIGEM DE CADA ITEM (edital, discursiva, IA, sigla) e "O QUE MUDOU DESDE A ÚLTIMA VEZ" (entrou / saiu e por quê).
+ * ===================================================================== */
+const LED_CATALOGO = [
+  ["Lei 13.709/2018", ["LGPD", "Lei Geral de Proteção de Dados", "Lei Geral de Proteção aos Dados"]],
+  ["Lei 6.830/1980", ["LEF", "Lei de Execução Fiscal", "Lei de Execuções Fiscais"]],
+  ["Lei Complementar 101/2000", ["LRF", "Lei de Responsabilidade Fiscal"]],
+  ["Lei 8.429/1992", ["LIA", "Lei de Improbidade Administrativa", "Lei de Improbidade"]],
+  ["Lei 5.172/1966", ["CTN", "Código Tributário Nacional"]],
+  ["Lei 13.105/2015", ["CPC", "Código de Processo Civil"]],
+  ["Decreto-Lei 3.689/1941", ["CPP", "Código de Processo Penal"]],
+  ["Decreto-Lei 2.848/1940", ["Código Penal"]],
+  ["Lei 10.406/2002", ["Código Civil"]],
+  ["Decreto-Lei 5.452/1943", ["CLT", "Consolidação das Leis do Trabalho"]],
+  ["Lei 8.078/1990", ["CDC", "Código de Defesa do Consumidor"]],
+  ["Lei 8.069/1990", ["ECA", "Estatuto da Criança e do Adolescente"]],
+  ["Decreto-Lei 4.657/1942", ["LINDB", "Lei de Introdução às Normas do Direito Brasileiro"]],
+  ["Lei 10.257/2001", ["Estatuto da Cidade"]],
+  ["Lei 14.133/2021", ["Nova Lei de Licitações", "Lei de Licitações e Contratos Administrativos", "Lei de Licitações"]],
+  ["Lei 9.784/1999", ["Lei do Processo Administrativo", "Lei de Processo Administrativo"]],
+  ["Lei 12.527/2011", ["LAI", "Lei de Acesso à Informação"]],
+  ["Lei 12.846/2013", ["Lei Anticorrupção"]],
+  ["Lei Complementar 123/2006", ["Estatuto da Microempresa", "Lei do Simples Nacional", "Lei Geral da Microempresa"]],
+  ["Lei Complementar 87/1996", ["Lei Kandir"]],
+  ["Lei Complementar 116/2003", ["Lei Geral do ISS"]],
+  ["Lei 8.987/1995", ["Lei de Concessões", "Lei das Concessões"]],
+  ["Lei 4.717/1965", ["Lei da Ação Popular", "Lei de Ação Popular"]],
+  ["Lei 7.347/1985", ["LACP", "Lei da Ação Civil Pública"]],
+  ["Lei 13.869/2019", ["Lei de Abuso de Autoridade"]],
+  ["Lei 9.613/1998", ["Lei de Lavagem de Dinheiro"]],
+  ["Lei 8.137/1990", ["Lei dos Crimes contra a Ordem Tributária"]],
+  ["Lei 7.210/1984", ["LEP", "Lei de Execução Penal"]],
+  ["Lei 12.965/2014", ["Marco Civil da Internet"]],
+  ["Lei 12.016/2009", ["Lei do Mandado de Segurança"]],
+  ["Lei 8.112/1990", ["Regime Jurídico dos Servidores Públicos Civis da União"]],
+];
+function ledSemAcento(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim(); }
+const ledCatIdx = (() => {
+  const siglas = new Map(), nomes = [];
+  LED_CATALOGO.forEach(([canon, ns]) => ns.forEach((x) => {
+    if (/^[A-Z]{2,6}$/.test(x)) siglas.set(x, canon); else nomes.push([ledSemAcento(x), canon, x]);
+  }));
+  nomes.sort((a, b) => b[0].length - a[0].length);
+  return { siglas, nomes };
+})();
+/* a lei do catálogo para um rótulo ("LGPD", "Estatuto da Cidade", "a Lei de Improbidade") — "" se não for nenhuma */
+function ledCanon(rot) {
+  const s = String(rot || "").trim();
+  if (ledCatIdx.siglas.has(s)) return ledCatIdx.siglas.get(s);
+  const n = ledSemAcento(s).replace(/^(a|da|na|pela|nova)\s+/, "");
+  const x = ledCatIdx.nomes.find(([k]) => k === n || k === "nova " + n);
+  return x ? x[1] : "";
+}
+/* as menções do catálogo num texto: siglas exatas (maiúsculas) e nomes (sem diferenciar acento/caixa) */
+function ledCatalogoNoTexto(texto) {
+  const s = String(texto || "");
+  const out = [], vistos = new Set();
+  const por = (achado, canon) => { if (vistos.has(canon + "|" + achado)) return; vistos.add(canon + "|" + achado); out.push({ achado, canon }); };
+  ledCatIdx.siglas.forEach((canon, sg) => { if (new RegExp("(?:^|[^A-Za-zÀ-ú])" + sg + "(?![A-Za-zÀ-ú])").test(s)) por(sg, canon); });
+  const sa = ledSemAcento(s);
+  const tomados = [];
+  ledCatIdx.nomes.forEach(([k, canon, orig]) => {
+    let i = sa.indexOf(k);
+    while (i >= 0) {
+      const fim = i + k.length;
+      const antes = i === 0 || /[^a-z0-9]/.test(sa[i - 1]), depois = fim >= sa.length || /[^a-z0-9]/.test(sa[fim]);
+      /* um nome mais longo já tomou este trecho ("Nova Lei de Licitações" antes de "Lei de Licitações") */
+      if (antes && depois && !tomados.some(([a, b]) => i >= a && fim <= b)) { tomados.push([i, fim]); por(orig, canon); }
+      i = sa.indexOf(k, i + 1);
+    }
+  });
+  return out;
+}
+/* o rótulo da lacuna: o número oficial e, entre parênteses, como o texto a chamou */
+function ledRotuloLacuna(rot) {
+  const c = ledCanon(rot);
+  return c ? c + " (" + String(rot).trim() + ")" : rot;
+}
+/* (item 2) as lacunas que JÁ ESTÃO DENTRO de uma lei da biblioteca (a norma alterou essa lei, e o texto consolidado
+ * dela já traz a mudança): saem de "faltam" e vão para M.cobertas, com o nome da lei que as contém */
+function ledSepararCobertas(M, lista) {
+  if (!M || typeof leiAlteradorasDe !== "function" || typeof leiChaveDeEspecieNumero !== "function") { if (M) M.cobertas = M.cobertas || []; return M; }
+  const por = new Map();
+  (lista || []).forEach((l) => {
+    let ks = null;
+    try { ks = leiAlteradorasDe(l); } catch (e) { ks = null; }
+    (ks || new Set()).forEach((k) => { if (!por.has(k)) por.set(k, []); por.get(k).push({ id: l.id, nome: l.nome }); });
+  });
+  const cob = [];
+  M.lacunas = (M.lacunas || []).filter((G) => {
+    const k = leiChaveDeEspecieNumero(String(G.rotulo).replace(/\s*\([^)]*\)\s*$/, ""));
+    const dentro = k ? por.get(k) : null;
+    if (!dentro || !dentro.length) return true;
+    G.dentroDe = dentro;
+    cob.push(G);
+    return false;
+  });
+  M.cobertas = cob;
+  return M;
+}
+/* (item 3) de onde veio cada item */
+function ledOrigens(G) {
+  const o = [];
+  if ((G.topicos || []).length) o.push("edital");
+  if ((G.ds || []).length) o.push("discursiva");
+  if (G.ia || G.soIa) o.push("ia");
+  if ((G.apelidos || []).length) o.push("sigla");
+  if (G.porNome) o.push("nome");
+  return o;
+}
+/* (item 3) O QUE MUDOU DESDE A ÚLTIMA VEZ que a tela foi aberta: as lacunas que entraram e as que saíram, com o motivo */
+const LED_VISTO_CH = "eac_led_visto";   /* {edId: {em, itens: {chave: {r: rótulo, o: [origens]}}}} */
+let ledDif = null;
+function ledDiferenca(M) {
+  if (!M) return null;
+  const todos = ledLerMapa(LED_VISTO_CH);
+  const ant = todos[String(M.edId)] || null;
+  const cur = {};
+  (M.lacunas || []).filter((G) => !G.dispensada).forEach((G) => { cur[G.chave] = { r: G.rotulo, o: ledOrigens(G) }; });
+  todos[String(M.edId)] = { em: new Date().toISOString(), itens: cur };
+  ledGravarMapa(LED_VISTO_CH, todos);
+  if (!ant || !ant.itens) return null;
+  const lista = typeof leisLista === "function" ? leisLista() : [];
+  const entraram = Object.keys(cur).filter((k) => !ant.itens[k]).map((k) => ({ chave: k, rotulo: cur[k].r, origens: cur[k].o }));
+  const sairam = Object.keys(ant.itens).filter((k) => !cur[k]).map((k) => {
+    const r = ant.itens[k].r;
+    let motivo = "nao_citada";
+    const cobre = (M.cobertas || []).find((G) => G.chave === k);
+    const dispensada = (M.lacunas || []).find((G) => G.chave === k && G.dispensada);
+    let lei = null;
+    try { lei = leiCasarRotulo(String(r).replace(/\s*\([^)]*\)\s*$/, ""), lista) || leiCasarRotulo(r, lista); } catch (e) { lei = null; }
+    if (!lei && /^nome:/.test(k)) lei = ledCasarPorNome(r, lista);
+    if (cobre) motivo = "coberta"; else if (dispensada) motivo = "dispensada"; else if (lei) motivo = "incluida";
+    return { chave: k, rotulo: r, motivo, lei: lei ? lei.nome : (cobre && cobre.dentroDe[0] ? cobre.dentroDe[0].nome : "") };
+  });
+  if (!entraram.length && !sairam.length) return { em: ant.em, entraram, sairam, igual: true };
+  return { em: ant.em, entraram, sairam };
+}
+function ledDifEl(D) {
+  if (!D || D.igual) return null;
+  const box = ledEl("div", "led-dif");
+  box.id = "ledDif";
+  const d = String(D.em || "").slice(0, 10).split("-").reverse().join("/");
+  box.append(ledEl("div", "led-dif-tit", t("led_dif_tit", { d })));
+  D.entraram.forEach((x) => box.append(ledEl("div", "led-dif-lin led-dif-mais", "＋ " + x.rotulo + " — " + x.origens.map((o) => t("led_orig_" + o)).join(", "))));
+  D.sairam.forEach((x) => box.append(ledEl("div", "led-dif-lin led-dif-menos", "− " + x.rotulo + " — " + t("led_dif_saiu_" + x.motivo, { l: x.lei || "" }))));
+  return box;
+}
+/* (item 2) a seção "já dentro de leis que você tem" (recolhida) */
+function ledCobertasEl(M) {
+  const cob = (M && M.cobertas) || [];
+  if (!cob.length) return null;
+  const det = ledEl("details", "led-lig led-cob");
+  det.id = "ledCob";
+  det.append(ledEl("summary", "led-lig-tit", t("led_cob_tit", { n: cob.length })));
+  det.append(ledEl("p", "nota", t("led_cob_expl")));
+  cob.forEach((G) => {
+    const lin = ledEl("div", "led-lac-lin");
+    lin.id = "ledCob_" + ledIdSeguro(G.chave);
+    const tx = ledEl("div", "led-lei-txt");
+    tx.append(ledEl("div", "led-lei-nome", G.rotulo));
+    tx.append(ledEl("div", "led-lei-meta", t("led_cob_dentro", { l: G.dentroDe.map((x) => x.nome).join("; ") })
+      + " · " + ledOrigens(G).map((o) => t("led_orig_" + o)).join(", ")));
+    lin.append(tx);
+    det.append(lin);
+  });
+  return det;
+}
+
+/* =====================================================================
+ * (19.164.0) A LEI CITADA PELO NOME, MESMO SEM NÚMERO
+ *
+ * "A recomendação das leis deve citar as leis que foram citadas nominalmente no edital." No ISS: "Código Tributário
+ * Municipal" (a LC 15/2009 de Caruaru está na biblioteca com esse nome, e o tópico não se ligava a ela). Edital
+ * municipal e estadual cita assim: "Lei Orgânica do Município", "Estatuto dos Servidores Públicos do Município",
+ * "Código de Obras", "Constituição do Estado de Pernambuco" — sem número nenhum.
+ *  · o NOME: "Código …", "Estatuto …", "Lei Orgânica …", "Lei Geral …", "Lei de/da/do …", "Regimento Interno …",
+ *    "Constituição do Estado …" seguidos de palavras com maiúscula (o nome próprio). "lei municipal", "lei específica",
+ *    "constituição do crédito" não são nome de lei e ficam de fora;
+ *  · casa com a biblioteca pelo NOME da lei (e o apelido e o começo do texto): todas as palavras do nome citado têm de
+ *    estar lá; havendo mais de uma, a de nome mais justo; empate, não liga;
+ *  · sem lei com esse nome: lacuna "citada pelo nome" (chave "nome:…").
+ * ===================================================================== */
+const LED_RE_NOME_LEI = /(?:^|[^A-Za-zÀ-ú])((?:C[óo]digo|Estatuto|Lei\s+Org[âa]nica|Lei\s+Geral|Lei\s+(?:de|da|do|das|dos)|Regimento\s+Interno|Constitui[çc][ãa]o\s+(?:do\s+Estado|Estadual))(?:\s+(?:de|da|do|das|dos|e|para|à|ao|aos|às)?\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ú]+){1,7})/g;
+const LED_NOME_VAZIAS = new Set(["de", "da", "do", "das", "dos", "e", "para", "a", "o", "as", "os", "ao", "aos", "lei"]);
+function ledNomesNoTexto(texto) {
+  const out = [];
+  const re = new RegExp(LED_RE_NOME_LEI.source, "g");
+  let m;
+  while ((m = re.exec(String(texto || ""))) !== null) {
+    /* "Código Tributário Municipal e Lei Orgânica do Município": o "e" antes de outro nome de lei separa os dois
+     * (e "Estatuto da Criança e do Adolescente" continua um nome só) */
+    m[1].replace(/\s+/g, " ").trim().split(/\s+e\s+(?=(?:Lei|C[óo]digo|Estatuto|Regimento|Constitui)\b)/).forEach((parte) => {
+      const nome = parte.replace(/\s+(?:de|da|do|das|dos|e|para|à|ao|aos|às)$/i, "");
+      /* "Lei de" / "Código de" sem nome próprio depois não é nome de lei */
+      const resto = nome.split(" ").slice(1).filter((w) => !LED_NOME_VAZIAS.has(ledSemAcento(w)));
+      if (!resto.length) return;
+      if (/^Lei\s+(?:de|da|do|das|dos)\s/i.test(nome) && resto.length < 2) return;
+      if (out.indexOf(nome) < 0) out.push(nome);
+    });
+  }
+  return out;
+}
+function ledPalavrasNome(s) { return ledSemAcento(s).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !LED_NOME_VAZIAS.has(w)); }
+/* a lei da biblioteca com esse nome (todas as palavras do nome citado no nome/apelido/começo do texto dela) */
+function ledCasarPorNome(nome, lista) {
+  const ps = ledPalavrasNome(nome);
+  if (ps.length < 2) return null;
+  const cands = [];
+  (lista || []).forEach((l) => {
+    const alvo = new Set(ledPalavrasNome([l.nome, l.apelido, String(l.texto || "").slice(0, 600)].filter(Boolean).join(" ")));
+    if (!ps.every((w) => alvo.has(w))) return;
+    const doNome = new Set(ledPalavrasNome([l.nome, l.apelido].filter(Boolean).join(" ")));
+    const noNome = ps.every((w) => doNome.has(w));
+    cands.push({ l, noNome, sobra: doNome.size });
+  });
+  if (!cands.length) return null;
+  cands.sort((a, b) => (b.noNome - a.noNome) || (a.sobra - b.sobra));
+  if (cands.length > 1 && cands[0].noNome === cands[1].noNome && cands[0].sobra === cands[1].sobra) return null;
+  return cands[0].l;
+}
+function ledChaveNome(nome) { const ps = ledPalavrasNome(nome); return ps.length >= 2 ? "nome:" + ps.join("_") : ""; }
+
+/* =====================================================================
+ * (19.164.0) "LEIS CITADAS NO EDITAL": todas as leis que o edital cita, por número ou pelo nome, numa lista só, cada
+ * uma com a situação — na biblioteca, falta, já dentro de outra lei, dispensada — e os tópicos que a citam. É a
+ * conferência de que nada ficou de fora: o que está nas disciplinas e o que está em "faltam" sai daqui.
+ * ===================================================================== */
+const LED_CIT_ORDEM = { falta: 0, dispensada: 1, coberta: 2, biblioteca: 3 };
+function ledCitadasSituacao(M) {
+  const lac = {};
+  (M.lacunas || []).forEach((G) => { lac[G.chave] = G; });
+  const cob = {};
+  (M.cobertas || []).forEach((G) => { cob[G.chave] = G; });
+  return (M.citadasEdital || []).map((C) => {
+    let st = "biblioteca", dentro = "";
+    if (!C.leiId) {
+      if (cob[C.chave]) { st = "coberta"; dentro = cob[C.chave].dentroDe.map((x) => x.nome).join("; "); }
+      else if (lac[C.chave] && lac[C.chave].dispensada) st = "dispensada";
+      else st = "falta";
+    }
+    return Object.assign({}, C, { st, dentro });
+  }).sort((a, b) => LED_CIT_ORDEM[a.st] - LED_CIT_ORDEM[b.st] || String(a.rotulo).localeCompare(String(b.rotulo)));
+}
+function ledCitadasEl(M) {
+  const L = ledCitadasSituacao(M);
+  if (!L.length) return null;
+  const nB = L.filter((x) => x.st === "biblioteca" || x.st === "coberta").length, nF = L.filter((x) => x.st === "falta").length;
+  const det = ledEl("details", "led-lig led-cit");
+  det.id = "ledCit";
+  det.append(ledEl("summary", "led-lig-tit", t("led_cit_tit", { n: L.length, b: nB, f: nF })));
+  det.append(ledEl("p", "nota", t("led_cit_expl")));
+  L.forEach((x) => {
+    const lin = ledEl("div", "led-cit-lin led-cit-" + x.st);
+    lin.id = "ledCit_" + ledIdSeguro(x.chave);
+    lin.append(ledEl("span", "led-cit-ic", x.st === "falta" ? "⚠" : x.st === "dispensada" ? "–" : "✓"));
+    const tx = ledEl("div", "led-lei-txt");
+    tx.append(ledEl("div", "led-lei-nome", x.rotulo));
+    tx.append(ledEl("div", "led-lei-meta", t("led_cit_st_" + x.st, { l: x.dentro }) + " · " + t("led_cit_em", { n: x.topicos.length, t: x.topicos.slice(0, 3).map((T) => T.nome).join("; ") + (x.topicos.length > 3 ? "…" : "") })
+      + (x.porNome ? " · " + t("led_orig_nome") : "")));
+    lin.append(tx);
+    det.append(lin);
+  });
+  return det;
+}
+
 function ledEdital(id) {
   const lista = typeof editais !== "undefined" ? editais : [];
   return lista.find((e) => String(e.id) === String(id)) || null;
@@ -172,11 +448,22 @@ function ledModelo(edId) {
    * Complementar 116/2003" são a mesma); e, para o pedido à IA, o que cada tópico cita */
   const lac = {};
   const citas = [];
-  const lacunar = (rot, D0, tp, num) => {
-    const k = ledChaveLacuna(rot);
+  /* (19.164.0) toda lei que o EDITAL cita (por número ou pelo nome): a conferência "leis citadas no edital" */
+  const cit = {};
+  const citar = (chave, rot, l, D0, tp, porNome) => {
+    if (!chave) return;
+    const C = cit[chave] = cit[chave] || { chave, rotulo: l ? l.nome : rot, leiId: l ? l.id : "", topicos: [], porNome: false };
+    if (!C.leiId && String(rot).length > String(C.rotulo).length) C.rotulo = rot;
+    if (porNome) C.porNome = true;
+    if (!C.topicos.some((x) => x.nome === tp.nome && x.disciplina === D0.nome)) C.topicos.push({ disciplina: D0.nome, nome: tp.nome });
+  };
+  const lacunar = (rot, D0, tp, num, apelido, chaveFixa) => {
+    const k = chaveFixa || ledChaveLacuna(rot);
     if (!k) return;
     const G = lac[k] = lac[k] || { chave: k, rotulo: rot, topicos: [], disciplinas: [], peso: 0, nums: new Set() };
+    if (apelido) { G.apelidos = G.apelidos || []; if (G.apelidos.indexOf(apelido) < 0) G.apelidos.push(apelido); }
     if (String(rot).length > String(G.rotulo).length) G.rotulo = rot;
+    if (chaveFixa) G.porNome = true;
     if (!G.topicos.some((x) => x.disciplina === D0.nome && x.nome === tp.nome)) { G.topicos.push({ disciplina: D0.nome, nome: tp.nome, peso: tp.peso || 0 }); G.peso += tp.peso || 0; }
     if (G.disciplinas.indexOf(D0.nome) < 0) G.disciplinas.push(D0.nome);
     if (num) G.nums.add(leiNumNormal(num));
@@ -186,6 +473,9 @@ function ledModelo(edId) {
     if (!casados.has(k)) { let l = null; try { l = leiCasarRotulo(k, lista); } catch (x) { l = null; } casados.set(k, l); }
     return casados.get(k);
   };
+  /* (19.164.0) a sigla ou o nome popular ("LEF", "Estatuto da Cidade") casa pela lei do catálogo */
+  const casarCat = (rot) => casar(rot) || (ledCanon(rot) ? casar(ledCanon(rot)) : null);
+  const mencoesDe = (txt) => ledMencoes(txt).concat(ledCatalogoNoTexto(txt).map((x) => x.achado)).filter((r, i, a) => a.indexOf(r) === i);
   /* (19.159.0) OS FUNDAMENTOS DAS DISCURSIVAS: as leis e os artigos citados no espelho e na resposta modelo dos temas
    * guardados deste edital entram na lei (artigos cobrados), na disciplina do tema; a lei citada que não está na
    * biblioteca vira lacuna ("citada em N discursiva(s)"). O tema não é tópico do edital: não liga lei a nada. */
@@ -193,11 +483,13 @@ function ledModelo(edId) {
   const discNomes = new Set((L.disciplinas || []).filter((d) => !d.inativa).map((d) => ledNormDisc(d.nome)));
   const dsDe = (nome) => dsTodas.filter((q) => ledNormDisc(q.disc) === ledNormDisc(nome));
   const dsSoltas = dsTodas.filter((q) => !discNomes.has(ledNormDisc(q.disc)));
-  const lacunarDs = (rot, nomeD, q, num) => {
-    const k = ledChaveLacuna(rot);
+  const lacunarDs = (rot, nomeD, q, num, apelido, chaveFixa) => {
+    const k = chaveFixa || ledChaveLacuna(rot);
     if (!k) return;
     const G = lac[k] = lac[k] || { chave: k, rotulo: rot, topicos: [], disciplinas: [], peso: 0, nums: new Set() };
+    if (apelido) { G.apelidos = G.apelidos || []; if (G.apelidos.indexOf(apelido) < 0) G.apelidos.push(apelido); }
     if (String(rot).length > String(G.rotulo).length) G.rotulo = rot;
+    if (chaveFixa) G.porNome = true;
     G.ds = G.ds || [];
     if (!G.ds.some((x) => x.id === q.id)) G.ds.push({ id: q.id, tema: q.tema, disciplina: nomeD });
     if (nomeD && G.disciplinas.indexOf(nomeD) < 0) G.disciplinas.push(nomeD);
@@ -206,20 +498,28 @@ function ledModelo(edId) {
   const lerDs = (q, D) => {
     const achadas = {};
     ledCitacoes(q.txt).forEach((c) => {
-      let lei = c.rotulo ? casar(c.rotulo) : null;
+      let lei = c.rotulo ? casarCat(c.rotulo) : null;
       if (!lei || !leiTemArtigo(lei, c.num)) {
         let r = null;
         try { r = leiResolverCitacao(c, lista, []); } catch (x) { r = null; }
         lei = r && r.lei;
       }
-      if (!lei && c.rotulo && !casar(c.rotulo)) { lacunarDs(c.rotulo, D.nome, q, c.num); return; }
+      if (!lei && c.rotulo && !casarCat(c.rotulo)) { lacunarDs(ledRotuloLacuna(c.rotulo), D.nome, q, c.num, ledCanon(c.rotulo) ? c.rotulo : ""); return; }
       if (!lei || !leiTemArtigo(lei, c.num)) return;
       (achadas[lei.id] = achadas[lei.id] || new Set()).add(leiNumNormal(c.num));
     });
-    ledMencoes(q.txt).forEach((rot) => {
-      const l = casar(rot);
-      if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); }
-      else if (ledChaveLacuna(rot)) lacunarDs(rot, D.nome, q);
+    mencoesDe(q.txt).forEach((rot) => {
+      const l = casarCat(rot);
+      if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); return; }
+      const r2 = ledRotuloLacuna(rot);
+      if (ledChaveLacuna(r2)) lacunarDs(r2, D.nome, q, "", ledCanon(rot) ? rot : "");
+    });
+    ledNomesNoTexto(q.txt).forEach((nm) => {
+      if (ledCanon(nm)) return;
+      const l = ledCasarPorNome(nm, lista);
+      if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); return; }
+      const k = ledChaveNome(nm);
+      if (k) lacunarDs(nm, D.nome, q, "", "", k);
     });
     Object.keys(achadas).forEach((id) => {
       const S = { id: q.id, tema: q.tema, disciplina: D.nome, nums: Array.from(achadas[id]) };
@@ -245,20 +545,39 @@ function ledModelo(edId) {
       ledCitacoes(txt).forEach((c) => {
         if (c.rotulo && !c.meioDaFaixa) anotar(c.rotulo, c.numCru || c.num);
         /* o caminho comum (o rótulo casa com uma lei que tem o artigo) pela memória; o resto, pela regra inteira */
-        let lei = c.rotulo ? casar(c.rotulo) : null;
+        let lei = c.rotulo ? casarCat(c.rotulo) : null;
         if (!lei || !leiTemArtigo(lei, c.num)) {
           let r = null;
           try { r = leiResolverCitacao(c, lista, dt); } catch (x) { r = null; }
           lei = r && r.lei;
         }
-        if (!lei && c.rotulo && !casar(c.rotulo)) { lacunar(c.rotulo, D, tp, c.num); return; }
+        if (!lei && c.rotulo && !casarCat(c.rotulo)) {
+          const rl = ledRotuloLacuna(c.rotulo);
+          lacunar(rl, D, tp, c.num, ledCanon(c.rotulo) ? c.rotulo : "");
+          citar(ledChaveLacuna(rl), rl, null, D, tp);
+          return;
+        }
+        /* a lei NOMEADA na citação conta como citada, mesmo que o artigo não esteja no texto dela */
+        if (c.rotulo) { const ln = casarCat(c.rotulo); if (ln) citar("id:" + ln.id, c.rotulo, ln, D, tp); }
         if (!lei || !leiTemArtigo(lei, c.num)) return;
         (achadas[lei.id] = achadas[lei.id] || new Set()).add(leiNumNormal(c.num));
       });
-      ledMencoes(txt).forEach((rot) => {
-        const l = casar(rot);
-        if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); anotar(rot); }
-        else if (ledChaveLacuna(rot)) { lacunar(rot, D, tp); anotar(rot); }
+      mencoesDe(txt).forEach((rot) => {
+        const l = casarCat(rot);
+        if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); anotar(rot); citar("id:" + l.id, rot, l, D, tp); return; }
+        const r2 = ledRotuloLacuna(rot);
+        if (ledChaveLacuna(r2)) { lacunar(r2, D, tp, "", ledCanon(rot) ? rot : ""); anotar(r2); citar(ledChaveLacuna(r2), r2, null, D, tp); }
+      });
+      /* (19.164.0) a lei citada PELO NOME, sem número ("Código Tributário Municipal", "Lei Orgânica do Município") */
+      ledNomesNoTexto(txt).forEach((nm) => {
+        if (ledCanon(nm)) return;
+        const l = ledCasarPorNome(nm, lista);
+        if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); anotar(nm); citar("id:" + l.id, nm, l, D, tp, true); return; }
+        const k = ledChaveNome(nm);
+        if (!k) return;
+        lacunar(nm, D, tp, "", "", k);
+        anotar(nm);
+        citar(k, nm, null, D, tp, true);
       });
       citas.push({ disciplina: d.nome, peso: d.peso || 0, nome: tp.nome, tpPeso: tp.peso || 0,
         cita: Array.from(cita.entries()).map(([r, ns]) => r + (ns.length ? " (art. " + ns.join(", ") + ")" : "")) });
@@ -327,6 +646,9 @@ function ledModelo(edId) {
     total: tot, lidos: lid, pct: tot ? Math.round((lid / tot) * 100) : 0, n: Object.keys(porLei).length,
     lacunas, semLigacao, citas, pesos: (L.disciplinas || []).filter((d) => !d.inativa).map((d) => ({ nome: d.nome, peso: d.peso || 0 })) };
   ledAplicarIa(M, casar, e.texto || "");
+  /* (19.164.0) a norma que só alterou uma lei da biblioteca não falta: o texto consolidado dela já a traz */
+  ledSepararCobertas(M, lista);
+  M.citadasEdital = Object.keys(cit).map((k) => cit[k]);
   return M;
 }
 
@@ -375,7 +697,7 @@ function ledAbrir(edId, opc) {
   const o = opc || {};
   const id = edId || (typeof edAberto === "function" && edAberto() ? edAberto().id : "") || (typeof editalAtual !== "undefined" ? editalAtual : "");
   if (!ledEdital(id)) return false;
-  ledCtx = { edId: id, disciplina: o.disciplina || "", topico: o.topico || "" };
+  ledCtx = { edId: id, disciplina: o.disciplina || "", topico: o.topico || "", recem: true };
   ledPorCimaDaLeitura = !!($("dlgLeiSeca") && $("dlgLeiSeca").open);
   ledFiltro = "todas";
   /* a janela abre antes da lista: a primeira montagem lê os artigos de cada lei (a CF, o CTM…) e pode levar um instante */
@@ -453,6 +775,13 @@ function ledPintar() {
   barra.append(fill);
   rs.append(barra);
   corpo.append(rs);
+  /* (19.164.0) O QUE MUDOU desde a última vez que a tela foi aberta (calculado só ao abrir, não a cada repintura) */
+  if (ledCtx.recem) { ledCtx.recem = false; try { ledDif = ledDiferenca(M); if (ledDif) ledDif.edId = M.edId; } catch (e) { ledDif = null; } }
+  const difEl = ledDif && ledDif.edId === M.edId ? ledDifEl(ledDif) : null;
+  if (difEl) corpo.append(difEl);
+  /* (19.164.0) a conferência: todas as leis que o edital cita, com a situação de cada uma */
+  const citEl = ledCitadasEl(M);
+  if (citEl) corpo.append(citEl);
 
   /* NESTE TÓPICO: o que o ⚖ da agenda pediu */
   if (ledCtx.topico) {
@@ -804,6 +1133,8 @@ function ledIncluida(G, id) {
   const l = leiDe(id);
   let casou = null;
   try { casou = leiCasarRotulo(G.rotulo, leisLista()); } catch (e) { casou = null; }
+  /* (19.164.0) a lei citada pelo nome casa pelo nome da lei incluída */
+  if (!casou && G.porNome && l) casou = ledCasarPorNome(G.rotulo, [l]);
   let n = 0;
   if (l && casou && casou.id === id && G.topicos.length) {
     G.topicos.forEach((T) => { try { if (leiLigar(id, typeof matChaveViva === "function" ? matChaveViva(T.disciplina, T.nome) : matChave(T.disciplina, T.nome))) n++; } catch (e) {} });
@@ -836,12 +1167,16 @@ function ledPintarLacunas(M, corpo) {
     sec.id = "ledLac";
     sec.append(ledEl("div", "led-lac-tit", t("led_lac_tit", { n: ativas.length })));
     sec.append(ledEl("p", "nota", t("led_lac_expl")));
+    sec.append(ledEl("p", "nota led-lac-crit", t("led_lac_criterio")));
     const linha = (G, dispensada) => {
       const k = ledIdSeguro(G.chave);
       const lin = ledEl("div", "led-lac-lin" + (dispensada ? " led-lac-disp" : ""));
       lin.id = "ledLac_" + k;
       const tx = ledEl("div", "led-lei-txt");
       const nm = ledEl("div", "led-lei-nome", G.rotulo);
+      /* (19.164.0) de onde veio, e se é nova desde a última vez */
+      ledOrigens(G).filter((o) => o !== "ia").forEach((o) => nm.append(ledEl("span", "led-tag led-tag-orig", t("led_orig_" + o))));
+      if (ledDif && ledDif.edId === M.edId && (ledDif.entraram || []).some((x) => x.chave === G.chave)) nm.append(ledEl("span", "led-tag led-tag-novo", t("led_tag_novo")));
       if (G.prioridade) nm.append(ledEl("span", "led-tag led-tag-prio", t("led_tag_prio")));
       if (G.ia) nm.append(ledEl("span", "led-tag led-tag-ia", t("led_tag_ia")));
       tx.append(nm);
@@ -886,6 +1221,10 @@ function ledPintarLacunas(M, corpo) {
     }
     corpo.append(sec);
   }
+
+  /* (19.164.0) já dentro de leis que você tem (a norma alterou uma lei da biblioteca) */
+  const cobEl = ledCobertasEl(M);
+  if (cobEl) corpo.append(cobEl);
 
   /* citadas e sem ligação */
   if (M.semLigacao.length) {
