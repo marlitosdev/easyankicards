@@ -1772,6 +1772,10 @@ dialog.led-dlg[open] #ledCorpo{flex:1 1 auto;min-height:0;overflow:auto;padding-
 .led-top{display:flex;gap:var(--esp-2);padding:1px 0}
 .led-top-peso{flex:none;min-width:18px;text-align:center;border-radius:var(--r-p);background:var(--campo);border:1px solid var(--borda);font-weight:var(--peso-f)}
 .led-top-nome{min-width:0}
+/* (19.159.0) o tema de discursiva que cita a lei: o botão numa linha só, à direita */
+.led-top-ds{align-items:baseline}
+.led-top-ds .led-top-nome{flex:1 1 auto}
+.led-top-ds .btn-min{flex:none;white-space:nowrap}
 .led-lei-acoes{flex:none;display:flex;gap:var(--esp-1);flex-wrap:wrap;justify-content:flex-end}
 .led-tag{margin-left:var(--esp-2);font-size:var(--fs-1);font-weight:var(--peso-m);color:var(--atencao);border:1px solid var(--atencao);border-radius:var(--r-pilula);padding:0 6px;white-space:nowrap}
 .led-lei-ok .led-lei-nome{color:var(--sutil)}
@@ -6438,6 +6442,10 @@ dialog.cl-modal.cl-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:1
 /* (19.158.0) o treino de esqueleto e o caderno de erros */
 .ds-esq-item{display:flex;gap:var(--esp-2);align-items:flex-start;padding:var(--esp-1) 0;cursor:pointer}
 .ds-esq-item input{margin-top:.3em;flex:0 0 auto}
+/* (19.159.0) o item do esqueleto com o botão de virar cartão ao lado */
+.ds-esq-row{display:flex;gap:var(--esp-1);align-items:flex-start}
+.ds-esq-row>.ds-esq-item{flex:1 1 auto;min-width:0}
+.ds-esq-vc{flex:0 0 auto;margin-top:var(--esp-1)}
 .ds-esq-tx{flex:1 1 auto;min-width:0}
 .ds-esq-sub{margin:0 0 var(--esp-1) 2.2em;padding-left:1em;color:var(--sutil)}
 .ds-esq-res{font-weight:var(--peso-m);margin:var(--esp-2) 0}

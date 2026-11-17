@@ -34,6 +34,18 @@ function ledEditalDoTopico(disciplina, topico) {
   return (com.find((e) => e.id === aberto) || com.find((e) => !e.encerrado) || com[0]).id;
 }
 
+/* (19.159.0) os temas de discursiva guardados do edital, com o texto onde moram os fundamentos (espelho e modelo) */
+function ledNormDisc(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+function ledDiscursivas(edId) {
+  if (typeof dsPropostas !== "function") return [];
+  let ps = [];
+  try { ps = dsPropostas(edId) || []; } catch (e) { ps = []; }
+  return ps.filter((p) => p && (p.espelho || p.modelo))
+    .map((p) => ({ id: p.id, tema: p.tema || "", disc: p.disc || "", txt: [p.espelho, p.modelo].filter(Boolean).join("\n") }));
+}
+
 function ledEdital(id) {
   const lista = typeof editais !== "undefined" ? editais : [];
   return lista.find((e) => String(e.id) === String(id)) || null;
@@ -174,6 +186,52 @@ function ledModelo(edId) {
     if (!casados.has(k)) { let l = null; try { l = leiCasarRotulo(k, lista); } catch (x) { l = null; } casados.set(k, l); }
     return casados.get(k);
   };
+  /* (19.159.0) OS FUNDAMENTOS DAS DISCURSIVAS: as leis e os artigos citados no espelho e na resposta modelo dos temas
+   * guardados deste edital entram na lei (artigos cobrados), na disciplina do tema; a lei citada que não está na
+   * biblioteca vira lacuna ("citada em N discursiva(s)"). O tema não é tópico do edital: não liga lei a nada. */
+  const dsTodas = ledDiscursivas(e.id);
+  const discNomes = new Set((L.disciplinas || []).filter((d) => !d.inativa).map((d) => ledNormDisc(d.nome)));
+  const dsDe = (nome) => dsTodas.filter((q) => ledNormDisc(q.disc) === ledNormDisc(nome));
+  const dsSoltas = dsTodas.filter((q) => !discNomes.has(ledNormDisc(q.disc)));
+  const lacunarDs = (rot, nomeD, q, num) => {
+    const k = ledChaveLacuna(rot);
+    if (!k) return;
+    const G = lac[k] = lac[k] || { chave: k, rotulo: rot, topicos: [], disciplinas: [], peso: 0, nums: new Set() };
+    if (String(rot).length > String(G.rotulo).length) G.rotulo = rot;
+    G.ds = G.ds || [];
+    if (!G.ds.some((x) => x.id === q.id)) G.ds.push({ id: q.id, tema: q.tema, disciplina: nomeD });
+    if (nomeD && G.disciplinas.indexOf(nomeD) < 0) G.disciplinas.push(nomeD);
+    if (num) G.nums.add(leiNumNormal(num));
+  };
+  const lerDs = (q, D) => {
+    const achadas = {};
+    ledCitacoes(q.txt).forEach((c) => {
+      let lei = c.rotulo ? casar(c.rotulo) : null;
+      if (!lei || !leiTemArtigo(lei, c.num)) {
+        let r = null;
+        try { r = leiResolverCitacao(c, lista, []); } catch (x) { r = null; }
+        lei = r && r.lei;
+      }
+      if (!lei && c.rotulo && !casar(c.rotulo)) { lacunarDs(c.rotulo, D.nome, q, c.num); return; }
+      if (!lei || !leiTemArtigo(lei, c.num)) return;
+      (achadas[lei.id] = achadas[lei.id] || new Set()).add(leiNumNormal(c.num));
+    });
+    ledMencoes(q.txt).forEach((rot) => {
+      const l = casar(rot);
+      if (l) { if (!achadas[l.id]) achadas[l.id] = new Set(); }
+      else if (ledChaveLacuna(rot)) lacunarDs(rot, D.nome, q);
+    });
+    Object.keys(achadas).forEach((id) => {
+      const S = { id: q.id, tema: q.tema, disciplina: D.nome, nums: Array.from(achadas[id]) };
+      const DL = D.leis[id] = D.leis[id] || { id, peso: 0, topicos: [] };
+      (DL.ds = DL.ds || []).push(S);
+      const P = porLei[id] = porLei[id] || { id, cob: new Set(), topicos: [], disciplinas: [] };
+      P.dsCob = P.dsCob || new Set();
+      S.nums.forEach((n) => P.dsCob.add(n));
+      (P.ds = P.ds || []).push(S);
+      if (P.disciplinas.indexOf(D.nome) < 0) P.disciplinas.push(D.nome);
+    });
+  };
   (L.disciplinas || []).filter((d) => !d.inativa).forEach((d, ordem) => {
     const D = { nome: d.nome, peso: d.peso || 0, abs: d.abs || 0, ordem, leis: {} };
     (d.topicos || []).forEach((tp) => {
@@ -214,13 +272,26 @@ function ledModelo(edId) {
         if (P.disciplinas.indexOf(d.nome) < 0) P.disciplinas.push(d.nome);
       });
     });
+    dsDe(d.nome).forEach((q) => lerDs(q, D));
     D.lista = Object.keys(D.leis).map((k) => D.leis[k]).filter((x) => leiDe(x.id))
       .sort((a, b) => b.peso - a.peso || String(leiDe(a.id).nome).localeCompare(String(leiDe(b.id).nome)));
     if (D.lista.length) discs.push(D);
   });
+  /* tema de discursiva com disciplina fora do edital: uma seção própria, no fim */
+  if (dsSoltas.length) {
+    const D = { nome: t("led_ds_disc"), peso: 0, abs: 0, ordem: 999, leis: {}, soDs: true };
+    dsSoltas.forEach((q) => lerDs(q, D));
+    D.lista = Object.keys(D.leis).map((k) => D.leis[k]).filter((x) => leiDe(x.id))
+      .sort((a, b) => String(leiDe(a.id).nome).localeCompare(String(leiDe(b.id).nome)));
+    if (D.lista.length) discs.push(D);
+  }
   discs.sort((a, b) => b.peso - a.peso || b.abs - a.abs || a.ordem - b.ordem);
   let tot = 0, lid = 0;
   Object.keys(porLei).forEach((id) => {
+    /* os artigos das discursivas contam quando a lei já é medida por artigos no edital, ou só aparece nas discursivas:
+     * uma lei que o edital cobra inteira continua inteira (o art. 195 de um espelho não encolhe o CTN para 1 artigo) */
+    const P0 = porLei[id];
+    if (P0.dsCob && (P0.cob.size || !P0.topicos.length)) P0.dsCob.forEach((n) => P0.cob.add(n));
     const l = leiDe(id);
     if (!l) { delete porLei[id]; return; }
     porLei[id].lei = l;
@@ -235,7 +306,7 @@ function ledModelo(edId) {
     let t2 = 0, l2 = 0;
     D.lista = D.lista.filter((x) => porLei[x.id]);
     D.lista.forEach((x) => {
-      x.leit = ledLeituraParcial(porLei[x.id].leit, [].concat(...x.topicos.map((T) => T.nums)));
+      x.leit = ledLeituraParcial(porLei[x.id].leit, [].concat(...x.topicos.map((T) => T.nums), ...(x.ds || []).map((S) => S.nums)));
       if (x.leit.modo === "cobrados") { t2 += x.leit.total; l2 += x.leit.lidos; }
     });
     D.total = t2; D.lidos = l2; D.pct = t2 ? Math.round((l2 / t2) * 100) : 0;
@@ -464,8 +535,9 @@ function ledPintar() {
       const nm = ledEl("div", "led-lei-nome", P.lei.nome);
       if (!P.topicos.some((T) => T.ligada)) nm.append(ledEl("span", "led-tag", t("led_nao_ligada")));
       tx.append(nm);
-      const meta = [L2.modo === "cobrados" ? t("led_cob", { t: L2.total, l: L2.lidos }) : t("led_cob_lei", { t: L2.total, l: L2.lidos }),
-        t("led_em_topicos", { n: x.topicos.length })];
+      const meta = [L2.modo === "cobrados" ? t("led_cob", { t: L2.total, l: L2.lidos }) : t("led_cob_lei", { t: L2.total, l: L2.lidos })];
+      if (x.topicos.length) meta.push(t("led_em_topicos", { n: x.topicos.length }));
+      if ((x.ds || []).length) meta.push(t("led_em_ds", { n: x.ds.length }));
       const outras = P.disciplinas.filter((n) => n !== D.nome);
       if (outras.length) meta.push(t("led_tambem", { d: outras.join(", ") }));
       tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
@@ -473,11 +545,25 @@ function ledPintar() {
       if (M.iaNaoCai && M.iaNaoCai[x.id]) tx.append(ledEl("div", "led-lei-meta led-aviso", t("led_ia_nao_cai", { m: M.iaNaoCai[x.id] })));
       if (L2.modo === "cobrados" && L2.cobrados.length) tx.append(ledEl("div", "led-lei-arts", t("led_arts", { f: ledFaixas(L2.cobrados, P.leit, 14) })));
       const det = ledEl("details", "led-lei-tops");
-      det.append(ledEl("summary", "", t("led_topicos_n", { n: x.topicos.length })));
+      det.append(ledEl("summary", "", x.topicos.length ? t("led_topicos_n", { n: x.topicos.length }) + ((x.ds || []).length ? " · " + t("led_em_ds", { n: x.ds.length }) : "") : t("led_ds_ver", { n: (x.ds || []).length })));
       x.topicos.slice().sort((a, b) => b.peso - a.peso).forEach((T) => {
         const li = ledEl("div", "led-top");
         li.append(ledEl("span", "led-top-peso", String(T.peso)));
         li.append(ledEl("span", "led-top-nome", T.nome + (T.nums.length ? " · " + t("led_arts", { f: ledFaixas(T.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
+        det.append(li);
+      });
+      /* (19.159.0) os temas de discursiva que citam a lei, com os artigos; tocar abre o tema */
+      (x.ds || []).forEach((S) => {
+        const li = ledEl("div", "led-top led-top-ds");
+        li.append(ledEl("span", "led-top-peso", "✍"));
+        li.append(ledEl("span", "led-top-nome", S.tema + (S.nums.length ? " · " + t("led_arts", { f: ledFaixas(S.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
+        const b = ledEl("button", "btn-min", t("led_ds_abrir"));
+        b.type = "button"; b.id = "btnLedDs_" + k + "_" + x.id + "_" + ledIdSeguro(S.id);
+        b.onclick = () => {
+          if ($("dlgLeisEd") && $("dlgLeisEd").open) $("dlgLeisEd").close();
+          if (typeof dsIrPara === "function") dsIrPara(M.edId, { secao: "propostas", pid: S.id });
+        };
+        li.append(b);
         det.append(li);
       });
       tx.append(det);
@@ -763,6 +849,7 @@ function ledPintarLacunas(M, corpo) {
       if (G.topicos.length) meta.push(t("led_lac_em", { n: G.topicos.length, d: G.disciplinas.join(", ") }));
       else if (G.disciplinas.length) meta.push(G.disciplinas.join(", "));
       if (G.nums && G.nums.size) meta.push(t("led_arts", { f: Array.from(G.nums).slice(0, 8).join(", ") }));
+      if ((G.ds || []).length) meta.push(t("led_lac_ds", { n: G.ds.length, l: G.ds.slice(0, 3).map((x) => x.tema).join("; ") + (G.ds.length > 3 ? "…" : "") }));
       if (meta.length) tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
       if (G.ia && G.ia !== "—") tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_motivo", { m: G.ia })));
       if (G.prioridade && G.prioridade !== "—") tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_prio", { m: G.prioridade })));

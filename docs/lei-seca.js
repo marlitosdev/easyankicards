@@ -5401,7 +5401,9 @@ function leisGravarTudo(o) {
 /* começa a migração em segundo plano assim que LEIS_CHAVE existe — não trava nada */
 if (typeof leisIdbMigrar === "function") {
   /* (v18.53.0) a leitura aberta ANTES de as leis chegarem desenhou os links como "sem lei": redesenha uma vez */
-  Promise.resolve(leisIdbMigrar()).then(() => { try { if (typeof citRepintarAposLeis === "function") citRepintarAposLeis(); } catch (e) {} });
+  Promise.resolve(leisIdbMigrar()).then(() => { try { if (typeof citRepintarAposLeis === "function") citRepintarAposLeis(); } catch (e) {}
+    /* (19.159.0) o leitor das discursivas também */
+    try { if (typeof dsRepintarAposLeis === "function") dsRepintarAposLeis(); } catch (e) {} });
 }
 
 function leisHojeISO() {

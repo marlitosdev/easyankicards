@@ -1613,6 +1613,8 @@ function citCtxDe(base) {
       if (b.disciplina && b.topico) doTopico = leisDoTopico(matChave(b.disciplina, b.topico));
       if (!doTopico.length && b.chave) doTopico = leisDoTopico(b.chave);
     }
+    /* (19.159.0) sem lei do tópico: as leis que o próprio texto nomeia (a discursiva que só fala do CTN) */
+    if (!doTopico.length && typeof b.leisDoTexto === "function") doTopico = b.leisDoTexto() || [];
   } catch (e) {}
   return Object.assign({}, b, { disciplina: b.disciplina || "", topico: b.topico || "", lista, doTopico,
     onde: b.onde || "resumo", aoVoltar: b.aoVoltar || (() => {}) });
@@ -1755,7 +1757,7 @@ function matCitLink(c, ctx) {
   b.type = "button";
   const alvo = qsUiLeiAlvo(c, ctx.lista, ctx.doTopico);
   const noCartao = ctx.onde === "cartao";
-  const k = noCartao ? "car_lei_link_" : "mat_lei_link_";
+  const k = noCartao ? "car_lei_link_" : ctx.onde === "discursiva" ? "ds_lei_link_" : "mat_lei_link_";
   /* o estado aparece antes do toque: com lei (sublinhado) ou sem (tracejado, cinza) */
   b.className = "qs-lei-link " + (noCartao ? "car-lei-link" : "mat-lei-link") + (alvo.lei ? "" : " qs-lei-link-sem")
     + (alvo.deduzida ? " qs-lei-link-ded" : "") + (c.permanente ? " qs-lei-link-perm" : "");
@@ -1880,7 +1882,7 @@ function citIr(c, botao, base) {
     leiCitacaoPreviewAbrir(c, "", { lei: alvo.lei,
       ctx: { disciplina: ctx.disciplina, topico: ctx.topico, aoVoltar: ctx.aoVoltar } });
     try { reg(ctx.onde === "questao" ? "QUESTOES" : "MATERIAL",
-      "citação " + (ctx.onde === "cartao" ? "do cartão" : ctx.onde === "questao" ? "da dica da questão" : "do resumo") + " aberta na prévia",
+      "citação " + (ctx.onde === "cartao" ? "do cartão" : ctx.onde === "questao" ? "da dica da questão" : ctx.onde === "discursiva" ? "da discursiva" : "do resumo") + " aberta na prévia",
       alvo.lei.nome + " · art. " + (c.numCru || c.num || "—") + (c.permanente ? " · vínculo seu" : "")); } catch (e) {}
     return;
   }

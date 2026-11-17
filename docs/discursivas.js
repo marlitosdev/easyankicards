@@ -561,7 +561,10 @@ function dsIrPara(id, opc) {
   const o = opc || {};
   try { localStorage.setItem("eac_ds_edital", String(id)); localStorage.setItem("eac_ds_secao", o.secao || "geral"); } catch (e) {}
   if (o.pend) dsPainelSoPend[id] = true;
+  /* (19.159.0) direto num tema (das Leis do edital): o leitor dele, sem filtro que o esconda */
+  if (o.pid) { dsPropSel[id] = o.pid; dsPropRolar = id; Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "", q: "" }); }
   if (typeof trocarModo === "function") trocarModo("discursivas"); else dsRender();
+  if (o.pid) return;
   setTimeout(() => {
     const c = document.getElementById("dsCard_" + id);
     if (!c) return;
@@ -1012,8 +1015,15 @@ function dsPintarEsqueleto(rd, ed, p, dc) {
     const tx = el("span", "ds-esq-tx");
     tx.append(el("b", "", t("ds_esq_item", { n: x.n, p: String(x.pts).replace(".", ",") }) + " "), document.createTextNode(x.tit));
     lb.append(ck, tx);
-    d.append(lb);
-    if (x.sub.length) { const ul = el("ul", "ds-esq-sub"); x.sub.forEach((s) => ul.append(el("li", "", s))); d.append(ul); }
+    /* (19.159.0) o item vira cartão; as citações dele viram links */
+    const row = el("div", "ds-esq-row");
+    const vc = el("button", "btn-min ds-esq-vc", t("ds_esq_cartao"));
+    vc.type = "button"; vc.id = "btnDsEsqCartao_" + p.id + "_" + i; vc.title = t("ds_esq_cartao_tip");
+    vc.onclick = (ev) => { if (ev && ev.preventDefault) ev.preventDefault(); dsItemVirarCartao(ed, p, i); };
+    row.append(lb, vc);
+    d.append(row);
+    dsLigarCitacoes(tx, ed, p);
+    if (x.sub.length) { const ul = el("ul", "ds-esq-sub"); x.sub.forEach((s) => ul.append(el("li", "", s))); d.append(ul); dsLigarCitacoes(ul, ed, p); }
   });
   pinta();
   d.append(res);
@@ -1119,6 +1129,110 @@ function dsPintarCaderno(sec, e) {
   });
   sec.append(d);
   return C;
+}
+
+/* =====================================================================
+ * (19.159.0) OS FUNDAMENTOS DO ESPELHO E DO MODELO, E O ITEM QUE VIRA CARTÃO
+ *
+ *  · as citações de lei e de julgado do espelho, do treino de esqueleto, da resposta modelo e da correção viram os
+ *    mesmos links do resumo (citLigarEm): tocar abre a prévia do artigo ou do julgado, e a volta repinta no lugar;
+ *  · o tema da discursiva costuma ser o nome do tópico do edital (as sugestões vêm dele): a citação sem lei acha a lei
+ *    pelas leis ligadas a esse tópico, como no resumo;
+ *  · cada item do espelho tem "🃏 Cartão": o item, os subitens e o trecho da resposta modelo que fala dele viram o
+ *    material do prompt de cartões, com a disciplina e o tema como origem.
+ * ===================================================================== */
+function dsCitBase(ed, p) {
+  return { disciplina: (p && p.disc) || "", topico: (p && p.tema) || "", chave: "", onde: "discursiva",
+    textoTodo: () => [p && p.espelho, p && p.modelo].filter(Boolean).join("\n"),
+    leisDoTexto: () => dsLeisNomeadas(p),
+    aoVoltar: () => dsRepintarNoLugar() };
+}
+/* as leis da biblioteca que o tema nomeia (enunciado, espelho, modelo): com UMA só, "o art. 121" sem lei é dela, se ela
+ * tiver o artigo (leiResolverCitacao confere); com duas ou mais, continua perguntando */
+function dsLeisNomeadas(p) {
+  if (!p || typeof leisLista !== "function" || typeof leiCasarRotulo !== "function") return [];
+  const txt = [p.enunciado, p.espelho, p.modelo].filter(Boolean).join("\n");
+  const lista = leisLista();
+  const rots = new Set();
+  try { (leiCitacoesNoTexto(txt) || []).forEach((c) => { if (c.rotulo) rots.add(c.rotulo); }); } catch (e) {}
+  try { if (typeof ledMencoes === "function") ledMencoes(txt).forEach((r) => rots.add(r)); } catch (e) {}
+  const out = [];
+  rots.forEach((r) => { let l = null; try { l = leiCasarRotulo(r, lista); } catch (e) { l = null; } if (l && !out.some((x) => x.id === l.id)) out.push(l); });
+  return out;
+}
+function dsRepintarNoLugar() {
+  let y = 0;
+  try { y = (typeof window !== "undefined" && window.scrollY) || 0; } catch (e) { y = 0; }
+  dsRender();
+  try { if (y && typeof window !== "undefined" && window.scrollTo) window.scrollTo(0, y); } catch (e) {}
+}
+function dsLigarCitacoes(alvo, ed, p) {
+  if (!alvo || typeof citLigarEm !== "function") return 0;
+  /* o próprio bloco com texto e sem nó filho (o simulador dos testes guarda só o textContent): vira nó, como citLigarEm
+   * já faz com os filhos */
+  try {
+    if (!(alvo.childNodes || []).length && alvo.textContent && alvo.append) { const s = String(alvo.textContent); alvo.textContent = ""; alvo.append(document.createTextNode(s)); }
+  } catch (e) {}
+  try { return citLigarEm(alvo, dsCitBase(ed, p)); } catch (e) { return 0; }
+}
+/* as leis carregam em segundo plano: o leitor aberto antes disso desenhou os links "sem lei"; repinta uma vez */
+function dsRepintarAposLeis() {
+  const cx = document.getElementById("dsLista");
+  if (!cx || !cx.querySelector || !cx.querySelector(".ds-leitor button.qs-lei-link-sem")) return false;
+  dsRepintarNoLugar();
+  return true;
+}
+
+/* o parágrafo da resposta modelo que mais fala do item (palavras de 5+ letras em comum, ao menos 2) */
+function dsPalavras(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z0-9]{5,}/g) || [];
+}
+function dsItemTrechoModelo(p, x) {
+  const pars = p && p.modelo ? dsParagrafos(p.modelo) : [];
+  if (!pars.length || !x) return "";
+  const alvo = new Set(dsPalavras([x.tit].concat(x.sub || []).join(" ")));
+  let melhor = "", mel = 0;
+  pars.forEach((q) => {
+    let c = 0;
+    new Set(dsPalavras(q)).forEach((w) => { if (alvo.has(w)) c++; });
+    if (c > mel) { mel = c; melhor = q; }
+  });
+  if (mel < 2) return "";
+  /* o parágrafo comprido (o modelo num bloco só): ficam as frases que mais falam do item, na ordem do texto, até ~700 letras */
+  if (melhor.length <= DS_TRECHO_MAX) return melhor;
+  const fr = dsFrases(melhor).map((f, k) => {
+    let c = 0;
+    new Set(dsPalavras(f)).forEach((w) => { if (alvo.has(w)) c++; });
+    return { f, k, c };
+  }).filter((x) => x.c > 0).sort((a, b) => b.c - a.c || a.k - b.k);
+  const pega = [];
+  let tam = 0;
+  fr.forEach((x) => { if (!pega.length || tam + x.f.length <= DS_TRECHO_MAX) { pega.push(x); tam += x.f.length + 1; } });
+  return pega.sort((a, b) => a.k - b.k).map((x) => x.f).join(" ");
+}
+const DS_TRECHO_MAX = 700;
+function dsItemCartaoTexto(p, x) {
+  const pts = String(x.pts).replace(".", ",");
+  const L = [t("ds_card_cab", { t: p.tema || "—", d: p.disc || "—" })];
+  if (p.enunciado) L.push(t("ds_card_enun") + " " + (String(p.enunciado).length > 700 ? String(p.enunciado).slice(0, 699) + "…" : p.enunciado));
+  L.push("", t("ds_card_item", { n: x.n, p: pts, i: x.tit }));
+  (x.sub || []).forEach((s) => L.push("- " + s));
+  const tr = dsItemTrechoModelo(p, x);
+  if (tr) L.push("", t("ds_card_trecho"), tr);
+  const tag = String(p.disc || "").toLowerCase().replace(/\s+/g, "_");
+  L.push("", "[tags sugeridas: " + [tag, "discursiva"].filter(Boolean).join(", ") + "]");
+  return L.join("\n");
+}
+function dsItemVirarCartao(ed, p, i) {
+  const E = dsEspelhoItens(p && p.espelho);
+  const x = E.itens[i];
+  if (!x) return false;
+  const txt = dsItemCartaoTexto(p, x);
+  try { reg("DISCURSIVAS", "item do espelho virou prompt de cartões", String(p.tema || "").slice(0, 60) + " · item " + x.n); } catch (e) {}
+  if (typeof trocarModo === "function") trocarModo("cartoes");
+  if (typeof abrirGerar !== "function") return false;
+  abrirGerar(txt, { disciplina: p.disc || "", topico: p.tema || "" });
+  return true;
 }
 
 /* ---------------- propostas: atualizar, modelo, correção ---------------- */
@@ -1375,7 +1489,8 @@ function dsPintarPropostas(card, e, dc, com) {
   }
   rd.append(el("div", "ds-sug-d", [p.disc, edP.nome, t(p.fonte === "ia" ? "ds_prop_fonte_ia" : "ds_prop_fonte_sug"), dsDataBr(p.d)].filter(Boolean).join(" · ")));
   if (p.enunciado) rd.append(el("div", "ds-prop-enun", p.enunciado));
-  if (p.espelho) { const d = el("details", "ds-det"); d.append(el("summary", "", t("ds_prop_espelho")), el("div", "ds-prop-enun", p.espelho)); rd.append(d); }
+  /* (19.159.0) as citações de lei e de julgado do espelho, do modelo e da correção viram links (dsLigarCitacoes) */
+  if (p.espelho) { const d = el("details", "ds-det"); const ex = el("div", "ds-prop-enun", p.espelho); ex.id = "dsEspTxt_" + p.id; d.append(el("summary", "", t("ds_prop_espelho")), ex); rd.append(d); dsLigarCitacoes(ex, edP, p); }
   /* (19.158.0) o treino de esqueleto: o espelho em itens pontuados, para marcar o que você lembrou */
   if (p.espelho) { try { dsPintarEsqueleto(rd, edP, p, dcP); } catch (err) {} }
   if (p.modelo) {
@@ -1384,6 +1499,7 @@ function dsPintarPropostas(card, e, dc, com) {
     mod.id = "dsModeloTxt_" + p.id;
     const pars = dsParagrafos(p.modelo);
     pars.forEach((x) => mod.append(el("p", "ds-mod-par", x)));
+    dsLigarCitacoes(mod, edP, p);
     d.append(el("summary", "", t("ds_pl_modelo") + (p.modeloLinhas ? " · " + t("ds_modelo_linhas", { n: p.modeloLinhas }) : "") + " · " + t("ds_pl_pars", { n: pars.length })), mod);
     /* um bloco só e comprido: oferece dividir pelos itens do espelho */
     if (pars.length < 2 && String(p.modelo).length > 500) {
@@ -1394,7 +1510,7 @@ function dsPintarPropostas(card, e, dc, com) {
     }
     rd.append(d);
   }
-  if (p.correcao) { const d = el("details", "ds-det"); d.append(el("summary", "", t("ds_pl_correcao") + (p.nota ? " · " + p.nota.nota + "/" + p.nota.max : "")), el("div", "ds-prop-enun", p.correcao)); rd.append(d); }
+  if (p.correcao) { const d = el("details", "ds-det"); const cr = el("div", "ds-prop-enun", p.correcao); d.append(el("summary", "", t("ds_pl_correcao") + (p.nota ? " · " + p.nota.nota + "/" + p.nota.max : "")), cr); rd.append(d); dsLigarCitacoes(cr, edP, p); }
   const ac = el("div", "ds-ia");
   const w = el("button", "btn-min" + (p.escrita ? "" : " btn-min-ok"), t("ds_prop_escrever"));
   w.type = "button"; w.title = t("ds_prop_escrever_tip");
