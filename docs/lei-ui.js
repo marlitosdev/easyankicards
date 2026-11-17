@@ -3540,6 +3540,8 @@ function leiEdSalvar(silencioso) {
     const r = leiCorrArtigoSalvar(leiIdAtual, leiEdNum, novo);
     if (r.erro) { $("leiArtAviso").textContent = r.erro; return false; }
     try { toastMsg(t("lei_corr_art_ok", { a: r.entrada.rotulo }), 4500); } catch (e) {}
+    /* (19.165.0) a mesma troca nos outros artigos que têm o mesmo trecho, com confirmação */
+    { const idL = leiIdAtual, ent = r.entrada; if (typeof leiCorrArtigoOferecer === "function") setTimeout(() => { try { leiCorrArtigoOferecer(idL, ent); } catch (e) {} }, 0); }
     if (!silencioso) {
       $("dlgLeiArt").close();
       leiTrocarModo("ler");

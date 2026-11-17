@@ -177,6 +177,8 @@ function leiCorrAdicionar(op) {
   leiCorrRecalcular(c);
   c.corrAberto = true;
   c.corrSel = null;
+  /* (19.165.0) os casos parecidos com esta correção, para oferecer de uma vez */
+  try { if (!op.lote) leiCorrOferecerParecidos(c, op); } catch (e) { c.corrParecidos = null; }
   try { leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "correção à mão: " + op.tipo, "linha " + op.alvo[op.alvo.length - 1].n + " · " + leiCorrResumo(op)); } catch (e) {}
   leiPreAvisar(t("lei_corr_feita", { l: op.alvo[op.alvo.length - 1].n }));
   leiPrePintar();
@@ -187,6 +189,7 @@ function leiCorrDesfazer(id) {
   if (!c || !c.correcoes) return false;
   const op = c.correcoes.find((x) => x.id === id);
   c.correcoes = id === "*" ? [] : c.correcoes.filter((x) => x.id !== id);
+  c.corrParecidos = null;
   leiCorrRecalcular(c);
   try { leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", id === "*" ? "correções à mão: todas desfeitas" : "correção à mão desfeita", op ? op.tipo + " · " + leiCorrResumo(op) : ""); } catch (e) {}
   leiPreAvisar(t(id === "*" ? "lei_corr_desfeitas" : "lei_corr_desfeita"));
@@ -417,6 +420,9 @@ function leiCorrPainelEl(c) {
   inp.onkeydown = (ev) => { if (ev && ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); bi.onclick(); } };
   ir.append(inp, bi);
   det.append(ir);
+  /* (19.165.0) os parecidos com a última correção */
+  const par = leiCorrParecidosEl(c);
+  if (par) { det.append(par); det.open = true; }
   if (c.corrVer && c.corrVer.n) det.append(leiCorrJanelaLivreEl(c, c.corrVer.n));
   /* a lista das correções, a mais nova primeiro */
   if (c.correcoes.length) {
@@ -425,7 +431,7 @@ function leiCorrPainelEl(c) {
       const falhou = (c.corrFalhas || []).indexOf(op.id) >= 0;
       const lin = leiPreEl("div", "lei-corr-item" + (falhou ? " falhou" : ""));
       lin.id = "leiCorrIt_" + op.id;
-      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + op.tipo) + " · " + t("lei_corr_linha", { l: op.alvo[op.alvo.length - 1].n })));
+      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + op.tipo) + " · " + (op.lote ? t("lei_corr_lote", { n: op.alvo.filter((a) => a.para !== "").length || op.alvo.length }) : t("lei_corr_linha", { l: op.alvo[op.alvo.length - 1].n }))));
       /* riscar / tirar o risco: a linha como fica, com o riscado pintado (e não as marcas ~~) */
       if (op.tipo === "riscar" || op.tipo === "tirar_risco") lin.append(leiCorrPartesEl(op.alvo[op.alvo.length - 1].para));
       else lin.append(leiPreEl("span", "lei-corr-res", leiCorrResumo(op)));
@@ -437,12 +443,19 @@ function leiCorrPainelEl(c) {
       ul.append(lin);
     });
     det.append(ul);
+    const rod = leiPreEl("div", "lei-corr-ed-ac");
     if (c.correcoes.length > 1) {
       const da = leiPreEl("button", "btn-min", t("lei_corr_desfazer_todas"));
       da.type = "button"; da.id = "btnLeiCorrDesfTodas";
       da.onclick = () => leiCorrDesfazer("*");
-      det.append(da);
+      rod.append(da);
     }
+    /* (19.165.0) o caso de teste: o antes, o depois e o trecho do HTML de origem, para relatar */
+    const cs = leiPreEl("button", "btn-min", t("lei_corr_caso_bt"));
+    cs.type = "button"; cs.id = "btnLeiCorrCaso"; cs.title = t("lei_corr_caso_tip");
+    cs.onclick = () => leiCorrCopiarCaso();
+    rod.append(cs);
+    det.append(rod);
   }
   return det;
 }
@@ -450,8 +463,14 @@ function leiCorrPainelEl(c) {
 function leiCorrRelatorio(c) {
   if (!c || !(c.correcoes || []).length) return ["  correções à mão: nenhuma"];
   return ["  correções à mão: " + c.correcoes.length + ((c.corrFalhas || []).length ? " (" + c.corrFalhas.length + " não aplicada(s))" : "")]
-    .concat(c.correcoes.map((op) => "      " + op.tipo + " · linha " + op.alvo[op.alvo.length - 1].n + " · " + leiCorrResumo(op)
-      + ((c.corrFalhas || []).indexOf(op.id) >= 0 ? " · NÃO APLICADA" : "")));
+    .concat(...c.correcoes.map((op) => {
+      const lin = ["      " + op.tipo + (op.lote ? " (lote de " + op.alvo.length + ")" : "") + " · linha " + op.alvo[op.alvo.length - 1].n + " · " + leiCorrResumo(op)
+        + ((c.corrFalhas || []).indexOf(op.id) >= 0 ? " · NÃO APLICADA" : "")];
+      /* (19.165.0) o trecho do HTML de origem, quando houver: é o que vira teste do leitor */
+      const tr = typeof leiHtmlUltimo !== "undefined" && leiHtmlUltimo ? leiCorrTrechoHtml(leiHtmlUltimo, op.alvo[0].de) : "";
+      if (tr) lin.push("        html: " + tr.slice(0, 600));
+      return lin;
+    }));
 }
 
 /* =====================================================================
@@ -555,7 +574,7 @@ function leiCorrMapaEl(l, arts) {
       const lin = leiPreEl("div", "lei-corr-item");
       lin.id = "leiMapaCorr_" + k;
       const dt = String(x.em || "").slice(0, 10).split("-").reverse().join("/");
-      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + x.tipo) + (x.rotulo ? " " + x.rotulo : "") + " · "
+      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + x.tipo) + (x.rotulo ? " " + x.rotulo : "") + (x.lote ? " · " + t("lei_mapa_dec_lote") : "") + " · "
         + t(x.fase === "leitor" ? "lei_mapa_dec_fase_leitor" : x.fase === "atualizar" ? "lei_mapa_dec_fase_upd" : "lei_mapa_dec_fase_criar", { d: dt })));
       /* o estado de uma correção do leitor: desfeita, ficou para trás numa versão nova ou reaplicada */
       if (x.desfeita) lin.append(leiPreEl("span", "lei-corr-st", t("lei_mapa_dec_st_desfeita")));
@@ -681,8 +700,19 @@ function leiCorrTrocarArt(l, num, onde, novo) {
     alt[alvo] = Object.assign({}, alt[alvo], { texto: leiCorrNormArt(novo) });
     return !!leiGuardar({ id: l.id, alteracoes: alt });
   }
-  const final = leiSubstituirArtigo(l.texto, alvo, leiCorrNormArt(novo));
-  if (final === null) return false;
+  /* as linhas em branco que separam o artigo do próximo ficam: a troca é só do texto dele (19.165.0 — antes, o
+   * artigo corrigido grudava no seguinte) */
+  const a0 = leiArtigo(l.texto, alvo);
+  let cauda = 0;
+  if (a0) {
+    const bloco = String(l.texto || "").split("\n").slice(a0.linha - 1, a0.linhaFim);
+    while (cauda < bloco.length - 1 && !String(bloco[bloco.length - 1 - cauda]).trim()) cauda++;
+  }
+  if (!a0) return false;
+  /* a troca direto nas linhas: leiSubstituirArtigo tira as linhas em branco do fim do texto novo */
+  const linhasL = String(l.texto || "").split("\n");
+  linhasL.splice(a0.linha - 1, a0.linhaFim - a0.linha + 1, ...leiCorrNormArt(novo).split("\n"), ...new Array(cauda).fill(""));
+  const final = linhasL.join("\n");
   const ok = !!leiGuardar({ id: l.id, texto: final });
   /* O CAMPO DO TEXTO DA LEI ABERTA ACOMPANHA: o leitor pinta a partir dele, e outras gravações (os grifos, por
    * leiGravar) o gravam de volta — desatualizado, ele desfaria a correção sem ninguém ver */
@@ -782,4 +812,266 @@ function leiCorrSeloEl(l, a) {
     if (typeof leiPintar === "function") leiPintar();
   };
   return b;
+}
+
+/* =====================================================================
+ * (19.165.0) FASE 3 — APRENDER COM AS CORREÇÕES
+ *
+ *  · APLICAR AOS PARECIDOS: depois de uma correção, o app procura no mesmo texto os casos iguais e oferece corrigir
+ *    todos de uma vez — sempre com a lista à vista e a confirmação da pessoa, nunca sozinho. "Iguais" é estrito, por
+ *    tipo: riscar/tirar o risco = o mesmo trecho na mesma situação (entre riscados, ou a linha inteira); reescrever = a
+ *    mesma linha, ou a mesma troca de palavra(s) curta; juntar = linha que começa minúscula depois de linha sem ponto
+ *    final; separar = o mesmo começo ("Art. N", "§", "I -", "a)") colado no meio de outra linha. O lote vira UMA
+ *    correção (um "desfazer" desfaz todas);
+ *  · no LEITOR, a correção de um artigo oferece a mesma troca nos outros artigos da lei que têm o mesmo trecho;
+ *  · O CASO DE TESTE: a correção com o antes, o depois e o trecho do HTML de origem (quando a lei veio de arquivo ou de
+ *    colagem com formatação), pronto para relatar — vira teste do leitor, como o art. 53 do Estatuto da Cidade.
+ * ===================================================================== */
+const LEI_CORR_PAR_MAX = 200;
+/* a troca de palavra(s) entre antes e depois, sem a pontuação que as duas versões têm em comum nas pontas
+ * ("leitrua." → "leitura." é a troca "leitrua" → "leitura", que também vale em "leitrua também") */
+function leiCorrTroca(antes, depois) {
+  const d = leiPreDiff(antes, depois);
+  let x = d.a, y = d.b;
+  const pont = (ch) => /[^0-9A-Za-zÀ-ú]/.test(ch);
+  while (x && y && x[x.length - 1] === y[y.length - 1] && pont(x[x.length - 1])) { x = x.slice(0, -1); y = y.slice(0, -1); }
+  while (x && y && x[0] === y[0] && pont(x[0])) { x = x.slice(1); y = y.slice(1); }
+  return { x, y };
+}
+/* a parte que mudou entre a linha antes e depois de riscar/tirar o risco: { a, b, txt } (posições no texto limpo) */
+function leiCorrTrechoMudado(de, para) {
+  const A = leiCorrLimpo(de), B = leiCorrLimpo(para);
+  if (A.txt !== B.txt) return null;
+  let a = -1, b = -1;
+  for (let i = 0; i < A.txt.length; i++) if (A.flag[i] !== B.flag[i]) { if (a < 0) a = i; b = i + 1; }
+  if (a < 0) return null;
+  return { a, b, txt: A.txt.slice(a, b), A };
+}
+/* a situação de um trecho na linha: riscado logo antes e logo depois (ignorando espaço), ou a linha inteira */
+function leiCorrSituacao(C, a, b) {
+  let i = a - 1; while (i >= 0 && /\s/.test(C.txt[i])) i--;
+  let j = b; while (j < C.txt.length && /\s/.test(C.txt[j])) j++;
+  return { antes: i >= 0 && !!C.flag[i], depois: j < C.txt.length && !!C.flag[j], toda: !C.txt.slice(0, a).trim() && !C.txt.slice(b).trim() };
+}
+const LEI_CORR_RE_CABECA = [/^Art(?:igo)?\.?\s*\d/i, /^§/, /^Par[áa]grafo\s+[úu]nico/i, /^[IVXLCDM]{1,7}\s*[-–—]/, /^[a-z]\)/];
+/* os casos parecidos com a correção op, no texto de agora (L) → [{ n, de, para }] (sem as linhas da própria op) */
+function leiCorrParecidos(L, op) {
+  const out = [];
+  if (!op || op.lote) return out;
+  const proprias = new Set(op.alvo.map((x) => x.n));
+  const a0 = op.alvo[op.alvo.length - 1];
+  const vale = (k) => !proprias.has(k + 1) && L[k] !== undefined;
+  if (op.tipo === "riscar" || op.tipo === "tirar_risco") {
+    const M = leiCorrTrechoMudado(a0.de, a0.para);
+    if (!M || !M.txt.trim()) return out;
+    const sim = op.tipo === "riscar";
+    const S = leiCorrSituacao(M.A, M.a, M.b);
+    for (let k = 0; k < L.length && out.length < LEI_CORR_PAR_MAX; k++) {
+      if (!vale(k) || L[k].indexOf(M.txt.trim().slice(0, 12)) < 0 && leiCorrLimpo(L[k]).txt.indexOf(M.txt) < 0) continue;
+      const C = leiCorrLimpo(L[k]);
+      let p = C.txt.indexOf(M.txt);
+      while (p >= 0) {
+        const q = p + M.txt.length;
+        const ja = C.flag.slice(p, q).every((f) => !!f === sim);
+        const s = leiCorrSituacao(C, p, q);
+        const ok = !ja && (S.toda ? s.toda : ((!S.antes || s.antes) && (!S.depois || s.depois)));
+        if (ok) { out.push({ n: k + 1, de: L[k], para: leiCorrRiscar(L[k], p, q, sim) }); break; }
+        p = C.txt.indexOf(M.txt, p + 1);
+      }
+    }
+    return out;
+  }
+  if (op.tipo === "editar") {
+    const de = a0.de, para = a0.para;
+    /* a mesma linha, inteira */
+    for (let k = 0; k < L.length && out.length < LEI_CORR_PAR_MAX; k++) if (vale(k) && L[k] === de) out.push({ n: k + 1, de: L[k], para });
+    if (out.length || para.indexOf("\n") >= 0) return out;
+    /* a mesma troca curta ("leitrua" → "leitura") em outras linhas */
+    const { x, y } = leiCorrTroca(de, para);
+    if (!x.trim() || x.length > 60 || x.trim().length < 2 || x.indexOf("~~") >= 0 || y.indexOf("~~") >= 0) return out;
+    for (let k = 0; k < L.length && out.length < LEI_CORR_PAR_MAX; k++) {
+      if (!vale(k) || L[k].indexOf(x) < 0) continue;
+      out.push({ n: k + 1, de: L[k], para: L[k].split(x).join(y) });
+    }
+    return out;
+  }
+  if (op.tipo === "juntar") {
+    /* a frase quebrada: começa minúscula e a linha com texto de cima não termina em pontuação de fim */
+    let acum = null;
+    const prox = (k) => { let j = k - 1; while (j >= 0 && !String(L[j]).trim()) j--; return j; };
+    const quebrada = (k) => {
+      const s = leiCorrLimpo(L[k]).txt.trim();
+      if (!/^[a-zà-ú]/.test(s)) return false;
+      const j = prox(k);
+      if (j < 0) return false;
+      const ant = leiCorrLimpo(L[j]).txt.trim();
+      return !!ant && !/[.;:!?)\]"”]$/.test(ant);
+    };
+    const alvo = {};
+    for (let k = 0; k < L.length; k++) {
+      if (!vale(k) || !String(L[k]).trim() || !quebrada(k)) continue;
+      const j = prox(k);
+      if (proprias.has(j + 1)) continue;
+      /* encadeia: a de cima já foi juntada a outra → junta nesta outra */
+      const base = acum && acum.ultimaVazia === j ? acum.base : j;
+      if (!alvo[base]) alvo[base] = { n: base + 1, de: L[base], para: String(L[base]).replace(/\s+$/, "") };
+      alvo[base].para += " " + String(L[k]).trim();
+      alvo[k] = { n: k + 1, de: L[k], para: "" };
+      acum = { base, ultimaVazia: k };
+      if (Object.keys(alvo).length >= LEI_CORR_PAR_MAX) break;
+    }
+    return Object.keys(alvo).map((k) => alvo[k]).sort((p, q) => p.n - q.n);
+  }
+  if (op.tipo === "separar") {
+    const dir = String(a0.para).split("\n")[1] || "";
+    const cab = LEI_CORR_RE_CABECA.find((re) => re.test(leiCorrLimpo(dir).txt.trim()));
+    if (!cab) return out;
+    const meio = new RegExp("([.;:])\\s+(" + cab.source.replace(/^\^/, "") + ")", cab.flags.replace("g", ""));
+    for (let k = 0; k < L.length && out.length < LEI_CORR_PAR_MAX; k++) {
+      if (!vale(k)) continue;
+      const C = leiCorrLimpo(L[k]);
+      const m = C.txt.match(meio);
+      if (!m) continue;
+      const pos = m.index + m[1].length + (m[0].length - m[1].length - m[2].length);
+      const o = leiCorrOpSeparar(L, k + 1, pos);
+      if (o) out.push({ n: k + 1, de: L[k], para: o.alvo[0].para });
+    }
+    return out;
+  }
+  return out;
+}
+/* depois de uma correção na revisão: guarda os parecidos para oferecer (chamado por leiCorrAdicionar) */
+function leiCorrOferecerParecidos(c, op) {
+  if (!c || !op || op.lote) return 0;
+  const itens = leiCorrParecidos(leiPreLinhasDaColagem(c), op);
+  c.corrParecidos = itens.length ? { op: op.id, tipo: op.tipo, itens, marcados: itens.map(() => true) } : null;
+  return itens.length;
+}
+function leiCorrAplicarParecidos() {
+  const c = leiPreCtx;
+  const P = c && c.corrParecidos;
+  if (!P) return false;
+  const alvo = P.itens.filter((x, i) => P.marcados[i]);
+  c.corrParecidos = null;
+  if (!alvo.length) { leiPrePintar(); return false; }
+  const op = leiCorrNova(P.tipo, alvo, { lote: true, origem: P.op });
+  return leiCorrAdicionar(op);
+}
+function leiCorrParecidosEl(c) {
+  const P = c.corrParecidos;
+  if (!P || !P.itens.length) return null;
+  const box = leiPreEl("div", "lei-corr-par");
+  box.id = "leiCorrPar";
+  box.append(leiPreEl("div", "lei-corr-par-tit", t("lei_corr_par_tit", { n: P.itens.length })));
+  box.append(leiPreEl("p", "nota", t("lei_corr_par_expl_" + P.tipo)));
+  const lista = leiPreEl("div", "lei-corr-par-lista");
+  P.itens.slice(0, 60).forEach((x, i) => {
+    const lb = leiPreEl("label", "lei-corr-par-it");
+    const ck = document.createElement("input");
+    ck.type = "checkbox"; ck.id = "leiCorrPar_" + i; ck.checked = !!P.marcados[i];
+    ck.onchange = () => { P.marcados[i] = ck.checked; const b = $("btnLeiCorrParAplicar"); if (b) b.textContent = t("lei_corr_par_aplicar", { n: P.marcados.filter(Boolean).length }); };
+    lb.append(ck, leiPreEl("span", "lei-corr-tipo", t("lei_corr_linha", { l: x.n })));
+    if (P.tipo === "riscar" || P.tipo === "tirar_risco") lb.append(leiCorrPartesEl(x.para));
+    else lb.append(leiPreEl("span", "lei-corr-res", leiCorrLimpo(x.de).txt.replace(/\s+/g, " ").slice(0, 70) + " → " + leiCorrLimpo(x.para).txt.replace(/\n/g, " ⏎ ").replace(/\s+/g, " ").slice(0, 70)));
+    lista.append(lb);
+  });
+  if (P.itens.length > 60) lista.append(leiPreEl("p", "nota", t("lei_corr_par_mais", { n: P.itens.length - 60 })));
+  box.append(lista);
+  const ac = leiPreEl("div", "lei-corr-ed-ac");
+  const ap = leiPreEl("button", "btn-min btn-min-ok", t("lei_corr_par_aplicar", { n: P.marcados.filter(Boolean).length }));
+  ap.type = "button"; ap.id = "btnLeiCorrParAplicar";
+  ap.onclick = () => leiCorrAplicarParecidos();
+  const no = leiPreEl("button", "btn-min", t("lei_corr_par_nao"));
+  no.type = "button"; no.id = "btnLeiCorrParNao";
+  no.onclick = () => { c.corrParecidos = null; leiPrePintar(); };
+  ac.append(ap, no);
+  box.append(ac);
+  return box;
+}
+
+/* ---------------- no leitor: a mesma troca nos outros artigos ---------------- */
+function leiCorrArtigoParecidos(idLei, entrada) {
+  const l = leiDe(idLei);
+  if (!l || !entrada) return [];
+  const { x, y } = leiCorrTroca(entrada.antes, entrada.depois);
+  if (!x.trim() || x.trim().length < 2 || x.length > 60 || x.indexOf("\n") >= 0 || y.indexOf("\n") >= 0) return [];
+  const nums = new Set();
+  leiArtigos(l.texto).forEach((a) => nums.add(a.num));
+  Object.keys(l.alteracoes || {}).forEach((n) => nums.add(n));
+  const out = [];
+  nums.forEach((num) => {
+    if (num === entrada.num) return;
+    const M = leiCorrOndeMora(l, num);
+    if (!M || M.texto.indexOf(x) < 0) return;
+    const a = leiArtigo(M.onde === "base" ? l.texto : M.texto, num);
+    out.push({ num, rotulo: (a && a.rotulo) || ("Art. " + num), novo: M.texto.split(x).join(y) });
+  });
+  return out.slice(0, LEI_CORR_PAR_MAX);
+}
+function leiCorrArtigoAplicarParecidos(idLei, lista, origem) {
+  let n = 0;
+  (lista || []).forEach((x) => {
+    const r = leiCorrArtigoSalvar(idLei, x.num, x.novo);
+    if (r.ok) {
+      n++;
+      const l = leiDe(idLei);
+      const cs = (l.correcoes || []).slice();
+      const i = cs.findIndex((y) => y.id === r.entrada.id);
+      if (i >= 0) { cs[i] = Object.assign({}, cs[i], { lote: true, origem: origem || "" }); leiGuardar({ id: idLei, correcoes: cs }); }
+    }
+  });
+  return n;
+}
+/* oferece, depois da correção de um artigo no leitor (leiEdSalvar), a mesma troca nos outros artigos */
+async function leiCorrArtigoOferecer(idLei, entrada) {
+  const par = leiCorrArtigoParecidos(idLei, entrada);
+  if (!par.length) return 0;
+  const d = leiCorrTroca(entrada.antes, entrada.depois);
+  const sim = await uiConfirm(t("lei_corr_par_art", { n: par.length, a: d.x.trim(), b: d.y.trim(),
+    l: par.slice(0, 8).map((x) => x.rotulo).join(", ") + (par.length > 8 ? "…" : "") }), { ok: t("lei_corr_par_art_ok", { n: par.length }) });
+  if (!sim) return 0;
+  const n = leiCorrArtigoAplicarParecidos(idLei, par, entrada.id);
+  try { toastMsg(t("lei_corr_par_art_feito", { n }), 4500); } catch (e) {}
+  if (typeof leiPintar === "function") leiPintar();
+  return n;
+}
+
+/* ---------------- o caso de teste ---------------- */
+/* o trecho do HTML de origem em volta do texto da linha (a palavra longa mais rara da linha, que aparece no HTML) */
+function leiCorrTrechoHtml(html, linha) {
+  const h = String(html || "");
+  if (!h) return "";
+  const ws = (leiCorrLimpo(linha).txt.match(/[A-Za-z]{6,}/g) || []);
+  let melhor = null;
+  ws.forEach((w) => {
+    let n = 0, i = h.indexOf(w), pos = i;
+    while (i >= 0 && n < 50) { n++; i = h.indexOf(w, i + 1); }
+    if (pos >= 0 && (!melhor || n < melhor.n)) melhor = { w, n, pos };
+  });
+  if (!melhor) return "";
+  return h.slice(Math.max(0, melhor.pos - 500), melhor.pos + 700).replace(/\s+/g, " ");
+}
+function leiCorrCasoDeTeste(c) {
+  if (!c || !(c.correcoes || []).length) return "";
+  const html = typeof leiHtmlUltimo !== "undefined" ? leiHtmlUltimo : "";
+  const L = ["=== CASO DE TESTE · EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "") + " · correções à mão na revisão da colagem ===",
+    "(o texto de leis é público; nada pessoal vai aqui)"];
+  c.correcoes.forEach((op, k) => {
+    L.push("", "--- " + (k + 1) + ". " + op.tipo + (op.lote ? " (lote de " + op.alvo.length + ")" : "") + " · linha " + op.alvo[op.alvo.length - 1].n);
+    op.alvo.slice(0, op.lote ? 3 : 4).forEach((a) => {
+      L.push("ANTES (como o leitor deixou):", a.de, "DEPOIS (como deve ficar):", a.para);
+    });
+    if (op.lote && op.alvo.length > 3) L.push("… e mais " + (op.alvo.length - 3) + " linha(s) iguais");
+    const tr = leiCorrTrechoHtml(html, op.alvo[0].de);
+    if (tr) L.push("HTML DE ORIGEM (trecho):", tr);
+  });
+  return L.join("\n");
+}
+async function leiCorrCopiarCaso() {
+  const txt = leiCorrCasoDeTeste(leiPreCtx);
+  if (!txt) return false;
+  try { await navigator.clipboard.writeText(txt); toastMsg(t("lei_corr_caso_ok"), 4000); }
+  catch (e) { if (typeof leiRelatorioMostrar === "function") leiRelatorioMostrar(txt); }
+  try { leiReg("gravar", "caso de teste das correções copiado", (leiPreCtx.correcoes || []).length + " correção(ões)"); } catch (e) {}
+  return true;
 }

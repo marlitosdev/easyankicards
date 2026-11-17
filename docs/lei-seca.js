@@ -1403,8 +1403,11 @@ function leiRiscarLinkIlhado(plain, flag, link) {
 }
 
 /* o texto puro com ~~…~~ em volta do que o HTML tem riscado → { texto, n, motivo } (n = trechos marcados) */
+/* (19.165.0) o último HTML lido (arquivo .htm ou colagem com formatação): o "caso de teste" das correções leva o trecho */
+let leiHtmlUltimo = "";
 function leiMarcarTachado(plain, html) {
   plain = String(plain == null ? "" : plain);
+  try { leiHtmlUltimo = String(html || "").slice(0, 4000000); } catch (e) {}
   const seg = leiSegmentosDoHtml(html);
   const tem = /[\p{L}\p{N}]/u;
   if (!seg.some((x) => x.s && tem.test(x.t))) return { texto: plain, n: 0, motivo: "sem_tachado" };
