@@ -1341,7 +1341,7 @@ function leiSegmentosDoHtml(html, opc) {
   const seg = [];
   const pilha = [];
   const blocos = !!(opc && opc.blocos);
-  let riscado = 0, pulando = 0;
+  let riscado = 0, pulando = 0, ligado = 0;
   const VAZIAS = { br: 1, img: 1, hr: 1, meta: 1, link: 1, input: 1, wbr: 1 };
   const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>|([^<]+)/g;
   let m;
@@ -1350,7 +1350,7 @@ function leiSegmentosDoHtml(html, opc) {
       if (!pulando) {
         const tx = leiDecodificarEntidades(m[4]);
         /* no modo "blocos" o texto sai como o navegador o mostra: espaço e quebra de linha do código valem UM espaço */
-        seg.push({ t: blocos ? tx.replace(/[ \t\r\n\f\u00a0]+/g, " ") : tx, s: riscado > 0 });
+        seg.push({ t: blocos ? tx.replace(/[ \t\r\n\f\u00a0]+/g, " ") : tx, s: riscado > 0, a: ligado > 0 });
       }
       continue;
     }
@@ -1364,19 +1364,42 @@ function leiSegmentosDoHtml(html, opc) {
     if (m[1]) {
       for (let k = pilha.length - 1; k >= 0; k--) {
         if (pilha[k].tag !== tag) continue;
-        pilha.splice(k).forEach((e) => { if (e.r) riscado--; if (e.p) pulando--; });
+        pilha.splice(k).forEach((e) => { if (e.r) riscado--; if (e.p) pulando--; if (e.l) ligado--; });
         break;
       }
       continue;
     }
     if (/\/\s*$/.test(m[3])) continue;
     const e = { tag, r: tag === "strike" || tag === "s" || tag === "del" || /text-decoration(?:-line)?\s*:[^;"']*line-through/i.test(m[3]),
-      p: tag === "script" || tag === "style" || tag === "head" || tag === "title" };
+      p: tag === "script" || tag === "style" || tag === "head" || tag === "title",
+      /* (19.161.0) o link: no Planalto ele fica FORA do <strike> mesmo no meio de um trecho riscado (leiRiscarLinkIlhado) */
+      l: tag === "a" && /\bhref\s*=/i.test(m[3]) };
     if (e.r) riscado++;
+    if (e.l) ligado++;
     if (e.p) pulando++;
     pilha.push(e);
   }
   return seg;
+}
+
+/* (19.161.0) O LINK NO MEIO DO RISCADO. O Planalto risca o artigo revogado com <strike>, mas o link para a lei citada
+ * fica FORA dele: "<strike>Art. 53. O art. 1º da </strike><a>Lei nº 7.347, de 24 de julho de 1985</a><strike>, passa a
+ * vigorar…</strike> (Revogado pela…)" (Estatuto da Cidade). Tirar o riscado deixava "Lei nº 7.347, de 24 de julho de
+ * 1985" solto, e a lei ficava com "Art. 53. (Revogado) Lei nº 7.347… (Revogado pela…)". Um trecho SEM risco que é só
+ * link (com espaço e pontuação), com riscado logo antes e logo depois NA MESMA LINHA, é parte do riscado. */
+function leiRiscarLinkIlhado(plain, flag, link) {
+  const n = plain.length;
+  const neutro = (i) => /[ \t\u00a0]/.test(plain[i]) || (!link[i] && /[^\p{L}\p{N}\s]/u.test(plain[i]));
+  let i = 0;
+  while (i < n) {
+    if (flag[i] || !link[i]) { i++; continue; }
+    let a = i;
+    while (a > 0 && !flag[a - 1] && neutro(a - 1)) a--;
+    let b = i;
+    while (b < n && !flag[b] && (link[b] || neutro(b))) b++;
+    if (a > 0 && flag[a - 1] && b < n && flag[b] && b - a <= 160) for (let k = a; k < b; k++) flag[k] = true;
+    i = Math.max(b, i + 1);
+  }
 }
 
 /* o texto puro com ~~…~~ em volta do que o HTML tem riscado → { texto, n, motivo } (n = trechos marcados) */
@@ -1386,8 +1409,8 @@ function leiMarcarTachado(plain, html) {
   const tem = /[\p{L}\p{N}]/u;
   if (!seg.some((x) => x.s && tem.test(x.t))) return { texto: plain, n: 0, motivo: "sem_tachado" };
   for (const f of [/\s/, /[^\p{L}\p{N}]/u]) {
-    const hc = [], hs = [], pi = [];
-    seg.forEach((sg) => { for (let i = 0; i < sg.t.length; i++) if (!f.test(sg.t[i])) { hc.push(sg.t[i]); hs.push(sg.s); } });
+    const hc = [], hs = [], ha = [], pi = [];
+    seg.forEach((sg) => { for (let i = 0; i < sg.t.length; i++) if (!f.test(sg.t[i])) { hc.push(sg.t[i]); hs.push(sg.s); ha.push(!!sg.a); } });
     for (let i = 0; i < plain.length; i++) if (!f.test(plain[i])) pi.push(i);
     if (hc.length !== pi.length) continue;
     let igual = true;
@@ -1396,7 +1419,9 @@ function leiMarcarTachado(plain, html) {
     for (let k = 0; k < pi.length; k++) if (hc[k] !== plain[pi[k]] && hc[k].toLowerCase() !== plain[pi[k]].toLowerCase()) { igual = false; break; }
     if (!igual) continue;
     const flag = new Array(plain.length).fill(false);
-    pi.forEach((pos, k) => { flag[pos] = hs[k]; });
+    const link = new Array(plain.length).fill(false);
+    pi.forEach((pos, k) => { flag[pos] = hs[k]; link[pos] = ha[k]; });
+    leiRiscarLinkIlhado(plain, flag, link);
     /* o que o filtro descartou (pontuação, no 2º filtro) acompanha o riscado que vem logo antes */
     if (f.source !== "\\s") for (let i = 1; i < plain.length; i++) if (!flag[i] && f.test(plain[i]) && !/\s/.test(plain[i]) && flag[i - 1]) flag[i] = true;
     let n = 0;
@@ -1409,7 +1434,10 @@ function leiMarcarTachado(plain, html) {
         while (fim < linha.length && (flag[ini + fim] || /\s/.test(linha[fim]))) fim++;
         while (fim > k && /\s/.test(linha[fim - 1])) fim--;
         const trecho = linha.slice(k, fim);
-        if (tem.test(trecho) && trecho.indexOf("~") < 0) { out += "~~" + trecho + "~~"; n++; } else out += trecho;
+        /* (19.161.0) a linha INTEIRA riscada sem letra ("......." no artigo citado e revogado) também é marcada: sem isso
+         * ela ficava sozinha no texto e partia o bloco riscado em dois */
+        const linhaToda = trecho.length >= 3 && trecho === linha.trim();
+        if ((tem.test(trecho) || linhaToda) && trecho.indexOf("~") < 0) { out += "~~" + trecho + "~~"; n++; } else out += trecho;
         k = fim;
       }
       acc.linhas.push(out);
@@ -1672,7 +1700,11 @@ function leiAcharTachados(linhas) {
     const janela = linhas.slice(c[c.length - 1].i + 1, c[c.length - 1].i + 6).filter((x) => String(x).trim()).slice(0, 3).join(" ");
     const proprio = c.map((x) => leiTirarTachado(linhas[x.i], false)).join(" ") + " " + c.map((x) => leiTirarTachado(linhas[x.i], true)).join(" ");
     const ident = c[0].ident;
+    /* (19.161.0) começa por um artigo que segue vivo mais abaixo: é a redação ANTIGA dele, mesmo longa (o 42-A do
+     * Estatuto da Cidade, 12 linhas riscadas, era descrito como "tabela inteira tachada") */
+    const h0 = ident ? null : leiCabecalhoRiscado(linhas[c[0].i]);
     const tipo = ident ? "identificador"
+      : h0 && vivos.has(h0.num) ? "substituido"
       : c.length >= 8 && inteiras >= c.length * 0.8 ? "tabela"
       : /Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Nova\s+reda/i.test(proprio + " " + janela) ? "substituido"
       : /Revogad/i.test(proprio + " " + janela) ? "revogado" : "outro";
