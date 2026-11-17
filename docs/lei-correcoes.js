@@ -508,6 +508,10 @@ function leiCorrGravarPendentes(idLei, modo) {
 
 /* onde a correção está na lei de agora: o artigo da linha que tem o texto corrigido */
 function leiCorrArtigoNaLei(l, x, arts) {
+  if (x.num) {
+    const idx = (arts || []).findIndex((y) => y.num === x.num);
+    return { num: x.num, numCru: String(x.rotulo || x.num).replace(/^Art(?:igo)?\.?\s*/i, "").replace(/\.$/, ""), indice: idx >= 0 ? idx : undefined };
+  }
   const chave = leiTirarTachado(String(x.depois || ""), true).split("\n").map((s) => s.trim()).filter((s) => s.length >= 8)[0];
   if (!chave) return null;
   const L = String(l.texto || "").split("\n");
@@ -550,12 +554,39 @@ function leiCorrMapaEl(l, arts) {
     corr.slice().reverse().forEach((x, k) => {
       const lin = leiPreEl("div", "lei-corr-item");
       lin.id = "leiMapaCorr_" + k;
-      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + x.tipo) + " · "
-        + t(x.fase === "atualizar" ? "lei_mapa_dec_fase_upd" : "lei_mapa_dec_fase_criar", { d: String(x.em || "").slice(0, 10).split("-").reverse().join("/") })));
+      const dt = String(x.em || "").slice(0, 10).split("-").reverse().join("/");
+      lin.append(leiPreEl("span", "lei-corr-tipo", t("lei_corr_tipo_" + x.tipo) + (x.rotulo ? " " + x.rotulo : "") + " · "
+        + t(x.fase === "leitor" ? "lei_mapa_dec_fase_leitor" : x.fase === "atualizar" ? "lei_mapa_dec_fase_upd" : "lei_mapa_dec_fase_criar", { d: dt })));
+      /* o estado de uma correção do leitor: desfeita, ficou para trás numa versão nova ou reaplicada */
+      if (x.desfeita) lin.append(leiPreEl("span", "lei-corr-st", t("lei_mapa_dec_st_desfeita")));
+      else if (x.atras) lin.append(leiPreEl("span", "lei-corr-st", t("lei_mapa_dec_st_atras")));
+      else if (x.reaplicada) lin.append(leiPreEl("span", "lei-corr-st ok", t("lei_mapa_dec_st_reaplicada", { n: x.reaplicada })));
       const bloco = leiPreEl("span", "lei-mapa-dec-ad");
-      bloco.append(leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_antes")), leiCorrPartesEl(x.antes),
-        leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_depois")), leiCorrPartesEl(x.depois));
+      if (x.fase === "leitor") {
+        /* o artigo inteiro é longo: só o pedaço que mudou, com um pouco de contexto */
+        const d = leiPreDiff(x.antes, x.depois);
+        const ctxA = d.pre.length > 70 ? "…" + d.pre.slice(-70) : d.pre, ctxD = d.suf.length > 70 ? d.suf.slice(0, 70) + "…" : d.suf;
+        const parte = (meio, k) => { const s = leiPreEl("span", "lei-corr-res"); s.append(document.createTextNode(ctxA)); if (meio) s.append(leiPreEl("span", "lei-pre-" + k, meio)); s.append(document.createTextNode(ctxD)); return s; };
+        bloco.append(leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_antes")), parte(d.a, "sai"),
+          leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_depois")), parte(d.b, "entra"));
+      } else {
+        bloco.append(leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_antes")), leiCorrPartesEl(x.antes),
+          leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_depois")), leiCorrPartesEl(x.depois));
+      }
       lin.append(bloco);
+      if (x.fase === "leitor" && !x.desfeita && !x.atras) {
+        const u = leiPreEl("button", "btn-min", t("lei_corr_desfazer"));
+        u.type = "button"; u.id = "btnLeiMapaCorrDesf_" + k;
+        u.onclick = () => {
+          const r = leiCorrArtigoDesfazer(l.id, x.id);
+          if (r.erro) { uiAlert(r.erro); return; }
+          try { toastMsg(t("lei_corr_art_desfeita", { a: x.rotulo }), 4000); } catch (e) {}
+          if (typeof leiPintar === "function") leiPintar();
+          leiMapaAbrir(true);
+          const dd = $("leiMapaDec"); if (dd) dd.open = true;
+        };
+        lin.append(u);
+      }
       const onde = leiCorrArtigoNaLei(l, x, arts);
       if (onde) {
         const b = leiPreEl("button", "btn-min", t("lei_mapa_dec_ver", { a: onde.numCru }));
@@ -615,4 +646,140 @@ function leiDecBatizar(nome) {
   decLer().forEach((d) => { if (sem.indexOf(d.lei) >= 0 && String(d.q || "") >= desde) { d.lei = String(nome).slice(0, 120); n++; } });
   if (n && typeof decGravar === "function") decGravar();
   return n;
+}
+
+/* =====================================================================
+ * (19.163.0) FASE 2 — CORRIGIR A LEITURA DE UM ARTIGO DEPOIS QUE A LEI JÁ EXISTE
+ *
+ * O "editar" do artigo, numa lei gravada, grava uma ALTERAÇÃO DA LEI (camada, com a norma e o selo "alterado por…").
+ * Para um erro de leitura isso mente: o artigo não foi alterado por norma nenhuma — o texto veio errado da fonte. Agora
+ * a janela do artigo pergunta o que é a mudança, e "✎" no leitor já abre como correção de leitura:
+ *  · a correção vai para ONDE o texto do artigo mora hoje: a redação da camada, quando o artigo tem uma (a correção não
+ *    tira a norma nem a data dela), ou o texto-base; o número continua o mesmo, então nota, marcas, "onde parei" e
+ *    cartões continuam ligados a ele;
+ *  · fica na lei (l.correcoes, fase "leitor"), com o que era e o que ficou: o leitor mostra "✎ corrigido" (ver e
+ *    desfazer) e o mapa lista em "Decisões tomadas";
+ *  · ATUALIZAR A LEI NÃO PERDE A CORREÇÃO: se a versão nova trouxe o MESMO texto errado, a correção é reaplicada; se o
+ *    artigo ganhou redação nova, ela fica marcada "ficou para trás" (e o mapa avisa) — nunca é aplicada às cegas sobre
+ *    um texto que ela não conhece.
+ * ===================================================================== */
+function leiCorrNormArt(s) { return String(s == null ? "" : s).replace(/\s+$/, ""); }
+/* o texto do artigo onde ele mora agora: { onde: "alteracao" | "base", texto } ou null */
+function leiCorrOndeMora(l, num) {
+  const alvo = leiNumNormal(num);
+  const alt = l && l.alteracoes && l.alteracoes[alvo];
+  if (alt && !alt.revogado && String(alt.texto || "").trim()) return { onde: "alteracao", texto: leiCorrNormArt(alt.texto) };
+  const a = l ? leiArtigo(l.texto, alvo) : null;
+  return a ? { onde: "base", texto: leiCorrNormArt(a.texto) } : null;
+}
+/* troca o texto do artigo onde ele mora (devolve false se não deu) */
+function leiCorrTrocarArt(l, num, onde, novo) {
+  const alvo = leiNumNormal(num);
+  if (onde === "alteracao") {
+    const alt = Object.assign({}, l.alteracoes || {});
+    if (!alt[alvo]) return false;
+    alt[alvo] = Object.assign({}, alt[alvo], { texto: leiCorrNormArt(novo) });
+    return !!leiGuardar({ id: l.id, alteracoes: alt });
+  }
+  const final = leiSubstituirArtigo(l.texto, alvo, leiCorrNormArt(novo));
+  if (final === null) return false;
+  const ok = !!leiGuardar({ id: l.id, texto: final });
+  /* O CAMPO DO TEXTO DA LEI ABERTA ACOMPANHA: o leitor pinta a partir dele, e outras gravações (os grifos, por
+   * leiGravar) o gravam de volta — desatualizado, ele desfaria a correção sem ninguém ver */
+  try { if (ok && typeof leiIdAtual !== "undefined" && leiIdAtual === l.id && $("leiTexto")) $("leiTexto").value = final; } catch (e) {}
+  return ok;
+}
+/* a correção de leitura de um artigo → { ok, num, entrada } | { erro } */
+function leiCorrArtigoSalvar(idLei, num, novo) {
+  const l = leiDe(idLei);
+  if (!l) return { erro: "sem_lei" };
+  const alvo = leiNumNormal(num);
+  const M = leiCorrOndeMora(l, alvo);
+  if (!M) return { erro: t("lei_art_nao_achou") };
+  const depois = leiCorrNormArt(novo);
+  if (depois === M.texto) return { erro: t("lei_corr_art_igual") };
+  const lido = leiArtigos(depois)[0];
+  if (!lido || lido.linha !== 1) return { erro: t("lei_art_sem_numero") };
+  /* a correção não renumera: o número é a âncora da nota, das marcas e dos cartões */
+  if (lido.num !== alvo) return { erro: t("lei_corr_art_numero", { a: lido.numCru, b: alvo }) };
+  if (!leiCorrTrocarArt(l, alvo, M.onde, depois)) return { erro: t("lei_art_nao_achou") };
+  const entrada = { id: "cl" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), fase: "leitor", tipo: "artigo", num: alvo,
+    rotulo: lido.rotulo || ("Art. " + lido.numCru), onde: M.onde, antes: M.texto.slice(0, 6000), depois: depois.slice(0, 6000), em: new Date().toISOString() };
+  const l2 = leiDe(idLei);
+  leiGuardar({ id: idLei, correcoes: (l2.correcoes || []).concat([entrada]).slice(-200) });
+  try { leiReg("editar", "correção de leitura no artigo", entrada.rotulo + " · " + (M.onde === "alteracao" ? "na redação da camada" : "no texto-base")); } catch (e) {}
+  if (typeof decRegistrar === "function") {
+    try {
+      decRegistrar({ area: "colagem", regra: "colagem.correcao", origem: "voce", lei: l.nome, ref: entrada.rotulo, motivo: t("lei_corr_tipo_artigo"),
+        risco: "baixo", decisao: "mudou", via: "manual", proposta: { acao: "corrigir", amostra: entrada.antes, depois: entrada.depois, n: 1, linhas: [] } });
+    } catch (e) {}
+  }
+  return { ok: true, num: alvo, entrada };
+}
+/* a correção ativa (a última, não desfeita) de um artigo, feita no leitor */
+function leiCorrDoArtigo(l, num) {
+  const alvo = leiNumNormal(num);
+  const xs = ((l && l.correcoes) || []).filter((x) => x.fase === "leitor" && x.num === alvo && !x.desfeita);
+  return xs[xs.length - 1] || null;
+}
+function leiCorrArtigoDesfazer(idLei, cid) {
+  const l = leiDe(idLei);
+  if (!l) return { erro: "sem_lei" };
+  const lista = (l.correcoes || []).slice();
+  const i = lista.findIndex((x) => x.id === cid);
+  if (i < 0) return { erro: "sem_correcao" };
+  const x = lista[i];
+  const M = leiCorrOndeMora(l, x.num);
+  if (!M || M.texto !== leiCorrNormArt(x.depois)) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
+  if (!leiCorrTrocarArt(l, x.num, M.onde, x.antes)) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
+  lista[i] = Object.assign({}, x, { desfeita: new Date().toISOString() });
+  leiGuardar({ id: idLei, correcoes: lista });
+  try { leiReg("editar", "correção de leitura desfeita", x.rotulo); } catch (e) {}
+  return { ok: true, entrada: lista[i] };
+}
+/* depois de uma atualização: reaplica onde o mesmo texto errado voltou; marca "ficou para trás" onde o artigo mudou */
+function leiCorrReaplicar(idLei) {
+  const l = leiDe(idLei);
+  const out = { reaplicadas: 0, atras: 0 };
+  if (!l || !(l.correcoes || []).some((x) => x.fase === "leitor" && !x.desfeita)) return out;
+  const lista = (l.correcoes || []).slice();
+  lista.forEach((x, i) => {
+    if (x.fase !== "leitor" || x.desfeita || x.atras) return;
+    const M = leiCorrOndeMora(leiDe(idLei), x.num);
+    if (!M) { lista[i] = Object.assign({}, x, { atras: new Date().toISOString() }); out.atras++; return; }
+    if (M.texto === leiCorrNormArt(x.depois)) return;
+    if (M.texto === leiCorrNormArt(x.antes) && leiCorrTrocarArt(leiDe(idLei), x.num, M.onde, x.depois)) {
+      lista[i] = Object.assign({}, x, { onde: M.onde, reaplicada: (x.reaplicada || 0) + 1 });
+      out.reaplicadas++;
+      return;
+    }
+    lista[i] = Object.assign({}, x, { atras: new Date().toISOString() });
+    out.atras++;
+  });
+  if (out.reaplicadas || out.atras) {
+    leiGuardar({ id: idLei, correcoes: lista });
+    try { leiReg("atualizacao", "correções de leitura depois da versão nova", out.reaplicadas + " reaplicada(s) · " + out.atras + " ficou(aram) para trás"); } catch (e) {}
+  }
+  return out;
+}
+/* o selo "✎ corrigido" no cabeçalho do artigo, no leitor (null sem correção ativa) */
+function leiCorrSeloEl(l, a) {
+  const x = leiCorrDoArtigo(l, a.num);
+  if (!x) return null;
+  const d = String(x.em || "").slice(0, 10).split("-").reverse().join("/");
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "lei-selo-alt lei-selo-corr" + (x.atras ? " lei-selo-corr-atras" : "");
+  b.textContent = t(x.atras ? "lei_corr_selo_atras" : "lei_corr_selo");
+  b.title = t("lei_corr_selo_tip", { d });
+  b.onclick = async () => {
+    const corta = (s) => (String(s).length > 1500 ? String(s).slice(0, 1499) + "…" : String(s));
+    const sim = await uiConfirm(t("lei_corr_selo_ver", { a: x.rotulo, d, x: corta(x.antes), y: corta(x.depois) }), { ok: t("lei_corr_selo_desf") });
+    if (!sim) return;
+    const r = leiCorrArtigoDesfazer(l.id, x.id);
+    if (r.erro) { uiAlert(r.erro); return; }
+    try { toastMsg(t("lei_corr_art_desfeita", { a: x.rotulo }), 4000); } catch (e) {}
+    if (typeof leiPintar === "function") leiPintar();
+  };
+  return b;
 }

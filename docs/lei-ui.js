@@ -2332,7 +2332,17 @@ function leiPintarLeitura() {
     bEd.className = "btn-min lei-art-b";
     bEd.textContent = t("lei_art_editar");
     bEd.title = t("lei_art_editar_ajuda");
-    bEd.onclick = () => leiEdAbrir(a.num);
+    bEd.onclick = () => leiEdAbrir(a.num, "alteracao");
+
+    /* (19.163.0) ✎ corrigir um erro de leitura deste artigo (sem virar "alteração da lei") */
+    const bCorr = document.createElement("button");
+    bCorr.className = "btn-min lei-art-b";
+    bCorr.textContent = "✎";
+    bCorr.title = t("lei_art_corr_bt_tip");
+    bCorr.setAttribute("aria-label", t("lei_art_corr_bt_tip"));
+    bCorr.onclick = () => leiEdAbrir(a.num, "correcao");
+    const seloCorr = l && typeof leiCorrSeloEl === "function" ? leiCorrSeloEl(l, a) : null;
+    if (seloCorr) cab.append(seloCorr);
 
     /* A NOTA — "do que trata este artigo", em poucas palavras. Ela é o
      * que ajuda a reconhecer uma citação sem abrir a lei: "art. 151" não
@@ -2344,7 +2354,7 @@ function leiPintarLeitura() {
     bNota.title = temNota || t("lei_nota_add_ajuda");
     bNota.onclick = () => leiNotaAbrir(a);
 
-    cab.append(bCloze, bEd, bNota);
+    cab.append(bCloze, bEd, bCorr, bNota);
     const chips = leiChipsDeAlteracao(a, cit);
     const recebidas = leiChipsRecebidos(a, leiRecebidasAtual);
 
@@ -3409,9 +3419,12 @@ function leiNotaTrechoMarcar() {
  * ------------------------------------------------------------------ */
 
 let leiEdNum = "";          /* "" = artigo novo */
+/* (19.163.0) o que é a mudança, numa lei já gravada: "correcao" (erro de leitura, sem selo) ou "alteracao" (outra norma) */
+let leiEdModo = "alteracao";
 
-function leiEdAbrir(num) {
+function leiEdAbrir(num, modo) {
   if (!$("dlgLeiArt")) return;
+  if (modo) leiEdModo = modo === "correcao" ? "correcao" : "alteracao";
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   const texto = String($("leiTexto").value || "");
   const camada = leiEmCamada();
@@ -3420,8 +3433,17 @@ function leiEdAbrir(num) {
   const arts = camada ? leiArtigosEfetivos(l) : leiArtigos(texto);
   const a = leiEdNum ? arts.filter((x) => x.num === leiEdNum)[0] : null;
 
+  /* (19.163.0) a pergunta só faz sentido num artigo que já existe numa lei gravada */
+  const temTipo = !!(camada && a);
+  const corr = temTipo && leiEdModo === "correcao";
+  const tipoCx = $("leiArtTipoCx");
+  if (tipoCx) {
+    tipoCx.hidden = !temTipo;
+    if ($("leiArtTipoCorr")) { $("leiArtTipoCorr").checked = corr; $("leiArtTipoCorr").onchange = () => { leiEdModo = "correcao"; leiEdModoPintar(a); }; }
+    if ($("leiArtTipoAlt")) { $("leiArtTipoAlt").checked = !corr; $("leiArtTipoAlt").onchange = () => { leiEdModo = "alteracao"; leiEdModoPintar(a); }; }
+  }
   $("leiArtTitulo").textContent = a
-    ? t("lei_art_ed_titulo", { a: a.rotulo })
+    ? t(corr ? "lei_art_corr_titulo" : "lei_art_ed_titulo", { a: a.rotulo })
     : t("lei_art_novo_titulo");
   $("leiArtSub").textContent = a
     ? [(l && l.nome) || "", a.divisao].filter(Boolean).join(" · ")
@@ -3435,9 +3457,10 @@ function leiEdAbrir(num) {
    * "norma que alterou", porque nada foi alterado ainda */
   const cxFonte = $("leiArtFonteCx");
   if (cxFonte) {
-    cxFonte.hidden = !camada;
+    cxFonte.hidden = !camada || corr;
     if (camada) $("leiArtFonte").value = (a && a.fonteAlteracao) || "";
   }
+  if ($("btnLeiArtApagar")) $("btnLeiArtApagar").hidden = !a || corr;
 
   /* a lista de artigos ao lado: trocar de artigo sem fechar e reabrir */
   const cx = $("leiArtLista");
@@ -3463,6 +3486,15 @@ function leiEdAbrir(num) {
   abrirModal("dlgLeiArt");
   leiReg("editar", a ? "edição de artigo aberta" : "artigo novo",
          a ? a.rotulo : "");
+}
+
+/* (19.163.0) trocar entre "correção de leitura" e "alteração da lei" sem perder o que foi digitado */
+function leiEdModoPintar(a) {
+  const corr = leiEdModo === "correcao" && !!a;
+  if (a) $("leiArtTitulo").textContent = t(corr ? "lei_art_corr_titulo" : "lei_art_ed_titulo", { a: a.rotulo });
+  if ($("leiArtFonteCx")) $("leiArtFonteCx").hidden = !leiEmCamada() || corr;
+  if ($("btnLeiArtApagar")) $("btnLeiArtApagar").hidden = !a || corr;
+  if ($("leiArtAviso")) $("leiArtAviso").textContent = corr ? t("lei_art_corr_aviso") : "";
 }
 
 /* Trocar de artigo dentro da janela SEM perder o que foi digitado sem
@@ -3503,6 +3535,19 @@ function leiEdSalvar(silencioso) {
     return false;
   }
 
+  /* (19.163.0) CORREÇÃO DE LEITURA: no lugar onde o artigo mora, sem selo de alteração, guardada na lei com o antes */
+  if (leiEmCamada() && leiEdModo === "correcao" && leiEdNum && typeof leiCorrArtigoSalvar === "function") {
+    const r = leiCorrArtigoSalvar(leiIdAtual, leiEdNum, novo);
+    if (r.erro) { $("leiArtAviso").textContent = r.erro; return false; }
+    try { toastMsg(t("lei_corr_art_ok", { a: r.entrada.rotulo }), 4500); } catch (e) {}
+    if (!silencioso) {
+      $("dlgLeiArt").close();
+      leiTrocarModo("ler");
+      leiIrArtigo(r.num);
+    }
+    leiPintar();
+    return true;
+  }
   if (leiEmCamada()) {
     const fonte = String(($("leiArtFonte") || {}).value || "").trim();
     const l = leiDe(leiIdAtual);
@@ -10476,6 +10521,13 @@ function leiAtualizarAplicar() {
   });
   /* (19.162.0) as correções à mão da revisão desta atualização entram na lei */
   if (typeof leiCorrGravarPendentes === "function") leiCorrGravarPendentes(leiIdAtual, "atualizar");
+  /* (19.163.0) as correções de leitura feitas no leitor: reaplicadas onde o mesmo texto errado voltou */
+  if (typeof leiCorrReaplicar === "function") {
+    const rc = leiCorrReaplicar(leiIdAtual);
+    if (rc.reaplicadas || rc.atras) {
+      try { toastMsg([rc.reaplicadas ? t("lei_corr_reaplic", { n: rc.reaplicadas }) : "", rc.atras ? t("lei_corr_atras", { n: rc.atras }) : ""].filter(Boolean).join(" "), 7000); } catch (e) {}
+    }
+  }
 
   leiReg("atualizacao", "versão atualizada",
          leiUpdFonteGlobal + " · " + aceitos.length + " artigos");

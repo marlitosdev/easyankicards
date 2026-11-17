@@ -1580,6 +1580,13 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-mapa-dec-ad{flex:1 1 100%;display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--esp-1) var(--esp-2)}
 .lei-mapa-dec-rot{color:var(--sutil)}
 .lei-mapa-dec-rec{padding-left:var(--esp-3);color:var(--sutil);overflow-wrap:anywhere}
+/* (19.163.0) a correção de leitura no leitor e o tipo de mudança na janela do artigo */
+.lei-selo-corr{border-color:var(--acao);color:var(--acao)}
+.lei-selo-corr-atras{border-color:var(--atencao);color:var(--atencao)}
+.lei-art-tipo{display:flex;flex-direction:column;gap:var(--esp-1);margin-bottom:var(--esp-2);padding:var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m)}
+.lei-art-tipo label{display:flex;gap:var(--esp-2);align-items:flex-start;cursor:pointer}
+.lei-corr-st{color:var(--atencao)}
+.lei-corr-st.ok{color:var(--ok)}
 .lei-pre-sai{background:rgba(229,72,77,.18);color:var(--erro);text-decoration:line-through;border-radius:3px;padding:0 2px}
 .lei-pre-entra{background:rgba(34,197,94,.18);color:var(--ok);border-radius:3px;padding:0 2px}
 .lei-pre-junta{background:rgba(232,148,10,.16);color:var(--atencao);border-bottom:2px solid var(--atencao);padding:0 2px}
@@ -11738,6 +11745,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <!-- a lista à esquerda: trocar de artigo sem fechar e reabrir -->
     <div class="lei-art-lista" id="leiArtLista"></div>
     <div class="lei-art-campo">
+      <!-- (19.163.0) numa lei gravada: erro de leitura (corrige o texto, sem selo) ou alteração da lei (camada, com a norma) -->
+      <div id="leiArtTipoCx" class="lei-art-tipo" hidden>
+        <span class="nota" data-i18n="lei_art_tipo_rot"></span>
+        <label><input type="radio" name="leiArtTipo" id="leiArtTipoCorr" value="correcao"> <span data-i18n="lei_art_tipo_corr"></span></label>
+        <label><input type="radio" name="leiArtTipo" id="leiArtTipoAlt" value="alteracao"> <span data-i18n="lei_art_tipo_alt"></span></label>
+      </div>
       <textarea id="leiArtTexto" rows="12"
         style="width:100%;box-sizing:border-box"
         placeholder="Art. 35. Pertencem ao exercício financeiro:&#10;I - as receitas nele arrecadadas;"></textarea>
