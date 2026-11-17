@@ -41,12 +41,22 @@ function dagEstrategia(e) {
     return { dc, sit, res, est };
   } catch (err) { return null; }
 }
-/* quanto a semana da discursiva reserva, em minutos: (preparar + escrever + corrigir) × meta + reescrever (meta ≥ 2) */
+/* (19.156.0) LER OS TEMAS: os preparados ainda não lidos, 10 min cada, até 6 por semana */
+const DAG_LER_MIN = 10, DAG_LER_MAX = 6;
+function dagLeitura(id) {
+  const props = typeof dsPropostas === "function" ? dsPropostas(id) : [];
+  const prep = props.filter((p) => typeof dsPreparada === "function" ? dsPreparada(p) : true);
+  const lidas = prep.filter((p) => typeof dsPropLida === "function" ? dsPropLida(p) : !!(p.lida || p.escrita)).length;
+  const faltam = prep.length - lidas;
+  return { total: prep.length, lidas, faltam, min: DAG_LER_MIN * Math.min(faltam, DAG_LER_MAX) };
+}
+/* quanto a semana da discursiva reserva, em minutos: (preparar + escrever + corrigir) × meta + reescrever (meta ≥ 2)
+ * + ler os temas que faltam */
 function dagReservaMin(e) {
   const x = dagEstrategia(e);
   if (!x) return 0;
   const m = x.est.meta;
-  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor) + (m >= 2 ? DAG_MIN.reesc : 0);
+  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor) + (m >= 2 ? DAG_MIN.reesc : 0) + dagLeitura(e.id).min;
 }
 
 function dagMarcasTodas() { try { return JSON.parse(localStorage.getItem(DAG_CH) || "{}") || {}; } catch (e) { return {}; } }
@@ -92,6 +102,9 @@ function dagSemana(e, plano) {
     /* o tempo da preparação acompanha as REDAÇÕES da semana (um tema por redação), o mesmo que a agenda desconta antes de
      * montar o plano (dagReservaMin) — a contagem de temas do Painel diz o que preparar, não quanto tempo reservar */
     auto: !!(P && P.feitas >= temasMeta), min: DAG_MIN.prep * meta });
+  /* (19.156.0) ler os temas preparados: aparece quando há tema guardado; fica feita com todos lidos */
+  const L = dagLeitura(id);
+  if (L.total) etapas.push({ k: "ler", tipo: "ler", n: L.total, feitos: L.lidas, feito: L.faltam === 0, auto: true, min: L.min });
   /* ② escrever e ③ corrigir, por redação */
   for (let k = 1; k <= meta; k++) {
     const r = daSemana[k - 1] || null;
@@ -110,6 +123,7 @@ function dagSemana(e, plano) {
 
 function dagRotulo(s) {
   if (s.tipo === "prep") return t("dag_prep", { f: s.feitos, n: s.n });
+  if (s.tipo === "ler") return t("dag_ler", { f: s.feitos, n: s.n });
   if (s.tipo === "esc") return t("dag_esc", { i: s.i });
   if (s.tipo === "cor") return t("dag_cor", { i: s.i });
   return t("dag_reesc");
@@ -176,6 +190,7 @@ function dagPintar(S, aoMudar, aberta) {
     b.textContent = (s.feito ? "✓ " : "○ ") + dagRotulo(s) + " · " + horasTexto(s.min);
     b.title = s.auto ? t("dag_auto_aj") : t(s.feito ? "dag_desmarcar_aj" : "dag_marcar_aj");
     b.onclick = () => {
+      if (s.tipo === "ler") { if (typeof dsIrPara === "function") dsIrPara(S.id, { secao: "propostas" }); return; }
       if (s.auto) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
       if (s.tipo === "prep" && S.P) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
       dagMarcar(S.id, s.k, !s.feito);

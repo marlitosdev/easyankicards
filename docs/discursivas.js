@@ -782,6 +782,130 @@ function dsPintarCriterios(card, dc) {
   card.append(det);
 }
 
+
+/* =====================================================================
+ * (19.156.0) LER OS TEMAS: o estado "lido" e a resposta modelo em parágrafos
+ *
+ * Na reta final o passo principal é LER os temas (enunciado, espelho, resposta modelo) — e o app só sabia "por
+ * escrever" ou "escrita". Agora cada tema tem três estados: ○ não lido · ◐ lido (com a data) · ✓ escrito. O "lido" conta
+ * no passo 3 da trilha ("Ler os temas" só fica verde com todos lidos) e na faixa da discursiva na agenda.
+ *
+ * A RESPOSTA MODELO EM PARÁGRAFOS: em 12 de 13 temas guardados ela veio num bloco só — a IA respondeu tudo na linha do
+ * rótulo "RESPOSTA MODELO:". O pedido passa a exigir os parágrafos separados por linha em branco (um por comando); a
+ * tela mostra cada parágrafo com recuo, como na folha de prova; e o modelo antigo de um bloco só ganha "dividir em
+ * parágrafos" (por frases, no número de itens do espelho, preferindo cortar onde começa "Quanto…", "Além…", "Por fim…").
+ * ===================================================================== */
+function dsPropLida(p) { return !!(p && (p.lida || p.escrita)); }
+function dsPropMarcarLida(id, pid, sim) {
+  const p = dsPropostaAtualizar(id, pid, { lida: sim ? dsHoje() : null });
+  try { reg("DISCURSIVAS", sim ? "tema marcado como lido" : "tema desmarcado como lido", p ? p.tema : pid); } catch (e) {}
+  return p;
+}
+/* os parágrafos de um texto: separados por linha em branco ou, se não houver, por quebra simples */
+function dsParagrafos(txt) {
+  const s = String(txt || "").replace(/\r/g, "").trim();
+  if (!s) return [];
+  const porBranco = s.split(/\n\s*\n/).map((x) => x.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
+  return porBranco.length > 1 ? porBranco : s.split(/\n/).map((x) => x.trim()).filter(Boolean);
+}
+/* quantos itens tem o espelho ("Item 1 (10 pontos)", "1.", "a)") — entre 2 e 5; sem itens, 3 */
+function dsItensDoEspelho(esp) {
+  const n = (String(esp || "").match(/(^|\n)\s*(?:item\s+\d+|\d+[.)]|[a-e][.)])\s/gi) || []).length;
+  return n ? Math.max(2, Math.min(5, n)) : 3;
+}
+/* as frases do texto, sem cortar em "art.", "nº", "inc." e afins */
+function dsFrases(txt) {
+  const s = String(txt || "").replace(/\s+/g, " ").trim();
+  const out = [];
+  let ini = 0;
+  const re = /([.!?])\s+(?=["“(]?[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g;
+  let m;
+  while ((m = re.exec(s))) {
+    const fim = m.index + 1;
+    const antes = s.slice(Math.max(ini, fim - 10), fim);
+    if (/(?:^|[\s(])(?:art|arts|inc|incs|n|nº|al|par|p|ex|dr|sr|sra|ltda|cf|ss|fls|v)\.$/i.test(antes)) continue;
+    out.push(s.slice(ini, fim).trim());
+    ini = re.lastIndex;
+  }
+  if (ini < s.length) out.push(s.slice(ini).trim());
+  return out.filter(Boolean);
+}
+const DS_ABRE_PARAGRAFO = /^["“]?(Quanto|No que|No tocante|Em rela[cç][aã]o|Relativamente|Al[eé]m|Ademais|Outrossim|Por fim|Finalmente|Por outro lado|Diante|Dessa forma|Desse modo|Assim|Conclui|Em suma|Em s[ií]ntese|Primeiramente|Inicialmente|Em primeiro|Em segundo|Em terceiro|Sobre|J[aá] )/i;
+/* divide um texto corrido em k parágrafos: corta entre frases, perto de cada 1/k do tamanho, e prefere a frase que
+ * abre assunto novo ("Quanto…", "Além…", "Por fim…") */
+function dsDividirEmParagrafos(txt, k) {
+  const fr = dsFrases(txt);
+  if (fr.length < 2) return [String(txt || "").trim()].filter(Boolean);
+  const n = Math.max(2, Math.min(k || 3, fr.length));
+  const tam = fr.map((x) => x.length + 1);
+  const total = tam.reduce((a, b) => a + b, 0);
+  const acum = [];
+  tam.reduce((a, b, i) => (acum[i] = a + b), 0);
+  const cortes = [];
+  let desde = 0;
+  for (let j = 1; j < n; j++) {
+    const alvo = (total * j) / n;
+    let melhor = -1, nota = Infinity;
+    for (let i = desde; i < fr.length - (n - j); i++) {
+      const v = Math.abs(acum[i] - alvo) - (DS_ABRE_PARAGRAFO.test(fr[i + 1] || "") ? total / (2.5 * n) : 0);
+      if (v < nota) { nota = v; melhor = i; }
+    }
+    if (melhor < 0) break;
+    cortes.push(melhor);
+    desde = melhor + 1;
+  }
+  const out = [];
+  let a = 0;
+  cortes.concat([fr.length - 1]).forEach((c) => { out.push(fr.slice(a, c + 1).join(" ")); a = c + 1; });
+  return out.filter(Boolean);
+}
+/* o modelo de um bloco só, dividido e guardado (com desfazer) */
+function dsModeloDividir(id, pid) {
+  const p = (dsPropostas(id) || []).find((x) => x.id === pid);
+  if (!p || !p.modelo) return null;
+  const partes = dsDividirEmParagrafos(p.modelo, dsItensDoEspelho(p.espelho));
+  if (partes.length < 2) return null;
+  const antes = p.modelo;
+  dsPropostaAtualizar(id, pid, { modelo: partes.join("\n\n") });
+  try { reg("DISCURSIVAS", "resposta modelo dividida em parágrafos", p.tema + " · " + partes.length); } catch (e) {}
+  try {
+    if (typeof toastDesfazer === "function") toastDesfazer(t("ds_div_ok", { n: partes.length }), () => { dsPropostaAtualizar(id, pid, { modelo: antes }); dsRender(); });
+  } catch (e) {}
+  return partes;
+}
+let dsPropRolar = "";   /* depois de escolher um tema, a tela rola até o leitor dele */
+/* rola até o elemento descontando o que fica preso no alto (o cabeçalho do app e a faixa das seções, no celular) */
+function dsRolarAte(el) {
+  if (!el) return false;
+  let tapa = 0;
+  try {
+    ["header", "#modosCaixa"].forEach((sel) => {
+      const x = document.querySelector(sel);
+      if (x && typeof getComputedStyle === "function" && /sticky|fixed/.test(getComputedStyle(x).position || "")) tapa = Math.max(tapa, x.getBoundingClientRect().bottom || 0);
+    });
+  } catch (e) { tapa = 0; }
+  try {
+    if (typeof window !== "undefined" && window.scrollBy && el.getBoundingClientRect) { window.scrollBy(0, el.getBoundingClientRect().top - tapa - 8); return true; }
+  } catch (e) {}
+  if (el.scrollIntoView) el.scrollIntoView({ block: "start" });
+  return true;
+}
+/* a letra de leitura do tema (enunciado, espelho, resposta modelo), em px; A−/A+ no leitor; guardada no aparelho */
+const DS_LER_CH = "eac_ds_fonte", DS_LER_MIN = 14, DS_LER_MAX = 26, DS_LER_PADRAO = 17;
+function dsLerFonte() { try { const v = Number(localStorage.getItem(DS_LER_CH)); return v >= DS_LER_MIN && v <= DS_LER_MAX ? v : DS_LER_PADRAO; } catch (e) { return DS_LER_PADRAO; } }
+function dsLerFonteAplicar() {
+  const sec = typeof document !== "undefined" ? document.getElementById("secDiscursivas") : null;
+  if (sec && sec.style) { if (sec.style.setProperty) sec.style.setProperty("--ds-ler", dsLerFonte() + "px"); else sec.style["--ds-ler"] = dsLerFonte() + "px"; }
+  if (sec && sec.setAttribute) sec.setAttribute("data-ds-ler", String(dsLerFonte()));
+}
+function dsLerFonteMudar(delta) {
+  const v = Math.max(DS_LER_MIN, Math.min(DS_LER_MAX, dsLerFonte() + (delta > 0 ? 1 : -1)));
+  try { localStorage.setItem(DS_LER_CH, String(v)); } catch (e) {}
+  dsLerFonteAplicar();
+  try { reg("DISCURSIVAS", "letra de leitura dos temas", v + "px"); } catch (e) {}
+  return v;
+}
+
 /* ---------------- propostas: atualizar, modelo, correção ---------------- */
 function dsPropostaAtualizar(id, pid, patch) {
   const lista = dsPropostasTodas()[id] || [];
@@ -948,6 +1072,8 @@ function dsPropostasFiltradas(e, com) {
   if (f.st === "escrita") out = out.filter((x) => x.p.escrita);
   if (f.st === "modelo") out = out.filter((x) => x.p.modelo);
   if (f.st === "semModelo") out = out.filter((x) => !x.p.modelo && !x.p.escrita);
+  if (f.st === "naolida") out = out.filter((x) => !dsPropLida(x.p));
+  if (f.st === "lida") out = out.filter((x) => x.p.lida && !x.p.escrita);
   const q = dsNorm(f.q);
   if (q) out = out.filter((x) => dsNorm(x.p.tema + " " + x.p.disc + " " + (x.p.enunciado || "")).indexOf(q) >= 0);
   return out;
@@ -957,7 +1083,7 @@ function dsPintarPropostas(card, e, dc, com) {
   const todasDeste = dsPropostas(e.id);
   const box = el("div", "ds-props");
   box.id = "dsProps_" + e.id;
-  box.append(el("div", "ds-sub-tit", t("ds_prop_tit", { n: todasDeste.length, a: todasDeste.filter((p) => !p.escrita).length })));
+  box.append(el("div", "ds-sub-tit", t("ds_prop_tit3", { n: todasDeste.length, l: todasDeste.filter((p) => p.lida && !p.escrita).length, e: todasDeste.filter((p) => p.escrita).length })));
   const lista0 = com || [{ e, dc }];
   /* o filtro */
   const fb = el("div", "ds-filtros");
@@ -966,7 +1092,7 @@ function dsPintarPropostas(card, e, dc, com) {
   const discs = [];
   (dsPropFiltro.ed === "todos" ? lista0 : [{ e }]).forEach((x) => dsPropostas(x.e.id).forEach((p) => { if (p.disc && discs.indexOf(p.disc) < 0) discs.push(p.disc); }));
   sel("dsPropFDisc_" + e.id, [["", t("ds_pf_disc_todas")]].concat(discs.sort().map((d) => [d, d])), dsPropFiltro.disc, (v) => { dsPropFiltro.disc = v; });
-  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")], ["semModelo", t("ds_pf_st_semmodelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
+  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["naolida", t("ds_pf_st_naolida")], ["lida", t("ds_pf_st_lida")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")], ["semModelo", t("ds_pf_st_semmodelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
   const q = document.createElement("input"); q.type = "search"; q.className = "ds-sel ds-pf-q"; q.id = "dsPropFQ_" + e.id; q.placeholder = t("ds_pf_busca"); q.value = dsPropFiltro.q;
   q.onchange = () => { dsPropFiltro.q = q.value; dsRender(); };
   fb.append(q);
@@ -978,32 +1104,77 @@ function dsPintarPropostas(card, e, dc, com) {
   if (atual < 0) atual = 0;
   const ul = el("div", "ds-prop-lista");
   vis.forEach((x, k) => {
-    const b = el("button", "ds-prop-item" + (k === atual ? " sel" : "") + (x.p.escrita ? " escrita" : ""));
+    const b = el("button", "ds-prop-item" + (k === atual ? " sel" : "") + (x.p.escrita ? " escrita" : x.p.lida ? " lida" : ""));
     b.type = "button";
-    b.append(el("span", "ds-prop-item-t", (x.p.escrita ? "✓ " : "○ ") + x.p.tema));
+    b.id = "dsPropIt_" + x.p.id;
+    b.title = t(x.p.escrita ? "ds_pi_escrita" : x.p.lida ? "ds_pi_lida" : "ds_pi_naolida");
+    b.append(el("span", "ds-prop-item-t", (x.p.escrita ? "✓ " : x.p.lida ? "◐ " : "○ ") + x.p.tema));
     b.append(el("span", "ds-sug-d", [x.p.disc, dsPropFiltro.ed === "todos" ? x.ed.nome : ""].filter(Boolean).join(" · ") + (x.p.modelo ? " · " + t("ds_pf_tem_modelo") : "")));
-    b.onclick = () => { dsPropSel[e.id] = x.p.id; dsRender(); };
+    b.onclick = () => { dsPropSel[e.id] = x.p.id; dsPropRolar = e.id; dsRender(); };
     ul.append(b);
   });
-  box.append(ul);
+  /* (19.156.0) lista e leitor juntos: lado a lado na tela larga (a lista à esquerda, presa), empilhados no celular */
+  const corpo = el("div", "ds-pl-corpo");
+  corpo.append(ul);
+  box.append(corpo);
   /* o leitor */
   const cur = vis[atual], p = cur.p, edP = cur.ed, dcP = dsDiscursivaDe(edP).dc || dc;
   const rd = el("div", "ds-leitor");
   rd.id = "dsLeitor_" + e.id;
   const nav = el("div", "ds-leitor-nav");
   const ant = el("button", "btn-min", "◀ " + t("ds_pl_ant")); ant.type = "button"; ant.disabled = atual === 0;
-  ant.onclick = () => { dsPropSel[e.id] = vis[atual - 1].p.id; dsRender(); };
+  ant.onclick = () => { dsPropSel[e.id] = vis[atual - 1].p.id; dsPropRolar = e.id; dsRender(); };
   const prox = el("button", "btn-min", t("ds_pl_prox") + " ▶"); prox.type = "button"; prox.disabled = atual === vis.length - 1;
-  prox.onclick = () => { dsPropSel[e.id] = vis[atual + 1].p.id; dsRender(); };
+  prox.onclick = () => { dsPropSel[e.id] = vis[atual + 1].p.id; dsPropRolar = e.id; dsRender(); };
   nav.append(ant, el("span", "nota", t("ds_pl_pos", { a: atual + 1, n: vis.length })), prox);
   rd.append(nav);
-  rd.append(el("div", "ds-leitor-tit", (p.escrita ? "✓ " : "") + p.tema));
+  /* A−/A+ da leitura do tema */
+  const fsx = el("div", "ds-ler-fs");
+  const menos = el("button", "btn-min", "A−"); menos.type = "button"; menos.id = "dsLerMenos"; menos.title = t("ds_ler_menos");
+  const valor = el("span", "", Math.round((dsLerFonte() / DS_LER_PADRAO) * 100) + "%");
+  const mais = el("button", "btn-min", "A+"); mais.type = "button"; mais.id = "dsLerMais"; mais.title = t("ds_ler_mais");
+  const pintaV = () => { valor.textContent = Math.round((dsLerFonte() / DS_LER_PADRAO) * 100) + "%"; menos.disabled = dsLerFonte() <= DS_LER_MIN; mais.disabled = dsLerFonte() >= DS_LER_MAX; };
+  menos.onclick = () => { dsLerFonteMudar(-1); pintaV(); };
+  mais.onclick = () => { dsLerFonteMudar(1); pintaV(); };
+  pintaV();
+  fsx.append(menos, valor, mais);
+  rd.append(fsx);
+  dsLerFonteAplicar();
+  rd.append(el("div", "ds-leitor-tit", (p.escrita ? "✓ " : p.lida ? "◐ " : "") + p.tema));
+  /* (19.156.0) LIDO: marcar leva ao próximo da lista; o escrito já conta como lido */
+  if (!p.escrita) {
+    const lb = el("div", "ds-lida-bar");
+    const bl = el("button", "btn-min" + (p.lida ? "" : " btn-min-ok"), p.lida ? t("ds_pl_lida_desf", { d: dsDataBr(p.lida) }) : t(atual < vis.length - 1 ? "ds_pl_lida_prox" : "ds_pl_lida"));
+    bl.type = "button";
+    bl.id = "dsPropLida_" + p.id;
+    bl.title = t("ds_pl_lida_tip");
+    bl.onclick = () => {
+      const marcar = !p.lida;
+      dsPropMarcarLida(edP.id, p.id, marcar);
+      if (marcar && atual < vis.length - 1) dsPropSel[e.id] = vis[atual + 1].p.id;
+      dsPropRolar = e.id;
+      dsRender();
+    };
+    lb.append(bl);
+    rd.append(lb);
+  }
   rd.append(el("div", "ds-sug-d", [p.disc, edP.nome, t(p.fonte === "ia" ? "ds_prop_fonte_ia" : "ds_prop_fonte_sug"), dsDataBr(p.d)].filter(Boolean).join(" · ")));
   if (p.enunciado) rd.append(el("div", "ds-prop-enun", p.enunciado));
   if (p.espelho) { const d = el("details", "ds-det"); d.append(el("summary", "", t("ds_prop_espelho")), el("div", "ds-prop-enun", p.espelho)); rd.append(d); }
   if (p.modelo) {
     const d = el("details", "ds-det ds-det-modelo"); d.open = true;
-    d.append(el("summary", "", t("ds_pl_modelo") + (p.modeloLinhas ? " · " + t("ds_modelo_linhas", { n: p.modeloLinhas }) : "")), el("div", "ds-modelo", p.modelo));
+    const mod = el("div", "ds-modelo");
+    mod.id = "dsModeloTxt_" + p.id;
+    const pars = dsParagrafos(p.modelo);
+    pars.forEach((x) => mod.append(el("p", "ds-mod-par", x)));
+    d.append(el("summary", "", t("ds_pl_modelo") + (p.modeloLinhas ? " · " + t("ds_modelo_linhas", { n: p.modeloLinhas }) : "") + " · " + t("ds_pl_pars", { n: pars.length })), mod);
+    /* um bloco só e comprido: oferece dividir pelos itens do espelho */
+    if (pars.length < 2 && String(p.modelo).length > 500) {
+      const dv = el("button", "btn-min ds-div-bt", t("ds_div_bt", { n: dsItensDoEspelho(p.espelho) }));
+      dv.type = "button"; dv.id = "dsModeloDiv_" + p.id; dv.title = t("ds_div_tip");
+      dv.onclick = () => { dsModeloDividir(edP.id, p.id); dsPropRolar = e.id; dsRender(); };
+      d.append(dv);
+    }
     rd.append(d);
   }
   if (p.correcao) { const d = el("details", "ds-det"); d.append(el("summary", "", t("ds_pl_correcao") + (p.nota ? " · " + p.nota.nota + "/" + p.nota.max : "")), el("div", "ds-prop-enun", p.correcao)); rd.append(d); }
@@ -1045,8 +1216,14 @@ function dsPintarPropostas(card, e, dc, com) {
       return {};
     } }));
   rd.append(ab);
-  box.append(rd);
+  corpo.append(rd);
   card.append(box);
+  /* depois de escolher um tema: o leitor sobe para a vista (no celular ele fica abaixo da lista) */
+  if (dsPropRolar === e.id) {
+    dsPropRolar = "";
+    /* pelo id, na hora: a tela pode ter sido redesenhada de novo e o leitor de antes já não estar nela */
+    setTimeout(() => { try { dsRolarAte(document.getElementById("dsLeitor_" + e.id) || rd); } catch (err) {} }, 60);
+  }
 }
 
 /* =====================================================================
@@ -1123,6 +1300,9 @@ function dsPainel(e, plano, dc, sit) {
   discs.forEach((d) => { cont[d.nivel]++; });
   return { discs, cont, feitas, meta, depois, faltam, semanas, dias, passou, modo: dsModoPadrao(dias),
     guardadas: props.filter(dsPreparada).length,
+    /* (19.156.0) os temas preparados já lidos (ou escritos) e os que ainda faltam ler */
+    lidas: props.filter((p) => dsPreparada(p) && dsPropLida(p)).length,
+    paraLer: props.filter((p) => dsPreparada(p) && !dsPropLida(p)),
     semModelo: props.filter((p) => dsPreparada(p) && !p.modelo && !p.escrita) };
 }
 
@@ -1371,7 +1551,8 @@ const DS_TRILHA = [["formato", "editar"], ["gerar", "geral"], ["ler", "propostas
 function dsTrilhaEstado(dc, P, nRed) {
   const gerou = !!(P && P.guardadas > 0);
   const gerarOk = !!(P && P.discs.length && P.cont.vermelho === 0);
-  const lerOk = gerou && !!P && (P.modo === "ideias" || P.semModelo.length === 0);
+  /* (19.156.0) "Ler os temas" fica verde quando todos os temas preparados foram LIDOS (e, no modo completo, têm modelo) */
+  const lerOk = gerou && !!P && (P.modo === "ideias" || P.semModelo.length === 0) && !(P.paraLer || []).length;
   const passos = DS_TRILHA.map(([k, sec]) => ({ k, sec, feito: false, parcial: false, opcional: k === "escrever" }));
   passos[0].feito = !(dc && dc.semFormato);
   passos[1].feito = gerarOk; passos[1].parcial = gerou && !gerarOk;
