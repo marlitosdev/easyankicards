@@ -4895,6 +4895,14 @@ function leiMapaAbrir(repintar) {
     if (dg.ajustes && dg.ajustes.length) ajCx.append(leiAjustesEl(l, dg.ajustes));
   }
   if (!repintar) { try { leiAjusteVistos(l, dg.ajustes || []); } catch (e) {} }
+  /* (19.162.0) AS DECISÕES TOMADAS: as suas correções à mão e o que a limpeza da colagem fez (recolhido) */
+  const dcCx = $("leiMapaDecisoes");
+  if (dcCx) {
+    dcCx.innerHTML = "";
+    let dEl = null;
+    try { dEl = typeof leiCorrMapaEl === "function" ? leiCorrMapaEl(l, dg.estrutura.artigos) : null; } catch (e) { dEl = null; }
+    if (dEl) dcCx.append(dEl);
+  }
   const infoCx = $("leiMapaInfo");
   if (infoCx) {
     infoCx.innerHTML = "";
@@ -4964,7 +4972,7 @@ function leiGravar(opc) {
       const an = leiPreAnalisar(txt);
       if (an.deve) {
         leiRevisarColagemAbrir({
-          modo: "criar", texto: txt, pre: an.pre,
+          modo: "criar", texto: txt, pre: an.pre, opcPre: undefined,
           aoConfirmar: (res) => {
             $("leiTexto").value = res.texto;
             leiGravar({ separado: true, limpo: true, anexos: res.anexos, ajustesRecusados: res.ajustesRecusados });
@@ -5030,6 +5038,8 @@ function leiGravar(opc) {
       escolhido && escolhido.apelido ? { apelido: escolhido.apelido } : {}));
     if (!l) return;
     leiIdAtual = l.id;
+    /* (19.162.0) as decisões da colagem desta lei nasceram como "(lei nova)": passam a ter o nome dela */
+    if (typeof leiDecBatizar === "function") leiDecBatizar(l.nome);
   } else {
     /* CONTINUA GRAVANDO O TEXTO INTEIRO — de propósito.
      *
@@ -5048,6 +5058,8 @@ function leiGravar(opc) {
     leiGuardar({ id: l.id, texto: txt });
     leiLigar(l.id, leiAtual.chave);
   }
+  /* (19.162.0) as correções à mão da revisão que acabou de ser confirmada entram na lei */
+  if (typeof leiCorrGravarPendentes === "function" && leiIdAtual) leiCorrGravarPendentes(leiIdAtual, "criar");
 
   /* o tópico guarda o PONTEIRO, não o texto — mas só ATUALIZA um resumo
    * que já existe. Criar um aqui de graça é o mesmo defeito que
@@ -5863,6 +5875,7 @@ function leiRelatorioFluxo(tela, opc) {
     p.push("  recusadas por você: " + (recusadas.length ? recusadas.length : "nenhuma"));
     recusadas.slice(0, 30).forEach((m) => p.push("      " + m.grupo + " linha(s) " + (m.linhas || []).slice(0, 4).join(",") + " · " + cortar(m.antes, 120)));
     if (recusadas.length > 30) p.push("      …e mais " + (recusadas.length - 30));
+    if (typeof leiCorrRelatorio === "function") leiCorrRelatorio(c).forEach((x) => p.push(x));
     if ((c.pre.identificadores || []).length) {
       p.push("  · identificadores revogados mantidos (informativo, sem decisão — nunca são removidos): " + c.pre.identificadores.length);
     }
@@ -5915,6 +5928,8 @@ function leiRelatorioFluxo(tela, opc) {
         p.push("  numeração (só informação; lei que altera outra): " + dg.numeracaoInfo.length + " — "
           + dg.numeracaoInfo.map((x) => x.tipo + " art. " + x.numCru + " linha " + x.linha).join(" · "));
       }
+      /* (19.162.0) as correções à mão guardadas na lei */
+      if (typeof leiCorrMapaTexto === "function") leiCorrMapaTexto(lm).forEach((x) => p.push("  " + x));
       const ajs = dg.ajustes || [];
       if (ajs.length) {
         const pt = {};
@@ -7036,6 +7051,9 @@ function leiRevisarColagemAbrir(ctx) {
   if (leiPreCtx.modo === "criar" && typeof leiNovaEtapa === "function") leiNovaEtapa("limpeza");
   leiPreAvisar("");
   leiPreCtx.texto = String(leiPreCtx.texto == null ? "" : leiPreCtx.texto).replace(/\r\n?/g, "\n");
+  /* (19.162.0) o texto como veio fica guardado; as correções à mão vão por cima dele */
+  if (typeof leiCorrIniciar === "function") leiCorrIniciar(leiPreCtx);
+  if (typeof leiCorrPendente !== "undefined") leiCorrPendente = null;
   leiPreSugestoes();
   leiPrePintar();
   abrirModal("dlgLeiPre");
@@ -7374,12 +7392,15 @@ function leiPreJanelaEl(c, itens) {
         if (p.t === "◌") s.title = t("lei_pre_jan_invis_tip");
         l.append(s);
       });
-      corpo.append(l);
+      /* (19.162.0) o ✎ da linha e a caixa de edição aberta nela (lei-correcoes.js) */
+      if (typeof leiCorrLinhaEl === "function" && r.n) leiCorrLinhaEl(c, l, r.n, corpo, box.id); else corpo.append(l);
     });
     if (mod.mais) corpo.append(el("span", "lei-pre-jan-nota", t(mod.maisChave || "lei_pre_jan_mais", { n: mod.mais })));
     if (mod.nota) corpo.append(el("span", "lei-pre-jan-nota", mod.nota));
     if (mod.igual) corpo.append(el("span", "lei-pre-jan-nota", t("lei_pre_jan_igual")));
     box.append(corpo);
+    /* (19.162.0) a barra da seleção (Riscar · Tirar o risco · Separar · Juntar), escondida até selecionar aqui */
+    if (typeof leiCorrBarraSelEl === "function") leiCorrBarraSelEl(c, box);
   };
   box.pintar = pintar;
   pintar();
@@ -8182,6 +8203,9 @@ function leiPrePintar() {
 
   const cx = $("leiPreLista");
   cx.innerHTML = "";
+  /* (19.162.0) "✎ Corrigir o texto à mão": ir para uma linha, a lista das correções e o desfazer */
+  const corrCx = $("leiPreCorrCx");
+  if (corrCx) { corrCx.innerHTML = ""; if (typeof leiCorrPainelEl === "function") corrCx.append(leiCorrPainelEl(c)); }
   if (rever.length && seguras.length) {
     /* o que precisa do seu olho primeiro; as limpezas seguras num bloco recolhido (já aceitas) */
     rever.forEach((x) => cx.append(leiPreGrupoEl(c, x.g, x.itens)));
@@ -8387,6 +8411,8 @@ function leiPreConfirmar() {
   if (!c) return false;
   leiDecColagem(c, false);
   const res = leiAplicarPreprocesso(c.texto, c.pre.mudancas, c.decisoes);
+  /* (19.162.0) as correções à mão esperam a lei ser gravada (e entram no histórico de decisões) */
+  if (typeof leiCorrConfirmadas === "function") { const cr = leiCorrConfirmadas(c); if (cr.length) res.correcoes = cr; }
   const aceitas = c.pre.mudancas.filter((m) => leiPreAceita(c, m)).length;
   /* (v19.132.0) as escolhas dos números com letra nascem junto com a lei (modo criar) */
   const ajRec = c.modo === "criar" && c.ajRec && Object.keys(c.ajRec).length ? Object.assign({}, c.ajRec) : null;
@@ -8396,7 +8422,8 @@ function leiPreConfirmar() {
   leiPreAvisar("");
   try {
     leiReg(c.modo === "atualizar" ? "atualizacao" : "gravar", "revisão da colagem: escolhas confirmadas",
-      JSON.stringify(res.resumo) + (ajRec ? " · números com letra trocados: " + Object.keys(ajRec).join(", ") : ""));
+      JSON.stringify(res.resumo) + (ajRec ? " · números com letra trocados: " + Object.keys(ajRec).join(", ") : "")
+      + ((c.correcoes || []).length ? " · " + c.correcoes.length + " correção(ões) à mão" : ""));
   } catch (e) {}
   /* (v18.66.0) no registro: grupo a grupo, quantas sugestões e quantas a pessoa aceitou */
   try {
@@ -8407,6 +8434,7 @@ function leiPreConfirmar() {
       det.push(g + ": " + it.length + " · " + t("lei_fx_d_aceitas") + " " + it.filter((m) => leiPreAceita(c, m)).length
         + " — " + it.slice(0, 3).map((m) => String(m.antes || "").replace(/\s+/g, " ").slice(0, 90)).join(" | "));
     });
+    if ((c.correcoes || []).length && typeof leiCorrRelatorio === "function") leiCorrRelatorio(c).forEach((x) => det.push(x.trim()));
     leiFluxoEtapa("limpeza", t("lei_fx_r_limpeza", { n: c.pre.mudancas.length, a: aceitas, x: (res.resumo && res.resumo.anexosSeparados) || 0 }), det);
   } catch (e) {}
   toastMsg(t("lei_pre_t_confirmado", { n: aceitas, a: (res.resumo && res.resumo.anexosSeparados) || 0 }), 3200);
@@ -8427,6 +8455,8 @@ function leiPreOriginal() {
   } catch (e) {}
   try { leiFluxoEtapa("limpeza", t("lei_fx_r_limpeza_original", { n: c.pre.mudancas.length }), []); } catch (e) {}
   toastMsg(t("lei_pre_t_original"), 3200);
+  /* (19.162.0) as correções à mão valem também aqui: são suas, não do app */
+  if (typeof leiCorrConfirmadas === "function") leiCorrConfirmadas(c);
   /* "o texto original" mantém tudo, mas as marcas do tachado (só da colagem) nunca ficam */
   c.aoConfirmar({ texto: leiTirarMarcasTachado(c.texto), anexos: [], resumo: {} });
   return true;
@@ -9475,10 +9505,11 @@ function leiAtualizarComparar(opc) {
   /* 2. LIMPEZA DO TEXTO DE PDF (cabeçalho de página, anexos, "Art . 382",
    * remissão partida) — a pessoa vê e aprova antes de qualquer comparação */
   if (!o.limpo) {
-    const an = leiPreAnalisar(novoTexto, leiPareceAlteradora(novoTexto).sim ? { semAnexos: true } : undefined);
+    const opcAn = leiPareceAlteradora(novoTexto).sim ? { semAnexos: true } : undefined;
+    const an = leiPreAnalisar(novoTexto, opcAn);
     if (an.deve) {
       leiRevisarColagemAbrir({
-        modo: "atualizar", texto: novoTexto, pre: an.pre,
+        modo: "atualizar", texto: novoTexto, pre: an.pre, opcPre: opcAn,
         aoConfirmar: (res) => {
           $("leiUpdTexto").value = res.texto;
           seguinte({ separado: true, limpo: true });
@@ -9596,7 +9627,7 @@ function leiAtualizarAlteracoes(l, fonte, novoTexto, o) {
     const an = leiPreAnalisar(novoTexto, { manterAspas: true, semNumeracao: true, semAnexos: true });
     if (an.deve) {
       leiRevisarColagemAbrir({
-        modo: "atualizar", texto: novoTexto, pre: an.pre, semNumeracao: true,
+        modo: "atualizar", texto: novoTexto, pre: an.pre, semNumeracao: true, opcPre: { manterAspas: true, semNumeracao: true, semAnexos: true },
         aoConfirmar: (res) => { $("leiUpdTexto").value = res.texto; seguinte({ limpo: true }); },
       });
       return false;
@@ -10443,6 +10474,8 @@ function leiAtualizarAplicar() {
     versao: (l.versao ? l.versao + "; " : "")
       + t("lei_upd_versao_sufixo", { f: leiUpdFonteGlobal }),
   });
+  /* (19.162.0) as correções à mão da revisão desta atualização entram na lei */
+  if (typeof leiCorrGravarPendentes === "function") leiCorrGravarPendentes(leiIdAtual, "atualizar");
 
   leiReg("atualizacao", "versão atualizada",
          leiUpdFonteGlobal + " · " + aceitos.length + " artigos");

@@ -1552,6 +1552,34 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-pre-jan-l{display:block;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--sutil)}
 .lei-pre-jan-l.alvo{color:var(--texto)}
 .lei-pre-jan-n{display:inline-block;min-width:42px;opacity:.55;user-select:none}
+/* (19.162.0) as correções à mão na revisão da colagem (lei-correcoes.js) */
+.lei-corr-ed-bt{margin-left:var(--esp-2);padding:0 var(--esp-1);border:1px solid transparent;border-radius:var(--r-p);background:none;color:var(--acao);cursor:pointer;opacity:.4;user-select:none}
+.lei-pre-jan-l:hover .lei-corr-ed-bt,.lei-corr-ed-bt:focus{opacity:1;border-color:var(--borda)}
+@media (hover:none){.lei-corr-ed-bt{opacity:.8}}
+.lei-corr-ed{margin:var(--esp-1) 0 var(--esp-2);padding:var(--esp-2);border:1px solid var(--acao);border-radius:var(--r-m);background:var(--campo)}
+.lei-corr-ed-tit{font-weight:var(--peso-m);margin-bottom:var(--esp-1)}
+.lei-corr-ed-ta{width:100%;box-sizing:border-box;font-family:ui-monospace,Consolas,monospace}
+.lei-corr-ed-ac,.lei-corr-ir{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin-top:var(--esp-1)}
+.lei-corr-ir-q{flex:1 1 220px;min-width:0}
+.lei-corr-sel{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:center;padding:var(--esp-2);border-top:1px solid var(--borda);background:var(--campo)}
+.lei-corr-sel[hidden]{display:none}
+.lei-corr-sel-t{flex:1 1 100%;color:var(--sutil)}
+.lei-corr{margin:0 0 var(--esp-3);padding:var(--esp-2) var(--esp-3);border:1px solid var(--borda);border-radius:var(--r-m)}
+.lei-corr>summary{cursor:pointer;font-weight:var(--peso-m)}
+.lei-corr-jan{margin-top:var(--esp-2)}
+.lei-corr-lista{margin-top:var(--esp-2)}
+.lei-corr-item{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:baseline;padding:var(--esp-1) 0;border-top:1px solid var(--borda)}
+.lei-corr-tipo{font-weight:var(--peso-m);color:var(--acao)}
+.lei-corr-res{flex:1 1 200px;min-width:0;overflow-wrap:anywhere;font-family:ui-monospace,Consolas,monospace}
+.lei-corr-item.falhou .lei-corr-res{text-decoration:line-through;color:var(--sutil)}
+.lei-corr-falhou{color:var(--atencao)}
+/* (19.162.0) as decisões tomadas, no mapa da lei */
+.lei-mapa-dec{margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--borda);border-radius:var(--r-m)}
+.lei-mapa-dec>summary{cursor:pointer;font-weight:var(--peso-m)}
+.lei-mapa-dec-sub{font-weight:var(--peso-m);margin:var(--esp-3) 0 var(--esp-1)}
+.lei-mapa-dec-ad{flex:1 1 100%;display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--esp-1) var(--esp-2)}
+.lei-mapa-dec-rot{color:var(--sutil)}
+.lei-mapa-dec-rec{padding-left:var(--esp-3);color:var(--sutil);overflow-wrap:anywhere}
 .lei-pre-sai{background:rgba(229,72,77,.18);color:var(--erro);text-decoration:line-through;border-radius:3px;padding:0 2px}
 .lei-pre-entra{background:rgba(34,197,94,.18);color:var(--ok);border-radius:3px;padding:0 2px}
 .lei-pre-junta{background:rgba(232,148,10,.16);color:var(--atencao);border-bottom:2px solid var(--atencao);padding:0 2px}
@@ -12023,6 +12051,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div id="leiPreNumeracao" class="lei-pre-num" hidden></div>
   <!-- (v19.132.0) os números com letra no texto ("Art. 3º - A Dívida…"), como o app leu e a troca na hora -->
   <div id="leiPreSufixos" class="lei-pre-suf" hidden></div>
+  <!-- (19.162.0) "✎ Corrigir o texto à mão" (leiCorrPainelEl, lei-correcoes.js) -->
+  <div id="leiPreCorrCx"></div>
   <div id="leiPreLista" class="lei-dup-lista"></div>
   <p class="nota" id="leiPreFim"></p>
   <div class="dlg-rodape">
@@ -12565,6 +12595,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div id="leiMapaAjustes"></div>
   <!-- NUMERAÇÃO DE LEI QUE ALTERA OUTRA: só informação, recolhida (leiNumInfoEl, lei-ui.js) -->
   <div id="leiMapaInfo"></div>
+  <!-- (19.162.0) AS DECISÕES TOMADAS: correções à mão e a limpeza da colagem, recolhido (leiCorrMapaEl, lei-correcoes.js) -->
+  <div id="leiMapaDecisoes"></div>
   <!-- COMO LER ESTA TELA: recolhido. Explicação que se lê uma vez não fica ocupando o topo. -->
   <details class="lei-mapa-como">
     <summary data-i18n="lei_mapa_como"></summary>
@@ -13975,6 +14007,7 @@ window.__sqlPromise = initSqlJs({
 <script src="edital-pontua.js"></script>
 <script src="discursivas.js"></script>
 <script src="discursiva-agenda.js"></script>
+<script src="lei-correcoes.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
