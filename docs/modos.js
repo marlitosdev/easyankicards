@@ -63,6 +63,11 @@ function trocarModo(id) {
   if (id === "questoes" && typeof qsUiRender === "function") { try { qsUiRender(); } catch (e) {} }
   /* (19.73.0) a tela das discursivas também se refaz ao abrir (o treino pode ter sido marcado na agenda) */
   if (id === "discursivas" && typeof dsRender === "function") { try { dsRender(); } catch (e) {} }
+  /* (19.160.0) e a agenda se refaz ao abrir o Edital quando algo das Discursivas mudou (a faixa da discursiva) */
+  if (id === "edital" && typeof dsAgendaSuja !== "undefined" && dsAgendaSuja && typeof hubPintarAgenda === "function") {
+    dsAgendaSuja = false;
+    setTimeout(() => { try { hubPintarAgenda(); } catch (e) {} }, 0);
+  }
   try { localStorage.setItem("eac_modo", id); } catch (e) {}
   if (typeof reg === "function") reg("MODO", "modo " + id);
 }

@@ -61,6 +61,10 @@ function dsPromptTemas(e, dc) {
  * quantas fora do tamanho — o que o Raio-X também leva para a IA.
  * ===================================================================== */
 const DS_RED_CHAVE = "eac_disc_redacoes";
+/* (19.160.0) A FAIXA DA AGENDA FICAVA PARADA: ler, reler ou registrar uma redação aqui e voltar à aba Edital mostrava a
+ * faixa da discursiva como estava antes (a aba só se redesenhava ao recarregar). Redesenhar a agenda custa ~0,7 s, então
+ * só acontece quando algo das Discursivas mudou desde a última vez (trocarModo, em modos.js). */
+let dsAgendaSuja = false;
 function dsRedacoesTodas() {
   try { const v = JSON.parse(localStorage.getItem(DS_RED_CHAVE) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; }
 }
@@ -68,7 +72,7 @@ function dsRedacoes(id) { return (dsRedacoesTodas()[id] || []).slice().sort((a, 
 function dsRedacoesGravar(id, lista) {
   const v = dsRedacoesTodas();
   v[id] = lista;
-  try { localStorage.setItem(DS_RED_CHAVE, JSON.stringify(v)); return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
+  try { localStorage.setItem(DS_RED_CHAVE, JSON.stringify(v)); dsAgendaSuja = true; return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
 }
 function dsRedacaoPct(x) { return x && x.max > 0 && x.nota >= 0 ? Math.round((x.nota / x.max) * 100) : null; }
 /* a redação nova: valida e grava; devolve o registro ou { erro } */
@@ -80,6 +84,11 @@ function dsRedacaoAdicionar(id, x) {
   const d = /^\d{4}-\d{2}-\d{2}$/.test(String(x.d || "")) ? x.d : (typeof hubHoje === "function" ? hubHoje() : new Date().toISOString().slice(0, 10));
   const r = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), d, tema: tema.slice(0, 200),
     disc: String(x.disc || "").slice(0, 120), linhas: Number(x.linhas) > 0 ? Math.round(Number(x.linhas)) : null, nota, max, obs: String(x.obs || "").slice(0, 500) };
+  /* (19.160.0) a reescrita aponta para a primeira versão */
+  if (x.orig) {
+    const o = (dsRedacoesTodas()[id] || []).find((y) => y.id === String(x.orig));
+    if (o) r.orig = o.orig || o.id;
+  }
   const lista = (dsRedacoesTodas()[id] || []).concat([r]);
   if (!dsRedacoesGravar(id, lista)) return { erro: t("ds_red_sem_espaco") };
   /* escrever uma redação É treinar: a semana dela fica marcada */
@@ -89,7 +98,7 @@ function dsRedacaoAdicionar(id, x) {
     v[id] = Object.assign({}, v[id] || {}, { [sem]: true });
     localStorage.setItem("eac_disc_treino", JSON.stringify(v));
   } catch (e) {}
-  try { reg("DISCURSIVAS", "redação registrada", tema.slice(0, 60) + " · " + nota + "/" + max); } catch (e) {}
+  try { reg("DISCURSIVAS", r.orig ? "reescrita registrada" : "redação registrada", tema.slice(0, 60) + " · " + nota + "/" + max); } catch (e) {}
   /* (19.75.0) a proposta com o mesmo tema fica como escrita */
   try { if (typeof dsPropostaMarcarEscrita === "function") r.proposta = dsPropostaMarcarEscrita(id, tema); } catch (e) {}
   return r;
@@ -100,7 +109,9 @@ function dsRedacaoApagar(id, rid) {
 }
 /* o resumo do histórico: n, média das últimas 5, tendência, abaixo do mínimo, fora do tamanho */
 function dsRedacoesResumo(id, dc) {
-  const l = dsRedacoes(id);
+  /* (19.160.0) a média e a tendência contam só as primeiras versões: a reescrita do mesmo tema sempre sai melhor */
+  const todas = dsRedacoes(id);
+  const l = todas.filter((x) => !x.orig);
   const pcts = l.map(dsRedacaoPct).filter((x) => x != null);
   const media = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
   const ult5 = media(pcts.slice(0, 5));
@@ -108,8 +119,8 @@ function dsRedacoesResumo(id, dc) {
   const tendencia = ult3 != null && ant3 != null ? (ult3 > ant3 + 5 ? "subindo" : ult3 < ant3 - 5 ? "caindo" : "estavel") : null;
   const minPct = dc && dc.minimo && dc.minimo.tipo === "pct" ? dc.minimo.valor : null;
   const abaixo = minPct == null ? 0 : pcts.filter((p) => p < minPct).length;
-  const fora = dc && dc.linhas && dc.linhas.max ? l.filter((x) => x.linhas && (x.linhas < (dc.linhas.min || 0) || x.linhas > dc.linhas.max)).length : 0;
-  return { n: l.length, media5: ult5, tendencia, abaixo, fora, minPct, ultima: l[0] || null };
+  const fora = dc && dc.linhas && dc.linhas.max ? todas.filter((x) => x.linhas && (x.linhas < (dc.linhas.min || 0) || x.linhas > dc.linhas.max)).length : 0;
+  return { n: todas.length, media5: ult5, tendencia, abaixo, fora, minPct, ultima: todas[0] || null, reesc: dsReescritas(id) };
 }
 
 function dsPintarRedacoes(card, e, dc) {
@@ -125,6 +136,7 @@ function dsPintarRedacoes(card, e, dc) {
     if (res.abaixo) al.push(t("ds_red_abaixo", { n: res.abaixo, m: res.minPct }));
     if (res.fora) al.push(t("ds_red_fora2", { n: res.fora, l: edLinhasTxt(dc.linhas) }));
     if (al.length) box.append(el("p", "ds-red-alerta", al.join(" ")));
+    if (res.reesc && res.reesc.n) box.append(el("p", "nota", t("ds_red_reesc_res", { n: res.reesc.n, g: res.reesc.ganhoMedio == null ? "—" : (res.reesc.ganhoMedio > 0 ? "+" : "") + res.reesc.ganhoMedio })));
   }
   /* o formulário */
   const f = el("div", "ds-red-form");
@@ -138,6 +150,18 @@ function dsPintarRedacoes(card, e, dc) {
   sel.id = "dsRedDisc_" + e.id;
   [""].concat(dc.disciplinas || []).forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n || t("ds_red_disc_qualquer"); sel.append(o); });
   campo(t("ds_red_disc"), sel);
+  /* (19.160.0) de qual redação é reescrita: o tema igual a uma anterior sugere a mais recente */
+  const selO = document.createElement("select");
+  selO.id = "dsRedOrig_" + e.id;
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = t("ds_red_orig_nao"); selO.append(o0);
+  const origs = dsRedacoes(e.id).filter((x) => !x.orig).slice(0, 40);
+  origs.forEach((x) => { const o = document.createElement("option"); o.value = x.id; o.textContent = dsDataBr(x.d).slice(0, 5) + " · " + String(x.tema).slice(0, 50) + " · " + x.nota + "/" + x.max; selO.append(o); });
+  campo(t("ds_red_orig"), selO);
+  iTema.onchange = () => { const o = dsRedacaoDoTema(e.id, iTema.value); if (o && !selO.value) selO.value = o.orig || o.id; };
+  selO.onchange = () => {
+    const o = origs.find((x) => x.id === selO.value);
+    if (o && !iTema.value.trim()) { iTema.value = o.tema; if (o.disc) sel.value = o.disc; }
+  };
   const iLin = campo(t("ds_red_linhas"), mk("number", "dsRedLinhas_" + e.id, edLinhasTxt(dc.linhas, true)));
   const iNota = campo(t("ds_red_nota"), mk("number", "dsRedNota_" + e.id, "ex.: 32"));
   const iMax = campo(t("ds_red_max"), mk("number", "dsRedMax_" + e.id));
@@ -147,7 +171,7 @@ function dsPintarRedacoes(card, e, dc) {
   const bt = el("button", "btn-min btn-min-ok", t("ds_red_add"));
   bt.type = "button"; bt.id = "btnDsRedAdd_" + e.id;
   bt.onclick = () => {
-    const r = dsRedacaoAdicionar(e.id, { d: iData.value, tema: iTema.value, disc: sel.value, linhas: iLin.value, nota: iNota.value === "" ? NaN : iNota.value, max: iMax.value });
+    const r = dsRedacaoAdicionar(e.id, { d: iData.value, tema: iTema.value, disc: sel.value, linhas: iLin.value, nota: iNota.value === "" ? NaN : iNota.value, max: iMax.value, orig: selO.value });
     if (r.erro) { msg.textContent = r.erro; return; }
     try { toastMsg(t("ds_red_ok", { p: dsRedacaoPct(r) }), 4000); } catch (err) {}
     dsRender();
@@ -162,7 +186,25 @@ function dsPintarRedacoes(card, e, dc) {
     lista.slice(0, 30).forEach((x) => {
       const p = dsRedacaoPct(x);
       const ln = el("div", "ds-red-lin" + (res.minPct != null && p != null && p < res.minPct ? " ds-red-ruim" : ""));
-      ln.append(el("span", "ds-red-d", x.d.split("-").reverse().join("/")), el("span", "ds-red-t", x.tema + (x.disc ? " · " + x.disc : "")));
+      /* (19.160.0) a reescrita mostra de onde veio e quanto subiu; a primeira versão tem "↻ reescrever" */
+      const tc = el("span", "ds-red-t");
+      tc.append(document.createTextNode(x.tema + (x.disc ? " · " + x.disc : "")));
+      const o = dsRedacaoOrig(e.id, x);
+      if (o) {
+        const po = dsRedacaoPct(o), dp = Math.round((x.nota - o.nota) * 10) / 10;
+        tc.append(el("span", "ds-red-reesc", t("ds_red_reesc_de", { d: dsDataBr(o.d).slice(0, 5), a: po == null ? "—" : po + "%", b: p == null ? "—" : p + "%",
+          g: (dp > 0 ? "+" : dp < 0 ? "−" : "±") + String(Math.abs(dp)).replace(".", ",") })));
+      } else {
+        const rw = el("button", "btn-min ds-red-rw", t("ds_red_reesc_bt"));
+        rw.type = "button"; rw.id = "btnDsRedReesc_" + x.id; rw.title = t("ds_red_reesc_tip");
+        rw.onclick = () => {
+          iTema.value = x.tema; if (x.disc) sel.value = x.disc; selO.value = x.id; iData.value = dsHoje(); iNota.value = "";
+          box.open = true;
+          try { f.scrollIntoView && f.scrollIntoView({ block: "center" }); iNota.focus(); } catch (er) {}
+        };
+        tc.append(rw);
+      }
+      ln.append(el("span", "ds-red-d", x.d.split("-").reverse().join("/")), tc);
       const foraTam = dc.linhas && dc.linhas.max && x.linhas && (x.linhas < (dc.linhas.min || 0) || x.linhas > dc.linhas.max);
       ln.append(el("span", "ds-red-l" + (foraTam ? " ds-red-ruim-t" : ""), x.linhas ? t("ds_red_l", { n: x.linhas }) : ""));
       ln.append(el("strong", "ds-red-n", (x.nota + "/" + x.max) + (p != null ? " · " + p + "%" : "")));
@@ -237,7 +279,7 @@ function dsPropostas(id) {
 function dsPropostasGravar(id, lista) {
   const v = dsPropostasTodas();
   v[id] = lista;
-  try { localStorage.setItem(DS_PROP_CHAVE, JSON.stringify(v)); return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
+  try { localStorage.setItem(DS_PROP_CHAVE, JSON.stringify(v)); dsAgendaSuja = true; return true; } catch (e) { try { uiAlert(t("ds_red_sem_espaco")); } catch (e2) {} return false; }
 }
 function dsPropostaAdicionar(id, x) {
   const tema = String((x && x.tema) || "").trim();
@@ -363,7 +405,7 @@ function dsCopiar(texto, aviso) {
 }
 
 /* ---------------- a estratégia ---------------- */
-function dsRedacoesNaSemana(id) { const ini = dsSemanaIni(dsHoje()); return dsRedacoes(id).filter((x) => dsSemanaIni(x.d) === ini).length; }
+function dsRedacoesNaSemana(id) { const ini = dsSemanaIni(dsHoje()); return dsRedacoes(id).filter((x) => !x.orig && dsSemanaIni(x.d) === ini).length; }
 /* as redações desta semana; sem nenhuma registrada, o "treinei" marcado vale uma */
 /* (19.152.0) e as marcadas na faixa da agenda (discursiva-agenda.js): uma conta só, em redações */
 function dsFeitasSemana(id) { const n = Math.max(dsRedacoesNaSemana(id), typeof dagEscritasSemana === "function" ? dagEscritasSemana(id) : 0); return n || (dsTreinos(id)[dsSemanaIni(dsHoje())] ? 1 : 0); }
@@ -563,8 +605,15 @@ function dsIrPara(id, opc) {
   if (o.pend) dsPainelSoPend[id] = true;
   /* (19.159.0) direto num tema (das Leis do edital): o leitor dele, sem filtro que o esconda */
   if (o.pid) { dsPropSel[id] = o.pid; dsPropRolar = id; Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "", q: "" }); }
+  /* (19.160.0) da etapa "reler" da agenda: a lista só com os vencidos, no primeiro */
+  if (o.reler) {
+    const d0 = dsRelerDevidas(id)[0];
+    Object.assign(dsPropFiltro, { ed: "este", disc: "", st: d0 ? "reler" : "", q: "" });
+    if (d0) dsPropSel[id] = d0.p.id;
+    dsPropRolar = id;
+  }
   if (typeof trocarModo === "function") trocarModo("discursivas"); else dsRender();
-  if (o.pid) return;
+  if (o.pid || o.reler) return;
   setTimeout(() => {
     const c = document.getElementById("dsCard_" + id);
     if (!c) return;
@@ -1235,6 +1284,114 @@ function dsItemVirarCartao(ed, p, i) {
   return true;
 }
 
+/* =====================================================================
+ * (19.160.0) RELER OS TEMAS EM INTERVALOS
+ *
+ * Ler o tema uma vez e nunca mais voltar a ele é esquecer o espelho até a prova. Como os cartões, o tema lido volta
+ * depois de alguns dias: 3, 7, 15, 30 e então a cada 60. Conta como "contato" com o tema a leitura, a releitura, o
+ * treino de esqueleto e a redação escrita sobre ele — o intervalo corre a partir do mais recente; só a releitura sobe
+ * de degrau. Nunca lido não é releitura: é "ler os temas" (19.156.0).
+ *
+ * Na tela: o tema que venceu ganha 🔁 na lista, o aviso "N para reler hoje" e, no leitor, "🔁 Reli · próximo".
+ * Na agenda: a etapa "Reler os temas (f/n)" da semana, 5 min cada, até 6 — o que vence até domingo.
+ * ===================================================================== */
+const DS_RELER_INTERVALOS = [3, 7, 15, 30, 60];
+const DS_RELER_MIN = 5, DS_RELER_MAX = 6;
+function dsIsoOk(d) { return /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")); }
+function dsSomarDias(iso, n) {
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dsDiasEntre(a, b) { return Math.round((Date.parse(b + "T12:00:00") - Date.parse(a + "T12:00:00")) / 86400000); }
+/* a situação de releitura de um tema; reds: as redações do edital (a escrita do tema conta como contato) */
+function dsReleitura(p, reds) {
+  if (!p) return null;
+  const ev = [];
+  if (dsIsoOk(p.lida)) ev.push(p.lida);
+  (p.reler || []).forEach((d) => { if (dsIsoOk(d)) ev.push(d); });
+  (p.esq || []).forEach((x) => { if (x && dsIsoOk(x.d)) ev.push(x.d); });
+  if (p.escrita && reds) { const n = dsNorm(p.tema); reds.forEach((r) => { if (dsNorm(r.tema) === n && dsIsoOk(r.d)) ev.push(r.d); }); }
+  if (!ev.length) return null;
+  ev.sort();
+  const ultima = ev[ev.length - 1];
+  const k = (p.reler || []).length;
+  const int = DS_RELER_INTERVALOS[Math.min(k, DS_RELER_INTERVALOS.length - 1)];
+  const prox = dsSomarDias(ultima, int);
+  const hoje = dsHoje();
+  return { ultima, k, int, prox, devida: prox <= hoje, ha: dsDiasEntre(ultima, hoje), hoje: (p.reler || []).indexOf(hoje) >= 0 };
+}
+function dsReler(id, pid, sim) {
+  const lista = dsPropostasTodas()[id] || [];
+  const p = lista.find((x) => x.id === pid);
+  if (!p) return null;
+  const h = dsHoje();
+  p.reler = (p.reler || []).filter((d) => d !== h);
+  if (sim !== false) { p.reler.push(h); p.reler = p.reler.slice(-20); if (!p.lida) p.lida = h; }
+  if (!p.reler.length) delete p.reler;
+  dsPropostasGravar(id, lista);
+  try { reg("DISCURSIVAS", sim === false ? "releitura desfeita" : "tema relido", String(p.tema || "").slice(0, 60) + " · " + ((p.reler || []).length) + "ª releitura"); } catch (e) {}
+  return p;
+}
+/* os temas para reler: os vencidos hoje (devida) */
+function dsRelerDevidas(id) {
+  const reds = dsRedacoes(id);
+  return dsPropostas(id).map((p) => ({ p, R: dsReleitura(p, reds) })).filter((x) => x.R && x.R.devida && !x.R.hoje)
+    .sort((a, b) => (a.R.prox < b.R.prox ? -1 : a.R.prox > b.R.prox ? 1 : 0));
+}
+/* a semana: relidos nesta semana e os que vencem até domingo (ainda não relidos nela); até 6 */
+function dsRelerDaSemana(id) {
+  const ini = dsSemanaIni(dsHoje());
+  const fim = dsSomarDias(ini, 6);
+  const reds = dsRedacoes(id);
+  let feitas = 0, pend = 0;
+  dsPropostas(id).forEach((p) => {
+    if ((p.reler || []).some((d) => dsIsoOk(d) && dsSemanaIni(d) === ini)) { feitas++; return; }
+    const R = dsReleitura(p, reds);
+    if (R && R.prox <= fim) pend++;
+  });
+  const n = Math.min(feitas + pend, DS_RELER_MAX);
+  return { feitas: Math.min(feitas, n), pend, n, min: DS_RELER_MIN * n };
+}
+
+/* =====================================================================
+ * (19.160.0) A REESCRITA LIGADA À ORIGINAL
+ *
+ * A 2ª versão de uma redação era só mais uma linha solta no histórico — e inflava a média (a segunda tentativa do
+ * mesmo tema sempre sai melhor). Agora a redação nova pode dizer de qual é reescrita (o app sugere a mais recente do
+ * mesmo tema): a linha mostra "↻ reescrita de 12/11: 55% → 78% (+9 pts)", a média e a tendência contam só as
+ * primeiras versões, e a etapa "reescrever a pior" da agenda fica feita sozinha — com o tema da pior na própria etapa.
+ * ===================================================================== */
+function dsRedacaoOrig(id, r) {
+  if (!r || !r.orig) return null;
+  return (dsRedacoesTodas()[id] || []).find((x) => x.id === r.orig) || null;
+}
+/* a redação mais recente do mesmo tema, para sugerir como original */
+function dsRedacaoDoTema(id, tema) {
+  const n = dsNorm(tema);
+  if (!n) return null;
+  return dsRedacoes(id).find((x) => dsNorm(x.tema) === n) || null;
+}
+function dsReescritas(id) {
+  const l = dsRedacoesTodas()[id] || [];
+  const out = [];
+  l.forEach((r) => {
+    const o = dsRedacaoOrig(id, r);
+    if (!o) return;
+    const a = dsRedacaoPct(o), b = dsRedacaoPct(r);
+    out.push({ r, o, a, b, ganho: a != null && b != null ? b - a : null, pts: Math.round((r.nota - o.nota) * 10) / 10 });
+  });
+  const gs = out.map((x) => x.ganho).filter((x) => x != null);
+  return { lista: out, n: out.length, ganhoMedio: gs.length ? Math.round(gs.reduce((s, x) => s + x, 0) / gs.length) : null };
+}
+/* a pior da semana (primeiras versões, com nota), para a etapa "reescrever a pior" */
+function dsPiorDaSemana(id) {
+  const ini = dsSemanaIni(dsHoje());
+  const l = dsRedacoes(id).filter((r) => !r.orig && dsSemanaIni(r.d) === ini && dsRedacaoPct(r) != null);
+  l.sort((a, b) => dsRedacaoPct(a) - dsRedacaoPct(b));
+  return l[0] || null;
+}
+
 /* ---------------- propostas: atualizar, modelo, correção ---------------- */
 function dsPropostaAtualizar(id, pid, patch) {
   const lista = dsPropostasTodas()[id] || [];
@@ -1403,6 +1560,7 @@ function dsPropostasFiltradas(e, com) {
   if (f.st === "semModelo") out = out.filter((x) => !x.p.modelo && !x.p.escrita);
   if (f.st === "naolida") out = out.filter((x) => !dsPropLida(x.p));
   if (f.st === "lida") out = out.filter((x) => x.p.lida && !x.p.escrita);
+  if (f.st === "reler") { const c = {}; out = out.filter((x) => { const R = dsReleitura(x.p, c[x.ed.id] || (c[x.ed.id] = dsRedacoes(x.ed.id))); return !!(R && R.devida && !R.hoje); }); }
   const q = dsNorm(f.q);
   if (q) out = out.filter((x) => dsNorm(x.p.tema + " " + x.p.disc + " " + (x.p.enunciado || "")).indexOf(q) >= 0);
   return out;
@@ -1413,6 +1571,18 @@ function dsPintarPropostas(card, e, dc, com) {
   const box = el("div", "ds-props");
   box.id = "dsProps_" + e.id;
   box.append(el("div", "ds-sub-tit", t("ds_prop_tit3", { n: todasDeste.length, l: todasDeste.filter((p) => p.lida && !p.escrita).length, e: todasDeste.filter((p) => p.escrita).length })));
+  /* (19.160.0) os temas que venceram para reler */
+  const devE = dsRelerDevidas(e.id);
+  if (devE.length && dsPropFiltro.st !== "reler") {
+    const av = el("div", "ds-reler-aviso");
+    av.id = "dsRelerAviso_" + e.id;
+    av.append(el("span", "", t("ds_reler_aviso", { n: devE.length })));
+    const vb = el("button", "btn-min btn-min-ok", t("ds_reler_ver"));
+    vb.type = "button"; vb.id = "btnDsRelerVer_" + e.id;
+    vb.onclick = () => { Object.assign(dsPropFiltro, { ed: "este", disc: "", st: "reler", q: "" }); dsPropSel[e.id] = devE[0].p.id; dsPropRolar = e.id; dsRender(); };
+    av.append(vb);
+    box.append(av);
+  }
   const lista0 = com || [{ e, dc }];
   /* o filtro */
   const fb = el("div", "ds-filtros");
@@ -1421,7 +1591,7 @@ function dsPintarPropostas(card, e, dc, com) {
   const discs = [];
   (dsPropFiltro.ed === "todos" ? lista0 : [{ e }]).forEach((x) => dsPropostas(x.e.id).forEach((p) => { if (p.disc && discs.indexOf(p.disc) < 0) discs.push(p.disc); }));
   sel("dsPropFDisc_" + e.id, [["", t("ds_pf_disc_todas")]].concat(discs.sort().map((d) => [d, d])), dsPropFiltro.disc, (v) => { dsPropFiltro.disc = v; });
-  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["naolida", t("ds_pf_st_naolida")], ["lida", t("ds_pf_st_lida")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")], ["semModelo", t("ds_pf_st_semmodelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
+  sel("dsPropFSt_" + e.id, [["", t("ds_pf_st_todas")], ["naolida", t("ds_pf_st_naolida")], ["lida", t("ds_pf_st_lida")], ["reler", t("ds_pf_st_reler")], ["aberta", t("ds_pf_st_aberta")], ["escrita", t("ds_pf_st_escrita")], ["modelo", t("ds_pf_st_modelo")], ["semModelo", t("ds_pf_st_semmodelo")]], dsPropFiltro.st, (v) => { dsPropFiltro.st = v; });
   const q = document.createElement("input"); q.type = "search"; q.className = "ds-sel ds-pf-q"; q.id = "dsPropFQ_" + e.id; q.placeholder = t("ds_pf_busca"); q.value = dsPropFiltro.q;
   q.onchange = () => { dsPropFiltro.q = q.value; dsRender(); };
   fb.append(q);
@@ -1432,12 +1602,16 @@ function dsPintarPropostas(card, e, dc, com) {
   let atual = vis.findIndex((x) => x.p.id === dsPropSel[e.id]);
   if (atual < 0) atual = 0;
   const ul = el("div", "ds-prop-lista");
+  const redsDe = {};
+  const relDe = (x) => { const R = dsReleitura(x.p, redsDe[x.ed.id] || (redsDe[x.ed.id] = dsRedacoes(x.ed.id))); return !!(R && R.devida && !R.hoje); };
   vis.forEach((x, k) => {
     const b = el("button", "ds-prop-item" + (k === atual ? " sel" : "") + (x.p.escrita ? " escrita" : x.p.lida ? " lida" : ""));
     b.type = "button";
     b.id = "dsPropIt_" + x.p.id;
     b.title = t(x.p.escrita ? "ds_pi_escrita" : x.p.lida ? "ds_pi_lida" : "ds_pi_naolida");
-    b.append(el("span", "ds-prop-item-t", (x.p.escrita ? "✓ " : x.p.lida ? "◐ " : "○ ") + x.p.tema));
+    const rel = relDe(x);
+    if (rel) b.title += " · " + t("ds_pi_reler");
+    b.append(el("span", "ds-prop-item-t", (x.p.escrita ? "✓ " : x.p.lida ? "◐ " : "○ ") + (rel ? "🔁 " : "") + x.p.tema));
     b.append(el("span", "ds-sug-d", [x.p.disc, dsPropFiltro.ed === "todos" ? x.ed.nome : ""].filter(Boolean).join(" · ") + (x.p.modelo ? " · " + t("ds_pf_tem_modelo") : "")));
     b.onclick = () => { dsPropSel[e.id] = x.p.id; dsPropRolar = e.id; dsRender(); };
     ul.append(b);
@@ -1486,6 +1660,34 @@ function dsPintarPropostas(card, e, dc, com) {
     };
     lb.append(bl);
     rd.append(lb);
+  }
+  /* (19.160.0) a releitura: vencida ("🔁 Reli · próximo"), feita hoje (com desfazer) ou a data da próxima */
+  const Rl = dsReleitura(p, dsRedacoes(edP.id));
+  if (Rl) {
+    const rb = el("div", "ds-reler-bar" + (Rl.devida && !Rl.hoje ? " devida" : ""));
+    rb.id = "dsReler_" + p.id;
+    if (Rl.hoje) {
+      rb.append(el("span", "nota", t("ds_reler_feito", { d: dsDataBr(Rl.prox) })));
+      const un = el("button", "btn-min", t("ds_reler_desf"));
+      un.type = "button"; un.id = "btnDsRelerDesf_" + p.id;
+      un.onclick = () => { dsReler(edP.id, p.id, false); dsPropRolar = e.id; dsRender(); };
+      rb.append(un);
+    } else if (Rl.devida) {
+      rb.append(el("span", "", t("ds_reler_devida", { n: Rl.ha })));
+      const outras = vis.filter((x, k) => k !== atual && relDe(x));
+      const rl = el("button", "btn-min btn-min-ok", t(outras.length ? "ds_reler_bt_prox" : "ds_reler_bt"));
+      rl.type = "button"; rl.id = "btnDsReler_" + p.id; rl.title = t("ds_reler_tip");
+      rl.onclick = () => {
+        dsReler(edP.id, p.id, true);
+        const prox = outras.find((x) => vis.indexOf(x) > atual) || outras[0];
+        if (prox) dsPropSel[e.id] = prox.p.id;
+        else if (dsPropFiltro.st === "reler") dsPropFiltro.st = "";
+        dsPropRolar = e.id;
+        dsRender();
+      };
+      rb.append(rl);
+    } else rb.append(el("span", "nota", t("ds_reler_prox", { d: dsDataBr(Rl.prox), k: Rl.k + 1 })));
+    rd.append(rb);
   }
   rd.append(el("div", "ds-sug-d", [p.disc, edP.nome, t(p.fonte === "ia" ? "ds_prop_fonte_ia" : "ds_prop_fonte_sug"), dsDataBr(p.d)].filter(Boolean).join(" · ")));
   if (p.enunciado) rd.append(el("div", "ds-prop-enun", p.enunciado));

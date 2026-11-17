@@ -58,7 +58,8 @@ function dagReservaMin(e) {
   const x = dagEstrategia(e);
   if (!x) return 0;
   const m = x.est.meta;
-  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor + DAG_ESQ_MIN) + (m >= 2 ? DAG_MIN.reesc : 0) + dagLeitura(e.id).min;
+  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor + DAG_ESQ_MIN) + (m >= 2 ? DAG_MIN.reesc : 0) + dagLeitura(e.id).min
+    + (typeof dsRelerDaSemana === "function" ? dsRelerDaSemana(e.id).min : 0);
 }
 
 function dagMarcasTodas() { try { return JSON.parse(localStorage.getItem(DAG_CH) || "{}") || {}; } catch (e) { return {}; } }
@@ -92,7 +93,10 @@ function dagSemana(e, plano) {
   const id = e.id, meta = x.est.meta, minEsc = dagMinEscrita(x.dc);
   const marcas = dagMarcas(id);
   const ini = dagSemanaIni();
-  const daSemana = (typeof dsRedacoes === "function" ? dsRedacoes(id) : []).filter((r) => dsSemanaIni(r.d) === ini)
+  /* (19.160.0) a reescrita não ocupa vaga de redação nova: ela é a etapa ④ */
+  const reescSem = (typeof dsRedacoes === "function" ? dsRedacoes(id) : []).some((r) => r.orig && dsSemanaIni(r.d) === ini);
+  const pior = typeof dsPiorDaSemana === "function" ? dsPiorDaSemana(id) : null;
+  const daSemana = (typeof dsRedacoes === "function" ? dsRedacoes(id) : []).filter((r) => !r.orig && dsSemanaIni(r.d) === ini)
     .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
   let P = null, passo = null;
   try { if (typeof dsPainel === "function") { P = dsPainel(e, plano, x.dc, x.sit); passo = dsProximoPasso(e, plano, x.dc, x.sit, P); } } catch (err) { P = null; }
@@ -107,6 +111,9 @@ function dagSemana(e, plano) {
   /* (19.156.0) ler os temas preparados: aparece quando há tema guardado; fica feita com todos lidos */
   const L = dagLeitura(id);
   if (L.total) etapas.push({ k: "ler", tipo: "ler", n: L.total, feitos: L.lidas, feito: L.faltam === 0, auto: true, min: L.min });
+  /* (19.160.0) reler os temas que vencem nesta semana (3, 7, 15, 30, 60 dias), 5 min cada, até 6 */
+  const RL = typeof dsRelerDaSemana === "function" ? dsRelerDaSemana(id) : null;
+  if (RL && RL.n) etapas.push({ k: "reler", tipo: "reler", n: RL.n, feitos: RL.feitas, feito: RL.feitas >= RL.n, auto: true, min: RL.min });
   /* (19.158.0) esqueletos de cabeça: tantos quanto a meta de redações, leves */
   const esqFeitos = typeof dsEsqDaSemana === "function" ? dsEsqDaSemana(id) : 0;
   etapas.push({ k: "esq", tipo: "esq", n: meta, feitos: Math.min(esqFeitos, meta), feito: esqFeitos >= meta, auto: true, min: DAG_ESQ_MIN * meta });
@@ -118,7 +125,7 @@ function dagSemana(e, plano) {
     etapas.push({ k: "cor_" + k, tipo: "cor", i: k, feito: autoC || !!marcas["cor_" + k], auto: autoC, min: DAG_MIN.cor });
   }
   /* ④ reescrever a pior, com duas ou mais na semana */
-  if (meta >= 2) etapas.push({ k: "reesc", tipo: "reesc", feito: !!marcas.reesc, auto: false, min: DAG_MIN.reesc });
+  if (meta >= 2) etapas.push({ k: "reesc", tipo: "reesc", feito: reescSem || !!marcas.reesc, auto: reescSem, tema: pior ? pior.tema : "", min: DAG_MIN.reesc });
   const reservaMin = etapas.reduce((a, s) => a + s.min, 0);
   const feitoMin = etapas.reduce((a, s) => a + (s.feito ? s.min : 0), 0);
   const escritas = etapas.filter((s) => s.tipo === "esc" && s.feito).length;
@@ -130,6 +137,8 @@ function dagRotulo(s) {
   if (s.tipo === "prep") return t("dag_prep", { f: s.feitos, n: s.n });
   if (s.tipo === "ler") return t("dag_ler", { f: s.feitos, n: s.n });
   if (s.tipo === "esq") return t("dag_esq", { f: s.feitos, n: s.n });
+  if (s.tipo === "reler") return t("dag_reler", { f: s.feitos, n: s.n });
+  if (s.tipo === "reesc" && s.tema) return t("dag_reesc_tema", { t: String(s.tema).length > 40 ? String(s.tema).slice(0, 39) + "…" : s.tema });
   if (s.tipo === "esc") return t("dag_esc", { i: s.i });
   if (s.tipo === "cor") return t("dag_cor", { i: s.i });
   return t("dag_reesc");
@@ -196,6 +205,7 @@ function dagPintar(S, aoMudar, aberta) {
     b.textContent = (s.feito ? "✓ " : "○ ") + dagRotulo(s) + " · " + horasTexto(s.min);
     b.title = s.auto ? t("dag_auto_aj") : t(s.feito ? "dag_desmarcar_aj" : "dag_marcar_aj");
     b.onclick = () => {
+      if (s.tipo === "reler") { if (typeof dsIrPara === "function") dsIrPara(S.id, { secao: "propostas", reler: true }); return; }
       if (s.tipo === "ler" || s.tipo === "esq") { if (typeof dsIrPara === "function") dsIrPara(S.id, { secao: "propostas" }); return; }
       if (s.auto) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
       if (s.tipo === "prep" && S.P) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
