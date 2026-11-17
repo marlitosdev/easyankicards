@@ -43,6 +43,8 @@ function dagEstrategia(e) {
 }
 /* (19.156.0) LER OS TEMAS: os preparados ainda não lidos, 10 min cada, até 6 por semana */
 const DAG_LER_MIN = 10, DAG_LER_MAX = 6;
+/* (19.158.0) o treino de esqueleto: uma por redação da meta, 5 min cada (conta sozinho, do que foi guardado no tema) */
+const DAG_ESQ_MIN = 5;
 function dagLeitura(id) {
   const props = typeof dsPropostas === "function" ? dsPropostas(id) : [];
   const prep = props.filter((p) => typeof dsPreparada === "function" ? dsPreparada(p) : true);
@@ -56,7 +58,7 @@ function dagReservaMin(e) {
   const x = dagEstrategia(e);
   if (!x) return 0;
   const m = x.est.meta;
-  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor) + (m >= 2 ? DAG_MIN.reesc : 0) + dagLeitura(e.id).min;
+  return m * (DAG_MIN.prep + dagMinEscrita(x.dc) + DAG_MIN.cor + DAG_ESQ_MIN) + (m >= 2 ? DAG_MIN.reesc : 0) + dagLeitura(e.id).min;
 }
 
 function dagMarcasTodas() { try { return JSON.parse(localStorage.getItem(DAG_CH) || "{}") || {}; } catch (e) { return {}; } }
@@ -105,6 +107,9 @@ function dagSemana(e, plano) {
   /* (19.156.0) ler os temas preparados: aparece quando há tema guardado; fica feita com todos lidos */
   const L = dagLeitura(id);
   if (L.total) etapas.push({ k: "ler", tipo: "ler", n: L.total, feitos: L.lidas, feito: L.faltam === 0, auto: true, min: L.min });
+  /* (19.158.0) esqueletos de cabeça: tantos quanto a meta de redações, leves */
+  const esqFeitos = typeof dsEsqDaSemana === "function" ? dsEsqDaSemana(id) : 0;
+  etapas.push({ k: "esq", tipo: "esq", n: meta, feitos: Math.min(esqFeitos, meta), feito: esqFeitos >= meta, auto: true, min: DAG_ESQ_MIN * meta });
   /* ② escrever e ③ corrigir, por redação */
   for (let k = 1; k <= meta; k++) {
     const r = daSemana[k - 1] || null;
@@ -124,6 +129,7 @@ function dagSemana(e, plano) {
 function dagRotulo(s) {
   if (s.tipo === "prep") return t("dag_prep", { f: s.feitos, n: s.n });
   if (s.tipo === "ler") return t("dag_ler", { f: s.feitos, n: s.n });
+  if (s.tipo === "esq") return t("dag_esq", { f: s.feitos, n: s.n });
   if (s.tipo === "esc") return t("dag_esc", { i: s.i });
   if (s.tipo === "cor") return t("dag_cor", { i: s.i });
   return t("dag_reesc");
@@ -190,7 +196,7 @@ function dagPintar(S, aoMudar, aberta) {
     b.textContent = (s.feito ? "✓ " : "○ ") + dagRotulo(s) + " · " + horasTexto(s.min);
     b.title = s.auto ? t("dag_auto_aj") : t(s.feito ? "dag_desmarcar_aj" : "dag_marcar_aj");
     b.onclick = () => {
-      if (s.tipo === "ler") { if (typeof dsIrPara === "function") dsIrPara(S.id, { secao: "propostas" }); return; }
+      if (s.tipo === "ler" || s.tipo === "esq") { if (typeof dsIrPara === "function") dsIrPara(S.id, { secao: "propostas" }); return; }
       if (s.auto) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
       if (s.tipo === "prep" && S.P) { if (typeof dsIrPara === "function") dsIrPara(S.id); return; }
       dagMarcar(S.id, s.k, !s.feito);

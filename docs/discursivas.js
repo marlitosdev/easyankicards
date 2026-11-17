@@ -906,6 +906,221 @@ function dsLerFonteMudar(delta) {
   return v;
 }
 
+
+/* =====================================================================
+ * (19.158.0) TREINO DE ESQUELETO E CADERNO DE ERROS
+ *
+ * ESQUELETO: a técnica de reta final — antes de abrir o espelho, listar no rascunho, em 3 a 5 minutos, o que você
+ * escreveria em cada comando; depois conferir pelo espelho. O espelho guardado vira itens com a pontuação ("1. … (14,0
+ * pontos)", com os subitens em "*", e a seção "Descontos" à parte); você marca o que lembrou e o app soma: "você
+ * garantiria 28 de 40 (70%) — acima do mínimo". O treino fica no tema (com o que faltou), conta como lido e entra na
+ * faixa da discursiva na agenda como etapa leve (5 min cada).
+ *
+ * CADERNO DE ERROS: o que se repete, de três fontes — os itens do espelho que você ESQUECE nos esqueletos; os
+ * DESCONTOS que os seus espelhos listam (viram o "confira antes de entregar"); e os tipos de erro que aparecem nas
+ * CORREÇÕES (língua, estrutura, conteúdo, tamanho), com um exemplo de cada.
+ * ===================================================================== */
+const DS_ESQ_MIN = 5;
+const DS_RE_DESCONTOS = /^\s*(?:crit[ée]rios\s+de\s+desconto|descontos|penalidades|dedu[çc][õo]es|redu[çc][õo]es)\b/i;
+const DS_RE_PONTOS = /(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:pts?\.?|pontos?)\b/i;
+function dsNumBr(s) { return Number(String(s).replace(",", ".")) || 0; }
+/* o espelho em itens: { itens: [{ n, tit, pts, sub }], descontos: [texto], total } */
+function dsEspelhoItens(esp) {
+  const L = String(esp || "").replace(/\r/g, "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const itens = [], descontos = [];
+  let cur = null, emDesc = false;
+  L.forEach((s) => {
+    if (DS_RE_DESCONTOS.test(s)) { emDesc = true; cur = null; return; }
+    const limpo = s.replace(/^[*•\-–]\s*/, "");
+    if (emDesc) { if (/^[*•\-–]/.test(s) || descontos.length < 12) descontos.push(limpo); return; }
+    const m = s.match(/^(?:item\s+)?(\d{1,2})\s*[.)\-–:]\s*(.+)$/i);
+    if (m && !/\btotal\b/i.test(s)) {
+      const pm = s.match(DS_RE_PONTOS);
+      cur = { n: Number(m[1]), tit: m[2].replace(/\s*[-–—:]?\s*\(?\s*(?:valor\s*:?\s*)?\d{1,3}(?:[.,]\d{1,2})?\s*(?:pts?\.?|pontos?)\s*\)?\s*[.:]?\s*$/i, "").replace(/\s*[:.]\s*$/, "").trim(), pts: pm ? dsNumBr(pm[1]) : 0, sub: [] };
+      itens.push(cur);
+      return;
+    }
+    if (cur && /^[*•\-–]/.test(s)) {
+      cur.sub.push(limpo);
+      if (!cur.pts) { const pm = limpo.match(DS_RE_PONTOS); if (pm) cur.pts = dsNumBr(pm[1]); }
+    }
+  });
+  /* sem itens numerados: cada marcador com pontuação vira um item */
+  if (!itens.length) {
+    L.forEach((s) => {
+      if (DS_RE_DESCONTOS.test(s)) emDesc = true;
+      const pm = s.match(DS_RE_PONTOS);
+      if (!emDesc && pm && /^[*•\-–]/.test(s) && !/\btotal\b/i.test(s)) itens.push({ n: itens.length + 1, tit: s.replace(/^[*•\-–]\s*/, ""), pts: dsNumBr(pm[1]), sub: [] });
+    });
+  }
+  return { itens, descontos, total: Math.round(itens.reduce((a, x) => a + x.pts, 0) * 100) / 100 };
+}
+/* o mínimo em %, da discursiva do edital (pontos viram % do total) */
+function dsMinPct(dc) {
+  if (!dc || !dc.minimo) return null;
+  if (dc.minimo.tipo === "pct") return dc.minimo.valor;
+  return dc.pontos ? Math.round((dc.minimo.valor / dc.pontos) * 100) : null;
+}
+/* guarda um treino de esqueleto no tema: os itens lembrados; conta como lido */
+function dsEsqGuardar(id, pid, okIdx) {
+  const p = (dsPropostas(id) || []).find((x) => x.id === pid);
+  if (!p) return null;
+  const E = dsEspelhoItens(p.espelho);
+  if (!E.itens.length) return null;
+  const ok = (okIdx || []).filter((i) => i >= 0 && i < E.itens.length);
+  const pts = Math.round(ok.reduce((a, i) => a + E.itens[i].pts, 0) * 100) / 100;
+  const reg0 = { d: dsHoje(), pts, max: E.total, ok, n: E.itens.length };
+  const esq = (p.esq || []).concat([reg0]).slice(-10);
+  const patch = { esq };
+  if (!p.lida && !p.escrita) patch.lida = dsHoje();
+  dsPropostaAtualizar(id, pid, patch);
+  try { reg("DISCURSIVAS", "treino de esqueleto guardado", p.tema.slice(0, 60) + " · " + pts + "/" + E.total); } catch (e) {}
+  return reg0;
+}
+/* quantos esqueletos nesta semana, no edital */
+function dsEsqDaSemana(id) {
+  const ini = dsSemanaIni(dsHoje());
+  return (dsPropostas(id) || []).reduce((a, p) => a + (p.esq || []).filter((x) => dsSemanaIni(x.d) === ini).length, 0);
+}
+let dsEsqMarcas = {};   /* pid -> {i: true} enquanto o treino está aberto */
+function dsPintarEsqueleto(rd, ed, p, dc) {
+  const el = dsEl;
+  const E = dsEspelhoItens(p.espelho);
+  if (!E.itens.length) return;
+  const d = el("details", "ds-det ds-esq");
+  d.id = "dsEsq_" + p.id;
+  d.open = !!dsEsqMarcas[p.id];
+  const ult = (p.esq || []).slice(-1)[0];
+  d.append(el("summary", "", t("ds_esq_tit", { n: E.itens.length, p: String(E.total).replace(".", ",") }) + (ult ? " · " + t("ds_esq_ultimo", { d: dsDataBr(ult.d), p: ult.max ? Math.round((ult.pts / ult.max) * 100) : 0 }) : "")));
+  d.ontoggle = () => { if (d.open && !dsEsqMarcas[p.id]) dsEsqMarcas[p.id] = {}; };
+  d.append(el("p", "nota", t("ds_esq_como", { m: DS_ESQ_MIN })));
+  const marcas = dsEsqMarcas[p.id] || {};
+  const res = el("p", "ds-esq-res");
+  const pinta = () => {
+    const pts = E.itens.reduce((a, x, i) => a + (marcas[i] ? x.pts : 0), 0);
+    const pct = E.total ? Math.round((pts / E.total) * 100) : 0;
+    const min = dsMinPct(dc);
+    res.className = "ds-esq-res" + (min == null ? "" : pct >= min ? " ok" : " baixo");
+    res.textContent = t("ds_esq_soma", { p: String(Math.round(pts * 10) / 10).replace(".", ","), t: String(E.total).replace(".", ","), c: pct })
+      + (min == null ? "" : " — " + t(pct >= min ? "ds_esq_acima" : "ds_esq_abaixo", { m: min }));
+  };
+  E.itens.forEach((x, i) => {
+    const lb = el("label", "ds-esq-item");
+    const ck = document.createElement("input");
+    ck.type = "checkbox"; ck.id = "dsEsqCk_" + p.id + "_" + i; ck.checked = !!marcas[i];
+    ck.onchange = () => { dsEsqMarcas[p.id] = dsEsqMarcas[p.id] || {}; dsEsqMarcas[p.id][i] = ck.checked; marcas[i] = ck.checked; pinta(); };
+    const tx = el("span", "ds-esq-tx");
+    tx.append(el("b", "", t("ds_esq_item", { n: x.n, p: String(x.pts).replace(".", ",") }) + " "), document.createTextNode(x.tit));
+    lb.append(ck, tx);
+    d.append(lb);
+    if (x.sub.length) { const ul = el("ul", "ds-esq-sub"); x.sub.forEach((s) => ul.append(el("li", "", s))); d.append(ul); }
+  });
+  pinta();
+  d.append(res);
+  const g = el("button", "btn-min btn-min-ok", t("ds_esq_guardar"));
+  g.type = "button"; g.id = "btnDsEsqGuardar_" + p.id;
+  g.onclick = () => {
+    const ok = E.itens.map((_, i) => i).filter((i) => marcas[i]);
+    const r = dsEsqGuardar(ed.id, p.id, ok);
+    delete dsEsqMarcas[p.id];
+    if (r) { try { toastMsg(t("ds_esq_ok", { p: String(r.pts).replace(".", ","), t: String(r.max).replace(".", ",") }), 4000); } catch (e) {} }
+    dsRender();
+  };
+  d.append(g);
+  if ((p.esq || []).length) d.append(el("p", "nota", t("ds_esq_hist", { l: p.esq.slice(-5).map((x) => dsDataBr(x.d).slice(0, 5) + " " + (x.max ? Math.round((x.pts / x.max) * 100) : 0) + "%").join(" · ") })));
+  rd.append(d);
+}
+
+/* ---------------- O CADERNO DE ERROS ---------------- */
+const DS_ERRO_CATS = [
+  ["lingua", /concord[âa]ncia|crase|reg[êe]ncia|pontua[çc][ãa]o|ortogra|grafia|acentua|v[íi]rgula|coloca[çc][ãa]o pronominal|erros? de l[íi]ngua/i],
+  ["estrutura", /par[áa]grafo|paragrafa|coes[ãa]o|coer[êe]ncia|conectiv|introdu[çc][ãa]o|conclus[ãa]o|estrutura|organiza[çc][ãa]o/i],
+  ["conteudo", /fundamento|dispositivo|artigo|s[úu]mula|jurisprud|n[ãa]o (?:mencion|abord|cit|explic)|faltou|omit|incomplet|superficial|fuga ao tema|tangenci/i],
+  ["tamanho", /linhas|limite|extrapol|ultrapass|n[ãa]o atingi/i],
+];
+function dsCaderno(ids) {
+  const props = [].concat(...(ids || []).map((id) => dsPropostas(id) || []));
+  /* 1. o que você esquece nos esqueletos */
+  const esq = {};
+  props.forEach((p) => {
+    if (!(p.esq || []).length) return;
+    const E = dsEspelhoItens(p.espelho);
+    E.itens.forEach((x, i) => {
+      const k = p.id + "#" + i;
+      const r = esq[k] || (esq[k] = { tema: p.tema, disc: p.disc, item: x.tit, pts: x.pts, treinos: 0, esqueceu: 0 });
+      p.esq.forEach((t0) => { if (i < (t0.n || E.itens.length)) { r.treinos++; if ((t0.ok || []).indexOf(i) < 0) r.esqueceu++; } });
+    });
+  });
+  const esquecidos = Object.keys(esq).map((k) => esq[k]).filter((x) => x.esqueceu > 0)
+    .sort((a, b) => (b.esqueceu / b.treinos) - (a.esqueceu / a.treinos) || b.pts - a.pts).slice(0, 10);
+  /* 2. os descontos que os espelhos listam: o "confira antes de entregar" */
+  /* agrupados por TIPO (a mesma regra escrita de jeitos diferentes em cada espelho vira uma linha), com o texto mais curto
+   * como exemplo e em quantos espelhos aparece */
+  const DESC_TIPOS = [["lingua", /grafia|concord|reg[êe]ncia|ortogra|pontua|gramat|l[íi]ngua/i], ["tamanho", /linhas?|limite/i],
+    ["tema", /fuga|tangenc|n[ãa]o atend|ileg[íi]vel|identifica|em branco|nota zero/i]];
+  const desc = {};
+  props.forEach((p) => {
+    const vistos = {};
+    dsEspelhoItens(p.espelho).descontos.forEach((s) => {
+      const tp = DESC_TIPOS.find(([, re]) => re.test(s));
+      const k = tp ? tp[0] : dsNorm(s.split(/[:.]/)[0]).slice(0, 40);
+      if (!k || vistos[k]) return;
+      vistos[k] = true;
+      const r = desc[k] || (desc[k] = { k, texto: s, n: 0 });
+      if (s.length < r.texto.length) r.texto = s;
+      r.n++;
+    });
+  });
+  const descontos = Object.keys(desc).map((k) => desc[k]).sort((a, b) => b.n - a.n).slice(0, 6);
+  /* 3. as correções: os tipos de erro que se repetem, com um exemplo */
+  const cats = {};
+  DS_ERRO_CATS.forEach(([k]) => { cats[k] = { k, n: 0, temas: 0, ex: "" }; });
+  let nCorr = 0;
+  props.forEach((p) => {
+    if (!String(p.correcao || "").trim()) return;
+    nCorr++;
+    const linhas = String(p.correcao).split("\n").map((x) => x.trim()).filter(Boolean);
+    DS_ERRO_CATS.forEach(([k, re]) => {
+      const hits = linhas.filter((l) => re.test(l) && !/^NOTA\s*:/i.test(l));
+      if (hits.length) { cats[k].n += hits.length; cats[k].temas++; if (!cats[k].ex) cats[k].ex = hits[0].slice(0, 160); }
+    });
+  });
+  return { esquecidos, descontos, correcoes: nCorr, cats: DS_ERRO_CATS.map(([k]) => cats[k]).filter((c) => c.n).sort((a, b) => b.temas - a.temas || b.n - a.n),
+    treinos: props.reduce((a, p) => a + (p.esq || []).length, 0) };
+}
+function dsPintarCaderno(sec, e) {
+  const el = dsEl;
+  const C = dsCaderno([e.id]);
+  const d = el("details", "ds-det ds-caderno");
+  d.id = "dsCaderno_" + e.id;
+  d.open = true;
+  d.append(el("summary", "", t("ds_cad_tit")));
+  /* o que você esquece */
+  d.append(el("div", "ds-cad-sub", t("ds_cad_esq_tit", { n: C.treinos })));
+  if (!C.esquecidos.length) d.append(el("p", "nota", t(C.treinos ? "ds_cad_esq_nada" : "ds_cad_esq_vazio")));
+  C.esquecidos.forEach((x) => {
+    const li = el("div", "ds-cad-l");
+    li.append(el("span", "ds-cad-n", t("ds_cad_esq_vezes", { e: x.esqueceu, t: x.treinos })), el("span", "", x.item + " · " + String(x.pts).replace(".", ",") + " pts"), el("span", "ds-sug-d", x.tema));
+    d.append(li);
+  });
+  /* confira antes de entregar */
+  d.append(el("div", "ds-cad-sub", t("ds_cad_desc_tit")));
+  if (!C.descontos.length) d.append(el("p", "nota", t("ds_cad_desc_vazio")));
+  const ul = el("ul", "ds-cad-desc");
+  C.descontos.forEach((x) => ul.append(el("li", "", x.texto + (x.n > 1 ? " " + t("ds_cad_desc_n", { n: x.n }) : ""))));
+  if (C.descontos.length) d.append(ul);
+  /* o que as correções apontam */
+  d.append(el("div", "ds-cad-sub", t("ds_cad_corr_tit", { n: C.correcoes })));
+  if (!C.cats.length) d.append(el("p", "nota", t(C.correcoes ? "ds_cad_corr_nada" : "ds_cad_corr_vazio")));
+  C.cats.forEach((c) => {
+    const li = el("div", "ds-cad-l");
+    li.append(el("span", "ds-cad-n", t("ds_cad_corr_n", { n: c.temas })), el("b", "", t("ds_cad_cat_" + c.k)), el("span", "ds-sug-d", "«" + c.ex + "»"));
+    d.append(li);
+  });
+  sec.append(d);
+  return C;
+}
+
 /* ---------------- propostas: atualizar, modelo, correção ---------------- */
 function dsPropostaAtualizar(id, pid, patch) {
   const lista = dsPropostasTodas()[id] || [];
@@ -1161,6 +1376,8 @@ function dsPintarPropostas(card, e, dc, com) {
   rd.append(el("div", "ds-sug-d", [p.disc, edP.nome, t(p.fonte === "ia" ? "ds_prop_fonte_ia" : "ds_prop_fonte_sug"), dsDataBr(p.d)].filter(Boolean).join(" · ")));
   if (p.enunciado) rd.append(el("div", "ds-prop-enun", p.enunciado));
   if (p.espelho) { const d = el("details", "ds-det"); d.append(el("summary", "", t("ds_prop_espelho")), el("div", "ds-prop-enun", p.espelho)); rd.append(d); }
+  /* (19.158.0) o treino de esqueleto: o espelho em itens pontuados, para marcar o que você lembrou */
+  if (p.espelho) { try { dsPintarEsqueleto(rd, edP, p, dcP); } catch (err) {} }
   if (p.modelo) {
     const d = el("details", "ds-det ds-det-modelo"); d.open = true;
     const mod = el("div", "ds-modelo");
@@ -1748,6 +1965,8 @@ function dsRender() {
     /* redações */
     const sr = sec("redacoes");
     dsPintarRedacoes(sr, e, dc);
+    /* (19.158.0) o caderno de erros: o que você esquece, o que a banca desconta e o que as correções apontam */
+    try { dsPintarCaderno(sr, e); } catch (x) {}
     try { const d = sr.querySelector("#dsRed_" + e.id) || sr.querySelector("details"); if (d) d.open = true; } catch (x) {}
     /* critérios e cortes */
     const sc = sec("criterios");

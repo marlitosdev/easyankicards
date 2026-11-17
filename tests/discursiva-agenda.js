@@ -39,29 +39,29 @@ async function testes() {
     api.matIniciar(); api.edIniciar();
     const e = api.edCriar("Reta", texto(10));
     const res = api.dagReservaMin(e);
-    ok(res === 2 * (15 + 60 + 20) + 30, "A2 reta final (meta 2): 2 × (15 + 60 + 20) + 30 = 220 min: " + res);
+    ok(res === 2 * (15 + 60 + 20 + 5) + 30, "A2 reta final (meta 2): 2 × (15 + 60 + 20 + 5 do esqueleto) + 30 = 230 min: " + res);
     const semDisc = api.edCriar("Sem", texto(10, false));
     ok(api.dagReservaMin(semDisc) === 0, "A2b sem discursiva, sem reserva");
     api.edApagar(semDisc.id);
     api.hubAbrirEdital(e.id);
     const ctx = api.plContexto();
-    ok(ctx && Math.round(ctx.plano.porSemana) === 600 - 220, "A3a a análise do estudo planeja com as horas menos a reserva: " + (ctx && ctx.plano.porSemana));
+    ok(ctx && Math.round(ctx.plano.porSemana) === 600 - 230, "A3a a análise do estudo planeja com as horas menos a reserva: " + (ctx && ctx.plano.porSemana));
     api.hubPintarAgenda();
     const topo = api.$("edAgendaTopo");
     const fx = achar(topo, (x) => x.id === "hubDiscTreino_" + e.id)[0];
     ok(fx && /(^| )dag( |$)/.test(fx.className) && !achar(topo, (x) => x.id === "hubAviso_disc")[0], "A4a a faixa está na semana, não nos avisos");
-    ok(/0 de 2 redação\(ões\) nesta semana · reserva 3h40/.test(fx.textContent), "A4b a faixa diz a meta da estratégia e a reserva: " + fx.textContent.slice(0, 160));
+    ok(/0 de 2 redação\(ões\) nesta semana · reserva 3h50/.test(fx.textContent), "A4b a faixa diz a meta da estratégia e a reserva: " + fx.textContent.slice(0, 160));
     const med = achar(topo, (x) => /(^| )ag-med-rot( |$)/.test(x.className || ""))[0];
-    ok(med && /discursiva: 3h40 reservadas à parte/.test(med.textContent), "A3b o medidor diz quanto a discursiva reservou: " + (med && med.textContent));
+    ok(med && /discursiva: 3h50 reservadas à parte/.test(med.textContent), "A3b o medidor diz quanto a discursiva reservou: " + (med && med.textContent));
     const ets = achar(fx, (x) => /(^| )dag-etapa( |$)/.test(x.className || ""));
-    ok(ets.length === 6 && /Preparar os temas/.test(ets[0].textContent) && /Escrever a redação 1/.test(ets[1].textContent) && /Corrigir a 1/.test(ets[2].textContent) && /Reescrever a pior/.test(ets[5].textContent),
+    ok(ets.length === 7 && /Preparar os temas/.test(ets[0].textContent) && /Esqueleto de cabeça \(0\/2\)/.test(ets[1].textContent) && /Escrever a redação 1/.test(ets[2].textContent) && /Corrigir a 1/.test(ets[3].textContent) && /Reescrever a pior/.test(ets[6].textContent),
       "A4c as etapas, em ordem: preparar, escrever e corrigir cada uma, reescrever: " + ets.map((b) => b.textContent).join(" | "));
-    ets[1].onclick();
+    ets[2].onclick();
     ok(api.dagMarcas(e.id).esc_1 === true && api.dsFeitasSemana(e.id) === 1 && api.dagEscritasSemana(e.id) === 1, "A4d marcar 'escrever' conta como redação da semana (uma conta só)");
     const fx2 = achar(api.$("edAgendaTopo"), (x) => x.id === "hubDiscTreino_" + e.id)[0];
     ok(/1 de 2 redação\(ões\)/.test(fx2.textContent) && /✓ Escrever a redação 1/.test(fx2.textContent), "A4e a faixa repinta com a etapa feita");
     const s = api.dagSemana(e, ctx.plano);
-    ok(s.feitoMin === 60 && s.reservaMin === 220 && s.reservaMin === api.dagReservaMin(e), "A4f o tempo feito acompanha, e a faixa reserva o mesmo que a agenda desconta: " + s.feitoMin + " de " + s.reservaMin);
+    ok(s.feitoMin === 60 && s.reservaMin === 230 && s.reservaMin === api.dagReservaMin(e), "A4f o tempo feito acompanha, e a faixa reserva o mesmo que a agenda desconta: " + s.feitoMin + " de " + s.reservaMin);
     achar(fx2, (x) => x.id === "dagEt_" + e.id + "_esc_1")[0].onclick();
     ok(!api.dagMarcas(e.id).esc_1 && api.dagEscritasSemana(e.id) === 0, "A4g tocar de novo desmarca");
     api.edApagar(e.id);
