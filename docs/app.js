@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.167.0";
+const VERSAO = "19.167.1";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4857,8 +4857,16 @@ function diagResumo(L) {
       const dias = (Date.now() - new Date(em).getTime()) / 86400000;
       const horas = dias * 24;
       const semCopia = !!(pend && pend.mudou);
-      ((dias > 3 || (semCopia && horas >= 2 && est.ligado)) ? av : ok)("Backup: o último há " + idade + " (" + (localStorage.getItem("eac_backup_onde") || "?") + ")" + (est.ligado ? " · automático ligado" : " · automático desligado")
-        + (semCopia ? " · há mudanças AINDA SEM CÓPIA" + (horas >= 2 && est.ligado && !motivo ? " — o automático não gravou (última tentativa nesta aba: " + (pend.tentativa ? diagQuando(pend.tentativa) : "nenhuma") + ")" : "") : ""));
+      /* (19.167.1) ALARME FALSO: logo depois de abrir, o automático ainda não teve a vez (ele espera uns minutos), e abrir já
+       * muda os retratos do dia — o diagnóstico das 05:22 chamava isso de "o automático não gravou". Só é alarme quando a
+       * aba já roda o automático há 10 minutos (ele tenta aos 5). */
+      const BKA_DIAG_FOLGA = 10 * 60000;
+      const relogio = typeof bkaRelogio === "function" ? bkaRelogio() : Date.now();
+      const teveVez = !!(pend && (!pend.aberta || relogio - pend.aberta >= BKA_DIAG_FOLGA));
+      const alarme = semCopia && horas >= 2 && est.ligado && !motivo && teveVez;
+      ((dias > 3 || alarme) ? av : ok)("Backup: o último há " + idade + " (" + (localStorage.getItem("eac_backup_onde") || "?") + ")" + (est.ligado ? " · automático ligado" : " · automático desligado")
+        + (semCopia ? " · há mudanças ainda sem cópia" + (alarme ? " — o automático NÃO GRAVOU (última tentativa nesta aba: " + (pend.tentativa ? diagQuando(pend.tentativa) : "nenhuma") + ")"
+          : est.ligado && !motivo && !teveVez ? " — normal logo depois de abrir: o automático grava nos primeiros minutos" : "") : ""));
     }
   } catch (e) {}
   /* atualização */

@@ -229,9 +229,9 @@ function bkaGravarAgora(motivo, opc) {
 }
 async function bkaGravarDeVerdade(motivo, o) {
   const est = bkaEstado();
-  if (!est.ligado || !bkaPasta) return { ok: false, razao: "sem_pasta" };
+  if (!est.ligado || !bkaPasta) { if (est.ligado) bkaRegistrarNaoTentou("sem_pasta", motivo); return { ok: false, razao: "sem_pasta" }; }
   bkaUltimaTentativa = bkaRelogio();
-  if ((await bkaPermitido(!!o.gesto)) !== "granted") { bkaPintarTudo(); return { ok: false, razao: "permissao" }; }
+  if ((await bkaPermitido(!!o.gesto)) !== "granted") { bkaRegistrarNaoTentou("permissao " + (bkaPermissao || "?"), motivo); bkaPintarTudo(); return { ok: false, razao: "permissao" }; }
   let bk;
   try { await bkEsperarDados(); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
   const hash = bkaImpressao(bk.dados);
@@ -358,11 +358,22 @@ function bkaMotivoParado() {
   if (bkaPermissao && bkaPermissao !== "granted") return "a permissão da pasta venceu (" + bkaPermissao + ") — nada é gravado até tocar no balão “Reconectar backup”";
   return "";
 }
-/* há mudança nos dados que ainda não foi para a pasta? { mudou, tentativa } (null se não dá para saber) */
+/* há mudança nos dados que ainda não foi para a pasta? { mudou, tentativa, aberta: desde quando esta aba roda o
+ * automático } (null se não dá para saber) */
 function bkaMudancasSemCopia() {
   const est = bkaEstado();
   if (!est.ultimo || !est.ultimo.hash || typeof montarBackup !== "function") return null;
-  try { return { mudou: bkaImpressao(montarBackup().dados) !== est.ultimo.hash, tentativa: bkaUltimaTentativa || 0 }; } catch (e) { return null; }
+  try { return { mudou: bkaImpressao(montarBackup().dados) !== est.ultimo.hash, tentativa: bkaUltimaTentativa || 0, aberta: bkaIniciadoEm || 0 }; } catch (e) { return null; }
+}
+/* (19.167.1) O AUTOMÁTICO QUE NEM TENTA GRAVAR era calado: sem pasta nesta aba ou com a permissão vencida, ele voltava
+ * sem deixar rastro — no dia 17/11 passaram 14 horas de uso sem nenhum evento de backup, e não dava para saber por quê.
+ * Agora fica UM registro por motivo em cada sessão (sem repetir a cada 30 minutos). */
+const bkaNaoTentouVistos = new Set();
+function bkaRegistrarNaoTentou(razao, motivo) {
+  if (bkaNaoTentouVistos.has(razao)) return false;
+  bkaNaoTentouVistos.add(razao);
+  try { reg("BACKUP", "automático não gravou", razao + " · " + (motivo || "-")); } catch (e) {}
+  return true;
 }
 /* a gravação deu certo (ou a pasta voltou e não havia o que gravar): a falha sai, e o registro diz depois de quantas */
 function bkaFalhaResolvida(est, como) {
@@ -908,7 +919,11 @@ function bkaBolhaPintar(momento) {
 }
 
 /* ---------------- começar ---------------- */
+/* (19.167.1) quando esta aba começou a cuidar do automático: a primeira gravação espera BKA_PRIMEIRA, e o diagnóstico não
+ * deve chamar de "não gravou" o que ainda não teve a vez */
+let bkaIniciadoEm = 0;
 async function bkaIniciar() {
+  bkaIniciadoEm = bkaRelogio();
   bkaPintar();
   try { bkaBolhaPintar(); } catch (e) {}
   if (!bkaPodeAutomatico() || !bkaEstado().ligado) return;

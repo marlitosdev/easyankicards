@@ -105,6 +105,34 @@ async function testes() {
     ok(/Backup automático parado: a permissão da pasta venceu/.test(dg2) && /mudanças desde o último backup: SIM/.test(dg2) && /permissão: prompt/.test(dg2), "V5c o diagnóstico diz que o automático parou, por quê, e que há mudança sem cópia");
   }
 
+  /* V7 + V8 (19.167.1): sem alarme falso logo depois de abrir; o automático que nem tenta gravar deixa rastro */
+  {
+    const r = rodar();
+    const { api, janela } = r;
+    const L = api.loja;
+    L.setItem("eac_texto", "A :: B");
+    api.bkaRelogioDefinir(() => agora);
+    api.bkAntesLojaDefinir({ ler: async () => [], gravar: async () => {} });
+    const loja = { h: null, ler: async () => loja.h, gravar: async (h) => { loja.h = h; } };
+    api.bkaPastaLojaDefinir(loja);
+    const P = pasta();
+    janela.showDirectoryPicker = async () => P;
+    api.bkIniciar();
+    await conduzir(api, api.bkaConectar());
+    await api.bkaIniciar();
+    L.setItem("eac_texto", "A :: B" + String.fromCharCode(10) + "C :: D");
+    let dg = await api.montarDiagnostico();
+    ok(!/NÃO GRAVOU/.test(dg) && /normal logo depois de abrir/.test(dg), "V7a logo depois de abrir, mudança sem cópia não é alarme");
+    agora += 11 * 60000;
+    dg = await api.montarDiagnostico();
+    ok(/o automático NÃO GRAVOU/.test(dg), "V7b passados 10 minutos sem gravar, é alarme");
+    P.perm = "prompt";
+    await api.bkaGravarAgora("periódico");
+    await api.bkaGravarAgora("periódico");
+    const ev = api.rtTudo({}).filter((x) => /automático não gravou/.test(x.msg));
+    ok(ev.length === 1 && /permissao prompt/.test(ev[0].extra), "V8 o automático que nem tenta gravar deixa UM registro por motivo na sessão: " + JSON.stringify(ev.map((x) => x.extra)));
+  }
+
   /* V4 */
   {
     const r = rodar();
