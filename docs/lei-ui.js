@@ -4955,6 +4955,8 @@ function leiMapaAbrir(repintar) {
   if (dcCx) {
     dcCx.innerHTML = "";
     let dEl = null;
+    /* (19.170.0) as decisões antigas, gravadas como "(lei nova)", vão para a lei certa antes de listar (uma vez por sessão) */
+    try { if (typeof leiDecLigarAntigas === "function") leiDecLigarAntigas(); } catch (e) {}
     try { dEl = typeof leiCorrMapaEl === "function" ? leiCorrMapaEl(l, dg.estrutura.artigos) : null; } catch (e) { dEl = null; }
     if (dEl) dcCx.append(dEl);
     /* (19.168.0) a linha do tempo da lei */

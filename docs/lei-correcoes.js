@@ -671,6 +671,64 @@ function leiDecBatizar(nome) {
   return n;
 }
 
+/* (19.170.0) AS DECISÕES ANTIGAS SEM LEI. Antes da 19.162.0 a limpeza registrava "(lei nova)" e ninguém trocava pelo
+ * nome depois de gravar — no backup de 18/11/2026 eram 106, de 27/09 e 21/10, e o "ver o que saiu" do mapa não as
+ * achava. O relógio sozinho não basta (a LC 214/2025 foi gravada 2 horas depois da colagem; uma colagem de 21/10 nem
+ * virou lei), então decide o CONTEÚDO, por sessão de colagem (decisões a menos de 1 minuto umas das outras):
+ *  · cada decisão leva trechos do que saiu (a linha riscada, o cabeçalho, a amostra); um trecho de 25+ letras achado
+ *    no texto de uma lei (base ou alterações) conta um acerto para ela;
+ *  · a sessão vai para a lei com 2+ acertos, ao menos o triplo da segunda colocada, e gravada entre 10 minutos antes
+ *    e 3 dias depois da colagem. O resto fica como está — melhor sem lei do que na lei errada.
+ * Só olha o que já passou da janela do batismo normal (LEI_CORR_PEND_MS), e uma vez por sessão do app. */
+let leiDecLigarFeito = false;
+function leiDecLigarAntigas(forcar) {
+  if ((leiDecLigarFeito && !forcar) || typeof decLer !== "function" || typeof leisLerTudo !== "function") return { ligadas: 0, sessoes: [] };
+  leiDecLigarFeito = true;
+  const sem = [t("dec_lei_nova"), "(lei nova)", "(new law)"];
+  const limite = Date.now() - LEI_CORR_PEND_MS;
+  const ms = (iso) => { const v = Date.parse(iso || ""); return isNaN(v) ? NaN : v; };
+  const orfas = decLer().filter((d) => sem.indexOf(d.lei) >= 0 && ms(d.q) < limite).sort((a, b) => ms(a.q) - ms(b.q));
+  if (!orfas.length) return { ligadas: 0, sessoes: [] };
+  const norm = (s) => String(s || "").replace(/~~/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const leis = Object.values(leisLerTudo() || {}).filter((l) => l && l.nome).map((l) => ({
+    nome: l.nome, criado: ms(l.criado),
+    texto: norm(String(l.texto || "") + "\n" + Object.values(l.alteracoes || {}).map((a) => (a && a.texto) || "").join("\n")),
+  }));
+  const sessoes = [];
+  orfas.forEach((d) => {
+    const s = sessoes[sessoes.length - 1];
+    if (s && ms(d.q) - s.ultimo <= 60000) { s.itens.push(d); s.ultimo = ms(d.q); }
+    else sessoes.push({ inicio: ms(d.q), ultimo: ms(d.q), itens: [d] });
+  });
+  let ligadas = 0;
+  const rel = [];
+  sessoes.forEach((s) => {
+    const acertos = new Map();
+    s.itens.forEach((d) => {
+      const p = d.proposta || {};
+      const tr = (p.linhas || []).map((x) => norm(x && x.texto).slice(0, 60)).concat([norm(p.amostra).slice(0, 60)]).filter((x) => x.length >= 25);
+      if (!tr.length) return;
+      leis.forEach((l) => { if (tr.some((x) => l.texto.indexOf(x) >= 0)) acertos.set(l, (acertos.get(l) || 0) + 1); });
+    });
+    const rank = Array.from(acertos.entries()).sort((a, b) => b[1] - a[1]);
+    const [melhor, segundo] = [rank[0], rank[1]];
+    const ok = melhor && melhor[1] >= 2 && melhor[1] >= 3 * (segundo ? segundo[1] : 0)
+      && melhor[0].criado >= s.inicio - 10 * 60000 && melhor[0].criado <= s.inicio + 3 * 86400000;
+    rel.push({ em: new Date(s.inicio).toISOString(), n: s.itens.length, lei: ok ? melhor[0].nome : null, acertos: melhor ? melhor[1] : 0 });
+    if (!ok) return;
+    s.itens.forEach((d) => { d.lei = String(melhor[0].nome).slice(0, 120); });
+    ligadas += s.itens.length;
+  });
+  if (ligadas && typeof decGravar === "function") decGravar();
+  if (ligadas) {
+    try {
+      leiReg("lei", "decisões antigas da limpeza ligadas à lei", rel.filter((x) => x.lei).map((x) => x.n + " de " + x.em.slice(0, 16).replace("T", " ") + " → " + x.lei).join(" · ")
+        + (rel.some((x) => !x.lei) ? " · sem lei certa: " + rel.filter((x) => !x.lei).reduce((a, x) => a + x.n, 0) : ""));
+    } catch (e) {}
+  }
+  return { ligadas, sessoes: rel };
+}
+
 /* =====================================================================
  * (19.163.0) FASE 2 — CORRIGIR A LEITURA DE UM ARTIGO DEPOIS QUE A LEI JÁ EXISTE
  *
