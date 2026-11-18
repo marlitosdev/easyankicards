@@ -233,6 +233,56 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---------------- F: fuga rápida ---------------- */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar(); api.qsUiIniciar();
+    let semente = 7;
+    const rnd = () => { semente = (semente * 9301 + 49297) % 233280; return semente / 233280; };
+    const C = (d, i, p) => ({ tipo: "cartao", disciplina: d, topico: "T", frente: "frente " + i, verso: "verso " + i, peso: p });
+    const M = (tipo, d, i) => ({ tipo, disciplina: d, topico: "T", texto: tipo + " " + i + " de " + d });
+    const fontes = {
+      cartoes: [C("Português", 1, 9), C("Tributário", 2, 8), C("Administrativo", 3, 7), C("Tributário", 4, 6)],
+      marcas: [M("pegadinha", "Português", 1), M("pegadinha", "Constitucional", 2), M("pegadinha", "Contabilidade", 3), M("importante", "Informática", 4)],
+      prazos: [{ tipo: "prazo", lei: "CTN", rotulo: "Art. 160", texto: "Art. 160. O prazo é de 30 (trinta) dias." }],
+      dicas: [{ tipo: "dica", disciplina: "Português", topico: "T", texto: "dica pt" }, { tipo: "dica", disciplina: "Lógica", topico: "T", texto: "dica lógica" }],
+    };
+    const r = api.fugaSortear({ disc: "Português", rnd, fontes });
+    const tipos = r.itens.map((x) => x.tipo);
+    ok(r.itens.length === 5 && tipos.filter((x) => x === "cartao").length === 2 && tipos.filter((x) => x === "pegadinha").length === 2 && tipos.indexOf("prazo") >= 0,
+      "F1 cinco itens: 2 cartões difíceis, 2 pegadinhas, 1 prazo: " + tipos.join());
+    ok(r.itens.every((x) => x.disciplina !== "Português"), "F2 nada da disciplina de agora");
+    const discCart = r.itens.filter((x) => x.tipo === "cartao").map((x) => x.disciplina);
+    ok(discCart[0] !== discCart[1], "F3 os cartões vêm de disciplinas diferentes enquanto há: " + discCart.join());
+    const pouco = api.fugaSortear({ disc: "Português", rnd, fontes: { cartoes: [], marcas: [M("importante", "Informática", 4)], prazos: [], dicas: fontes.dicas } });
+    ok(pouco.itens.map((x) => x.tipo).join() === "importante,dica", "F4 sem pegadinha, vale o 'importante'; o que falta sai das suas dicas (fora da disciplina de agora): " + pouco.itens.map((x) => x.tipo + ":" + x.disciplina).join());
+    /* as fontes reais */
+    api.matGravar(api.matChave("Constitucional", "Direitos"), "Texto ==~não confunda prazo com decadência aqui== e ==!o ponto principal da aula==." + NL + "==~* **Regra:** o item marcado com a lista junto==", { disciplina: "Constitucional", topico: "Direitos" });
+    const mk = api.fugaMarcas();
+    ok(mk.some((x) => x.tipo === "pegadinha" && x.texto === "não confunda prazo com decadência aqui" && x.disciplina === "Constitucional") && mk.some((x) => x.tipo === "importante")
+      && mk.some((x) => x.texto === "Regra: o item marcado com a lista junto"), "F5 as marcas de pegadinha e importante dos resumos, sem o '* ' e o '**': " + mk.map((x) => x.texto).join(" | "));
+    api.leiGuardar({ id: "lei_f", nome: "Lei F", texto: ["Art. 1º Disposição geral.", "", "Art. 2º O recurso tem prazo de 15 (quinze) dias.", "", "Art. 3º (Revogado) O prazo de 10 dias."].join(NL) });
+    const pz = api.fugaPrazos(rnd);
+    ok(pz.length === 1 && /Art\. 2º/.test(pz[0].rotulo) && pz[0].lei === "Lei F", "F6 só o artigo com prazo, e não o revogado: " + JSON.stringify(pz.map((x) => x.rotulo)));
+    /* a janela */
+    api.fugaPintar(r);
+    ok(api.$("fugaItem_0") && api.$("fugaItem_4") && !api.$("fugaItem_5"), "F7 a janela com os 5");
+    const iC = r.itens.findIndex((x) => x.tipo === "cartao");
+    const verso = api.$("fugaItem_" + iC).querySelectorAll("div").filter((d) => /fuga-verso/.test(d.className))[0];
+    ok(verso && verso.hidden, "F8 o verso do cartão começa escondido");
+    api.$("btnFugaVer_" + iC).onclick();
+    ok(!verso.hidden, "F9 'ver a resposta' mostra");
+    api.fugaAbrir();
+    ok(api.$("dlgFuga").open && /⏱ 3:00|⏱ 2:5\d/.test(api.$("fugaRelogio").textContent), "F10 abre com o relógio de 3 minutos: " + api.$("fugaRelogio").textContent);
+    api.fugaFechar();
+    ok(!api.$("dlgFuga").open, "F11 voltar ao estudo fecha");
+    api.fugaPintar({ itens: [] });
+    ok(api.$("fugaVazia"), "F12 sem material, diz de onde ele vem");
+    ["fuga_btn", "fuga_titulo", "fuga_tip", "fuga_vazia", "fuga_tipo_cartao", "fuga_tipo_prazo", "fuga_outros", "fuga_voltar", "fuga_acabou"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "F13 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
+
   falhas.quantas = n;
   return falhas;
 }

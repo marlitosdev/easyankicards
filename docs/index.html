@@ -811,6 +811,17 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
 /* (19.172.0) só os grifos: some o bloco sem marca, o texto em volta da marca esmaece, os títulos ficam */
 #matLeitura.mat-so-grifos .mat-sg-fora{display:none}
+/* (19.173.0) a fuga rápida */
+dialog.fuga-dlg{width:min(640px,96vw)}
+.hdr-fuga{font-weight:var(--peso-m);white-space:nowrap}
+.fuga-relogio{font-size:var(--fs-5);font-weight:var(--peso-f);text-align:center;margin:var(--esp-1) 0 var(--esp-2);color:var(--acao)}
+.fuga-relogio.fuga-acabou{color:var(--ok)}
+.fuga-lista{display:flex;flex-direction:column;gap:var(--esp-2);max-height:60vh;overflow:auto}
+.fuga-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
+.fuga-cab{font-size:var(--fs-2);color:var(--sutil);margin-bottom:var(--esp-1)}
+.fuga-txt{font-size:var(--fs-4);line-height:1.45}
+.fuga-verso{margin-top:var(--esp-2);padding-top:var(--esp-2);border-top:1px dashed var(--borda);color:var(--ok)}
+.fuga-item .btn-min{margin-top:var(--esp-2)}
 /* (19.172.0) a Revisão 360° */
 .rv-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--atencao);border-radius:var(--r-m)}
 .rv-aviso-txt{flex:1 1 220px;font-size:var(--fs-3)}
@@ -8497,6 +8508,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <h1>EasyAnkiCards <small><span class="hdr-por">by MarlitosDev · </span><span id="versao"></span></small></h1>
   <!-- (19.135.0) o Gemini no cabeçalho: sempre à vista, com a luz da chave; abre a chave, as permissões e os links.
        O "Ajuda" saiu (o guia não era usado; os prompts estão em "Gerar prompt"; "Procurar atualizações" foi para ⚙). -->
+  <!-- (19.173.0) a pausa ativa de 3 minutos (fuga.js) -->
+  <button class="hdr-btn hdr-fuga" id="btnHdrFuga" type="button" data-i18n="fuga_btn" data-i18n-title="fuga_tip"></button>
   <button class="hdr-btn hdr-ia" id="btnHdrIa" type="button"><span class="hdr-ia-luz" id="hdrIaLuz" aria-hidden="true"></span><span id="hdrIaTxt">Gemini</span></button>
   <button class="hdr-btn hdr-config" id="btnHdrConfig" type="button"
           data-i18n-title="cfg_titulo">⚙</button>
@@ -10246,6 +10259,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <details class="mat-pop" id="matPopMais">
         <summary class="btn-min mat-pop-bt" data-i18n="mat_mais" data-i18n-title="mat_mais_tit"></summary>
         <div class="mat-pop-corpo mat-pop-mais" id="matPopMaisCorpo">
+          <button class="btn-min" id="btnMatFuga" data-i18n="fuga_btn_menu" data-i18n-title="fuga_tip"></button>
           <button class="btn-min" id="btnMatMarcador" data-i18n="mat_marcador_por" title="Guarda onde você parou. Lendo, usa o ponto da rolagem; editando, usa o cursor."></button>
           <button class="btn-min" id="btnMatIrMarcador" data-i18n="mat_marcador_ir" hidden title="Leva a leitura de volta ao ponto que você marcou."></button>
           <span class="mat-marcador-info" id="matMarcadorInfo"></span>
@@ -10382,6 +10396,17 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
      qualquer alteração, e a linha que mais importa não é "17 tópicos
      saíram" — é "9 deles você já estudou, e dá para remanejar". -->
 <!-- (19.172.0) A REVISÃO 360° DA RETA FINAL (revisao-360.js): os blocos R1, R2… até a véspera -->
+<!-- (19.173.0) ⚡ FUGA RÁPIDA: 5 itens curtos de outras disciplinas, 3 minutos (fuga.js) -->
+<dialog id="dlgFuga" class="ui-modal fuga-dlg">
+  <h3 data-i18n="fuga_titulo"></h3>
+  <p class="nota" id="fugaSub"></p>
+  <div class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></div>
+  <div id="fugaLista" class="fuga-lista"></div>
+  <div class="dlg-rodape">
+    <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros"></button>
+    <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar"></button>
+  </div>
+</dialog>
 <dialog id="dlgRv360" class="ui-modal diag-modal rv-dlg">
   <h3 id="rvTitulo"></h3>
   <p class="nota" data-i18n="rv_ajuda"></p>
@@ -14130,6 +14155,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-correcoes.js"></script>
 <script src="lei-mapa-historia.js"></script>
 <script src="revisao-360.js"></script>
+<script src="fuga.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
