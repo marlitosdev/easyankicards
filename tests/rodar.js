@@ -484,7 +484,7 @@ async function main() {
                     ["lei: o link sem risco no meio do artigo riscado (Planalto), a linha só de pontos riscada, redação antiga longa", ltlT],
                     ["lei: correções à mão na revisão da colagem (riscar, tirar, separar, juntar, ✎) e as decisões no mapa", lcoT],
                     ["lei: corrigir a leitura de um artigo no leitor (sem virar alteração), desfazer e reaplicar na versão nova", lclrT],
-                    ["leis do edital: siglas e nomes populares, a norma que só alterou outra lei, a origem e o que mudou", leiiT],
+                    ["leis do edital: siglas e nomes populares, a norma que só alterou outra lei, a origem e o que mudou, o artigo citado que não está na lei e as citadas só no material", leiiT],
                     ["lei: correções — os parecidos (revisão e leitor), o lote com um desfazer e o caso de teste com o HTML de origem", lcpaT],
                     ["edital verticalizado (motor): disciplinas por questões ou peso, numeração 1/1.1, ramos, 2ª fase, progresso nas caixas e fatia igual à do plano", vtT],
                     ["edital verticalizado (tela): faixas e colunas do modelo, opções que mexem na folha e ficam guardadas, caixinhas do progresso, imprimir só a folha e o CSS de impressão", vuT],

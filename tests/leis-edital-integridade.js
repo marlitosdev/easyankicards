@@ -92,10 +92,49 @@ async function testes() {
     const cit = api.$("ledCit");
     ok(cit && cit.open !== true && /Leis citadas no edital · 5 \(2 na biblioteca · 3 falta\(m\)\)/.test(cit.textContent) && /citada pelo nome/.test(cit.textContent), "I7f a tela mostra a lista, recolhida, com a contagem: " + (cit && cit.textContent.slice(0, 120)));
   }
+  /* I8: o artigo citado que não está na lei (item 5) e as leis citadas só no material (item 4) */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.edIniciar(); api.leiIniciar && api.leiIniciar();
+    api.ledIniciar();
+    const e = api.edCriar("ISS", ["# ISS | prova: 2027-06-01 | horas: 20",
+      "@ Sistema Tributário :: 5", "+ Fiscalização :: 3 :: art. 3º e art. 195 do CTN", "+ Sigilo :: 3"].join(NL));
+    const ctn = api.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN", texto: arts(12), topicos: [] });
+    api.dsPropostaAdicionar(e.id, { tema: "Fiscalização", disc: "Sistema Tributário", enunciado: "Disserte.", espelho: "Citar o art. 300 do CTN (10 pts)", fonte: "ia" });
+    const M = api.ledModelo(e.id);
+    const af = (M.artsFalta || []).filter((x) => x.leiId === ctn.id)[0];
+    ok(af && af.nums.map((y) => y.num).sort().join() === "195,300" && af.nums.filter((y) => y.num === "195")[0].onde[0].fonte === "edital" && af.nums.filter((y) => y.num === "300")[0].onde[0].fonte === "discursiva",
+      "I8a os artigos citados que não estão no CTN guardado (195 do edital, 300 da discursiva); o 3º está e não entra: " + JSON.stringify(af && af.nums));
+    /* o material dos tópicos: resumo, cartões e comentário de questão */
+    const chS = api.matChave("Sistema Tributário", "Sigilo");
+    api.matGravar(chS, "Resumo: o sigilo bancário está na LC 105/2001; ver também a LGPD.", { disciplina: "Sistema Tributário", topico: "Sigilo" });
+    api.qsTodas().push({ id: "q_teste", chave: chS, enunciado: "Questão.", comentario: "Fundamento: Lei 9.784/99 e LC 105/2001." });
+    const O = api.ledOutrasFontes(e.id, M);
+    const lc105 = O.filter((G) => G.chave === "lc:105")[0], l9784 = O.filter((G) => G.chave === "lei:9784")[0], lgpd = O.filter((G) => G.chave === "lei:13709")[0];
+    ok(lc105 && lc105.fontes.resumo === 1 && lc105.fontes.questao === 1 && l9784 && l9784.fontes.questao === 1 && lgpd && lgpd.fontes.resumo === 1 && lc105.topicos[0].nome === "Sigilo",
+      "I8b as leis citadas só no material, com a fonte e o tópico: " + JSON.stringify(O.map((G) => [G.chave, G.fontes])));
+    ok(!O.some((G) => G.chave === "lei:5172") && !M.lacunas.some((G) => G.chave === "lc:105"), "I8c lei da biblioteca não entra; e as do material não vão para 'faltam'");
+    /* as correções vistas com o backup real: "Lcp" e o zero à esquerda, a EC que já está dentro da CF, nomes repetidos e "Lei de Direito Material" */
+    ok(api.leiChaveDeEspecieNumero("Lcp nº 118, de 2005") === api.leiChaveDeEspecieNumero("LC 118/2005") && api.leiChaveDeEspecieNumero("LC 015/2009") === api.leiChaveDeEspecieNumero("LC nº 15/2009"),
+      "I8f 'Lcp' é Lei Complementar e o zero à esquerda não conta");
+    const ctmT = api.leiGuardar({ nome: "LC 015/2009 - Código Tributário Municipal de Caruaru", numero: "015", especie: "Lei Complementar", ano: "2009", texto: arts(3), topicos: [] });
+    ok((api.leiCasarRotulo("LC nº 15/2009", api.leisLista()) || {}).id === ctmT.id, "I8f2 a 'LC nº 15/2009' citada casa com a 'LC 015/2009' guardada");
+    ok(api.ledNomesNoTexto("a Lei de Direito Material e a Lei Orgânica Municipal").join("|") === "Lei Orgânica Municipal", "I8g 'Lei de Direito Material' não é nome de lei");
+    api.leiGuardar({ nome: "Constituição Federal", apelido: "CF", texto: arts(3) + NL + "Art. 4º Texto. (Redação dada pela Emenda Constitucional nº 29, de 2000)", topicos: [] });
+    const chF = api.matChave("Sistema Tributário", "Fiscalização");
+    api.matGravar(chF, "Ver a EC 29/2000. A Lei Orgânica Municipal, a Lei Orgânica de Caruaru e a Lei Orgânica Municipal de Caruaru tratam disso.", { disciplina: "Sistema Tributário", topico: "Fiscalização" });
+    const O2 = api.ledOutrasFontes(e.id, api.ledModelo(e.id));
+    const orgs = O2.filter((G) => /org[aâ]nica/i.test(G.rotulo));
+    ok(!O2.some((G) => /29/.test(G.rotulo)) && orgs.length === 1 && orgs[0].rotulo === "Lei Orgânica Municipal de Caruaru" && orgs[0].fontes.resumo === 3,
+      "I8h a EC que já está na CF não entra, e o mesmo nome escrito de três jeitos vira um: " + JSON.stringify(O2.map((G) => [G.rotulo, G.fontes])));
+    api.ledAbrir(e.id);
+    ok(api.$("ledArtFalta") && /Artigos citados que não estão no texto da lei · 2/.test(api.$("ledArtFalta").textContent) && /abrir a lei/.test(api.$("ledArtFalta").textContent), "I8d a tela avisa os artigos que faltam, com 'abrir a lei'");
+    ok(api.$("ledOutras") && /Citadas só no seu material · 4/.test(api.$("ledOutras").textContent) && /questões \(1\)/.test(api.$("ledOutras").textContent) && api.$("btnLedOutrasInc_lc_105"), "I8e e a seção das citadas só no material, com '＋ incluir'");
+  }
   {
     const { api } = rodar();
     ["led_orig_edital", "led_orig_discursiva", "led_orig_ia", "led_orig_sigla", "led_tag_novo", "led_lac_criterio", "led_dif_tit", "led_dif_saiu_incluida", "led_dif_saiu_coberta",
-      "led_dif_saiu_dispensada", "led_dif_saiu_nao_citada", "led_cob_tit", "led_cob_expl", "led_cob_dentro", "led_orig_nome", "led_cit_tit", "led_cit_expl", "led_cit_st_biblioteca", "led_cit_st_falta", "led_cit_st_coberta", "led_cit_st_dispensada", "led_cit_em"].forEach((k) =>
+      "led_dif_saiu_dispensada", "led_dif_saiu_nao_citada", "led_cob_tit", "led_cob_expl", "led_cob_dentro", "led_orig_nome", "led_cit_tit", "led_cit_expl", "led_cit_st_biblioteca", "led_cit_st_falta", "led_cit_st_coberta", "led_cit_st_dispensada", "led_cit_em", "led_outras_tit", "led_outras_expl", "led_outras_f_resumo", "led_outras_f_cartao", "led_outras_f_questao", "led_artfalta_tit", "led_artfalta_expl", "led_artfalta_arts", "led_artfalta_abrir"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "I6 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
   }

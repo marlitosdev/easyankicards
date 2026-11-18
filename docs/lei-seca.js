@@ -4985,10 +4985,12 @@ function leiRotuloChave(rotulo) {
   if (/^(cf\b|cf\/|crfb|constitui|adct\b)/.test(s)) {
     return { especie: "constituicao", numero: "", sigla: "" };
   }
+  /* (19.166.0) "Lcp nº 118" é como o Planalto escreve Lei Complementar nas notas de alteração; e "LC 015/2009" é a
+   * mesma lei que "LC nº 15/2009" (o zero à esquerda não faz parte do número) */
   const especie = leiEspecieChave(
-    /^lc\b/.test(s) ? "complementar" : /^ec\b/.test(s) ? "emenda" : s);
+    /^lcp?\b/.test(s) ? "complementar" : /^ec\b/.test(s) ? "emenda" : s);
   const m = s.match(/(\d[\d.]*)/);
-  const numero = m ? m[1].replace(/[.]/g, "") : "";
+  const numero = m ? m[1].replace(/[.]/g, "").replace(/^0+(?=\d)/, "") : "";
   if (!especie && !numero) return { especie: "", numero: "", sigla: s.toUpperCase() };
   return { especie, numero, sigla: "" };
 }
@@ -5148,12 +5150,14 @@ function leiCandidatosDoRotulo(rotulo, lista) {
       }
     }
   } else if (alvo.numero) {
-    cand = ls.filter((l) => String(l.numero || "").replace(/[.]/g, "") === alvo.numero);
+    /* (19.166.0) sem o zero à esquerda dos dois lados: a "LC 015/2009" guardada é a "LC nº 15/2009" citada */
+    const semZero = (x) => String(x || "").replace(/[.]/g, "").replace(/^0+(?=\d)/, "");
+    cand = ls.filter((l) => semZero(l.numero) === alvo.numero);
     /* lei colada sem cabeçalho não tem "numero" preenchido; o número
      * ainda costuma estar no nome que ela recebeu */
     if (!cand.length) {
       cand = ls.filter((l) => leiTxtChave(l.nome).replace(/[.]/g, "")
-        .split(/[^0-9]+/).indexOf(alvo.numero) >= 0);
+        .split(/[^0-9]+/).map(semZero).indexOf(alvo.numero) >= 0);
     }
     /* a espécie é o que separa a LC 101 da Lei 101 */
     if (cand.length > 1 && alvo.especie) {
