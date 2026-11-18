@@ -235,7 +235,16 @@ async function bkaGravarDeVerdade(motivo, o) {
   let bk;
   try { await bkEsperarDados(); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
   const hash = bkaImpressao(bk.dados);
-  if (!o.forcar && est.ultimo && est.ultimo.hash === hash) return { ok: true, igual: true };
+  if (!o.forcar && est.ultimo && est.ultimo.hash === hash) {
+    /* (19.167.0) havia falha: confere se a pasta voltou a responder; se sim, o aviso sai — a última cópia já está em dia */
+    if (est.erro) {
+      try { await bkaListar(); } catch (e) { return bkaFalhou(est, e); }
+      bkaFalhaResolvida(est, "a pasta voltou a responder (nada novo a gravar)");
+      bkaEstadoGravar(est);
+      bkaPintarTudo();
+    }
+    return { ok: true, igual: true };
+  }
   try { bkaBolhaPintar("gravando"); } catch (e) {}
   /* (19.40.0) NÃO SOBREPOR O MAIS NOVO. Cada aparelho grava o SEU arquivo — nunca apaga o do outro —, mas um aparelho
    * desatualizado que segue gravando deixa o arquivo DELE como o mais novo da pasta, e o outro aparelho passa a ver
@@ -267,7 +276,7 @@ async function bkaGravarDeVerdade(motivo, o) {
       const nome = bkaNome(aparelho, agora, true, gz);
       await bkaEscrever(nome, dados);
       est.pausado = { quando: agora.toISOString(), nome, encolheu: enc, hash };
-      delete est.erro;
+      bkaFalhaResolvida(est, "gravou à parte (encolheu)");
       bkaEstadoGravar(est);
       reg("BACKUP", "automático pausado: os dados encolheram", enc.map((x) => x.rotulo + " " + x.de + "→" + x.para).join(", ") + " · " + nome);
       bkaPintarTudo();
@@ -278,7 +287,7 @@ async function bkaGravarDeVerdade(motivo, o) {
     est.ultimo = { quando: agora.toISOString(), nome, hash, resumo: bk.resumo };
     est.base = est.ultimo.quando;
     delete est.pausado;
-    delete est.erro;
+    bkaFalhaResolvida(est, "gravou " + nome);
     bkaEstadoGravar(est);
     bkaMarcarSalvo(nome, est.ultimo.quando);
     const apagados = await bkaRodar(agora);
@@ -287,12 +296,82 @@ async function bkaGravarDeVerdade(motivo, o) {
     return { ok: true, nome, apagados };
   } catch (e) { return bkaFalhou(est, e); }
 }
+/* =====================================================================
+ * (19.167.0) A FALHA EXPLICADA, A NOVA TENTATIVA SOZINHA E O ALARME SÓ QUANDO INSISTE
+ *
+ * O caso real: "recebi notificação sobre backup faltando arquivos". O balão dizia "Backup falhou" e o painel, em
+ * inglês, "A requested file or directory could not be found…" — a pasta do Google Drive não respondeu por um instante
+ * (desconectado, reiniciando, sincronizando). Nada tinha se perdido, mas a mensagem assustava, não dizia o que fazer, e
+ * a próxima tentativa só vinha 30 minutos depois (ou ao trocar de janela). Pior: se nada mudou desde o último backup bom,
+ * a tentativa seguinte nem gravava ("igual") e o aviso de falha nunca saía.
+ *  · a falha vira CAUSA e AÇÃO em português (pasta que não respondeu, permissão vencida, sem espaço, arquivo em uso pela
+ *    sincronização, gravação interrompida), com o texto técnico à parte, para relatar;
+ *  · a falha passageira tenta de novo SOZINHA em 2, 5 e depois a cada 15 minutos — com a hora da próxima à vista;
+ *  · o alarme (vermelho, "Backup falhou") só a partir da 3ª falha seguida, ou de cara quando não é passageira; antes,
+ *    o balão diz "Tentando de novo", em amarelo;
+ *  · se a pasta volta a responder e os dados são os mesmos do último backup bom, o aviso sai (a cópia da pasta já está
+ *    em dia).
+ * ===================================================================== */
+const BKA_REPETIR_MIN = [2, 5, 15];
+const BKA_REPETIR_MAX = 30;
+let bkaRepetirTimer = null;
+function bkaErroExplicar(e) {
+  const nome = String((e && e.name) || "");
+  const msg = String((e && (e.message || e.name)) || e || "");
+  const tem = (re) => re.test(nome) || re.test(msg);
+  if (tem(/NotAllowed|Security|permission|denied/i)) return { cod: "permissao", transitorio: false, acao: "reconectar" };
+  if (tem(/QuotaExceeded|quota|no space|not enough space|disk full|disco cheio|espa[çc]o/i)) return { cod: "espaco", transitorio: false, acao: "tentar" };
+  if (tem(/NotFound|could not be found|not found|n[ãa]o encontrad/i)) return { cod: "pasta_sumiu", transitorio: true, acao: "" };
+  if (tem(/NoModificationAllowed|InvalidState|in use|being used|lock|busy|em uso/i)) return { cod: "ocupado", transitorio: true, acao: "" };
+  if (tem(/Abort|interrupt|interrompid/i)) return { cod: "interrompido", transitorio: true, acao: "" };
+  return { cod: "outro", transitorio: true, acao: "tentar" };
+}
+/* a falha guardada (das versões antigas também, que só tinham "msg") com a explicação */
+function bkaErroInfo(erro) {
+  if (!erro) return null;
+  const ex = erro.cod ? Object.assign(bkaErroExplicar({ name: "", message: "" }), { cod: erro.cod, transitorio: ["pasta_sumiu", "ocupado", "interrompido", "outro"].indexOf(erro.cod) >= 0, acao: erro.cod === "permissao" ? "reconectar" : erro.cod === "espaco" || erro.cod === "outro" ? "tentar" : "" }) : bkaErroExplicar({ message: erro.msg });
+  const n = erro.n || 1;
+  return Object.assign({}, ex, { n, grave: !ex.transitorio || n >= 3, texto: t("bka_erro_" + ex.cod), desde: erro.desde || erro.quando, proxima: erro.proxima || "" });
+}
 function bkaFalhou(est, e) {
-  est.erro = { quando: new Date(bkaRelogio()).toISOString(), msg: (e && (e.message || e.name)) || "?" };
+  const ex = bkaErroExplicar(e);
+  const ant = est.erro || null;
+  const agoraMs = bkaRelogio();
+  const n = (ant && ant.n ? ant.n : (ant ? 1 : 0)) + 1;
+  const espera = ex.transitorio && n <= BKA_REPETIR_MAX ? BKA_REPETIR_MIN[Math.min(n - 1, BKA_REPETIR_MIN.length - 1)] * 60000 : 0;
+  est.erro = { quando: new Date(agoraMs).toISOString(), msg: String((e && (e.message || e.name)) || "?").slice(0, 300), cod: ex.cod, n,
+    desde: (ant && (ant.desde || ant.quando)) || new Date(agoraMs).toISOString(), proxima: espera ? new Date(agoraMs + espera).toISOString() : "" };
   bkaEstadoGravar(est);
-  try { reg("BACKUP", "automático falhou", est.erro.msg); } catch (x) {}
+  try { reg("BACKUP", "automático falhou", ex.cod + " · " + n + "ª seguida · " + est.erro.msg + (espera ? " · nova tentativa em " + Math.round(espera / 60000) + " min" : "")); } catch (x) {}
+  if (bkaRepetirTimer) { clearTimeout(bkaRepetirTimer); bkaRepetirTimer = null; }
+  if (espera) bkaRepetirTimer = setTimeout(() => { bkaRepetirTimer = null; try { bkaGravarAgora("nova tentativa"); } catch (x) {} }, espera);
   bkaPintarTudo();
-  return { ok: false, razao: "erro", erro: est.erro.msg };
+  return { ok: false, razao: "erro", erro: est.erro.msg, cod: ex.cod };
+}
+/* (19.167.0) POR QUE O AUTOMÁTICO NÃO ESTÁ GRAVANDO, sem erro nenhum ("" = está apto) — o diagnóstico e o painel usam */
+function bkaMotivoParado() {
+  const est = bkaEstado();
+  if (!bkaPodeAutomatico() || !est.ligado) return "";
+  if (est.pausado) return "pausado porque os dados encolheram — confira no painel do backup";
+  if (est.travado) return "há backup mais novo de outro aparelho (" + (est.travado.aparelho || "?") + ") — confira no painel do backup";
+  if (!bkaPasta) return "a pasta não está conectada nesta aba (o navegador esqueceu) — toque no balão “Reconectar backup”";
+  if (bkaPermissao && bkaPermissao !== "granted") return "a permissão da pasta venceu (" + bkaPermissao + ") — nada é gravado até tocar no balão “Reconectar backup”";
+  return "";
+}
+/* há mudança nos dados que ainda não foi para a pasta? { mudou, tentativa } (null se não dá para saber) */
+function bkaMudancasSemCopia() {
+  const est = bkaEstado();
+  if (!est.ultimo || !est.ultimo.hash || typeof montarBackup !== "function") return null;
+  try { return { mudou: bkaImpressao(montarBackup().dados) !== est.ultimo.hash, tentativa: bkaUltimaTentativa || 0 }; } catch (e) { return null; }
+}
+/* a gravação deu certo (ou a pasta voltou e não havia o que gravar): a falha sai, e o registro diz depois de quantas */
+function bkaFalhaResolvida(est, como) {
+  if (bkaRepetirTimer) { clearTimeout(bkaRepetirTimer); bkaRepetirTimer = null; }
+  if (!est.erro) return false;
+  const n = est.erro.n || 1;
+  delete est.erro;
+  try { reg("BACKUP", "backup automático voltou a funcionar", como + " · depois de " + n + " falha(s)"); } catch (x) {}
+  return true;
 }
 /* a data da base (selo do topo) e a lista de cópias — sem encher a lista a cada 30 minutos: o arquivo do dia é um só */
 function bkaMarcarSalvo(nome, quando) {
@@ -600,7 +679,8 @@ function bkaAvisoDoSelo() {
   const est = bkaEstado();
   if (!est.ligado) return null;
   if (est.pausado) return { txt: t("bka_selo_pausado"), cls: "sb-alerta" };
-  if (est.erro) return { txt: t("bka_selo_erro"), cls: "sb-alerta" };
+  /* (19.167.0) a falha passageira, nas primeiras vezes, é aviso ("tentando de novo"); o alarme é quando insiste */
+  if (est.erro) { const ie = bkaErroInfo(est.erro); return ie.grave ? { txt: t("bka_selo_erro"), cls: "sb-alerta" } : { txt: t("bka_selo_tentando"), cls: "sb-aviso" }; }
   if (!bkaPasta || (bkaPermissao && bkaPermissao !== "granted")) return { txt: t("bka_selo_reconectar"), cls: "sb-aviso" };
   if (bkaMaisNovo) return { txt: t(est.travado ? "bka_selo_travado" : "bka_selo_mais_novo", { a: bkaMaisNovo.aparelho }), cls: est.travado ? "sb-alerta" : "sb-aviso" };
   return null;
@@ -647,7 +727,18 @@ function bkaPintar() {
     if (bkaPasta && est.ultimo && est.ultimo.nome) botao(ls, t("bka_enc_ver_boa"), bkaVerBoa, "btn btn-azul", "btnBkaVerBoa", "", t("bka_enc_ver_boa_sub", { q: bkQuandoCurto(est.ultimo.quando) }));
     botao(ls, t("bka_aceitar"), bkaAceitarPedido, "btn btn-perigo", "btnBkaAceitar", t("bka_aceitar_tip"), t("bka_aceitar_sub"));
   }
-  if (est.erro) nota(t("bka_erro", { e: est.erro.msg }), "bk-aviso grave");
+  /* (19.167.0) a falha explicada: a causa e o que fazer, desde quando, a próxima tentativa sozinha, "tentar agora" e o
+   * texto técnico à parte */
+  if (est.erro) {
+    const ie = bkaErroInfo(est.erro);
+    nota(t(ie.grave ? "bka_erro" : "bka_erro_tentando", { e: ie.texto }), "bk-aviso " + (ie.grave ? "grave" : "") + " bka-erro");
+    const hm = (iso) => { const d = new Date(iso); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+    nota(t("bka_erro_quando", { d: bkQuandoCurto(ie.desde), n: ie.n }) + " · " + (ie.proxima ? t("bka_erro_proxima", { h: hm(ie.proxima) }) : t("bka_erro_sozinho_nao")), "nota bka-erro-quando");
+    const le = linha();
+    if (ie.acao === "reconectar") botao(le, t("bka_reconectar"), bkaReconectar, "btn btn-verde", "btnBkaErroReconectar");
+    else if (bkaPasta) botao(le, t("bka_erro_tentar"), bkaGravarPedido, "btn btn-verde", "btnBkaErroTentar");
+    nota(t("bka_erro_tecnico", { m: est.erro.msg }), "nota bka-erro-tec");
+  }
   if (bkaMaisNovo) {
     const d = new Date(bkaMaisNovo.quando);
     nota(t("bka_mais_novo", { a: bkaMaisNovo.aparelho, q: bkQuandoCurto(d.toISOString()) }) + (bkaMaisNovo.localMudou ? " " + t("bka_mais_novo_local") : ""), "bk-aviso bka-mais-novo");
@@ -702,7 +793,7 @@ function bkaBolhaEstado() {
   const av = bkaAvisoDoSelo();
   if (av) {
     /* (19.41.0) a LEGENDA curta embaixo do círculo diz o problema sem precisar parar o mouse em cima */
-    const rot = est.pausado ? t("bka_rot_pausado") : est.erro ? t("bka_rot_erro")
+    const rot = est.pausado ? t("bka_rot_pausado") : est.erro ? t(bkaErroInfo(est.erro).grave ? "bka_rot_erro" : "bka_rot_tentando")
       : (!bkaPasta || (bkaPermissao && bkaPermissao !== "granted")) ? t("bka_rot_reconectar")
       : est.travado ? t("bka_rot_travado") : t("bka_rot_mais_novo");
     return { k: "problema", ic: "!", rot, txt: av.txt, cls: av.cls === "sb-alerta" ? "bb-alerta" : "bb-aviso" };

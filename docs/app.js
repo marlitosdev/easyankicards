@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.166.0";
+const VERSAO = "19.167.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4840,11 +4840,25 @@ function diagResumo(L) {
     const est = typeof bkaEstado === "function" ? bkaEstado() : {};
     const em = localStorage.getItem("eac_backup_em");
     const idade = em ? diagIdade(em) : null;
-    if (est.erro) av("Backup automático com erro: " + est.erro.msg + " (" + diagQuando(new Date(est.erro.quando).getTime()) + ")");
+    if (est.erro) {
+      const ie = typeof bkaErroInfo === "function" ? bkaErroInfo(est.erro) : null;
+      av("Backup automático com erro" + (ie ? " (" + ie.cod + ", " + ie.n + "ª seguida" + (ie.proxima ? ", nova tentativa às " + new Date(ie.proxima).toTimeString().slice(0, 5) : "") + ")" : "") + ": "
+        + (ie ? ie.texto + " — técnico: " : "") + est.erro.msg + " (" + diagQuando(new Date(est.erro.quando).getTime()) + ")");
+    }
+    /* (19.167.0) O AUTOMÁTICO PODE PARAR SEM ERRO NENHUM: pasta esquecida, permissão vencida, pausado, outro aparelho
+     * mais novo. O diagnóstico dizia "✓ o último há 13 h · automático ligado" num dia inteiro de uso sem cópia. Agora
+     * ele diz por que parou e se há mudanças ainda sem cópia. */
+    const motivo = typeof bkaMotivoParado === "function" ? bkaMotivoParado() : "";
+    if (motivo) av("Backup automático parado: " + motivo);
+    const pend = typeof bkaMudancasSemCopia === "function" ? bkaMudancasSemCopia() : null;
+    if (est.erro) { /* já dito acima */ }
     else if (!em) av("Backup: nenhum feito neste aparelho");
     else {
       const dias = (Date.now() - new Date(em).getTime()) / 86400000;
-      (dias > 3 ? av : ok)("Backup: o último há " + idade + " (" + (localStorage.getItem("eac_backup_onde") || "?") + ")" + (est.ligado ? " · automático ligado" : " · automático desligado"));
+      const horas = dias * 24;
+      const semCopia = !!(pend && pend.mudou);
+      ((dias > 3 || (semCopia && horas >= 2 && est.ligado)) ? av : ok)("Backup: o último há " + idade + " (" + (localStorage.getItem("eac_backup_onde") || "?") + ")" + (est.ligado ? " · automático ligado" : " · automático desligado")
+        + (semCopia ? " · há mudanças AINDA SEM CÓPIA" + (horas >= 2 && est.ligado && !motivo ? " — o automático não gravou (última tentativa nesta aba: " + (pend.tentativa ? diagQuando(pend.tentativa) : "nenhuma") + ")" : "") : ""));
     }
   } catch (e) {}
   /* atualização */
@@ -4871,6 +4885,26 @@ function diagBackup(L) {
   const pode = typeof bkaPodeAutomatico === "function" ? bkaPodeAutomatico() : false;
   L.push("automático: " + (!pode ? "não disponível neste navegador" : est.ligado ? "ligado" : "desligado") + (est.pausado ? " (pausado)" : "")
     + (est.erro ? " · ERRO: " + est.erro.msg : ""));
+  /* (19.167.0) o que decide se o automático grava: a pasta nesta aba, a permissão, a última tentativa, mudanças sem cópia */
+  try {
+    if (pode && est.ligado) {
+      L.push("pasta: " + (est.pasta || "?") + " · conectada nesta aba: " + (typeof bkaPasta !== "undefined" && bkaPasta ? "sim" : "NÃO")
+        + " · permissão: " + ((typeof bkaPermissao !== "undefined" && bkaPermissao) || "?")
+        + " · última tentativa nesta aba: " + (typeof bkaUltimaTentativa !== "undefined" && bkaUltimaTentativa ? diagQuando(bkaUltimaTentativa) : "nenhuma"));
+      const pend = typeof bkaMudancasSemCopia === "function" ? bkaMudancasSemCopia() : null;
+      if (pend) L.push("mudanças desde o último backup: " + (pend.mudou ? "SIM — ainda sem cópia" : "não (a cópia está em dia)"));
+      if (est.erro && typeof bkaErroInfo === "function") { const ie = bkaErroInfo(est.erro); L.push("falha: " + ie.cod + " · " + ie.n + "ª seguida · desde " + diagQuando(new Date(ie.desde).getTime()) + (ie.proxima ? " · nova tentativa às " + new Date(ie.proxima).toTimeString().slice(0, 5) : "")); }
+      if (est.travado) L.push("parado por backup mais novo de outro aparelho: " + (est.travado.aparelho || "?"));
+    }
+  } catch (e) {}
+  /* (19.167.0) os últimos eventos do backup, para ver falhas e paradas sem depender do filtro do registro */
+  try {
+    const ev = (typeof rtTudo === "function" ? rtTudo({}) : []).filter((x) => /^BACKUP/i.test(String(x.tag || ""))).slice(0, 8);
+    if (ev.length) {
+      L.push("últimos eventos do backup:");
+      ev.forEach((x) => L.push("  " + diagQuando(x.quando) + " · " + x.msg + (x.extra ? " — " + String(x.extra).slice(0, 140) : "")));
+    }
+  } catch (e) {}
   const em = localStorage.getItem("eac_backup_em");
   L.push("base de hoje: " + (em ? diagQuando(new Date(em).getTime()) + " (há " + diagIdade(em) + ", " + (localStorage.getItem("eac_backup_onde") || "?") + ")" : "nenhuma"));
   try {

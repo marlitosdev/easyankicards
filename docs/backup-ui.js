@@ -481,7 +481,11 @@ function bkSituacao() {
       if (!bkaPasta) return { st: "st-alerta", txt: t("bka_pasta_perdida"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
       if (bkaPermissao && bkaPermissao !== "granted") return { st: "st-alerta", txt: t("bk_sit_permissao"), acao: t("bka_reconectar"), fn: bkaReconectar };
       if (est.pausado) return { st: "st-alerta", txt: t("bk_sit_pausado") };
-      if (est.erro) return { st: "st-alerta", txt: t("bka_erro", { e: est.erro.msg }), acao: t("bk_sit_tentar"), fn: bkaGravarPedido };
+      if (est.erro) {
+        /* (19.167.0) a causa em português; passageira e no começo, é aviso (o app tenta de novo sozinho) */
+        const ie = typeof bkaErroInfo === "function" ? bkaErroInfo(est.erro) : { grave: true, texto: est.erro.msg };
+        return { st: ie.grave ? "st-alerta" : "st-aviso", txt: t(ie.grave ? "bka_erro" : "bka_erro_tentando", { e: ie.texto }), acao: t("bk_sit_tentar"), fn: bkaGravarPedido };
+      }
       if (bkaMaisNovo) return { st: est.travado ? "st-alerta" : "st-aviso", txt: av.txt, acao: t("bka_ver_mais_novo"), fn: bkaVerMaisNovo };
       return { st: "st-aviso", txt: av.txt };
     }

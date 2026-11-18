@@ -258,7 +258,7 @@ async function testes() {
     P.quebrarEscrita = false;
     ok(r.razao === "erro" && JSON.stringify(P.conteudo(doDia)) === antes, "S-A gravação cortada: a cópia anterior fica intacta");
     api.bkPintarPainel();
-    ok(/falhou: disco cheio/.test(corpo(api)) && /falhou/.test(api.$("seloBase").textContent), "S-A2 a falha aparece no painel e no selo (não fica calada)");
+    ok(/falhou: não há espaço/.test(corpo(api)) && /Detalhe técnico \(para relatar\): disco cheio/.test(corpo(api)) && /falhou/.test(api.$("seloBase").textContent), "S-A2 a falha aparece no painel (explicada, com o técnico à parte) e no selo (não fica calada)");
     const r2 = await api.bkaGravarAgora("periódico");
     ok(r2.ok && !api.bkaEstado().erro, "S-A3 na próxima tentativa grava e o aviso some");
   }
