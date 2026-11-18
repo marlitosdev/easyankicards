@@ -222,6 +222,8 @@ function hubPintarAgenda() {
   tit.textContent = t("hub_agenda_tit");
   cab.append(tit, hubControlesAgenda());
   cx.append(cab);
+  /* (19.172.0) a 15 dias ou menos da prova: a Revisão 360° (montar, ou o andamento dela) */
+  try { const rv = typeof rvAvisoEl === "function" ? rvAvisoEl() : null; if (rv) cx.append(rv); } catch (e) {}
   /* (19.99.0) PRÉ-EDITAL NA AGENDA: o previsto diz que é previsto e oferece a virada — o caminho do "saiu o edital" ficava
    * só no topo do Plano, com o previsto aberto */
   todosAtivos.filter(edEhPrevisto).slice(0, 3).forEach((e) => {

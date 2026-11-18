@@ -302,7 +302,9 @@ function novo() {
     v[5] === "Outra coisa totalmente separada.");
   ok("a primeira linha foi marcada por inteiro, com o negrito dentro",
     v[0] === "==?**Questao 2 (Cebraspe):** A vedacao e valida?==");
-  ok("a segunda linha do bloco também", v[2].indexOf("==?- **Resposta") === 0);
+  /* (19.172.0) a marca vai DEPOIS do "- " da lista: antes ela ficava na frente ("==?- **Resposta"), a linha deixava de
+   * ser item de lista e o "consertar marcação" acendia */
+  ok("a segunda linha do bloco também, com a marca depois do '- ': " + v[2].slice(0, 20), v[2].indexOf("- ==?**Resposta") === 0 || v[2].indexOf("- ==? **Resposta") === 0);
   ok("linha em branco não recebe marca", v[1] === "" && v[3] === "");
   ok("cada linha fecha o próprio negrito",
     v.every((l) => ((l.match(/\*\*/g) || []).length % 2) === 0));

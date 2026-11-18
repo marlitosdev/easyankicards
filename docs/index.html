@@ -809,6 +809,52 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-lei{background:rgba(16,185,129,.30)}
 .mat-leitura mark.m-prova{background:rgba(168,85,247,.32)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
+/* (19.172.0) só os grifos: some o bloco sem marca, o texto em volta da marca esmaece, os títulos ficam */
+#matLeitura.mat-so-grifos .mat-sg-fora{display:none}
+/* (19.172.0) a Revisão 360° */
+.rv-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--atencao);border-radius:var(--r-m)}
+.rv-aviso-txt{flex:1 1 220px;font-size:var(--fs-3)}
+dialog.rv-dlg{width:min(860px,96vw)}
+.rv-corpo{max-height:70vh;overflow:auto}
+.rv-cfg{display:flex;flex-direction:column;gap:var(--esp-1);margin-bottom:var(--esp-2)}
+.rv-cfg label{display:flex;gap:var(--esp-2);align-items:center;font-size:var(--fs-3)}
+.rv-resumo,.rv-estado{margin:var(--esp-1) 0;font-size:var(--fs-3)}
+.rv-dia{margin:var(--esp-3) 0 var(--esp-2)}
+.rv-dia-tit{font-weight:var(--peso-m);margin-bottom:var(--esp-1)}
+.rv-hoje>.rv-dia-tit{color:var(--acao)}
+.rv-atrasados>.rv-dia-tit{color:var(--atencao)}
+.rv-bloco{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-1) var(--esp-2);margin:var(--esp-1) 0}
+.rv-bloco>summary{cursor:pointer;font-size:var(--fs-3)}
+.rv-bloco-feito>summary{color:var(--ok)}
+.rv-como{font-size:var(--fs-2);margin:var(--esp-1) 0}
+.rv-item{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-2);padding:var(--esp-1) 0;border-top:1px solid var(--borda);font-size:var(--fs-3)}
+.rv-item-nome{flex:1 1 240px}
+.rv-feito .rv-item-nome{color:var(--sutil);text-decoration:line-through}
+.rv-selos,.rv-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-1)}
+.rv-selo{font-size:var(--fs-1);border:1px solid var(--borda);border-radius:var(--r-pilula);padding:0 var(--esp-2)}
+.rv-selo-dif{border-color:var(--erro);color:var(--erro)}
+.rv-selo-piso{border-color:var(--atencao);color:var(--atencao)}
+.rv-vespera{border-top:1px dashed var(--borda);padding-top:var(--esp-2)}
+.rv-fora{margin-top:var(--esp-3)}
+.rv-fora>summary{cursor:pointer}
+.rv-fora-lin{font-size:var(--fs-2);color:var(--sutil);margin:var(--esp-1) 0}
+/* (19.172.0) lei: ler só os que caem / só onde erro (os títulos ficam) */
+.lei-ver{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin:var(--esp-1) 0}
+.lei-ver .btn-min.on{background:var(--acao);border-color:var(--acao);color:#fff}
+#leiLeitura.lei-ver-caem .lei-art:not(.lei-art-q),#leiLeitura.lei-ver-erro .lei-art:not(.lei-art-erro),
+#leiLeitura.lei-ver-caem .lei-div:not(.lei-ver-tit),#leiLeitura.lei-ver-erro .lei-div:not(.lei-ver-tit){display:none}
+/* (19.172.0) o caderno de erros e chutes e o bizu */
+.qs-caderno{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--esp-2);margin:var(--esp-2) 0}
+#btnQsCaderno.on{background:var(--acao);border-color:var(--acao);color:#fff}
+.qs-bizu{flex:1 1 100%;border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
+.qs-bizu-cab{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;justify-content:space-between;margin-bottom:var(--esp-2)}
+.qs-bizu-tit{font-weight:var(--peso-m);margin-top:var(--esp-2)}
+.qs-bizu-item{padding-left:var(--esp-2);font-size:var(--fs-3)}
+.qs-cad-saiu{color:var(--ok);font-size:var(--fs-2)}
+.qs-cad-entrou{color:var(--atencao);font-size:var(--fs-2)}
+#matLeitura.mat-so-grifos{color:var(--sutil)}
+#matLeitura.mat-so-grifos mark,#matLeitura.mat-so-grifos :is(h1,h2,h3,h4,h5,th){color:var(--texto)}
+#btnMatSoGrifos.on,#btnMatCheiaSoGrifos.on{background:var(--acao);border-color:var(--acao);color:#fff}
 /* "nota" carrega texto anexado (as outras seis são só cor) — o
  * sublinhado pontilhado avisa, de relance, que ali tem mais do que uma
  * cor: clicar abre o que foi escrito, não um menu de trocar cor. */
@@ -8733,6 +8779,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="btn-min" id="btnFatosAbrir" data-i18n="fatos_btn" data-i18n-title="fatos_btn_tip"></button>
     <span class="fatos-linha" id="fatosResumoLinha"></span>
   </div>
+  <!-- (19.172.0) o caderno de erros e chutes e o bizu (as suas dicas), no alto da aba -->
+  <div class="qs-caderno" id="qsCaderno" hidden>
+    <button type="button" class="btn-min" id="btnQsCaderno" aria-pressed="false" data-i18n-title="qs_cad_btn_tip"></button>
+    <button type="button" class="btn-min" id="btnQsBizu" hidden data-i18n-title="qs_bizu_tip"></button>
+    <div class="qs-bizu" id="qsBizu" hidden></div>
+  </div>
   <div id="qsDesfazer" class="qs-desfazer" hidden>
     <span id="qsDesfazerTxt"></span>
     <button class="btn-min" id="btnQsDesfazer" data-i18n="qs_desfazer"
@@ -8772,6 +8824,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <legend class="qs-campo-rot" data-i18n="qs_f_situacao"></legend>
         <label class="qs-chk" title="Só as que você nunca respondeu."><input type="checkbox" id="qsFIneditas"><span data-i18n="qs_so_ineditas"></span></label>
         <label class="qs-chk" title="Só aquelas em que você errou da última vez — é onde o estudo rende mais."><input type="checkbox" id="qsFErradas"><span data-i18n="qs_so_erradas"></span></label>
+        <label class="qs-chk" data-i18n-title="qs_so_caderno_tip"><input type="checkbox" id="qsFCaderno"><span data-i18n="qs_so_caderno"></span></label>
       </fieldset>
     </aside>
     <div class="qs-bib-res">
@@ -10161,6 +10214,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       title="Registra esta leitura no diário de estudos, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
       <button class="btn-min" id="btnMatCartoes" data-i18n="mat_cartoes_topo" aria-label="Virar cartões"
       title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
+      <!-- (19.172.0) revisão rápida: só os trechos grifados (aparece só na leitura e com grifo) -->
+      <button class="btn-min" id="btnMatSoGrifos" hidden aria-pressed="false" data-i18n-title="mat_sg_tip"></button>
       <!-- A TELA CHEIA À VISTA (v18.75.0): antes ficava escondida dentro do "Aa"; é o jeito de ler sem nada em volta -->
       <button class="btn-min mat-cheia-bt" id="btnMatCheiaTopo" data-i18n="mat_cheia" data-i18n-title="mat_cheia_topo_tip"></button>
       <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
@@ -10257,6 +10312,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
        sobrevive à tela cheia está escrito em um lugar só, e é isto. -->
   <div class="mat-cheia-barra" id="matCheiaBarra" hidden>
     <button class="btn-min mat-cheia-sair" id="btnMatCheiaSair" data-i18n="mat_cheia_sair" data-i18n-title="mat_tip_cheia_sair"></button>
+    <button class="btn-min" id="btnMatCheiaSoGrifos" hidden aria-pressed="false" data-i18n-title="mat_sg_tip"></button>
     <span class="mat-cheia-dir">
       <span class="mat-grupo" role="group" data-i18n-title="mat_letra">
         <span class="mat-grupo-rot" data-i18n="mat_letra"></span>
@@ -10325,6 +10381,13 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
      disciplinas, tópicos e pesos mudam. A comparação é mostrada ANTES de
      qualquer alteração, e a linha que mais importa não é "17 tópicos
      saíram" — é "9 deles você já estudou, e dá para remanejar". -->
+<!-- (19.172.0) A REVISÃO 360° DA RETA FINAL (revisao-360.js): os blocos R1, R2… até a véspera -->
+<dialog id="dlgRv360" class="ui-modal diag-modal rv-dlg">
+  <h3 id="rvTitulo"></h3>
+  <p class="nota" data-i18n="rv_ajuda"></p>
+  <div id="rvCorpo" class="rv-corpo"></div>
+  <div class="dlg-rodape"><button class="btn btn-cinza" id="btnRvFechar" data-i18n="help_close"></button></div>
+</dialog>
 <dialog id="dlgVirada" class="ui-modal diag-modal">
   <h3 data-i18n="vr_titulo"></h3>
   <p class="nota" data-i18n="vr_ajuda"></p>
@@ -11250,6 +11313,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="lei-fila-nv" id="leiFilaNV" role="status" hidden></div>
   <!-- (19.43.0) O LOCALIZADOR: linha de altura zero logo ACIMA da leitura; a faixa desce para dentro dela (absolute),
        sem empurrar o texto. Mostra o artigo e o §/inciso que já começaram acima da tela (leiLocAtualizar). -->
+  <!-- (19.172.0) ler só os artigos que caem nas suas questões, ou só onde você erra (revisão rápida) -->
+  <div class="lei-ver" id="leiVer" role="group" data-i18n-title="lei_ver_tip" hidden>
+    <button type="button" class="btn-min" id="btnLeiVerTudo" aria-pressed="true"></button>
+    <button type="button" class="btn-min" id="btnLeiVerCaem" aria-pressed="false"></button>
+    <button type="button" class="btn-min" id="btnLeiVerErro" aria-pressed="false"></button>
+  </div>
   <div class="lei-loc-linha" id="leiLocLinha" hidden><nav class="lei-loc" id="leiLoc" aria-label="Localizador"></nav></div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
   <!-- (v18.47.0) a bolha da seleção no leitor: ligar o trecho a uma lei, à mão -->
@@ -14060,6 +14129,7 @@ window.__sqlPromise = initSqlJs({
 <script src="discursiva-agenda.js"></script>
 <script src="lei-correcoes.js"></script>
 <script src="lei-mapa-historia.js"></script>
+<script src="revisao-360.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

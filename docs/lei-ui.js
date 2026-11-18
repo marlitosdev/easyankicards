@@ -1659,6 +1659,7 @@ function leiTrocarModo(modo) {
   /* na tela cheia a barra de marcas some junto: ela é ferramenta de
    * quem está trabalhando o texto, não de quem está lendo */
   if ($("leiMarcas")) $("leiMarcas").hidden = ed || rec || leiCheia;
+  if ($("leiVer")) $("leiVer").hidden = ed || rec || !leiVerTem;
   /* =================================================================
    * A CAIXA DE COLAR PRECISA DE ALTURA, E A ALTURA NÃO É DELA
    *
@@ -2160,6 +2161,8 @@ function leiPintarLeitura() {
     cx.append(p);
     return;
   }
+  /* (19.172.0) "lei inteira / só os que caem / só onde erro": a conta é a do placar por artigo (o mesmo do mapa) */
+  try { prepararRanking(); leiVerPintar(ranking); } catch (e) {}
 
   let divisao = "";
   /* quais números já foram desenhados: a Constituição repete quase todos
@@ -2191,7 +2194,9 @@ function leiPintarLeitura() {
     bloco.className = "lei-art"
       + (ehMarcado ? " lei-art-parei" : "")
       + (risco && risco.erros > risco.acertos ? " lei-art-perigo"
-         : (risco && risco.prova ? " lei-art-caiu" : ""));
+         : (risco && risco.prova ? " lei-art-caiu" : ""))
+      /* (19.172.0) para o filtro de leitura: cai nas suas questões (ou caiu em prova) / você erra mais do que acerta */
+      + (leiVerCai(risco) ? " lei-art-q" : "") + (leiVerErra(risco) ? " lei-art-erro" : "");
     /* =================================================================
      * O NÚMERO DO ARTIGO NÃO É CHAVE ÚNICA
      *
@@ -10693,6 +10698,89 @@ function leiClozeAplicar() {
  * diz "o art. 167 apareceu em 3 das SUAS questões e você errou 2".
  * ------------------------------------------------------------------ */
 
+/* =====================================================================
+ * (19.172.0) LER SÓ O QUE CAI — o "atalho da perfeição" da lei seca
+ *
+ * Na revisão rápida não se relê a lei inteira: lê-se o núcleo cobrado. O leitor já sabia, artigo por artigo, quantas
+ * questões suas o citam, se caiu em prova e se você erra mais do que acerta (o placar do mapa, leiRanking). Agora dá
+ * para LER só esses: "só os que caem" (citado nas suas questões ou marcado "caiu em prova") e "só onde erro". Os
+ * títulos de capítulo e seção ficam, para situar; nada muda no texto. Sem nenhum artigo citado, o seletor não aparece.
+ * ===================================================================== */
+let leiVerFiltro = "";          /* "" | "caem" | "erro" */
+let leiVerTem = false;
+function leiVerCai(r) { return !!r && ((r.questoes || 0) > 0 || (r.prova || 0) > 0); }
+function leiVerErra(r) { return !!r && (r.erros || 0) > (r.acertos || 0); }
+function leiVerContar(ranking) {
+  const vs = Object.keys(ranking || {}).map((k) => ranking[k]);
+  return { caem: vs.filter(leiVerCai).length, erro: vs.filter(leiVerErra).length };
+}
+/* os títulos que encabeçam um artigo mostrado ficam; os vazios somem (sem isto, no "só onde erro" do CTN apareciam 4
+ * artigos no meio de dezenas de "CAPÍTULO…/SEÇÃO…" empilhados). Sobe do artigo pelos títulos logo acima dele. */
+function leiVerTitulos() {
+  const cx = $("leiLeitura");
+  if (!cx || !cx.children) return 0;
+  const kids = Array.from(cx.children);
+  const tem = (el, c) => (" " + String(el.className || "") + " ").indexOf(" " + c + " ") >= 0;
+  const ehTit = (el) => tem(el, "lei-div");
+  kids.forEach((el) => { if (ehTit(el) && el.classList) el.classList.remove("lei-ver-tit"); });
+  if (!leiVerFiltro) return 0;
+  const cls = leiVerFiltro === "caem" ? "lei-art-q" : "lei-art-erro";
+  let n = 0;
+  kids.forEach((el, k) => {
+    if (!tem(el, cls)) return;
+    /* sobe pulando os artigos escondidos até o bloco de títulos do trecho; outro artigo mostrado antes dele já levou os títulos */
+    let achou = false;
+    for (let j = k - 1; j >= 0; j--) {
+      const x = kids[j];
+      if (ehTit(x)) { if (x.classList) x.classList.add("lei-ver-tit"); n++; achou = true; continue; }
+      if (achou || tem(x, cls)) break;
+    }
+  });
+  return n;
+}
+function leiVerClasses() {
+  const cx = $("leiLeitura");
+  if (cx && cx.classList) { cx.classList.toggle("lei-ver-caem", leiVerFiltro === "caem"); cx.classList.toggle("lei-ver-erro", leiVerFiltro === "erro"); }
+  ["btnLeiVerTudo", "btnLeiVerCaem", "btnLeiVerErro"].forEach((id, k) => {
+    const b = $(id); if (!b) return;
+    const on = leiVerFiltro === ["", "caem", "erro"][k];
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (b.classList) b.classList.toggle("on", on);
+  });
+  try { leiVerTitulos(); } catch (e) {}
+}
+function leiVerPintar(ranking) {
+  const n = leiVerContar(ranking);
+  leiVerTem = n.caem > 0;
+  if (leiVerFiltro === "erro" && !n.erro) leiVerFiltro = "";
+  if (leiVerFiltro === "caem" && !n.caem) leiVerFiltro = "";
+  const box = $("leiVer");
+  if (box) {
+    const cx = $("leiLeitura");
+    box.hidden = !leiVerTem || !!(cx && cx.hidden);
+    [["btnLeiVerTudo", "", "lei_ver_tudo", 0], ["btnLeiVerCaem", "caem", "lei_ver_caem", n.caem], ["btnLeiVerErro", "erro", "lei_ver_erro", n.erro]].forEach(([id, f, k, q]) => {
+      const b = $(id);
+      if (!b) return;
+      b.textContent = t(k, { n: q });
+      b.disabled = !!f && !q;
+    });
+  }
+  leiVerClasses();
+  /* os títulos só se decidem com os artigos desenhados: na pintura em partes, quando ela termina */
+  Promise.resolve().then(() => {
+    const lp = typeof leiPintura !== "undefined" ? leiPintura : null;
+    if (lp && lp.pronta && lp.pronta.then) lp.pronta.then(() => { try { leiVerTitulos(); } catch (e) {} });
+    else { try { leiVerTitulos(); } catch (e) {} }
+  });
+  return n;
+}
+function leiVerDefinir(f) {
+  leiVerFiltro = f === "caem" || f === "erro" ? f : "";
+  leiVerClasses();
+  try { leiReg("leitura", "ler: " + (leiVerFiltro || "lei inteira"), leiIdAtual || ""); } catch (e) {}
+  return leiVerFiltro;
+}
+
 function leiRanking(id) {
   const l = leiDe(id || leiIdAtual);
   if (!l) return [];
@@ -10978,6 +11066,10 @@ function leiIniciar() {
   const liga = (id, nome, fn) => leiBotao(id, nome, fn);
 
   liga("btnLeiModoLer", "ler", () => leiTrocarModo("ler"));
+  /* (19.172.0) ler só o que cai / só onde erro */
+  liga("btnLeiVerTudo", "ler a lei inteira", () => leiVerDefinir(""));
+  liga("btnLeiVerCaem", "ler só os que caem", () => leiVerDefinir("caem"));
+  liga("btnLeiVerErro", "ler só onde erro", () => leiVerDefinir("erro"));
   liga("btnLeiModoEditar", "editar", () => leiTrocarModo("editar"));
   liga("btnLeiModoRecitar", "recitar", () => leiTrocarModo("recitar"));
   liga("btnLeiSalvar", "gravar", () => leiGravar());

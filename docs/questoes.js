@@ -997,6 +997,7 @@ function qsFiltrar(f) {
       const ts = q.tentativas || [];
       if (!ts.length || !qsPedeRevisao(ts[ts.length - 1])) return false;
     }
+    if (o.caderno && !qsNoCaderno(q)) return false;
     if (o.busca && qsNormal(q.enunciado).indexOf(qsNormal(o.busca)) < 0) return false;
     return true;
   });
@@ -1291,6 +1292,63 @@ function qsValorAcerto(tt) {
 }
 /* errou ou chutou: a que pede revisão */
 function qsPedeRevisao(tt) { return !!tt && (!tt.acertou || !!tt.chute); }
+
+/* =====================================================================
+ * (19.172.0) O CADERNO DE ERROS E CHUTES
+ *
+ * Errar por não saber e acertar no chute pedem a mesma coisa: voltar à questão. O "só as que errei" já olhava a última
+ * tentativa; o caderno guarda a questão até ela estar DOMINADA, porque um acerto só depois do erro ainda pode ter
+ * sido memória da última vez:
+ *  · entra quando alguma tentativa foi erro ou chute;
+ *  · sai sozinha com QS_CADERNO_DOMINA acertos seguidos sem chute ("dominada");
+ *  · sai quando você a tira à mão ("✓ tirar do caderno") — e volta se você errar ou chutar de novo depois disso.
+ * ===================================================================== */
+const QS_CADERNO_DOMINA = 2;
+/* { dentro, motivo ("nunca" | "dominada" | "tirada" | ""), seguidos (acertos sem chute no fim), errou, chute } */
+function qsCadernoEstado(q) {
+  const ts = (q && q.tentativas) || [];
+  if (!ts.some(qsPedeRevisao)) return { dentro: false, motivo: "nunca", seguidos: 0 };
+  let seguidos = 0;
+  for (let k = ts.length - 1; k >= 0 && ts[k].acertou && !ts[k].chute; k--) seguidos++;
+  const ult = ts[ts.length - 1];
+  if (q.cadernoFora && !ts.some((x) => String(x.q || "") > String(q.cadernoFora) && qsPedeRevisao(x))) {
+    return { dentro: false, motivo: "tirada", seguidos };
+  }
+  if (seguidos >= QS_CADERNO_DOMINA) return { dentro: false, motivo: "dominada", seguidos };
+  return { dentro: true, motivo: "", seguidos, errou: !ult.acertou, chute: !!(ult.acertou && ult.chute) };
+}
+function qsNoCaderno(q) { return qsCadernoEstado(q).dentro; }
+function qsCadernoTirar(id, gravar) {
+  const q = qsBanco.find((x) => x.id === id);
+  if (!q) return false;
+  q.cadernoFora = new Date().toISOString();
+  qsSalvar(gravar, q.chave);
+  return true;
+}
+function qsCadernoDevolver(id, gravar) {
+  const q = qsBanco.find((x) => x.id === id);
+  if (!q || !q.cadernoFora) return false;
+  delete q.cadernoFora;
+  qsSalvar(gravar, q.chave);
+  return true;
+}
+/* o BIZU: só as suas dicas das questões do caderno, por disciplina e tópico — a lista de assertivas corrigidas para a
+ * semana da prova. [{ disciplina, topico, itens: [{ id, dica, enunciado }] }] */
+function qsBizu(lista) {
+  const grupos = new Map();
+  (lista || []).forEach((q) => {
+    const dica = String((q && q.dica) || "").trim();
+    if (!dica) return;
+    const k = (q.disciplina || "") + "›" + (q.topico || "");
+    if (!grupos.has(k)) grupos.set(k, { disciplina: q.disciplina || "", topico: q.topico || "", itens: [] });
+    grupos.get(k).itens.push({ id: q.id, dica, enunciado: String(q.enunciado || "").replace(/\s+/g, " ").slice(0, 140) });
+  });
+  return Array.from(grupos.values()).sort((a, b) => a.disciplina.localeCompare(b.disciplina) || a.topico.localeCompare(b.topico));
+}
+function qsBizuTexto(grupos) {
+  const NL = String.fromCharCode(10);
+  return (grupos || []).map((g) => [g.disciplina + (g.topico ? " — " + g.topico : "")].concat(g.itens.map((x) => "• " + x.dica)).join(NL)).join(NL + NL);
+}
 
 /* =====================================================================
  * A QUESTÃO IRMÃ (v18.81.0)

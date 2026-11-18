@@ -1609,7 +1609,50 @@ function matTrocarModo(modo) {
     try { matPintarJurLote(); } catch (e) {}
     try { matRolDepoisDeDesenhar(); } catch (e) {}
   } else matRolMostrado = null;
+  try { matSoGrifosAplicar(lendo); } catch (e) {}
   matPintarFonte();
+}
+
+/* =====================================================================
+ * (19.172.0) LER SÓ OS MEUS GRIFOS
+ *
+ * A releitura dos grifos é o carro-chefe da revisão rápida (24 h, 7 dias, 30 dias, véspera): o resumo inteiro em
+ * poucos minutos, só o que você mesmo achou que importava. O leitor esconde os blocos sem marca (parágrafo, item de
+ * lista, linha de tabela) e esmaece o texto em volta das marcas que ficam; os títulos ficam, para saber onde se está.
+ * Nada muda no texto: é só desenho, e vale também na tela cheia. Sem grifo nenhum, o botão não aparece.
+ * ===================================================================== */
+let matSoGrifos = false;
+const MAT_SG_BLOCOS = "p, li, tr, blockquote, dd, dt, pre";
+function matSoGrifosConta() {
+  const b = $("matLeitura");
+  return b && b.querySelectorAll ? b.querySelectorAll("mark").length : 0;
+}
+function matSoGrifosAplicar(lendo) {
+  const box = $("matLeitura");
+  if (!box) return 0;
+  const n = lendo === false ? 0 : matSoGrifosConta();
+  const on = matSoGrifos && n > 0;
+  if (box.classList) box.classList.toggle("mat-so-grifos", on);
+  Array.from(box.querySelectorAll ? box.querySelectorAll(MAT_SG_BLOCOS) : []).forEach((el) => {
+    /* a linha de cabeçalho da tabela fica: sem ela a linha grifada perde o nome das colunas */
+    const fora = on && !el.querySelector("mark") && !el.querySelector("th");
+    if (el.classList) el.classList.toggle("mat-sg-fora", fora);
+  });
+  [["btnMatSoGrifos", "mat_sg"], ["btnMatCheiaSoGrifos", "mat_sg"]].forEach(([id, k]) => {
+    const b = $(id);
+    if (!b) return;
+    b.hidden = !n;
+    b.textContent = t(on ? "mat_sg_on" : k, { n });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (b.classList) b.classList.toggle("on", on);
+  });
+  return n;
+}
+function matSoGrifosAlternar(sim) {
+  matSoGrifos = sim === undefined ? !matSoGrifos : !!sim;
+  matSoGrifosAplicar(!!($("matLeitura") && !$("matLeitura").hidden));
+  try { matReg("ler", matSoGrifos ? "só os grifos" : "texto inteiro", matAtual ? matAtual.chave : ""); } catch (e) {}
+  return matSoGrifos;
 }
 
 /* =====================================================================
@@ -2455,10 +2498,15 @@ function matMapear(src, opc) {
       for (let k = 0; k < num[1].length; k++) empurra(num[1][k], i + k);
       empurra(".", i + num[1].length);
       espaco(i + num[1].length + 1);
-      prefixos.push({ a: i, b: i + num[0].length });
+      prefixos.push({ a: ini, b: i + num[0].length });
       corpo = s.slice(num[0].length); i += num[0].length;
     } else if (tit || bul || outro) {
       const p = tit || bul || outro;
+      /* (19.172.0) o "* " / "- " da lista, o "## " do título e o "> " da dica também são prefixos: a seleção que
+       * atravessava de um item para o seguinte punha a marca ANTES do "* " ("== * **Teste…"), a linha deixava de ser
+       * item de lista e o "consertar marcação" acendia (o "*" do item contado como asterisco solto). Desde o começo
+       * da linha (o recuo junto): a marca começa depois do prefixo. */
+      prefixos.push({ a: ini, b: i + p[0].length });
       corpo = s.slice(p[0].length); i += p[0].length;
     } else {
       /* "$$ … $$" sozinha na linha: a fórmula em destaque */
@@ -4977,6 +5025,8 @@ function matIniciar() {
   matBotao("btnMatCheia", "ler em tela cheia", () => matCheiaTrocar(true));
   matBotao("btnMatCheiaTopo", "ler em tela cheia (topo)", () => matCheiaTrocar(true));
   matBotao("btnMatCheiaSair", "voltar do tela cheia", () => matCheiaTrocar(false));
+  matBotao("btnMatSoGrifos", "só os grifos", () => matSoGrifosAlternar());
+  matBotao("btnMatCheiaSoGrifos", "só os grifos (tela cheia)", () => matSoGrifosAlternar());
   matBotao("btnMatCheiaMaior", "letra maior (tela cheia)", () => matFonteMudar(1));
   matBotao("btnMatCheiaMenor", "letra menor (tela cheia)", () => matFonteMudar(-1));
   /* MESMA função dos botões de cima, de propósito: dois caminhos para o
@@ -6685,7 +6735,19 @@ function matSemMarcas(l) {
   return String(l).replace(new RegExp("==" + MAT_SUF, "g"), "");
 }
 
+/* (19.172.0) A MARCA ANTES DO PREFIXO DE LISTA: "== * **Teste…==" (ou "==! 1. …") — a linha deixa de ser item e o "*"
+ * do item vira asterisco solto. O conserto certo é pôr a marca DEPOIS do prefixo ("* == **Teste…=="), não mexer nos
+ * asteriscos: antes, ele trocava "* " por "** " e tirava o "**" do fim — estragava o negrito que estava certo. */
+/* o sufixo da marca é lido inteiro: sem a trava (?!…), "==* **1." (prova em cima de negrito) voltava atrás e lia o "*"
+ * da prova como o "* " de uma lista */
+const MAT_RE_MARCA_ANTES_LISTA = new RegExp("^(\\s*)(==" + MAT_SUF + ")(?![!?\\u00a7~@]|\\*(?!\\*))(\\s*)([-*]\\s+|\\d+[.)]\\s+)");
+function matMarcaAntesDaLista(l) { return MAT_RE_MARCA_ANTES_LISTA.test(String(l)); }
+function matPorMarcaDepoisDaLista(l) {
+  return String(l).replace(MAT_RE_MARCA_ANTES_LISTA, (m0, rec, abre, esp, pre) => rec + pre + abre + (esp || ""));
+}
+
 function matLinhaTorta(l) {
+  if (matMarcaAntesDaLista(l)) return true;
   const cru = String(l).replace(/^(\s*[-*]\s+)/, "");
   const s = matSemItalico(matSemMarcas(cru));
   const pares = (s.match(/\*\*/g) || []).length;
@@ -6696,6 +6758,13 @@ function matLinhaTorta(l) {
 function matConsertarLinha(l0) {
   let l = String(l0);
   const motivos = [];
+
+  /* (19.172.0) a marca que ficou antes do "* " da lista vai para depois dele — e só isso */
+  if (matMarcaAntesDaLista(l)) {
+    l = matPorMarcaDepoisDaLista(l);
+    motivos.push("marca_depois_da_lista");
+    if (!matLinhaTorta(l)) return { nova: l, mudou: l !== String(l0), motivo: motivos.join("+") };
+  }
 
   /* marca de cor aberta e nunca fechada: tira o abridor. Não inventamos
    * onde ela deveria terminar — inventar é pintar o que não foi escolhido. */

@@ -10,7 +10,7 @@
  * ===================================================================== */
 
 let qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "",
-                   soIneditas: false, soErradas: false, busca: "", lote: "" };
+                   soIneditas: false, soErradas: false, caderno: false, busca: "", lote: "" };
 let qsUiCtxCriar = null;      /* de qual tópico vieram as questões sendo criadas */
 let qsUiAchados = null;
 let qsUiDoTexto = [];   /* as que o detector achou no próprio texto */
@@ -1648,6 +1648,29 @@ function qsUiPintarSessao() {
       qsUiPintarSessao();
     };
     acoes.append(bd);
+
+    /* (19.172.0) O CADERNO DE ERROS E CHUTES no gabarito: errou/chutou → entrou; acertou limpo uma questão do caderno →
+     * "tirar do caderno" à mão; o segundo acerto limpo seguido → saiu sozinha ("dominada") */
+    try {
+      const ce = qsCadernoEstado(q);
+      if (ce.dentro && jaFoi.acertou && !jaFoi.chute) {
+        const bt = document.createElement("button");
+        bt.type = "button"; bt.className = "btn-min qs-bt-mini"; bt.id = "btnQsCadTirarGab";
+        bt.textContent = t("qs_cad_tirar"); bt.title = t("qs_cad_tirar_tip");
+        bt.onclick = () => { qsCadernoTirar(q.id); bt.disabled = true; bt.textContent = t("qs_cad_tirada"); };
+        acoes.append(bt);
+      } else if (!ce.dentro && ce.motivo === "dominada" && jaFoi.acertou && !jaFoi.chute && ce.seguidos === QS_CADERNO_DOMINA) {
+        const sp = document.createElement("span");
+        sp.className = "qs-cad-saiu"; sp.id = "qsCadDominada";
+        sp.textContent = t("qs_cad_dominada", { n: QS_CADERNO_DOMINA });
+        acoes.append(sp);
+      } else if (ce.dentro && qsPedeRevisao(jaFoi)) {
+        const sp = document.createElement("span");
+        sp.className = "qs-cad-entrou"; sp.id = "qsCadEntrou";
+        sp.textContent = t("qs_cad_entrou");
+        acoes.append(sp);
+      }
+    } catch (e) {}
 
     gbLinha.append(gb, acoes);
     depois.append(gbLinha);
@@ -3755,6 +3778,75 @@ function qsUiPintarRamos() {
   return ramos;
 }
 
+/* =====================================================================
+ * (19.172.0) O CADERNO DE ERROS E CHUTES NA ABA (ver qsCadernoEstado, questoes.js)
+ * Um atalho com a contagem no alto da aba ("📕 caderno de erros e chutes (N)"), que liga o filtro; e o BIZU: só as
+ * suas dicas das questões do caderno (dentro dos filtros de edital, disciplina e tópico), para ler na véspera.
+ * ===================================================================== */
+let qsUiBizuAberto = false;
+function qsUiPintarCaderno() {
+  const cx = $("qsCaderno");
+  if (!cx) return 0;
+  const n = qsFiltrar({ caderno: true }).length;
+  cx.hidden = !n && !qsUiFiltro.caderno;
+  const b = $("btnQsCaderno");
+  if (b) {
+    b.textContent = t(qsUiFiltro.caderno ? "qs_cad_btn_on" : "qs_cad_btn", { n });
+    b.setAttribute("aria-pressed", qsUiFiltro.caderno ? "true" : "false");
+    if (b.classList) b.classList.toggle("on", !!qsUiFiltro.caderno);
+  }
+  const grupos = qsBizu(qsUiBizuBase());
+  const nd = grupos.reduce((a, g) => a + g.itens.length, 0);
+  const bb = $("btnQsBizu");
+  if (bb) { bb.hidden = !nd; bb.textContent = t(qsUiBizuAberto ? "qs_bizu_fechar" : "qs_bizu_btn", { n: nd }); }
+  const box = $("qsBizu");
+  if (box) {
+    box.hidden = !(qsUiBizuAberto && nd);
+    box.innerHTML = "";
+    if (qsUiBizuAberto && nd) {
+      const cab = document.createElement("div");
+      cab.className = "qs-bizu-cab";
+      const tt = document.createElement("span"); tt.className = "nota"; tt.textContent = t("qs_bizu_ajuda", { n: nd });
+      const cp = document.createElement("button"); cp.type = "button"; cp.className = "btn-min"; cp.id = "btnQsBizuCopiar";
+      cp.textContent = t("qs_bizu_copiar");
+      cp.onclick = async () => { const txt = qsBizuTexto(grupos); try { await navigator.clipboard.writeText(txt); toastMsg(t("qs_bizu_copiado"), 2500); } catch (e) { try { uiAlert(txt); } catch (x) {} } };
+      cab.append(tt, cp);
+      box.append(cab);
+      grupos.forEach((g) => {
+        const gr = document.createElement("div"); gr.className = "qs-bizu-grupo";
+        const h = document.createElement("div"); h.className = "qs-bizu-tit"; h.textContent = g.disciplina + (g.topico ? " — " + g.topico : "");
+        gr.append(h);
+        g.itens.forEach((x) => {
+          const li = document.createElement("div"); li.className = "qs-bizu-item"; li.textContent = "• " + x.dica; li.title = x.enunciado;
+          gr.append(li);
+        });
+        box.append(gr);
+      });
+    }
+  }
+  return n;
+}
+/* o bizu segue os filtros de edital, disciplina e tópico já escolhidos, sempre sobre o caderno */
+function qsUiBizuBase() {
+  const f = Object.assign({}, qsUiFiltro, { caderno: true, soErradas: false, soIneditas: false, busca: "", lote: "", banca: "", tipo: "" });
+  if (f.edital && !f.chave) {
+    const ks = [];
+    qsUiTopicosDoEdital(f.edital).forEach((g) => g.itens.forEach((it) => ks.push(qsChaveNormal(it.chave))));
+    f.chaves = ks;
+  }
+  delete f.edital;
+  return qsFiltrar(f);
+}
+function qsUiCadernoAbrir() {
+  try { if (typeof trocarModo === "function") trocarModo("questoes"); } catch (e) {}
+  qsUiFiltro.caderno = !qsUiFiltro.caderno;
+  if (qsUiFiltro.caderno) { qsUiFiltro.soErradas = false; qsUiFiltro.soIneditas = false; }
+  qsUiFiltrosNaTela();
+  qsUiRender();
+  return qsUiFiltro.caderno;
+}
+function qsUiBizuAlternar() { qsUiBizuAberto = !qsUiBizuAberto; qsUiPintarCaderno(); return qsUiBizuAberto; }
+
 function qsUiListaFiltrada() {
   const filtro = Object.assign({}, qsUiFiltro);
   if (filtro.edital && !filtro.chave) {
@@ -3789,7 +3881,7 @@ function qsUiOpcoesDoSelect(sel) {
 /* as questões que passam por TODOS os filtros menos os de `exceto` */
 function qsUiBaseSem(exceto) {
   const f = Object.assign({}, qsUiFiltro);
-  (exceto || []).forEach((k) => { f[k] = (k === "soIneditas" || k === "soErradas") ? false : ""; });
+  (exceto || []).forEach((k) => { f[k] = (k === "soIneditas" || k === "soErradas" || k === "caderno") ? false : ""; });
   if (f.edital && !f.chave) {
     const ks = [];
     qsUiTopicosDoEdital(f.edital).forEach((g) => g.itens.forEach((it) => ks.push(qsChaveNormal(it.chave))));
@@ -3978,7 +4070,7 @@ function qsUiPintarLotes() {
 function qsUiVerLote(lote) {
   if (!lote) return false;
   try { if (typeof trocarModo === "function") trocarModo("questoes"); } catch (e) {}
-  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "", lote };
+  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, caderno: false, busca: "", edital: "", chave: "", ramo: "", lote };
   qsUiFiltrosNaTela();
   qsUiRender();
   return true;
@@ -4066,6 +4158,7 @@ function qsUiPintarChips() {
   if (f.tipo) chips.push(["tipo", t("qs_f_tipo"), t("qs_tipo_" + f.tipo)]);
   if (f.soIneditas) chips.push(["soIneditas", t("qs_f_situacao"), t("qs_so_ineditas")]);
   if (f.soErradas) chips.push(["soErradas", t("qs_f_situacao"), t("qs_so_erradas")]);
+  if (f.caderno) chips.push(["caderno", t("qs_f_situacao"), t("qs_so_caderno")]);
   if (f.busca) chips.push(["busca", t("qs_f_busca"), "“" + f.busca + "”"]);
   if (f.lote) { const g = qsLotes(qsFiltrar({ lote: f.lote }))[0]; chips.push(["lote", t("qs_f_lote"), g ? qsUiLoteRotulo(g, false) : "—"]); }
   if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").hidden = !chips.length;
@@ -4094,12 +4187,12 @@ function qsUiPintarChips() {
 /* tirar um filtro (o de cima leva junto os que dependem dele) */
 function qsUiTirarFiltro(k) {
   const dep = { edital: ["edital", "chave", "ramo"], disciplina: ["disciplina"], chave: ["chave", "ramo"] };
-  (dep[k] || [k]).forEach((x) => { qsUiFiltro[x] = (x === "soIneditas" || x === "soErradas") ? false : ""; });
+  (dep[k] || [k]).forEach((x) => { qsUiFiltro[x] = (x === "soIneditas" || x === "soErradas" || x === "caderno") ? false : ""; });
   qsUiFiltrosNaTela();
   qsUiRender();
 }
 function qsUiLimparFiltros() {
-  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, busca: "", edital: "", chave: "", ramo: "", lote: "" };
+  qsUiFiltro = { disciplina: "", concurso: "", banca: "", tipo: "", soIneditas: false, soErradas: false, caderno: false, busca: "", edital: "", chave: "", ramo: "", lote: "" };
   qsUiFiltrosNaTela();
   qsUiRender();
 }
@@ -4107,6 +4200,7 @@ function qsUiLimparFiltros() {
 function qsUiFiltrosNaTela() {
   if ($("qsFIneditas")) $("qsFIneditas").checked = !!qsUiFiltro.soIneditas;
   if ($("qsFErradas")) $("qsFErradas").checked = !!qsUiFiltro.soErradas;
+  if ($("qsFCaderno")) $("qsFCaderno").checked = !!qsUiFiltro.caderno;
   if ($("qsBusca")) $("qsBusca").value = qsUiFiltro.busca || "";
 }
 
@@ -4128,6 +4222,7 @@ function qsUiRender() {
    * o banco de questões não precisa saber o que é um edital */
   const lista = qsUiListaFiltrada();
   qsUiPintarLoteAcoes(lista);
+  try { qsUiPintarCaderno(); } catch (e) {}
   const d = qsDesempenho(lista);
   try { qsUiHistRender(); } catch (e) {}
   $("qsResumo").textContent = qsTodas().length
@@ -4201,6 +4296,8 @@ function qsUiRender() {
       hs.textContent = t("qs_hist", { n: ts.length, c: certas })
         + " · " + (ts[ts.length - 1].acertou ? t("qs_ultima_ok") : t("qs_ultima_nao"));
       hs.className += ts[ts.length - 1].acertou ? " ok" : " nao";
+      /* (19.172.0) no caderno: por que está lá e quanto falta para sair */
+      if (qsUiFiltro.caderno) { const ce = qsCadernoEstado(q); if (ce.dentro) hs.textContent += " · " + t(ce.chute ? "qs_cad_chutou" : ce.errou ? "qs_cad_errou" : "qs_cad_seguidos", { n: ce.seguidos, m: QS_CADERNO_DOMINA }); }
       /* o histórico vai para DEPOIS das ações, na base do card: é
        * informação de apoio, não o que se lê primeiro */
       li._hist = hs;
@@ -4212,6 +4309,14 @@ function qsUiRender() {
     bResp.type = "button"; bResp.className = "btn-min btn-min-ok";
     bResp.textContent = t("qs_responder_esta");
     bResp.onclick = () => qsUiResponderAbrir([q], "aba", "uma:" + q.id);
+    /* (19.172.0) no caderno, tirar à mão (volta se errar ou chutar de novo) */
+    let bTirar = null;
+    if (qsUiFiltro.caderno && qsNoCaderno(q)) {
+      bTirar = document.createElement("button");
+      bTirar.type = "button"; bTirar.className = "btn-min"; bTirar.id = "btnQsCadTirar_" + q.id;
+      bTirar.textContent = t("qs_cad_tirar"); bTirar.title = t("qs_cad_tirar_tip");
+      bTirar.onclick = () => { qsCadernoTirar(q.id); qsUiRender(); try { toastMsg(t("qs_cad_tirada"), 3000); } catch (e) {} };
+    }
     /* APAGAR SAI DA LINHA DE FRENTE.
      * Em vermelho forte ao lado de "responder", ele atraía mais o olho
      * do que a ação principal — e o alvo errado num toque de celular é
@@ -4283,6 +4388,7 @@ function qsUiRender() {
       bc.onclick = () => qsUiCartoesVer(q);
       ac.append(bResp, bc, bMais);
     } else ac.append(bResp, bMais);
+    if (bTirar) ac.insertBefore ? ac.insertBefore(bTirar, bMais) : ac.append(bTirar);
     li.append(ac);
     if (li._hist) li.append(li._hist);
     box.append(li);
@@ -4532,6 +4638,7 @@ function qsUiLerFiltros() {
     tipo: ($("qsFTipo") || {}).value || "",
     soIneditas: !!($("qsFIneditas") || {}).checked,
     soErradas: !!($("qsFErradas") || {}).checked,
+    caderno: !!($("qsFCaderno") || {}).checked,
     busca: ($("qsBusca") || {}).value || "",
     lote: ($("qsFLote") || {}).value || "",
   };
@@ -4886,9 +4993,12 @@ function qsUiIniciar() {
   if ($("btnQsRamosDesfazer")) $("btnQsRamosDesfazer").onclick = () => qsUiLigarRamosDesfazer();
   if ($("btnQsRamosFechar")) $("btnQsRamosFechar").onclick = () => $("dlgQsRamos").close();
   ["qsFEdital", "qsFTopico", "qsFRamo", "qsFDisc", "qsFBanca", "qsFTipo",
-   "qsFIneditas", "qsFErradas", "qsFLote"].forEach((id) => {
+   "qsFIneditas", "qsFErradas", "qsFCaderno", "qsFLote"].forEach((id) => {
     if ($(id)) $(id).onchange = () => qsUiLerFiltros();
   });
+  /* (19.172.0) o caderno de erros e chutes e o bizu, no alto da aba */
+  if ($("btnQsCaderno")) $("btnQsCaderno").onclick = () => qsUiCadernoAbrir();
+  if ($("btnQsBizu")) $("btnQsBizu").onclick = () => qsUiBizuAlternar();
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();
   if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").onclick = () => qsUiLimparFiltros();
   if ($("btnQsDesfazer")) $("btnQsDesfazer").onclick = () => qsUiDesfazer();

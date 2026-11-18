@@ -46,7 +46,9 @@ const BK_CHAVES = {
            /* (19.74.0) decisões e registros que estavam ficando de fora: o treino e as redações da discursiva, os itens
             * marcados "o edital não informa", o modo de estudo, a meta e o ritmo, e o que você escondeu da agenda */
            "eac_disc_treino", "eac_disc_redacoes", "eac_disc_propostas", "eac_ds_etapas", "eac_ed_conferencia", "eac_ag_modo", "eac_ag_meta_min",
-           "eac_ag_ritmo_real", "eac_ag_ritmo_recusa", "eac_agenda_disc_ocultas", "eac_ag_editais_ocultos"],
+           "eac_ag_ritmo_real", "eac_ag_ritmo_recusa", "eac_agenda_disc_ocultas", "eac_ag_editais_ocultos",
+           /* (19.172.0) os blocos da Revisão 360° (revisao-360.js): o plano da reta final não se refaz sozinho */
+           "eac_rv360"],
   /* FORA DO BACKUP, DE PROPÓSITO: "eac_chave_gemini".
    *
    * Toda a lógica deste arquivo é "não esqueça de incluir" — e esta é a
