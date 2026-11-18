@@ -1587,6 +1587,16 @@ dialog.lei-sep-dlg{width:min(860px,96vw);max-width:860px}
 .lei-art-tipo label{display:flex;gap:var(--esp-2);align-items:flex-start;cursor:pointer}
 .lei-corr-st{color:var(--atencao)}
 .lei-corr-st.ok{color:var(--ok)}
+/* (19.168.0) a história da lei no mapa */
+.lei-ir-n-mudou{border-color:var(--acao);color:var(--acao);font-weight:var(--peso-m)}
+.lei-mh-filtro{margin:0 0 var(--esp-2)}
+.lei-mh-filtro.on{border-color:var(--acao);color:var(--acao)}
+.lei-mh-lin{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:baseline;padding:var(--esp-1) 0;border-top:1px solid var(--borda)}
+.lei-mh-tip{color:var(--sutil)}
+.lei-mh-art{flex:1 1 100%}
+.lei-mh-art>summary,.lei-mh-saiu>summary{cursor:pointer;color:var(--acao)}
+.lei-mh-lt-ev{padding-left:var(--esp-2)}
+.lei-mh-saiu-ac{display:flex;flex-wrap:wrap;gap:var(--esp-1)}
 /* (19.164.0) Leis do edital: o que mudou, a origem e as já dentro de outra lei */
 .led-dif{margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--info);border-radius:var(--r-m)}
 .led-dif-tit{font-weight:var(--peso-m);margin-bottom:var(--esp-1)}
@@ -12634,6 +12644,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <p class="nota" data-i18n="lei_mapa_ajuda"></p>
   </details>
   <div class="lei-mapa-tit" data-i18n="lei_mapa_arvore"></div>
+  <!-- (19.168.0) o filtro "só o que mudou" (leiMapaFiltroEl, lei-mapa-historia.js) -->
+  <div id="leiMapaFiltro"></div>
   <div id="leiMapaArvore" class="lei-mapa-arvore"></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnLeiMapaFechar" data-i18n="help_close"></button>
@@ -14039,6 +14051,7 @@ window.__sqlPromise = initSqlJs({
 <script src="discursivas.js"></script>
 <script src="discursiva-agenda.js"></script>
 <script src="lei-correcoes.js"></script>
+<script src="lei-mapa-historia.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

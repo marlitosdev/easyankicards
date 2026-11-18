@@ -4606,22 +4606,30 @@ function leiMapaNoEl(no, arts, pos, fundo) {
   const det = document.createElement("details");
   det.className = leiMapaNoClasse(no, fundo);
   const sm = document.createElement("summary");
-  sm.textContent = no.rotulo + " · " + leiMapaArtsTxt(no, arts);
+  /* (19.168.0) quantos artigos deste ramo mudaram (correção sua, alteração por norma, ajuste do leitor) */
+  const nMud = typeof leiMapaMudouNo === "function" ? leiMapaMudouNo(no, arts) : 0;
+  sm.textContent = no.rotulo + " · " + leiMapaArtsTxt(no, arts) + (nMud ? " · ✎ " + nMud : "");
   det.append(sm);
+  const soMudou = typeof leiMapaSoMudou !== "undefined" && leiMapaSoMudou;
+  if (soMudou && !nMud) { det.hidden = true; return det; }
   let pronto = false;
   const encher = () => {
     if (pronto) return;
     pronto = true;
-    if (no.artigos.length) {
+    if (soMudou) {
+      const lm = leiMapaCtx && typeof leiMapaLinhasMudouEl === "function" ? leiMapaLinhasMudouEl(leiDe(leiMapaCtx.id), no, arts) : null;
+      if (lm) det.append(lm);
+    } else if (no.artigos.length) {
       const g = document.createElement("div");
       g.className = "lei-ir-grade";
       no.artigos.forEach((i) => {
         const a = arts[i];
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "lei-ir-n";
+        const mudou = typeof leiMapaMudAtual !== "undefined" && leiMapaMudAtual && leiMapaMudAtual.get(a.num);
+        b.className = "lei-ir-n" + (mudou ? " lei-ir-n-mudou" : "");
         b.textContent = a.numCru;
-        b.title = a.rotulo + (a.ementa ? " — " + a.ementa : "");
+        b.title = a.rotulo + (a.ementa ? " — " + a.ementa : "") + (mudou ? " · " + leiMapaMarcaTip(mudou) : "");
         b.onclick = () => leiMapaIr(a.num, a.indice);
         g.append(b);
       });
@@ -4631,8 +4639,8 @@ function leiMapaNoEl(no, arts, pos, fundo) {
   };
   det.ontoggle = () => { if (det.open) encher(); };
   det.encher = encher;
-  /* o ramo onde a pessoa parou já vem aberto, até o capítulo */
-  if (pos >= 0 && no.de >= 0 && no.de <= pos && pos <= no.ate) { det.open = true; encher(); }
+  /* o ramo onde a pessoa parou já vem aberto, até o capítulo; em "só o que mudou", os ramos marcados */
+  if (soMudou || (pos >= 0 && no.de >= 0 && no.de <= pos && pos <= no.ate)) { det.open = true; encher(); }
   return det;
 }
 
@@ -4949,6 +4957,10 @@ function leiMapaAbrir(repintar) {
     let dEl = null;
     try { dEl = typeof leiCorrMapaEl === "function" ? leiCorrMapaEl(l, dg.estrutura.artigos) : null; } catch (e) { dEl = null; }
     if (dEl) dcCx.append(dEl);
+    /* (19.168.0) a linha do tempo da lei */
+    let lt = null;
+    try { lt = typeof leiMapaLinhaTempoEl === "function" ? leiMapaLinhaTempoEl(l) : null; } catch (e) { lt = null; }
+    if (lt) dcCx.append(lt);
   }
   const infoCx = $("leiMapaInfo");
   if (infoCx) {
@@ -4960,7 +4972,14 @@ function leiMapaAbrir(repintar) {
   av.innerHTML = "";
   const arts = dg.estrutura.artigos;
   const pos = leiIndiceDoMarcador(l, arts);
+  /* (19.168.0) o que mudou em cada artigo, a marca ✎ na árvore e o filtro "só o que mudou" */
+  if (!repintar) leiMapaSoMudou = false;
+  try { leiMapaMudAtual = typeof leiMapaMudancas === "function" ? leiMapaMudancas(l, dg) : null; } catch (e) { leiMapaMudAtual = null; }
+  const fx = $("leiMapaFiltro");
+  if (fx) { fx.innerHTML = ""; if (typeof leiMapaFiltroEl === "function") fx.append(leiMapaFiltroEl(leiMapaMudAtual ? leiMapaMudAtual.size : 0)); }
   dg.estrutura.raiz.forEach((no) => av.append(leiMapaNoEl(no, arts, pos)));
+  /* (19.168.0) os acrescentados por norma, que não estão no texto colado */
+  { const fora = typeof leiMapaForaDoTextoEl === "function" ? leiMapaForaDoTextoEl(l, arts) : null; if (fora) av.append(fora); }
   if (repintar) return true;
   abrirModal("dlgLeiMapa");
   try { leiReg("navegar", "mapa e conferência aberto", l.nome + " · " + r.artigos + " artigos · " + dg.itens.length + " a conferir"); }

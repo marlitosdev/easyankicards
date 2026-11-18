@@ -620,7 +620,8 @@ function leiCorrMapaEl(l, arts) {
     det.append(leiPreEl("div", "lei-mapa-dec-sub", t("lei_mapa_dec_limpeza_tit")));
     const porRegra = {};
     decs.forEach((d) => {
-      const g = porRegra[d.regra] = porRegra[d.regra] || { ace: 0, rec: 0, itens: [] };
+      const g = porRegra[d.regra] = porRegra[d.regra] || { ace: 0, rec: 0, itens: [], todos: [] };
+      g.todos.push(d);
       if (d.decisao === "aceitou") g.ace++; else { g.rec++; g.itens.push(d); }
     });
     Object.keys(porRegra).forEach((rg) => {
@@ -637,6 +638,9 @@ function leiCorrMapaEl(l, arts) {
         det.append(r);
       });
       if (g.itens.length > 8) det.append(leiPreEl("p", "nota", t("lei_mapa_dec_mais", { n: g.itens.length - 8 })));
+      /* (19.168.0) o que a limpeza tirou: copiar, ou devolver o artigo inteiro ao lugar dele */
+      const saiu = typeof leiMapaSaiuEl === "function" ? leiMapaSaiuEl(l, g.todos) : null;
+      if (saiu) det.append(saiu);
     });
     if (typeof decAbrir === "function") {
       const b = leiPreEl("button", "btn-min", t("lei_mapa_dec_hist"));
@@ -761,7 +765,14 @@ function leiCorrArtigoDesfazer(idLei, cid) {
   const x = lista[i];
   const M = leiCorrOndeMora(l, x.num);
   if (!M || M.texto !== leiCorrNormArt(x.depois)) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
-  if (!leiCorrTrocarArt(l, x.num, M.onde, x.antes)) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
+  if (x.tipo === "devolvido") {
+    /* (19.168.0) o artigo devolvido pela limpeza sai de novo */
+    const sem = leiSubstituirArtigo(l.texto, x.num, "");
+    if (sem === null) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
+    const final = sem.replace(/\n{3,}/g, "\n\n");
+    leiGuardar({ id: l.id, texto: final });
+    try { if (typeof leiIdAtual !== "undefined" && leiIdAtual === l.id && $("leiTexto")) $("leiTexto").value = final; } catch (e) {}
+  } else if (!leiCorrTrocarArt(l, x.num, M.onde, x.antes)) return { erro: t("lei_corr_art_nao_desf", { a: x.rotulo }) };
   lista[i] = Object.assign({}, x, { desfeita: new Date().toISOString() });
   leiGuardar({ id: idLei, correcoes: lista });
   try { leiReg("editar", "correção de leitura desfeita", x.rotulo); } catch (e) {}
