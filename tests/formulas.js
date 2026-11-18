@@ -1,5 +1,5 @@
 /* =====================================================================
- * FÓRMULAS NO RESUMO (19.65.0)
+ * FÓRMULAS NO RESUMO (19.65.0; símbolo solto em 19.169.0)
  *
  * O QUE PRECISA SER VERDADE:
  *  F1 o LaTeX copiado da IA ($…$, $$…$$, \(…\)) vira símbolos: ¬ ∧ ∨ → ↔ ≡ ∀ ∃ ∈ ℝ ⊻ ⊕;
@@ -95,6 +95,45 @@ async function testes() {
     const duas = H("| a | b |\n|---|---|\n| 1 | 2 |\n\n- item\n\n| c | d |\n|---|---|\n| 3 | 4 |");
     ok((duas.match(/<table/g) || []).length === 2 && (duas.match(/<\/table>/g) || []).length === 2 && /<ul>\n<li>item<\/li>\n<\/ul>/.test(duas), "T10 duas tabelas com lista no meio: cada uma abre e fecha: " + duas);
     ok(/a conta passo a passo/.test(api.t("prep_p_regras")) && /\| --- \| --- \| debaixo do cabeçalho/.test(api.t("prep_p_regras")), "T11 o pedido do Preparar tópico pede a tabela completa e a conta passo a passo");
+  }
+  /* ---- (19.169.0) S: símbolo solto escrito em código não é fórmula ---- */
+  {
+    ok(api.matTexSoSimbolo(R`\rightarrow`) && api.matTexSoSimbolo(R` \times `) && api.matTexSoSimbolo(R`\geq`)
+       && !api.matTexSoSimbolo(R`p \wedge q`) && !api.matTexSoSimbolo(R`x^2`) && !api.matTexSoSimbolo(R`\log`) && !api.matTexSoSimbolo(R`\quad`) && !api.matTexSoSimbolo(R`\naoexiste`),
+       "S1 só um comando de símbolo conta como símbolo solto");
+    const PT = R`* **Teste:** (*Espero que você passe* $\rightarrow$ *Espero ISSO*) e $p \wedge q$.`;
+    const so = api.matTexConverterLinha(PT, "simbolos");
+    ok(so.nova === R`* **Teste:** (*Espero que você passe* → *Espero ISSO*) e $p \wedge q$.` && so.simb === 1 && so.conv === 1,
+       "S2 no modo 'simbolos' só a seta muda; a fórmula fica para a janela: " + so.nova);
+    const tudo = api.matTexConverterLinha(PT);
+    ok(tudo.conv === 2 && tudo.simb === 1, "S3 no modo normal as duas convertem, e a conta diz qual era símbolo");
+    ok(api.matTexConverterLinha("Custa R$ 100,00 e $ 3.", "simbolos").conv === 0, "S4 dinheiro continua não sendo nada");
+    /* o fluxo: resumo de português só com setas — troca direto, sem abrir a janela */
+    const ch = api.matChave("Português", "Conectivos");
+    const LIN = [R`* (*Espero que você passe* $\rightarrow$ *Espero ISSO*).`, R`* (*O livro que li* $\rightarrow$ *O livro o qual li*).`];
+    api.matGravar(ch, LIN.join("\n"), { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, true);
+    api.matTrocarModo("editar");
+    api.matPintarFormulas();
+    ok(/símbolos escritos em código \(2\)/.test(api.$("btnMatFormulas").textContent) && !/fórmula/.test(api.$("btnMatFormulas").textContent),
+       "S5 o botão não fala em fórmula quando só há símbolo: " + api.$("btnMatFormulas").textContent);
+    let abriu = false;
+    const dlg = api.$("dlgMatConserto");
+    const showAntes = dlg.showModal;
+    dlg.showModal = function () { abriu = true; if (showAntes) return showAntes.apply(this, arguments); };
+    const r = await api.matFormulasOferecer("colar");
+    ok(r === true && !abriu && api.$("matTexto").value === "* (*Espero que você passe* → *Espero ISSO*).\n* (*O livro que li* → *O livro o qual li*).",
+       "S6 colar: as setas viram → sem janela nenhuma: " + JSON.stringify(api.$("matTexto").value));
+    ok(/não eram fórmulas/i.test(api.t("mtx_simb_feito", { n: 2, l: 2, s: "→" })) && api.t("mtx_btn_simb", { n: 1 }) !== "mtx_btn_simb", "S7 o aviso diz que não eram fórmulas");
+    /* fórmula de verdade continua perguntando */
+    api.$("matTexto").value = R`Lógica: $p \wedge q$ e a seta $\to$.`;
+    abriu = false;
+    const pr = api.matFormulasOferecer("colar");
+    ok(abriu && api.$("matTexto").value === R`Lógica: $p \wedge q$ e a seta →.`, "S8 com fórmula de verdade a janela abre, e a seta já foi trocada antes: " + api.$("matTexto").value);
+    api.$("btnCnsNao").onclick();
+    await pr;
+    ok(api.$("matTexto").value === R`Lógica: $p \wedge q$ e a seta →.`, "S9 'manter como está' mantém a fórmula");
+    dlg.showModal = showAntes;
   }
   /* (19.66.0) H — colar página com fórmula desenhada: conferido no navegador (o ambiente de teste não tem o leitor de HTML) */
   return Object.assign(falhas, { quantas: n });

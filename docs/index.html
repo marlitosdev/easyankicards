@@ -1938,6 +1938,8 @@ dialog.lb-dlg.lb-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100
 #dlgMaterial .mat-escopo>*{flex:0 0 auto}
 /* o rodapé repetia Editar, Salvar e Fechar do topo: ficam só os que não existem lá */
 #matRodape #btnMatModo,#matRodape #btnMatSalvar,#matRodape #btnMatFechar{display:none}
+/* (19.169.0) sem nada visível dentro, o rodapé do resumo não ocupa a altura da leitura ("Li" e "Cartões" subiram para o topo) */
+#dlgMaterial #matRodape{display:none}
 /* A EDIÇÃO (v18.30.0): a barra não pode cortar o menu das marcas; o campo ocupa a janela */
 #dlgMaterial #matBarra{max-height:none;overflow:visible}
 .mat-pop-esq .mat-pop-corpo{left:0;right:auto}
@@ -10149,8 +10151,12 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       title="Este resumo tem fórmulas em código LaTeX ($…$). Mostro como ficam em símbolos (¬ ∧ ∨ → ≡) antes de trocar; você pode manter como está."></button>
       <button class="btn-min mat-duv-conta" id="btnMatDuvidas" hidden
       title="Este resumo tem dúvidas em aberto. Clique para ver todas as suas dúvidas, de todos os tópicos."></button>
-      <button class="btn-min btn-min-ok" id="btnMatQuestoes" hidden
-      title="Responde, em sequência, as questões deste tópico."></button>
+      <!-- (19.169.0) "Li este material" e "Virar cartões" moravam num rodapé de 59 px só deles, roubando altura da
+           leitura. Sobem para esta fila, no mesmo tamanho dos vizinhos, e o rodapé do resumo deixa de existir na tela. -->
+      <button class="btn-min btn-min-ok" id="btnMatLerReg" data-i18n="mat_li_topo" hidden aria-label="Li este material"
+      title="Registra esta leitura no diário de estudos, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
+      <button class="btn-min" id="btnMatCartoes" data-i18n="mat_cartoes_topo" aria-label="Virar cartões"
+      title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
       <!-- A TELA CHEIA À VISTA (v18.75.0): antes ficava escondida dentro do "Aa"; é o jeito de ler sem nada em volta -->
       <button class="btn-min mat-cheia-bt" id="btnMatCheiaTopo" data-i18n="mat_cheia" data-i18n-title="mat_cheia_topo_tip"></button>
       <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
@@ -10300,8 +10306,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
          só: gravar e continuar aqui. -->
     <button class="btn btn-verde" id="btnMatSalvar" data-i18n="mat_salvar"
       title="Grava o resumo com as marcas que você fez, e continua aqui. Cartões, lei seca e marcador de página não são tocados."></button>
-    <button class="btn btn-verde" id="btnMatLerReg" data-i18n="mat_registrar_leitura" hidden title="Registra esta leitura no diário de estudos, com o tempo estimado pelo tamanho do texto. Se o tópico já foi estudado, entra como revisão."></button>
-    <button class="btn btn-azul" id="btnMatCartoes" data-i18n="mat_virar_cartoes" title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
     <button class="btn btn-cinza" id="btnMatFechar" data-i18n="help_close" title="Fecha o resumo. Com marcação não salva, pergunta antes: salvar e sair, sair sem salvar, ou continuar aqui."></button>
   </div>
 </dialog>

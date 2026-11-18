@@ -111,7 +111,7 @@ async function testes() {
   {
     const entre = (de, ate) => { const i = HTML.indexOf(de); const j = HTML.indexOf(ate, i); return i >= 0 && j > i ? HTML.slice(i, j) : ""; };
     const topo = entre('id="matTopo"', 'id="matAjudaNota"');
-    const ordem = ["btnMatConsertar", "btnMatDuvidas", "btnMatQuestoes", "btnMatModoTopo", "btnMatSalvarEstadoTopo", "matPopAa", "matPopMais", "btnMatFecharTopo"];
+    const ordem = ["btnMatConsertar", "btnMatDuvidas", "btnMatModoTopo", "btnMatSalvarEstadoTopo", "matPopAa", "matPopMais", "btnMatFecharTopo"];
     const pos = ordem.map((id) => topo.indexOf('id="' + id + '"'));
     ok(pos.every((p) => p >= 0) && pos.every((p, i) => i === 0 || p > pos[i - 1]), "T1 o topo não tem tudo na ordem (avisos, Editar, Salvar, Aa, ⋯, fechar): " + pos.join(","));
     const aa = entre('id="matPopAa"', 'id="matPopMais"');
@@ -127,6 +127,12 @@ async function testes() {
       ok(HTML.split('id="' + id + '"').length === 2, "T1d o id " + id + " não aparece exatamente uma vez"));
     ok(/#matRodape #btnMatModo,#matRodape #btnMatSalvar,#matRodape #btnMatFechar\{display:none\}/.test(HTML), "T1e o rodapé continua repetindo Editar/Salvar/Fechar");
     ok(/#dlgMaterial \.mat-cab \.mat-topo\{max-height:none;overflow:visible/.test(HTML), "T1f o topo continua com rolagem própria (cortaria os menus)");
+    /* (19.169.0) "Li este material" e "Virar cartões" subiram para o topo; o rodapé do resumo não ocupa altura */
+    const topoLi = entre('id="matTopo"', 'id="btnMatModoTopo"');
+    ok(/id="btnMatLerReg"/.test(topoLi) && /id="btnMatCartoes"/.test(topoLi) && HTML.split('id="btnMatLerReg"').length === 2 && HTML.split('id="btnMatCartoes"').length === 2,
+       "T1g 'Li' e 'Virar cartões' ficam na fila do topo, uma vez só");
+    ok(/<button class="btn-min btn-min-ok" id="btnMatLerReg"/.test(HTML) && /<button class="btn-min" id="btnMatCartoes"/.test(HTML), "T1h no tamanho dos vizinhos (btn-min), não botão grande");
+    ok(/#dlgMaterial #matRodape\{display:none\}/.test(HTML), "T1i o rodapé do resumo não toma altura da leitura");
   }
   {
     const { api } = rodar();

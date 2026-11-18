@@ -104,8 +104,8 @@ async function testes() {
    * O que a asserção protege continua sendo o mesmo: NÃO PODE HAVER
    * BECO. Só que agora quem responde por isso são os dois criadores,
    * que ficam visíveis — e é neles que a exigência passa a bater. */
-  ok(api.$("btnMatQuestoes").hidden === true,
-     "U1 sem questão nenhuma, o botao de RESPONDER continua na fila: "
+  ok(!api.$("btnMatQuestoes"),
+     "U1 (19.169.0: o resumo não tem mais o botão de responder) sem questão nenhuma, o botao de RESPONDER continua na fila: "
      + "com dois botoes de criar ao lado, ele vira um terceiro caminho "
      + "para o mesmo lugar, com o rotulo errado");
   ok(api.$("btnMatQstResumo").hidden === false
@@ -159,9 +159,8 @@ async function testes() {
   ok(api.qsTodas().every((q) => q.chave === ch && q.concurso !== undefined),
      "U4b a questao nao guardou de qual topico veio");
   api.qsUiPintarBotaoResumo();
-  ok(/2/.test(api.$("btnMatQuestoes").textContent),
-     "U4c o botao do resumo nao mostrou a contagem");
-  ok(api.$("btnMatQuestoes").disabled === false, "U4d o botao continuou desabilitado");
+  ok(!api.$("btnMatQuestoes") && api.$("btnMatQstResumo").hidden === false,
+     "U4c (19.169.0) com questões gravadas, o resumo continua sem o botão de responder e com o de criar");
   ok(api.$("qsDesfazer").hidden === false, "U4e nao ofereceu desfazer");
 
   /* U5 — responder pelo resumo: SELECIONAR não é RESPONDER.
@@ -258,7 +257,7 @@ async function testes() {
   api.qsUiDesfazer();
   ok(api.qsTodas().length === 0, "U8 desfazer nao tirou as questoes");
   api.qsUiPintarBotaoResumo();
-  ok(api.$("btnMatQuestoes").hidden === true,
+  ok(!api.$("btnMatQuestoes"),
      "U8b desfeitas as questoes, o botao de responder continua na fila "
      + "oferecendo responder o que nao existe mais");
 
@@ -363,7 +362,7 @@ async function testes() {
     a3.matGravar(a3.matChave("D", "Vazio"), "Texto qualquer sem questao nenhuma.",
       { disciplina: "D", topico: "Vazio" });
     a3.matAbrirEditor({ disciplina: "D", nome: "Vazio" }, "ler");
-    ok(a3.$("btnMatQuestoes").hidden === true,
+    ok(!a3.$("btnMatQuestoes"),
        "P7 sem questao no topico, o botao de RESPONDER continua na fila");
     a3.qsUiResponderDoTopico();
     ok(a3.$("dlgQsCriar").open === true,

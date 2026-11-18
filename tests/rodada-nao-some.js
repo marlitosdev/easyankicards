@@ -453,7 +453,7 @@ async function testes() {
     api.qsUiPintarBotaoResumo();
 
     const bResp = api.$("btnMatQuestoes");
-    ok(bResp && bResp.hidden === true,
+    ok(!bResp,
        "R11 sem nenhuma questão guardada, o botão de RESPONDER continua "
        + "na fila: com dois botões de criar ao lado, ele vira um "
        + "terceiro caminho para o mesmo lugar, com o rótulo errado");
@@ -471,8 +471,7 @@ async function testes() {
                       disciplina: "D", topico: "T",
                       chave: api.matChave("D", "T") }]);
     api.qsUiPintarBotaoResumo();
-    ok(rot("btnMatQuestoes").indexOf("criar") < 0
-       && /responder/i.test(rot("btnMatQuestoes")),
+    ok(!api.$("btnMatQuestoes"),
        "R11c o botão de RESPONDER não diz o verbo dele, ou diz 'criar' "
        + "como os outros dois: " + rot("btnMatQuestoes"));
   }
@@ -486,8 +485,8 @@ async function testes() {
     api.matGravar(api.matChave("D", "T"), "resumo", { disciplina: "D", topico: "T" });
     api.matAbrirEditor({ disciplina: "D", nome: "T" }, "ler");
     api.qsUiPintarBotaoResumo();
-    ok(api.$("btnMatQuestoes").disabled === false,
-       "R11d com questão guardada o botão de responder continua "
+    ok(!api.$("btnMatQuestoes"),
+       "R11d (19.169.0: responder saiu do resumo; fica na agenda e na tela de questões) com questão guardada o botão de responder continua "
        + "desabilitado");
   }
 

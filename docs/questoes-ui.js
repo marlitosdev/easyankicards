@@ -4546,48 +4546,13 @@ function qsUiLerFiltros() {
  * propósito — um parágrafo curto de lei passa. */
 const QS_TRECHO_MIN = 120;
 
+/* (19.169.0) O RESUMO NÃO OFERECE MAIS "▶ responder as N questões".
+ * Responder tem lugar próprio (a agenda e a tela de questões, pelo tópico ou pelo ramo); no resumo o botão só repetia
+ * esse caminho e ocupava a fila de cima. O nome da função fica: quem pinta o resumo continua chamando-a, e ela pinta
+ * os dois botões que CRIAM questão, que seguem no resumo. */
 function qsUiPintarBotaoResumo() {
   const b = $("btnMatQuestoes");
-  if (!b) return;
-  if (!matAtual) { b.hidden = true; return; }
-  const n = qsContarDoTopico(matAtual.chave);
-  b.hidden = false;
-  /* =================================================================
-   * SEM QUESTÃO, ESTE BOTÃO SOME — não fica morto, e não fica sendo um
-   * terceiro caminho para criar.
-   *
-   * A PRIMEIRA TENTATIVA FOI DESABILITÁ-LO, e um teste antigo (U1c)
-   * apontou o erro: com zero questões ele não era um beco, era um
-   * atalho — clicá-lo LEVAVA a criar. Desabilitar teria tirado um
-   * caminho que funcionava, para consertar uma confusão de rótulo.
-   *
-   * Só que esse atalho nasceu quando ele era o ÚNICO botão de questões
-   * do resumo. Hoje há dois, explícitos e rotulados com o verbo, logo
-   * ao lado — e o atalho virou um terceiro caminho para o mesmo lugar,
-   * com um rótulo ("sem questões") que não diz que leva a criar. Era
-   * exatamente esta a queixa: "não sei informar se existem ou não
-   * questões".
-   *
-   * Some é melhor que morto e melhor que repetido: a fila fica com uma
-   * linha só quando não há o que responder, e o que fazer a seguir está
-   * escrito nos dois botões que sobraram.
-   * ================================================================= */
-  b.hidden = !n;
-  if (!n) return qsUiPintarCriadores();
-  b.textContent = t("qs_do_topico_n", { n });
-  b.disabled = false;
-  b.title = t("qs_do_topico_ajuda", { n });
-
-  /* O BOTAO TEM DE DIZER DE QUAL TEXTO VAI SAIR A QUESTAO.
-   * "virar em questão" sem mais nada nao deixa ver se vai usar o trecho
-   * marcado ou o resumo todo — e a pessoa so descobre lendo o prompt
-   * gerado. Com o tamanho no rotulo, da para conferir antes. */
-  /* DOIS BOTOES, UM POR ORIGEM.
-   * Um botao so, que trocava de rotulo conforme houvesse selecao, obrigava
-   * a LER o rotulo para saber o que ia acontecer — e "trecho marcado"
-   * ainda se confundia com as marcas coloridas da mesma barra. Separados,
-   * cada um diz uma coisa so, e o do trecho fica apagado enquanto nao ha
-   * trecho: dai se ve, sem ler, que falta selecionar. */
+  if (b) b.hidden = true;
   return qsUiPintarCriadores();
 }
 
@@ -4924,7 +4889,6 @@ function qsUiIniciar() {
   if ($("qsBusca")) $("qsBusca").oninput = () => qsUiLerFiltros();
   if ($("btnQsLimparFiltros")) $("btnQsLimparFiltros").onclick = () => qsUiLimparFiltros();
   if ($("btnQsDesfazer")) $("btnQsDesfazer").onclick = () => qsUiDesfazer();
-  if ($("btnMatQuestoes")) $("btnMatQuestoes").onclick = () => qsUiResponderDoTopico();
   if ($("btnQsCriarDaSessao")) {
     $("btnQsCriarDaSessao").onclick = () => {
       $("dlgQsResponder").close();

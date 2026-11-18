@@ -709,37 +709,65 @@ function matTexParaTexto(latex) {
   t2 = t2.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").replace(/\s{2,}/g, " ").trim();
   return t2 || null;
 }
-/* uma linha: { nova, conv, mant } — conv = fórmulas convertidas, mant = as que ficam em LaTeX */
-function matTexConverterLinha(l) {
-  let conv = 0, mant = 0;
+/* (19.169.0) SÍMBOLO SOLTO NÃO É FÓRMULA. Num resumo de português, "Espero que você passe $\rightarrow$ Espero ISSO" é
+ * só a seta escrita em código pela IA. Chamar isso de "fórmula" e abrir uma janela para perguntar confunde — não há o que
+ * decidir: o símbolo é o mesmo, só muda a escrita. Um único comando de símbolo ($\rightarrow$, $\times$, $\geq$…) é
+ * trocado direto; a janela fica para fórmula de verdade ($p \wedge q$, $x^2$…). Funções (lim, log, sen) e espaços não
+ * contam: sozinhos não são símbolo. */
+const MAT_TEX_NAO_SIMB = /^(lim|log|ln|exp|max|min|sin|cos|tan|quad|qquad|lt|gt|backslash|lbrace|rbrace|mid|vert|Vert)$/;
+function matTexSoSimbolo(tex) {
+  const m = /^\s*\\([A-Za-z]+)\s*$/.exec(String(tex || ""));
+  return !!(m && Object.prototype.hasOwnProperty.call(MAT_TEX_SIMB, m[1]) && !MAT_TEX_NAO_SIMB.test(m[1]));
+}
+/* uma linha: { nova, conv, mant, simb } — conv = fórmulas convertidas (simb delas eram símbolo solto), mant = as que
+ * ficam em LaTeX. modo "simbolos": converte só os símbolos soltos e deixa o resto como está. */
+function matTexConverterLinha(l, modo) {
+  let conv = 0, mant = 0, simb = 0;
+  const so = modo === "simbolos";
   const bloco = String(l).match(/^(\s*)\$\$([\s\S]+?)\$\$\s*$/) || String(l).match(/^(\s*)\\\[([\s\S]+?)\\\]\s*$/);
   if (bloco) {
+    const ehSimb = matTexSoSimbolo(bloco[2]);
+    if (so && !ehSimb) return { nova: l, conv: 0, mant: 0, simb: 0 };
     const x = matTexParaTexto(bloco[2].trim());
-    if (x == null) return { nova: l, conv: 0, mant: 1 };
-    return { nova: bloco[1] + x, conv: 1, mant: 0 };
+    if (x == null) return { nova: l, conv: 0, mant: 1, simb: 0 };
+    return { nova: bloco[1] + x, conv: 1, mant: 0, simb: ehSimb ? 1 : 0 };
   }
   const nova = String(l).replace(MAT_TEX_INLINE, (m0, a, b, c) => {
     if (c && !matTexTemCara(c)) return m0;
-    const x = matTexParaTexto((a || b || c).trim());
+    const tex = (a || b || c).trim();
+    const ehSimb = matTexSoSimbolo(tex);
+    if (so && !ehSimb) return m0;
+    const x = matTexParaTexto(tex);
     if (x == null) { mant++; return m0; }
     conv++;
+    if (ehSimb) simb++;
     return x;
   });
-  return { nova, conv, mant };
+  return { nova, conv, mant, simb };
 }
-/* o texto inteiro: { texto, itens:[{linha, antes, depois}], mant } */
-function matTexConverterTexto(txt) {
+/* o texto inteiro: { texto, itens:[{linha, antes, depois, conv, simb}], mant, simb } */
+function matTexConverterTexto(txt, modo) {
   const L = String(txt || "").split("\n");
   const itens = [];
-  let mant = 0;
+  let mant = 0, simb = 0;
   const out = L.map((l, k) => {
     if (l.indexOf("$") < 0 && l.indexOf("\\(") < 0 && l.indexOf("\\[") < 0) return l;
-    const r = matTexConverterLinha(l);
+    const r = matTexConverterLinha(l, modo);
     mant += r.mant;
-    if (r.conv && r.nova !== l) itens.push({ linha: k, antes: l, depois: r.nova });
+    if (r.conv && r.nova !== l) { itens.push({ linha: k, antes: l, depois: r.nova, conv: r.conv, simb: r.simb }); simb += r.simb; }
     return r.nova;
   });
-  return { texto: out.join("\n"), itens, mant };
+  return { texto: out.join("\n"), itens, mant, simb };
+}
+/* os símbolos que um texto escreve em código, sem repetir: "→, ×" (para dizer o que foi trocado) */
+function matTexSimbolosDe(itens) {
+  const vistos = [];
+  (itens || []).forEach((p) => String(p.antes).replace(MAT_TEX_INLINE, (m0, a, b, c) => {
+    const tex = (a || b || c || "").trim();
+    if (matTexSoSimbolo(tex)) { const s = matTexParaTexto(tex); if (s && vistos.indexOf(s) < 0) vistos.push(s); }
+    return m0;
+  }));
+  return vistos.join(" ");
 }
 
 /* (19.67.0) DESENHAR AS FÓRMULAS DENTRO DE UM ELEMENTO JÁ MONTADO (o cartão na tela de estudo): percorre os textos e
@@ -2691,15 +2719,35 @@ function matTexPendentes() {
 function matPintarFormulas() {
   const b = $("btnMatFormulas");
   if (!b) return;
-  const n = matAtual ? matTexPendentes().itens.length : 0;
+  const p = matAtual ? matTexPendentes() : { itens: [] };
+  const n = p.itens.length;
   b.hidden = !n;
-  if (n) b.textContent = t("mtx_btn", { n });
+  /* (19.169.0) só símbolo escrito em código: o botão não fala em fórmula */
+  if (n) b.textContent = t(p.itens.every((x) => x.conv === x.simb) ? "mtx_btn_simb" : "mtx_btn", { n });
+}
+/* (19.169.0) troca direto os símbolos soltos ($\rightarrow$ → →) e avisa o que trocou; devolve quantos */
+function matTexTrocarSimbolos(ta, origem) {
+  const ss = matTexConverterTexto(ta.value, "simbolos");
+  if (!ss.itens.length) return 0;
+  if (typeof matTrocarTrecho === "function") matTrocarTrecho(ta, 0, ta.value.length, ss.texto, 0, 0);
+  else ta.value = ss.texto;
+  const s = matTexSimbolosDe(ss.itens);
+  try { reg("MATERIAL", "símbolos escritos em código trocados pelo próprio símbolo", ss.simb + " símbolo(s) · " + ss.itens.length + " linha(s) · " + s + " · " + origem); } catch (e) {}
+  try { toastMsg(t("mtx_simb_feito", { n: ss.simb, l: ss.itens.length, s }), 6000); } catch (e) {}
+  return ss.simb;
 }
 async function matFormulasOferecer(origem) {
   if (!matAtual || !$("matTexto")) return false;
   const ta = $("matTexto");
+  /* 1º os símbolos soltos, sem perguntar; depois, se sobrar fórmula de verdade, a janela */
+  const nSimb = matTexTrocarSimbolos(ta, origem);
+  if (nSimb) {
+    if (origem === "salvar" || origem === "botao") matSalvarEstado();
+    try { matRender(); } catch (e) {}
+    matPintarFormulas();
+  }
   const plano = matTexConverterTexto(ta.value);
-  if (!plano.itens.length) { if (origem === "botao") await uiAlert(t("mtx_nada")); return false; }
+  if (!plano.itens.length) { if (origem === "botao" && !nSimb) await uiAlert(t("mtx_nada")); return nSimb > 0; }
   const assinatura = plano.itens.map((x) => x.antes).join("\n");
   if (origem !== "botao" && matTexRecusado[matAtual.chave] === assinatura) return false;
   const box = $("cnsLista");
