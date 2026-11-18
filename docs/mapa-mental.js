@@ -14,6 +14,69 @@ let matMapaOn = false;
 const MM_RECOLHIDOS = "eac_mm_recolhidos";       /* conveniência do aparelho: quais nós ficam recolhidos, por resumo */
 const MM_MUITOS = 60;                             /* acima disso, o mapa abre só até os ramos */
 
+/* (19.175.0) TENTAR LEMBRAR — a fase 2: o mapa deixa de ser leitura passiva. Os galhos aparecem só pelo nome; o que há
+ * dentro (o detalhe e os galhos de baixo) fica escondido até você tentar lembrar e tocar para revelar; aí marca
+ * "✓ lembrei" ou "✗ não lembrei". O "não lembrei" fica destacado também no mapa normal e pode virar cartão (o painel de
+ * cartões do tópico abre já preenchido, para você conferir antes de gravar). O resultado é guardado por CAMINHO do galho
+ * ("Ramo › Item"), não por linha — vale igual no "Tudo" e no ramo, e sobrevive a editar outras partes do resumo. */
+const MM_TREINO_CH = "eac_mm_treino";
+let mmTreino = false;
+let mmRevelados = {};
+function mmTreinoLer() { try { const v = JSON.parse(localStorage.getItem(MM_TREINO_CH) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
+function mmTreinoGravar(m) { try { localStorage.setItem(MM_TREINO_CH, JSON.stringify(m)); } catch (e) {} }
+function mmChaveResumo() { return typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : ""; }
+function mmResultados() { return mmTreinoLer()[mmChaveResumo()] || {}; }
+function mmMarcarResultado(no, v) {
+  const m = mmTreinoLer();
+  const ch = mmChaveResumo();
+  const r = m[ch] || {};
+  if (v) r[no.caminho] = { v, em: (typeof hojeISO === "function" ? hojeISO() : new Date().toISOString().slice(0, 10)) };
+  else delete r[no.caminho];
+  m[ch] = r;
+  mmTreinoGravar(m);
+  matMapaPintar();
+}
+function mmTemDentro(no) { return !no.raiz && (!!no.det || no.filhos.length > 0); }
+function mmRevelar(no) { mmRevelados[no.caminho] = 1; matMapaPintar(); }
+/* os galhos com "não lembrei" na árvore atual */
+function mmEsquecidos(arv) {
+  const res = mmResultados(), out = [];
+  const ir = (no, pai) => { if (!no.raiz && res[no.caminho] && res[no.caminho].v === "n") out.push({ no, pai }); no.filhos.forEach((f) => ir(f, no)); };
+  if (arv) ir(arv.raiz, null);
+  return out;
+}
+/* a linha do cartão ("frente :: verso"): a pergunta leva o galho de cima, para não ficar solta */
+function mmCartaoLinha(no, pai) {
+  const limpa = (s) => String(s || "").replace(/::/g, ":").replace(/\s+/g, " ").trim();
+  const verso = no.det ? no.det : no.filhos.map((f) => f.label).join("; ");
+  if (!verso) return "";
+  const ctx = pai && !pai.raiz ? limpa(pai.label) + " › " : "";
+  return limpa(ctx + no.label + " — o que é / o que diz?") + " :: " + limpa(verso);
+}
+function mmVirarCartoes() {
+  const lst = mmEsquecidos(mmUltimo && mmUltimo.arvore).map((x) => mmCartaoLinha(x.no, x.pai)).filter(Boolean);
+  if (!lst.length || typeof matCartoesAbrir !== "function") return 0;
+  matCartoesAbrir({ semGravarResumo: true });
+  const ta = $("mcTexto");
+  if (ta) { ta.value = lst.join("\n"); try { if (typeof matCartoesConferir === "function") matCartoesConferir(); } catch (e) {} }
+  try { matReg("ler", "mapa: não lembrados viram cartões", lst.length + " · " + mmChaveResumo()); } catch (e) {}
+  return lst.length;
+}
+function mmTreinoAlternar(sim) {
+  mmTreino = sim === undefined ? !mmTreino : !!sim;
+  mmRevelados = {};
+  matMapaPintar();
+  try { matReg("ler", mmTreino ? "mapa: tentar lembrar" : "mapa: fim do treino", mmChaveResumo()); } catch (e) {}
+  return mmTreino;
+}
+function mmTreinoRecomecar() {
+  const m = mmTreinoLer();
+  delete m[mmChaveResumo()];
+  mmTreinoGravar(m);
+  mmRevelados = {};
+  matMapaPintar();
+}
+
 function mmLerRecolhidos() { try { const v = JSON.parse(localStorage.getItem(MM_RECOLHIDOS) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
 function mmGravarRecolhidos(m) { try { localStorage.setItem(MM_RECOLHIDOS, JSON.stringify(m)); } catch (e) {} }
 
@@ -105,6 +168,18 @@ function mmMontar(texto, opc) {
     /* o parágrafo logo depois de um item, sem linha em branco no meio, continua o item */
     (lista.length ? lista[lista.length - 1].no : atual()).filhos.push(no);
   });
+  /* o CAMINHO de cada galho ("Ramo › Item"): a identidade estável do treino; nomes repetidos sob o mesmo pai ganham #2 */
+  const caminhos = (no, pre) => {
+    const vistos = {};
+    no.filhos.forEach((f) => {
+      const base = (pre ? pre + " › " : "") + norm(f.label).slice(0, 80);
+      vistos[base] = (vistos[base] || 0) + 1;
+      f.caminho = base + (vistos[base] > 1 ? " #" + vistos[base] : "");
+      caminhos(f, f.caminho);
+    });
+  };
+  raiz.caminho = "";
+  caminhos(raiz, "");
   return { raiz, nos, ramos };
 }
 
@@ -112,7 +187,8 @@ function mmMontar(texto, opc) {
 const MM_ICO_MARCA = { importante: "❗", duvida: "❓", lei: "§", prova: "🎯", pegadinha: "⚠", nota: "📝", destaque: "🖍" };
 function mmNoEl(no, prof, rec, chave) {
   const li = document.createElement("li");
-  const fechado = !!rec[no.id];
+  /* no treino, o que está aberto é o que você já revelou (a raiz sempre) */
+  const fechado = mmTreino ? !(no.raiz || mmRevelados[no.caminho]) : !!rec[no.id];
   li.className = "mm-no" + (no.raiz ? " mm-raiz" : "") + (no.ramo ? " mm-ramo" : "") + (no.titulo && !no.ramo ? " mm-tit" : "")
     + (no.peso >= 4 ? " mm-peso-alto" : "") + (no.dica ? " mm-dica" : "") + (fechado && no.filhos.length ? " mm-fechado" : "");
   li.id = "mmNo_" + no.id;
@@ -124,7 +200,7 @@ function mmNoEl(no, prof, rec, chave) {
     tg.textContent = fechado ? "▸" : "▾";
     tg.setAttribute("aria-expanded", fechado ? "false" : "true");
     tg.title = t(fechado ? "mm_abrir" : "mm_recolher", { n: no.filhos.length });
-    tg.onclick = () => mmAlternar(chave, no.id);
+    tg.onclick = () => (mmTreino && fechado ? mmRevelar(no) : mmAlternar(chave, no.id));
     cx.append(tg);
   }
   const rot = document.createElement("span");
@@ -132,14 +208,37 @@ function mmNoEl(no, prof, rec, chave) {
   rot.textContent = no.label;
   if (!no.raiz) {
     rot.setAttribute("role", "button"); rot.tabIndex = 0;
-    rot.title = t("mm_ir_tip");
-    rot.onclick = () => matMapaIr(no.linha);
+    rot.title = t(mmTreino ? "mm_revelar_tip" : "mm_ir_tip");
+    rot.onclick = () => (mmTreino ? mmRevelar(no) : matMapaIr(no.linha));
   }
   cx.append(rot);
   if (no.peso >= 4) { const p = document.createElement("span"); p.className = "mm-peso"; p.textContent = t("mm_peso", { p: no.peso }); cx.append(p); }
   no.marcas.forEach((m) => { const s = document.createElement("span"); s.className = "mm-mk mm-mk-" + m; s.textContent = MM_ICO_MARCA[m] || "•"; s.title = t("mm_marca_" + m); cx.append(s); });
-  if (fechado && no.filhos.length) { const n = document.createElement("span"); n.className = "mm-conta"; n.textContent = "+" + no.filhos.length; cx.append(n); }
-  if (no.det) {
+  if (fechado && no.filhos.length && !mmTreino) { const n = document.createElement("span"); n.className = "mm-conta"; n.textContent = "+" + no.filhos.length; cx.append(n); }
+  /* (19.175.0) o treino: o que há dentro fica escondido até revelar; revelado, "✓ lembrei / ✗ não lembrei" */
+  const res = mmResultados()[no.caminho];
+  if (res && res.v === "n") li.className += " mm-esqueci";
+  if (mmTreino && mmTemDentro(no)) {
+    const revelado = !!mmRevelados[no.caminho];
+    if (res && res.v === "s") li.className += " mm-lembrei";
+    if (!revelado) {
+      const oc = document.createElement("button");
+      oc.type = "button"; oc.className = "mm-oculto"; oc.id = "mmOc_" + no.id;
+      oc.textContent = t("mm_oculto", { n: no.filhos.length });
+      oc.onclick = () => mmRevelar(no);
+      cx.append(oc);
+    } else {
+      const ac = document.createElement("span");
+      ac.className = "mm-res";
+      const bt = (id, txt, v, cls) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn-min " + cls + (res && res.v === v ? " on" : ""); b.id = id; b.textContent = txt; b.onclick = () => mmMarcarResultado(no, res && res.v === v ? "" : v); ac.append(b); };
+      bt("mmSim_" + no.id, t("mm_lembrei"), "s", "mm-res-s");
+      bt("mmNao_" + no.id, t("mm_nao_lembrei"), "n", "mm-res-n");
+      cx.append(ac);
+    }
+  } else if (res && res.v === "n") {
+    const s = document.createElement("span"); s.className = "mm-esq-selo"; s.textContent = t("mm_selo_esqueci"); s.title = t("mm_selo_esqueci_tip", { d: (res.em || "").split("-").reverse().join("/") }); cx.append(s);
+  }
+  if (no.det && (!mmTreino || !!mmRevelados[no.caminho])) {
     const d = document.createElement("span");
     d.className = "mm-det";
     d.textContent = no.det.length > 180 ? no.det.slice(0, 179) + "…" : no.det;
@@ -213,6 +312,32 @@ function matMapaPintar() {
   const b2 = document.createElement("button"); b2.type = "button"; b2.className = "btn-min"; b2.id = "btnMmSoRamos"; b2.textContent = t("mm_so_ramos");
   b2.onclick = () => mmTodos(chave, false);
   barra.append(res, b1, b2);
+  /* (19.175.0) o treino: ligar, o placar, recomeçar e os não lembrados em cartões */
+  const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn-min" + (mmTreino ? " on" : ""); bt.id = "btnMmTreino";
+  bt.textContent = t(mmTreino ? "mm_treino_sair" : "mm_treino"); bt.title = t("mm_treino_tip");
+  bt.setAttribute("aria-pressed", mmTreino ? "true" : "false");
+  bt.onclick = () => mmTreinoAlternar();
+  barra.append(bt);
+  const resT = mmResultados();
+  const vals = Object.keys(resT).map((k) => resT[k] && resT[k].v);
+  const nS = vals.filter((v) => v === "s").length, nN = vals.filter((v) => v === "n").length;
+  if (mmTreino || nS || nN) {
+    const pl = document.createElement("span"); pl.className = "nota mm-placar"; pl.id = "mmPlacar";
+    pl.textContent = t("mm_placar", { s: nS, n: nN });
+    barra.append(pl);
+  }
+  if (mmTreino && (nS || nN)) {
+    const br = document.createElement("button"); br.type = "button"; br.className = "btn-min"; br.id = "btnMmRecomecar"; br.textContent = t("mm_recomecar");
+    br.onclick = () => mmTreinoRecomecar();
+    barra.append(br);
+  }
+  const esq = mmEsquecidos(arv).filter((x) => mmCartaoLinha(x.no, x.pai));
+  if (esq.length) {
+    const bc = document.createElement("button"); bc.type = "button"; bc.className = "btn-min"; bc.id = "btnMmCartoes";
+    bc.textContent = t("mm_cartoes", { n: esq.length }); bc.title = t("mm_cartoes_tip");
+    bc.onclick = () => mmVirarCartoes();
+    barra.append(bc);
+  }
   box.append(barra);
   if (!arv.nos) {
     const p = document.createElement("p"); p.className = "nota"; p.id = "mmVazio"; p.textContent = t("mm_vazio"); box.append(p);

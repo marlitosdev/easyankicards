@@ -325,6 +325,40 @@ async function testes() {
     ok(!/mm-fechado/.test(api.$("mmNo_l2").className), "MM13 abrir tudo");
     api.matMapaIr(5);
     ok(!api.matMapaAtual() && !api.$("matLeitura").hidden && api.$("matMapa").hidden, "MM14 tocar num galho volta ao texto");
+    /* (19.175.0) tentar lembrar */
+    api.matMapaAlternar(true);
+    api.$("btnMmTreino").onclick();
+    ok(api.mmTreinoAtual() && /sair do treino/.test(api.$("btnMmTreino").textContent), "MT1 o treino liga pelo botão da barra");
+    const ram = () => api.$("mmNo_l2");
+    ok(/mm-fechado/.test(ram().className) && api.$("mmOc_l2") && !/Aditivas/.test(ram().textContent), "MT2 no treino o ramo aparece só pelo nome: o que há dentro fica escondido");
+    api.$("mmOc_l2").onclick();
+    ok(/Aditivas/.test(ram().textContent) && api.$("mmSim_l2") && api.$("mmNao_l2"), "MT3 revelar mostra os galhos de baixo e 'lembrei / não lembrei'");
+    ok(api.$("mmOc_l5") && !/mas, porém/.test(api.$("mmNo_l5").textContent), "MT4 os de baixo também começam escondidos (o detalhe só depois de revelar)");
+    api.$("mmOc_l5").onclick();
+    ok(/mas, porém, contudo/.test(api.$("mmNo_l5").textContent), "MT5 revelado, aparece o detalhe");
+    api.$("mmNao_l5").onclick();
+    api.$("mmSim_l2").onclick();
+    const R0 = api.mmResultados();
+    const kN = Object.keys(R0).filter((k) => R0[k].v === "n"), kS = Object.keys(R0).filter((k) => R0[k].v === "s");
+    ok(kN.length === 1 && /adversativas/.test(kN[0]) && /conjuncoes coordenativas/.test(kN[0]) && kS.length === 1, "MT6 o resultado guardado pelo CAMINHO do galho: " + JSON.stringify(R0));
+    ok(/lembrou 1 · não lembrou 1/.test(api.$("mmPlacar").textContent) && /mm-esqueci/.test(api.$("mmNo_l5").className), "MT7 o placar e o galho não lembrado em destaque");
+    ok(api.BK_CHAVES.material.indexOf("eac_mm_treino") >= 0, "MT8 o treino entra no backup");
+    const esq = api.mmEsquecidos(api.mmUltimoAtual().arvore);
+    const lin = api.mmCartaoLinha(esq[0].no, esq[0].pai);
+    ok(lin === "Conjunções Coordenativas › Adversativas — o que é / o que diz? :: mas, porém, contudo.", "MT9 a linha do cartão leva o galho de cima: " + lin);
+    api.$("btnMmTreino").onclick();
+    ok(!api.mmTreinoAtual() && /mm-esqueci/.test(api.$("mmNo_l5").className) && /não lembrei/.test(api.$("mmNo_l5").textContent), "MT10 fora do treino, o não lembrado continua marcado no mapa");
+    ok(api.$("btnMmCartoes") && /\(1\)/.test(api.$("btnMmCartoes").textContent), "MT11 o botão de virar cartões com a contagem");
+    api.$("btnMmCartoes").onclick();
+    ok(/Adversativas — o que é/.test(api.$("mcTexto").value), "MT12 o painel de cartões abre já preenchido: " + api.$("mcTexto").value.slice(0, 80));
+    try { api.$("dlgMatCartoes") && api.$("dlgMatCartoes").close && api.$("dlgMatCartoes").close(); } catch (e) {}
+    api.mmTreinoAlternar(true);
+    api.$("btnMmRecomecar").onclick();
+    ok(!Object.keys(api.mmResultados()).length, "MT13 recomeçar limpa o treino deste resumo");
+    api.mmTreinoAlternar(false);
+    ["mm_treino", "mm_treino_sair", "mm_oculto", "mm_lembrei", "mm_nao_lembrei", "mm_placar", "mm_cartoes", "mm_selo_esqueci", "mm_recomecar"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MT14 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
     api.matTrocarModo("editar");
     ok(api.$("btnMatMapa").hidden, "MM15 editando, sem o botão");
     ["mm_btn", "mm_btn_on", "mm_tip", "mm_resumo", "mm_abrir_tudo", "mm_so_ramos", "mm_peso", "mm_vazio", "mm_ir_tip", "mm_marca_pegadinha"].forEach((k) =>
