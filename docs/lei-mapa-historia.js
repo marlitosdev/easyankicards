@@ -56,7 +56,84 @@ function leiMapaMudouNo(no, arts) {
 }
 
 /* ---------------- 2. como veio × como ficou ---------------- */
+/* (19.171.0) SÓ EM VOLTA DO QUE MUDOU. O corte antigo tirava só o começo e o fim iguais: com duas mudanças longe uma
+ * da outra (art. 91 da LC 15/2009: o caput e um parágrafo), o "era" mostrava o artigo quase inteiro. Agora a comparação
+ * é palavra a palavra (a maior sequência em comum) e só aparecem os trechos alterados, cada um com até
+ * LEI_MH_CTX palavras em volta; trechos próximos se juntam, os distantes ficam separados por "…". O artigo inteiro fica
+ * num "ver o artigo inteiro". Artigo gigante (mais de LEI_MH_DIFF_MAX comparações) volta ao corte antigo. */
+const LEI_MH_CTX = 6;
+const LEI_MH_DIFF_MAX = 3000000;
+function leiMapaDiffPalavras(antes, depois) {
+  const A = String(antes || "").match(/\S+\s*/g) || [], B = String(depois || "").match(/\S+\s*/g) || [];
+  const n = A.length, m = B.length;
+  if ((n + 1) * (m + 1) > LEI_MH_DIFF_MAX) return null;
+  const a = A.map((x) => x.trim()), b = B.map((x) => x.trim());
+  const W = m + 1;
+  const T = new Uint32Array((n + 1) * W);
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+    T[i * W + j] = a[i] === b[j] ? T[(i + 1) * W + j + 1] + 1 : Math.max(T[(i + 1) * W + j], T[i * W + j + 1]);
+  }
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { ops.push({ t: "=", a: A[i], b: B[j] }); i++; j++; }
+    else if (T[(i + 1) * W + j] >= T[i * W + j + 1]) { ops.push({ t: "-", a: A[i] }); i++; }
+    else { ops.push({ t: "+", b: B[j] }); j++; }
+  }
+  while (i < n) ops.push({ t: "-", a: A[i++] });
+  while (j < m) ops.push({ t: "+", b: B[j++] });
+  return ops;
+}
+/* os trechos: [{ ini, fim }] em ops, já com o contexto e juntando os próximos */
+function leiMapaDiffTrechos(ops) {
+  const mud = [];
+  ops.forEach((o, k) => { if (o.t !== "=") mud.push(k); });
+  const tr = [];
+  mud.forEach((k) => {
+    const ini = Math.max(0, k - LEI_MH_CTX), fim = Math.min(ops.length - 1, k + LEI_MH_CTX);
+    const u = tr[tr.length - 1];
+    if (u && ini <= u.fim + 1) u.fim = Math.max(u.fim, fim); else tr.push({ ini, fim });
+  });
+  return tr;
+}
 function leiMapaDiffEl(antes, depois) {
+  const ops = leiMapaDiffPalavras(antes, depois);
+  if (ops) {
+    const tr = leiMapaDiffTrechos(ops);
+    if (!tr.length) return leiPreEl("span", "nota", t("lei_mh_sem_dif"));
+    const lado = (qual) => {
+      const s = leiPreEl("span", "lei-corr-res");
+      tr.forEach((x, q) => {
+        if (q || x.ini > 0) s.append(document.createTextNode(q ? " … " : "…"));
+        /* as palavras vizinhas que mudaram ficam num destaque só ("de Finanças." e não "de" + "Finanças.") */
+        let igual = "", mudou = "";
+        const cls = qual === "a" ? "lei-pre-sai" : "lei-pre-entra";
+        const soltaM = () => { if (mudou) { const fim = mudou.match(/\s*$/)[0]; s.append(leiPreEl("span", cls, mudou.slice(0, mudou.length - fim.length))); if (fim) s.append(document.createTextNode(fim)); mudou = ""; } };
+        const soltaI = () => { if (igual) { s.append(document.createTextNode(igual)); igual = ""; } };
+        for (let k = x.ini; k <= x.fim; k++) {
+          const o = ops[k];
+          if (o.t === "=") { soltaM(); igual += qual === "a" ? o.a : o.b; }
+          else if (o.t === "-" && qual === "a") { soltaI(); mudou += o.a; }
+          else if (o.t === "+" && qual === "b") { soltaI(); mudou += o.b; }
+        }
+        soltaM(); soltaI();
+      });
+      if (tr[tr.length - 1].fim < ops.length - 1) s.append(document.createTextNode("…"));
+      return s;
+    };
+    const box = leiPreEl("span", "lei-mapa-dec-ad");
+    box.append(leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_antes")), lado("a"), leiPreEl("span", "lei-mapa-dec-rot", t("lei_mapa_dec_depois")), lado("b"));
+    /* recortou alguma coisa: o artigo inteiro, antes e depois, fica a um toque */
+    const cortou = tr.length > 1 || tr[0].ini > 0 || tr[0].fim < ops.length - 1;
+    if (cortou) {
+      const det = leiPreEl("details", "lei-mh-inteiro");
+      det.append(leiPreEl("summary", "", t("lei_mh_ver_inteiro")));
+      det.append(leiPreEl("div", "lei-mh-inteiro-tx", t("lei_mapa_dec_antes") + " " + String(antes || "")));
+      det.append(leiPreEl("div", "lei-mh-inteiro-tx", t("lei_mapa_dec_depois") + " " + String(depois || "")));
+      box.append(det);
+    }
+    return box;
+  }
   const d = leiPreDiff(String(antes || ""), String(depois || ""));
   const ctxA = d.pre.length > 70 ? "…" + d.pre.slice(-70) : d.pre, ctxD = d.suf.length > 70 ? d.suf.slice(0, 70) + "…" : d.suf;
   const parte = (meio, k) => { const s = leiPreEl("span", "lei-corr-res"); s.append(document.createTextNode(ctxA)); if (meio) s.append(leiPreEl("span", "lei-pre-" + k, meio)); s.append(document.createTextNode(ctxD)); return s; };
@@ -212,7 +289,13 @@ function leiMapaTextoQueSaiu(d) {
   const ls = ((d && d.proposta && d.proposta.linhas) || []).map((x) => (typeof leiTirarMarcasTachado === "function" ? leiTirarMarcasTachado(x.texto) : x.texto));
   return ls.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-/* dá para devolver ao lugar? só um ARTIGO INTEIRO que não existe mais na lei (o número dele está livre) */
+/* (19.171.0) O TEXTO QUE DIZ QUE FOI REVOGADO. "(Revogado pela Lei nº 12.529, de 2011)", "(Vetado)": saiu riscado da
+ * fonte porque não vale mais — devolvê-lo poria texto revogado no meio da lei em vigor. */
+const LEI_MH_RE_REVOGADO = /\((?:[^)]*\b)?(?:revogad[oa]s?|vetad[oa]s?|suprimid[oa]s?)\b[^)]*\)|\brevogad[oa]s?\s+pel[oa]\b/i;
+function leiMapaTextoRevogado(tx) { return LEI_MH_RE_REVOGADO.test(String(tx || "")); }
+/* dá para devolver ao lugar? só um ARTIGO INTEIRO que não existe mais na lei (o número dele está livre).
+ * (19.171.0) revogado: o próprio texto diz que foi revogado/vetado (não volta); riscado: veio riscado na fonte (volta,
+ * mas avisando — em geral é redação antiga) */
 function leiMapaPodeDevolver(l, d) {
   const tx = leiMapaTextoQueSaiu(d);
   if (!tx) return null;
@@ -220,12 +303,14 @@ function leiMapaPodeDevolver(l, d) {
   if (!a || a.linha !== 1) return null;
   let tem = false;
   try { tem = leiArtigosEfetivos(l).some((x) => x.num === a.num); } catch (e) { tem = !!leiArtigo(l.texto, a.num); }
-  return tem ? null : { num: a.num, rotulo: a.rotulo || ("Art. " + a.numCru), texto: tx };
+  return tem ? null : { num: a.num, rotulo: a.rotulo || ("Art. " + a.numCru), texto: tx,
+    revogado: leiMapaTextoRevogado(tx), riscado: /tachado/.test(String((d && d.regra) || "")) };
 }
 function leiMapaDevolver(idLei, d) {
   const l = leiDe(idLei);
   const p = l ? leiMapaPodeDevolver(l, d) : null;
   if (!p) return { erro: t("lei_mh_dev_nao") };
+  if (p.revogado) return { erro: t("lei_mh_dev_revogado_tip") };
   let final = leiInserirArtigo(l.texto, p.texto);
   if (final === null) return { erro: t("lei_mh_dev_nao") };
   /* o artigo devolvido não gruda no seguinte: uma linha em branco depois dele */
@@ -265,11 +350,16 @@ function leiMapaSaiuEl(l, itens) {
     cp.onclick = () => leiMapaCopiar(tx);
     ac.append(cp);
     const pd = leiMapaPodeDevolver(l, d);
-    if (pd) {
-      const dv = leiPreEl("button", "btn-min btn-min-ok", t("lei_mh_devolver", { a: pd.rotulo }));
-      dv.type = "button"; dv.id = "btnLeiMhDevolver_" + (d.id || k); dv.title = t("lei_mh_devolver_tip");
+    if (pd && pd.revogado) {
+      /* revogado não volta: diz por quê, no lugar do botão */
+      const rv = leiPreEl("span", "lei-mh-revogado", t("lei_mh_dev_revogado"));
+      rv.id = "leiMhRevogado_" + (d.id || k); rv.title = t("lei_mh_dev_revogado_tip");
+      ac.append(rv);
+    } else if (pd) {
+      const dv = leiPreEl("button", "btn-min" + (pd.riscado ? "" : " btn-min-ok"), t(pd.riscado ? "lei_mh_devolver_riscado" : "lei_mh_devolver", { a: pd.rotulo }));
+      dv.type = "button"; dv.id = "btnLeiMhDevolver_" + (d.id || k); dv.title = t(pd.riscado ? "lei_mh_devolver_riscado_tip" : "lei_mh_devolver_tip");
       dv.onclick = async () => {
-        if (!(await uiConfirm(t("lei_mh_devolver_conf", { a: pd.rotulo, x: pd.texto.slice(0, 400) })))) return;
+        if (!(await uiConfirm((pd.riscado ? t("lei_mh_devolver_aviso_riscado") + "\n\n" : "") + t("lei_mh_devolver_conf", { a: pd.rotulo, x: pd.texto.slice(0, 400) })))) return;
         const r = leiMapaDevolver(l.id, d);
         if (r.erro) { uiAlert(r.erro); return; }
         try { toastMsg(t("lei_mh_devolvido", { a: pd.rotulo }), 4500); } catch (e) {}

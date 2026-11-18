@@ -93,6 +93,50 @@ async function testes() {
     "lei_mh_devolver_conf", "lei_mh_devolvido", "lei_mh_dev_nao", "lei_corr_tipo_devolvido", "lei_mh_sem_norma"].forEach((k) =>
     ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "H5 falta " + k + " em " + lg); }));
   api.setLanguage("pt");
+
+  /* H7 (19.171.0): como veio × como ficou só em volta do que mudou */
+  {
+    const enche = (k) => Array.from({ length: k }, (_, i) => "palavra" + i).join(" ");
+    const ANTES = "Art. 91 O pagamento parcelado poderá ser concedido " + enche(60) + " competindo à Secretaria de Finanças.";
+    const DEPOIS = "Art. 91 O pagamento parcelado será concedido " + enche(60) + " competindo à Secretaria da Fazenda.";
+    const ops = api.leiMapaDiffPalavras(ANTES, DEPOIS);
+    const tr = api.leiMapaDiffTrechos(ops);
+    ok(ops && tr.length === 2, "H7a duas mudanças longe uma da outra: dois trechos, não o artigo inteiro: " + tr.length);
+    const el = api.leiMapaDiffEl(ANTES, DEPOIS);
+    const tx = el.textContent;
+    ok(/poderá/.test(tx) && /será/.test(tx) && /de Finanças/.test(tx) && /da Fazenda/.test(tx) && / … /.test(tx) && !/palavra30 /.test(tx.split("ver o artigo inteiro")[0]),
+      "H7b só os trechos alterados, com '…' entre eles (o meio igual não aparece): " + tx.slice(0, 300));
+    const sai = el.querySelectorAll("span").filter((s) => /lei-pre-sai/.test(s.className)).map((s) => s.textContent.trim());
+    const entra = el.querySelectorAll("span").filter((s) => /lei-pre-entra/.test(s.className)).map((s) => s.textContent.trim());
+    ok(sai.join("|") === "poderá ser|de Finanças." && entra.join("|") === "será|da Fazenda.",
+      "H7c palavra a palavra, vizinhas num destaque só: sai 'poderá ser', 'de Finanças.'; entra 'será', 'da Fazenda.': " + sai.join("|") + " / " + entra.join("|"));
+    ok(/ver o artigo inteiro/.test(tx) && tx.indexOf("palavra30") > tx.indexOf("ver o artigo inteiro"), "H7d o artigo inteiro fica a um toque");
+    const curto = api.leiMapaDiffEl("Art. 1º Texto com leitrua.", "Art. 1º Texto com leitura.").textContent;
+    ok(/leitrua/.test(curto) && /leitura/.test(curto) && !/ver o artigo inteiro/.test(curto), "H7e artigo curto: aparece inteiro, sem 'ver inteiro': " + curto);
+    ok(/só mudaram espaços/.test(api.leiMapaDiffEl("Art. 1º  Texto.", "Art. 1º Texto.").textContent), "H7f só espaço mudou: diz isso");
+  }
+
+  /* H8 (19.171.0): devolver não põe artigo revogado de volta; o que vinha riscado volta avisando */
+  {
+    ok(api.leiMapaTextoRevogado("Art. 5° Constitui crime: (Revogado pela Lei nº 12.529, de 2011).") && api.leiMapaTextoRevogado("Art. 7º (VETADO)")
+      && !api.leiMapaTextoRevogado("Art. 5º Artigo que saiu por engano.") && !api.leiMapaTextoRevogado("Art. 18. Fica acrescentado ao Capítulo III do Código"),
+      "H8a reconhece revogado e vetado pelo próprio texto");
+    const dRev = api.decRegistrar({ area: "colagem", regra: "colagem.tachado", origem: "app", lei: "Lei da História", ref: "linha 12", decisao: "aceitou", via: "padrao",
+      proposta: { acao: "remover", amostra: "Art. 7º", n: 1, linhas: [{ linha: 12, texto: "~~Art. 7º Constitui crime da mesma natureza:~~ (Revogado pela Lei nº 12.529, de 2011)." }] } });
+    const dRis = api.decRegistrar({ area: "colagem", regra: "colagem.tachado", origem: "app", lei: "Lei da História", ref: "linha 14", decisao: "aceitou", via: "padrao",
+      proposta: { acao: "remover", amostra: "Art. 8º", n: 1, linhas: [{ linha: 14, texto: "~~Art. 8º Texto que vinha riscado.~~" }] } });
+    const pRev = api.leiMapaPodeDevolver(api.leiDe(l0.id), api.decLer().filter((d) => d.id === dRev)[0]);
+    ok(pRev && pRev.revogado && api.leiMapaDevolver(l0.id, api.decLer().filter((d) => d.id === dRev)[0]).erro && !/Art\. 7º/.test(api.leiDe(l0.id).texto),
+      "H8b o revogado não volta, nem chamando direto");
+    api.leiMapaAbrir(true);
+    ok(api.$("leiMhRevogado_" + dRev) && !api.$("btnLeiMhDevolver_" + dRev) && /revogado — não volta/.test(api.$("leiMhRevogado_" + dRev).textContent),
+      "H8c no lugar do botão, '⊘ revogado — não volta'");
+    const bRis = api.$("btnLeiMhDevolver_" + dRis);
+    ok(bRis && /vinha riscado/.test(bRis.textContent) && !/btn-min-ok/.test(bRis.className), "H8d o que vinha riscado: 'devolver (vinha riscado)', sem a cor de ação recomendada");
+  }
+  ["lei_mh_dev_revogado", "lei_mh_dev_revogado_tip", "lei_mh_devolver_riscado", "lei_mh_devolver_riscado_tip", "lei_mh_devolver_aviso_riscado", "lei_mh_ver_inteiro", "lei_mh_sem_dif"].forEach((k) =>
+    ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "H9 falta " + k + " em " + lg); }));
+  api.setLanguage("pt");
   falhas.quantas = n;
   return falhas;
 }

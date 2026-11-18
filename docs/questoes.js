@@ -37,6 +37,44 @@ function qsNormal(s) {
     .toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/* (19.171.0) CÓDIGO QUE NÃO É TEXTO, NAS QUESTÕES. A tela de questões não desenha "$…$": o que a IA escreveu em
+ * código aparece cru — "$\rightarrow$" no meio do exemplo, "R\$ 180 milhões" (o cifrão escapado do Markdown). O
+ * símbolo solto vira o próprio símbolo (matTexSoSimbolo, o mesmo do resumo) e "\$" vira "$". Fórmula de verdade fica.
+ * Devolve { x, n }: o texto e quantas trocas. */
+function qsTextoSemCodigo(s) {
+  let x = String(s == null ? "" : s);
+  let n = 0;
+  if (x.indexOf("$") < 0) return { x, n };
+  if (typeof matTexConverterTexto === "function" && x.indexOf("$\\") >= 0) {
+    const cv = matTexConverterTexto(x, "simbolos"); n += cv.simb || 0; x = cv.texto;
+  }
+  x = x.replace(/\\\$/g, () => { n++; return "$"; });
+  return { x, n };
+}
+/* as questões já gravadas, uma vez ao carregar: { questoes, trocas } */
+function qsLimparCodigoBanco() {
+  let questoes = 0, trocas = 0;
+  (qsBanco || []).forEach((q) => {
+    let mudou = 0;
+    ["enunciado", "comentario"].forEach((c) => {
+      if (typeof q[c] !== "string") return;
+      const r = qsTextoSemCodigo(q[c]); if (r.n) { q[c] = r.x; mudou += r.n; }
+    });
+    (Array.isArray(q.opcoes) ? q.opcoes : []).forEach((o) => {
+      if (!o || typeof o.txt !== "string") return;
+      const r = qsTextoSemCodigo(o.txt); if (r.n) { o.txt = r.x; mudou += r.n; }
+    });
+    if (mudou) { questoes++; trocas += mudou; }
+  });
+  return { questoes, trocas };
+}
+function qsLimparCodigoEGravar() {
+  const r = qsLimparCodigoBanco();
+  if (!r.questoes) return r;
+  if (qsSalvar()) { try { matReg("questao", "código trocado por símbolo nas questões gravadas", r.trocas + " troca(s) em " + r.questoes + " questão(ões)"); } catch (e) {} }
+  return r;
+}
+
 function qsCarregar(lerLoja) {
   /* (v19.18.0) moram no IndexedDB: chegam em segundo plano — até lá, gravar é recusado (ver idb-questoes.js) */
   if (!lerLoja && typeof qsNoIdb === "function" && qsNoIdb()) {
@@ -45,6 +83,8 @@ function qsCarregar(lerLoja) {
      * ainda"), e só se refazia ao mexer num filtro — com 595 questões no banco */
     qsIdbCarregar((v) => {
       qsBanco = v;
+      /* (19.171.0) a limpeza do código grava DEPOIS que o carregamento termina (antes disso gravar é recusado) */
+      Promise.resolve().then(() => { try { qsLimparCodigoEGravar(); } catch (e) {} });
       try { if (typeof qsUiRender === "function") qsUiRender(); } catch (e) {}
       try { if (typeof qsUiPintarBotaoResumo === "function") qsUiPintarBotaoResumo(); } catch (e) {}
     });
@@ -57,6 +97,8 @@ function qsCarregar(lerLoja) {
     const v = JSON.parse(cru || "[]");
     qsBanco = Array.isArray(v) ? v : [];
   } catch (e) { qsBanco = []; }
+  /* (19.171.0) o código que não é texto, nas questões já gravadas (só no carregamento do app, não na leitura de um backup) */
+  if (!lerLoja) { try { qsLimparCodigoEGravar(); } catch (e) {} }
   /* ainda no localStorage, e o navegador tem IndexedDB: muda de casa em segundo plano (só apaga daqui conferido) */
   if (!lerLoja && typeof qsIdbMigrar === "function" && qsIdbSuportado()) qsIdbMigrar();
   return qsBanco;
@@ -315,7 +357,13 @@ function qsLerResposta(txt, ctx) {
   const achados = [];
   const ignoradas = [];
   /* (v19.10.0) os invisíveis de quem copia de outro site saem antes de ler (ver semInvisiveis, app.js) */
-  const linhas = qsAbrirCampos(typeof semInvisiveis === "function" ? semInvisiveis(txt) : txt).split("\n");
+  let base = typeof semInvisiveis === "function" ? semInvisiveis(txt) : txt;
+  /* (19.171.0) o símbolo que a IA escreveu em código ("$\rightarrow$") vira o próprio símbolo antes de ler — o mesmo
+   * do resumo (matTexSoSimbolo): não é fórmula, e a questão é lida e copiada fora do app. Fórmula de verdade fica. */
+  const semCod = qsTextoSemCodigo(base);
+  const simb = semCod.n;
+  base = semCod.x;
+  const linhas = qsAbrirCampos(base).split("\n");
   let atual = null;
 
   const fechar = () => {
@@ -498,7 +546,7 @@ function qsLerResposta(txt, ctx) {
   /* Q2 — criadas a partir de um RAMO: já nascem ligadas a ele */
   if (c.ramo) achados.forEach((q) => { q.ramo = c.ramo; q.ramoNome = c.ramoNome || ""; delete q.ramoTxt; });
   else qsAplicarRamosLidos(achados, c.ramos || []);
-  return { achados, ignoradas };
+  return { achados, ignoradas, simb };
 }
 
 /* =====================================================================

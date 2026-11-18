@@ -135,6 +135,25 @@ async function testes() {
     ok(api.$("matTexto").value === R`Lógica: $p \wedge q$ e a seta →.`, "S9 'manter como está' mantém a fórmula");
     dlg.showModal = showAntes;
   }
+  /* ---- (19.171.0) Q: nas questões, o código que não é texto ---- */
+  {
+    const r0 = api.qsTextoSemCodigo(R`Espero que passe $\rightarrow$ Espero ISSO; custa R\$ 180 milhões; $p \wedge q$`);
+    ok(r0.x === R`Espero que passe → Espero ISSO; custa R$ 180 milhões; $p \wedge q$` && r0.n === 2, "Q1 seta e cifrão escapado viram texto; fórmula fica: " + r0.x);
+    const resp = ["[QUESTAO]", "TIPO: CE", "BANCA: ", R`ENUNCIADO: Espero que você passe $\rightarrow$ Espero ISSO.`, "GABARITO: C", R`COMENTARIO: R\$ 10 e a seta $\to$.`, "[/QUESTAO]"].join("\n");
+    const lr = api.qsLerResposta(resp, {});
+    ok(lr.simb === 3 && lr.achados.length === 1 && lr.achados[0].enunciado === "Espero que você passe → Espero ISSO." && lr.achados[0].comentario === "R$ 10 e a seta →.",
+       "Q2 a resposta da IA já é lida sem o código: " + JSON.stringify(lr.achados.map((q) => [q.enunciado, q.comentario])));
+    api.qsBancoPor([
+      { id: "qa", enunciado: R`O livro $\rightarrow$ o qual`, comentario: R`R\$ 4 milhões`, tipo: "me", gabarito: "A", opcoes: [{ letra: "A", txt: R`p $\wedge$ q` }, { letra: "B", txt: "nada" }] },
+      { id: "qb", enunciado: "sem código", comentario: R`fórmula $x^2 + y$ fica`, tipo: "ce", gabarito: "C" },
+    ]);
+    const lb = api.qsLimparCodigoBanco();
+    const qa = api.qsTodas()[0], qb = api.qsTodas()[1];
+    ok(lb.questoes === 1 && lb.trocas === 3 && qa.enunciado === "O livro → o qual" && qa.comentario === "R$ 4 milhões" && qa.opcoes[0].txt === "p ∧ q" && qb.comentario === R`fórmula $x^2 + y$ fica`,
+       "Q3 as já gravadas: trocadas uma vez, fórmula de verdade intacta: " + JSON.stringify(lb));
+    ok(api.qsLimparCodigoBanco().questoes === 0, "Q4 passar de novo não muda nada");
+    ok(api.t("qs_simb_trocados", { n: 2 }) !== "qs_simb_trocados", "Q5 o aviso existe");
+  }
   /* (19.66.0) H — colar página com fórmula desenhada: conferido no navegador (o ambiente de teste não tem o leitor de HTML) */
   return Object.assign(falhas, { quantas: n });
 }

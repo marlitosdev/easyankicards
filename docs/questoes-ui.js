@@ -822,6 +822,8 @@ function qsUiConferir() {
     else if (!lidas0) qsUiCriarSem("erro", t("qs_sem_nada"));
     else if (ignoradas.length) qsUiCriarSem("atencao", t("qs_sem_avisos", { n: lidas0, r: ignoradas.length }));
     else qsUiCriarSem("ok", t("qs_sem_ok", { n: lidas0 }));
+    /* (19.171.0) os símbolos que vieram em código e já viraram símbolo */
+    if (lidas0 && r.simb) { try { toastMsg(t("qs_simb_trocados", { n: r.simb }), 6000); } catch (e) {} }
     if (lidas0) qsUiCriarPassos(3);
     qsUiPlano = plano.tem ? plano : null;
     qsUiPintarPlano();
@@ -841,6 +843,7 @@ function qsUiConferir() {
          + repetidas + " repetidas do texto · "
          + ignoradas.length + " recusadas"
          + (detalhe ? " · motivos: " + detalhe : "")
+         + (r.simb ? " · " + r.simb + " símbolo(s) em código trocados pelo símbolo" : "")
          + " · formato: " + (/\[QUESTAO\]/i.test(bruto)
              ? "campos nomeados" : (prontas.length ? "texto pronto" : "linha compacta")));
   /* O MESMO no registro da geração — e ali com os motivos linha a linha,
