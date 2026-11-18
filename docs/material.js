@@ -1610,6 +1610,8 @@ function matTrocarModo(modo) {
     try { matRolDepoisDeDesenhar(); } catch (e) {}
   } else matRolMostrado = null;
   try { matSoGrifosAplicar(lendo); } catch (e) {}
+  /* (19.174.0) o mapa do resumo (mapa-mental.js): o botão e, ligado, o mapa no lugar da leitura */
+  try { if (typeof matMapaAplicar === "function") matMapaAplicar(lendo); } catch (e) {}
   matPintarFonte();
 }
 

@@ -811,6 +811,28 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mat-leitura mark.m-peg{background:rgba(236,72,153,.30)}
 /* (19.172.0) só os grifos: some o bloco sem marca, o texto em volta da marca esmaece, os títulos ficam */
 #matLeitura.mat-so-grifos .mat-sg-fora{display:none}
+/* (19.174.0) o mapa do resumo: árvore com conectores, ramos em destaque, peso 4–5 com borda forte */
+#dlgMaterial .mm{flex:1 1 auto;min-height:0;overflow:auto;padding:var(--esp-2) var(--esp-1)}
+.mm-barra{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin-bottom:var(--esp-2)}
+.mm-arv,.mm-arv ul{list-style:none;margin:0;padding:0}
+.mm-arv ul{margin-left:var(--esp-3);padding-left:var(--esp-4);border-left:2px solid var(--borda)}
+.mm-no{position:relative;margin:var(--esp-1) 0}
+.mm-arv ul>.mm-no::before{content:"";position:absolute;left:calc(-1 * var(--esp-4));top:1em;width:var(--esp-3);border-top:2px solid var(--borda)}
+.mm-cx{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:var(--esp-1) var(--esp-2);max-width:100%;padding:var(--esp-1) var(--esp-2);border:1px solid var(--borda);border-radius:var(--r-m);background:var(--panel);font-size:var(--fs-3)}
+.mm-raiz>.mm-cx{background:var(--acao);border-color:var(--acao);color:#fff;font-size:var(--fs-4)}
+.mm-ramo>.mm-cx{border-color:var(--acao);font-size:var(--fs-4)}
+.mm-tit>.mm-cx{border-color:var(--info)}
+.mm-peso-alto>.mm-cx{border-width:2px;border-color:var(--erro)}
+.mm-dica>.mm-cx{border-style:dashed}
+.mm-rot{cursor:pointer;font-weight:var(--peso-m)}
+.mm-raiz .mm-rot{cursor:default}
+.mm-det{flex:1 1 100%;color:var(--sutil);font-size:var(--fs-2)}
+.mm-tg{border:0;background:none;cursor:pointer;color:inherit;padding:0;font-size:var(--fs-3)}
+.mm-peso{font-size:var(--fs-1);border:1px solid var(--erro);color:var(--erro);border-radius:var(--r-pilula);padding:0 var(--esp-1)}
+.mm-mk{font-size:var(--fs-2)}
+.mm-conta{font-size:var(--fs-1);color:var(--sutil)}
+#btnMatMapa.on{background:var(--acao);border-color:var(--acao);color:#fff}
+#matLeitura .mm-alvo{outline:2px solid var(--acao);border-radius:var(--r-p)}
 /* (19.173.0) a fuga rápida */
 dialog.fuga-dlg{width:min(640px,96vw)}
 .hdr-fuga{font-weight:var(--peso-m);white-space:nowrap}
@@ -10229,6 +10251,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       title="Abre o painel de cartões deste tópico por cima do resumo: criar com IA, colar, importar de arquivo, estudar em tela ou apagar. O resumo continua aberto atrás."></button>
       <!-- (19.172.0) revisão rápida: só os trechos grifados (aparece só na leitura e com grifo) -->
       <button class="btn-min" id="btnMatSoGrifos" hidden aria-pressed="false" data-i18n-title="mat_sg_tip"></button>
+      <!-- (19.174.0) o mapa do resumo: a estrutura do texto em árvore (mapa-mental.js) -->
+      <button class="btn-min" id="btnMatMapa" hidden aria-pressed="false" data-i18n-title="mm_tip"></button>
       <!-- A TELA CHEIA À VISTA (v18.75.0): antes ficava escondida dentro do "Aa"; é o jeito de ler sem nada em volta -->
       <button class="btn-min mat-cheia-bt" id="btnMatCheiaTopo" data-i18n="mat_cheia" data-i18n-title="mat_cheia_topo_tip"></button>
       <button class="btn-min" id="btnMatModoTopo" title="Alterna entre ler (com as marcas coloridas) e editar (o texto cru, com a marcação à mostra)."></button>
@@ -10352,6 +10376,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </span>
   </div>
   <div class="mat-leitura" id="matLeitura" hidden></div>
+  <div class="mm" id="matMapa" hidden></div>
   <!-- A BOLHA DA SELEÇÃO (v18.28.0): o que se faz COM um trecho aparece junto
        dele, só quando há seleção, como no Kindle e no Google Docs. Os botões
        são os mesmos de antes (mesmos ids); só mudaram de lugar. Vale também
@@ -14156,6 +14181,7 @@ window.__sqlPromise = initSqlJs({
 <script src="lei-mapa-historia.js"></script>
 <script src="revisao-360.js"></script>
 <script src="fuga.js"></script>
+<script src="mapa-mental.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

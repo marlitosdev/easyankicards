@@ -283,6 +283,55 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---------------- MM: o mapa do resumo ---------------- */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const TXT = ["Os conectivos ligam termos e orações.", "",
+      "## Ramo — Conjunções Coordenativas", "",
+      "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, ==!contudo==.", "  - **Exceção:** ==~\"e\" com valor adversativo==", "",
+      "### Testes práticos", "", "1. **Teste da Conjunção Integrante:** troca por ISSO.", "",
+      "## Ramo — Conjunções Subordinadas", "", "Texto corrido do ramo, sem negrito, que é bem mais comprido do que o limite de noventa caracteres para caber no galho do mapa.", "",
+      "| A | B |", "|---|---|", "| 1 | 2 |"].join(NL);
+    const A = api.mmMontar(TXT, { titulo: "Conectivos", ramos: [{ nome: "Conjunções Coordenativas", peso: 5 }, { nome: "Conjunções Subordinadas", peso: 2 }] });
+    const R = A.raiz;
+    ok(R.label === "Conectivos" && R.filhos.length === 3 && A.ramos === 2, "MM1 a raiz é o tópico; o parágrafo de abertura e os dois ramos são os primeiros galhos: " + R.filhos.map((x) => x.label).join(" | "));
+    const coord = R.filhos[1];
+    ok(coord.ramo && coord.label === "Conjunções Coordenativas" && coord.peso === 5, "MM2 o ramo com o nome limpo e o peso do edital");
+    ok(coord.filhos.map((x) => x.label).join("|") === "Aditivas|Adversativas|Testes práticos", "MM3 os itens viram galhos pelo termo em negrito; o subtítulo também: " + coord.filhos.map((x) => x.label).join("|"));
+    const adv = coord.filhos[1];
+    ok(adv.det === "mas, porém, contudo." && adv.marcas.join() === "importante" && adv.filhos[0].label === "Exceção" && adv.filhos[0].marcas.join() === "pegadinha",
+      "MM4 o detalhe sem sinais, as marcas pelo tipo e o item recuado como filho: " + JSON.stringify([adv.det, adv.marcas, adv.filhos[0].label, adv.filhos[0].marcas]));
+    ok(coord.filhos[2].filhos[0].label === "Teste da Conjunção Integrante" && coord.filhos[2].filhos[0].linha === 10, "MM5 a lista numerada dentro do subtítulo, com a linha de origem");
+    const sub = R.filhos[2];
+    ok(sub.filhos.length === 1 && /…$/.test(sub.filhos[0].label) && sub.filhos[0].det.length > 0, "MM6 o parágrafo longo vira galho curto com o resto no detalhe; a tabela fica de fora: " + sub.filhos.map((x) => x.label).join("|"));
+    ok(api.mmMarcasDe("==!a== e ==b== e ==*c== e ==**d**==").join() === "importante,destaque,prova", "MM7 marcas pelo tipo, sem confundir o fechamento: " + api.mmMarcasDe("==!a== e ==b== e ==*c== e ==**d**==").join());
+    /* a tela */
+    api.edIniciar();
+    api.edCriar("Ed MM", ["# Ed MM | prova: 2099-12-01 | horas: 10", "@ Português :: 5", "+ Conectivos :: 5", "++ Conjunções Coordenativas :: 5", "++ Conjunções Subordinadas :: 2"].join(NL));
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    const b = api.$("btnMatMapa");
+    ok(b && !b.hidden && /mapa/.test(b.textContent), "MM8 o botão '🗺 mapa' aparece na leitura");
+    api.matMapaAlternar(true);
+    ok(api.matMapaAtual() && !api.$("matMapa").hidden && api.$("matLeitura").hidden && /texto/.test(api.$("btnMatMapa").textContent), "MM9 ligado: o mapa no lugar da leitura; o botão vira '📄 texto'");
+    ok(api.$("mmNo_raiz") && api.$("mmNo_l2") && /2 ramo/.test(api.$("mmResumo").textContent), "MM10 a árvore desenhada, com o resumo da contagem");
+    const noPeso = api.$("mmNo_l2");
+    ok(/mm-peso-alto/.test(noPeso.className) && /peso 5/.test(noPeso.textContent), "MM11 o ramo de peso 5 em destaque");
+    api.$("mmTg_l2").onclick();
+    ok(/mm-fechado/.test(api.$("mmNo_l2").className) && /\+3/.test(api.$("mmNo_l2").textContent), "MM12 recolher o ramo (mostra quantos galhos ficaram dentro)");
+    api.$("btnMmAbrirTudo").onclick();
+    ok(!/mm-fechado/.test(api.$("mmNo_l2").className), "MM13 abrir tudo");
+    api.matMapaIr(5);
+    ok(!api.matMapaAtual() && !api.$("matLeitura").hidden && api.$("matMapa").hidden, "MM14 tocar num galho volta ao texto");
+    api.matTrocarModo("editar");
+    ok(api.$("btnMatMapa").hidden, "MM15 editando, sem o botão");
+    ["mm_btn", "mm_btn_on", "mm_tip", "mm_resumo", "mm_abrir_tudo", "mm_so_ramos", "mm_peso", "mm_vazio", "mm_ir_tip", "mm_marca_pegadinha"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MM16 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
+
   falhas.quantas = n;
   return falhas;
 }
