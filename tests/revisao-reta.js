@@ -228,6 +228,38 @@ async function testes() {
     api.$("btnRvConfirmar").onclick();
     ok(api.rvDoEdital(e.id) && api.$("rvBloco_R1") && api.$("rvVespera") && api.$("rvEstado"), "R17 confirmar grava e mostra os blocos, a véspera e o estado");
     ok(api.$("rvCorpo").textContent.indexOf("🔥 difícil") >= 0, "R18 o difícil aparece sinalizado");
+    /* (19.178.0) os atalhos para o mapa: o resumo curto não tem mapa; com estrutura, o "🗺 mapa" aparece no bloco e na véspera */
+    const btsRv = () => api.$("rvCorpo").querySelectorAll("button").map((b) => b.id);
+    const chUm = api.matChave("A", "Tema um");
+    ok(!api.mmTemMapa(chUm) && !btsRv().some((id) => /^btnRvMapa_/.test(id)) && !api.$("rvCorpo").querySelectorAll("details").some((d) => d.id === "rvVesperaMapas"),
+      "MS1 o resumo de uma linha não tem mapa: nem botão no bloco, nem na véspera");
+    api.matGravar(chUm, ["## Ramo — Primeiro", "- **Ponto:** ==!o ponto==", "- **Outro:** mais", "## Ramo — Segundo", "- **Último:** fim"].join(NL), { disciplina: "A", topico: "Tema um" });
+    ok(api.mmTemMapa(chUm) && !api.mmTemMapa(api.matChave("A", "Tema dois")), "MS2 com estrutura, tem mapa; sem resumo, não");
+    api.rvPintar();
+    const idMapa = btsRv().filter((id) => /^btnRvMapa_/.test(id));
+    ok(idMapa.length >= 1 && api.rvTopicosComMapa(api.rvDoEdital(e.id)).map((x) => x.topico).join() === "Tema um", "MS3 o '🗺 mapa' no item do bloco; a véspera lista o tópico uma vez só: " + idMapa.join());
+    const vesp = api.$("rvCorpo").querySelectorAll("details").find((d) => d.id === "rvVesperaMapas");
+    ok(vesp && /os mapas dos tópicos \(1\)/.test(vesp.textContent) && /🗺 Tema um/.test(vesp.textContent), "MS4 na véspera, os mapas dos tópicos do plano");
+    api.$("rvCorpo").querySelectorAll("button").find((b) => b.id === idMapa[0]).onclick();
+    ok(!api.$("dlgRv360").open && api.matMapaAtual() && api.mmUltimoAtual().arvore.ramos === 2, "MS5 tocar fecha a revisão e abre o resumo JÁ no mapa");
+    api.matMapaAlternar(false);
+    api.$("btnRvAbrir").onclick();
+    api.$("rvCorpo").querySelectorAll("button").find((b) => b.id === "btnRvVespMapa_0").onclick();
+    ok(!api.$("dlgRv360").open && api.matMapaAtual(), "MS6 o mapa da véspera também abre direto");
+    api.matMapaAlternar(false);
+    /* a ficha do tópico */
+    api.matAbrirFicha(Object.assign({ chave: chUm }, api.matObter(chUm)));
+    const bFicha = api.$("matFichaLista").querySelectorAll("button").find((b) => b.id === "btnMatFichaMapa");
+    ok(bFicha && /mapa/.test(bFicha.textContent), "MS7 o '🗺 mapa' na linha do resumo da ficha");
+    bFicha.onclick();
+    ok(!api.$("dlgMatFicha").open && api.matMapaAtual(), "MS8 tocar fecha a ficha e abre o mapa");
+    api.matMapaAlternar(false);
+    api.matGravar(api.matChave("A", "Tema dois"), "Uma linha só.", { disciplina: "A", topico: "Tema dois" });
+    api.matAbrirFicha(Object.assign({ chave: api.matChave("A", "Tema dois") }, api.matObter(api.matChave("A", "Tema dois"))));
+    ok(!api.$("matFichaLista").querySelectorAll("button").some((b) => b.id === "btnMatFichaMapa"), "MS9 resumo sem estrutura: a ficha não oferece mapa");
+    try { api.$("dlgMatFicha").close(); } catch (x) {}
+    ["mm_atalho", "mm_atalho_tip", "rv_vespera_mapas"].forEach((k) => ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MS10 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
     ["rv_titulo", "rv_aviso_novo", "rv_aviso_em_curso", "rv_montar", "rv_resumo", "rv_selo_dificil", "rv_selo_piso", "rv_vespera", "rv_fora_tit", "rv_bt_revisei", "rv_outros_pausar"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "R19 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
@@ -481,6 +513,82 @@ async function testes() {
     ["mm_resumo_ia", "mm_fonte_texto", "mm_fonte_ia", "mm_ia_pedir", "mm_ia_refazer", "mm_ia_conf_mapa", "mm_ia_fora", "mm_ia_num", "mm_ia_sem_linha", "mmia_titulo", "mmia_ajuda", "mmia_p",
       "mmia_copiar", "mmia_copiado", "mmia_conf", "mmia_conf_fora", "mmia_conf_num", "mmia_conf_sem_lista", "mmia_usar", "mmia_apagar", "mmia_apagar_conf", "mmia_sem_resumo", "mmia_ja_tem", "mmia_cortado"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MA30 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+  }
+
+  /* ---------------- MC: (19.178.0) a curadoria de qualidade do mapa e o registro para pedir a avaliação ---------------- */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const TXT = ["Os conectivos ligam termos e orações.", "",
+      "## Ramo — Conjunções Coordenativas", "",
+      "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, ==!contudo==.", "  - **Exceção:** \"e\" com valor adversativo", "",
+      "## Ramo — Conjunções Subordinadas", "", "* **Causais:** porque, visto que."].join(NL);
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    api.matMapaAlternar(true);
+    const no = (label) => { let achou = null; const ir = (x) => { if (x.label === label) achou = x; x.filhos.forEach(ir); }; ir(api.mmUltimoAtual().arvore.raiz); return achou; };
+    const btn = (id) => api.$("matMapa").querySelectorAll("button").find((b) => b.id === id);
+    const li = (id) => api.$("matMapa").querySelectorAll("li").find((x) => x.id === id);
+    ok(btn("btnMmCuradoria") && /curadoria/.test(btn("btnMmCuradoria").textContent) && !btn("btnMmQualidade"), "MC1 o botão da curadoria na barra; sem nada marcado, sem registro");
+    btn("btnMmCuradoria").onclick();
+    ok(api.mmCuradoriaAtual() && btn("mmCurOk_l5") && btn("mmCurErr_l5") && btn("mmCurDuv_l5") && /faltam 7/.test(api.$("mmCurPlacar").textContent),
+      "MC2 no modo curadoria, cada galho com ✓ ✗ ? e o placar: " + (api.$("mmCurPlacar") || {}).textContent);
+    api.mmTreinoAlternar(true);
+    ok(!api.mmCuradoriaAtual() && api.mmTreinoAtual(), "MC3 ligar o treino desliga a curadoria");
+    api.mmCurAlternar(true);
+    ok(api.mmCuradoriaAtual() && !api.mmTreinoAtual2(), "MC4 e ligar a curadoria desliga o treino");
+    btn("mmCurOk_l4").onclick();
+    api.mmCurMarcar(no("Adversativas"), "errado", "contudo não é adversativa? conferir");
+    api.mmCurMarcar(no("Causais"), "duvida", "");
+    const cur = api.mmCurDoMapa();
+    ok(Object.keys(cur).length === 3 && cur[no("Adversativas").caminho].v === "errado" && cur[no("Adversativas").caminho].nota === "contudo não é adversativa? conferir" && cur[no("Aditivas").caminho].v === "ok",
+      "MC5 o veredito guardado pelo caminho do galho, com a nota");
+    ok(/✓ 1 · ✗ 1 · \? 1 · faltam 4/.test(api.$("mmCurPlacar").textContent) && /on/.test(btn("mmCurOk_l4").className), "MC6 o placar conta: " + api.$("mmCurPlacar").textContent);
+    btn("mmCurOk_l4").onclick();
+    ok(!api.mmCurDoMapa()[no("Aditivas").caminho], "MC7 tocar de novo no mesmo veredito desfaz");
+    api.mmCurAlternar(false);
+    ok(/mm-cur-errado/.test(li("mmNo_l5").className) && /✗ errado/.test(li("mmNo_l5").textContent) && /\? duvidoso/.test(li("mmNo_l10").textContent) && !btn("mmCurErr_l5"),
+      "MC8 fora do modo, o veredito fica à vista no galho (sem os botões)");
+    /* o registro */
+    const itens = api.mmQualItens(api.mmUltimoAtual().arvore);
+    ok(itens.length === 2 && itens[0].caminho === "Conjunções Coordenativas › Adversativas" && itens[0].tipos.join() === "errado" && /^Adversativas: mas, porém, contudo/.test(itens[0].trecho) && !/==/.test(itens[0].trecho),
+      "MC9 o registro: os pontos com o caminho, o motivo e o trecho do resumo (sem os sinais): " + JSON.stringify(itens.map((x) => [x.caminho, x.tipos, x.trecho])));
+    const ped = api.mmQualPedido(api.mmUltimoAtual().arvore, { topico: "Conectivos", disciplina: "Português" });
+    ok(/QUALIDADE/.test(ped) && /"Conectivos" \(Português\)/.test(ped) && /- Conjunções Coordenativas\n  - Aditivas — e, nem/.test(ped) && /\[1\] Conjunções Coordenativas › Adversativas/.test(ped)
+      && /Nota da pessoa: contudo não é adversativa/.test(ped) && /No resumo: "/.test(ped) && /CORRETO \| INCORRETO \| IMPRECISO/.test(ped) && /\[2\] Conjunções Subordinadas › Causais/.test(ped),
+      "MC10 o pedido de avaliação: o mapa inteiro de contexto, os pontos numerados com nota e trecho, e o formato da resposta");
+    ok(btn("btnMmQualidade") && /registro de qualidade \(2\)/.test(btn("btnMmQualidade").textContent), "MC11 com pontos, o botão do registro com a contagem");
+    btn("btnMmQualidade").onclick();
+    ok(api.$("dlgMmQual").open && api.$("mmQualLista").querySelectorAll(".mmq-item").length === 2 && /2 ponto/.test(api.$("mmQualSub").textContent) && /Nenhuma avaliação/.test(api.$("mmQualAvalInfo").textContent),
+      "MC12 o registro abre com os pontos e sem avaliação guardada");
+    ok(api.$("mmQualGm_config") || api.$("mmQualGm_bt"), "MC13 o Gemini direto (ou o caminho para configurar) ao lado do copiar");
+    api.$("mmQualResp").value = "[1] INCORRETO — contudo é adversativa — gramática\n[2] CORRETO";
+    api.$("btnMmQualGuardar").onclick();
+    ok(api.mmQualAval() && /INCORRETO/.test(api.mmQualAval().texto) && /Avaliação guardada em/.test(api.$("mmQualAvalInfo").textContent), "MC14 a avaliação que voltou fica guardada, com a data");
+    api.$("btnMmQualFechar").onclick();
+    btn("btnMmQualidade").onclick();
+    ok(/INCORRETO/.test(api.$("mmQualResp").value), "MC15 reabrir mostra a avaliação guardada");
+    api.$("btnMmQualFechar").onclick();
+    ok(api.BK_CHAVES.material.indexOf("eac_mm_curadoria") >= 0, "MC16 a curadoria e as avaliações entram no backup");
+    /* o mapa da IA: a curadoria dele é separada; o aviso automático conferido como ✓ sai do registro */
+    const RESP = ["- **Conjunções Coordenativas**", "  - **Aditivas** — e, nem", "  - **Adversativas** — mas, porém", "- **Conjunções Subordinadas**", "  - **Causais** — porque", "  - **Finais** — a fim de que, em 2 casos"].join(NL);
+    api.mmIaGravar(ch, RESP);
+    api.mmFonteDefinir("ia");
+    ok(!Object.keys(api.mmCurDoMapa()).length, "MC17 o mapa da IA começa sem curadoria (a do mapa do texto é outra)");
+    const itIa = api.mmQualItens(api.mmUltimoAtual().arvore);
+    ok(itIa.length === 1 && itIa[0].tipos.join() === "fora,num", "MC18 no mapa da IA, os avisos automáticos entram no registro: " + JSON.stringify(itIa.map((x) => x.tipos)));
+    api.mmCurMarcar(no("Finais"), "ok", "");
+    ok(!api.mmQualItens(api.mmUltimoAtual().arvore).length && /Revise o mapa inteiro/.test(api.mmQualPedido(api.mmUltimoAtual().arvore, {})), "MC19 o aviso que você conferiu (✓) sai do registro; sem pontos, o pedido é do mapa inteiro");
+    api.mmFonteDefinir("texto");
+    ok(Object.keys(api.mmCurDoMapa()).length === 2, "MC20 de volta ao mapa do texto, a curadoria dele continua");
+    api.mmIaApagar(ch);
+    ok(!api.mmCurDoMapa(ch + "|ia")["conjuncoes subordinadas › finais"], "MC21 apagar o mapa da IA apaga a curadoria dele");
+    ["mmq_ligar", "mmq_sair", "mmq_placar", "mmq_selo_errado", "mmq_selo_duvida", "mmq_registro_bt", "mmq_titulo", "mmq_ajuda", "mmq_sub", "mmq_sub_ia", "mmq_vazio", "mmq_tipo_errado", "mmq_tipo_duvida",
+      "mmq_tipo_fora", "mmq_tipo_num", "mmq_copiar", "mmq_copiado", "mmq_guardar", "mmq_aval_guardada", "mmq_aval_nenhuma", "mmq_p_intro", "mmq_p_intro_ia", "mmq_p_pontos", "mmq_p_formato_pontos", "mmq_p_tudo", "mmq_nota_errado", "mmq_nota_duvida"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MC22 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
     api.matMapaAlternar(false);
   }

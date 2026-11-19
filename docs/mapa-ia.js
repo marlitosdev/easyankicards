@@ -138,6 +138,8 @@ function mmIaApagar(chave) {
   /* o treino e os recolhidos do mapa apagado saem junto */
   try { const m = mmTreinoLer(); if (m[chave + "|ia"]) { delete m[chave + "|ia"]; mmTreinoGravar(m); } } catch (e) {}
   try { const m = mmLerRecolhidos(); if (m[chave + "|ia"]) { delete m[chave + "|ia"]; mmGravarRecolhidos(m); } } catch (e) {}
+  /* (19.178.0) e a curadoria dele (os galhos eram outros) */
+  try { if (typeof mmCurEsquecer === "function") mmCurEsquecer(chave + "|ia"); } catch (e) {}
   return true;
 }
 
@@ -230,6 +232,7 @@ function mmIaUsar() {
   if (!g) { if (box) box.textContent = t("mmia_sem_resumo"); return null; }
   try { const m = mmTreinoLer(); if (m[chave + "|ia"]) { delete m[chave + "|ia"]; mmTreinoGravar(m); } } catch (e) {}
   try { const m = mmLerRecolhidos(); if (m[chave + "|ia"]) { delete m[chave + "|ia"]; mmGravarRecolhidos(m); } } catch (e) {}
+  try { if (typeof mmCurEsquecer === "function") mmCurEsquecer(chave + "|ia"); } catch (e) {}
   try { matReg("ler", "mapa da IA: guardado", chave + " · " + g.texto.split("\n").length + " linhas"); } catch (e) {}
   mmIaFechar();
   mmFonte = "ia";

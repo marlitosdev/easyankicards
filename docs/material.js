@@ -4428,6 +4428,12 @@ function matPintarFicha() {
       ? [botao(t("mat_ficha_ler"), "btn-min mat-slot slot-resumo", () => matAbrirEditor(ed, "ler", opcEd), t("mat_slot_resumo_tip", { tp: ramo ? ramo.nome : x.topico })),
         botao(t("mat_ficha_editar"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t("mat_ficha_editar_tip", { tp: ramo ? ramo.nome : x.topico }))]
       : [botao(t("mat_ficha_escrever"), "btn-min", () => matAbrirEditor(ed, "editar", opcEd), t(ramo ? "mat_ficha_escrever_ramo_tip" : "mat_add_resumo_ajuda", { tp: x.topico, r: ramo ? ramo.nome : "" }))]);
+  /* (19.178.0) 🗺 o mapa do resumo, a um toque (o mapa é do resumo inteiro, mesmo com um ramo escolhido) */
+  if (inf.temR && typeof mmTemMapa === "function" && mmTemMapa(x.chave)) {
+    const linhaM = box.children[box.children.length - 1];
+    const acoesM = linhaM && Array.from(linhaM.children).find((c) => /mat-ficha-acoes/.test(c.className || ""));
+    if (acoesM) acoesM.append(mmAtalhoBotao("btnMatFichaMapa", fechaE(() => mmAbrirNoMapa(x.disciplina, x.topico, opcEd, "ficha"))));
+  }
   /* T4: pedir este resumo (do tópico com os ramos, ou só do ramo) a uma IA, pelo mesmo caminho */
   if (typeof riaAbrir === "function") {
     const linhaR = box.children[box.children.length - 1];

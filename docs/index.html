@@ -866,7 +866,7 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mm-ia-conf{font-size:var(--fs-2)}
 .mm-ia-alerta{color:var(--atencao)}
 .mm-fonte.on,#btnMmFonteTexto.on,#btnMmFonteIa.on{background:var(--acao);border-color:var(--acao);color:#fff}
-dialog.mmia-dlg{width:min(720px,96vw)}
+dialog.mmia-dlg{width:min(720px,96vw);max-width:min(720px,96vw)}
 .mmia-passo{margin:var(--esp-3) 0;display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center}
 .mmia-passo textarea{width:100%;font-size:var(--fs-2)}
 .mmia-conf{margin:var(--esp-2) 0}
@@ -920,6 +920,30 @@ dialog.rv-dlg{width:min(860px,96vw)}
 .rv-selo-dif{border-color:var(--erro);color:var(--erro)}
 .rv-selo-piso{border-color:var(--atencao);color:var(--atencao)}
 .rv-vespera{border-top:1px dashed var(--borda);padding-top:var(--esp-2)}
+/* (19.178.0) os mapas na véspera */
+.rv-mapas{margin-top:var(--esp-2)}
+.rv-mapas-lista{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin-top:var(--esp-1)}
+.mm-atalho{white-space:nowrap}
+/* (19.178.0) a curadoria de qualidade do mapa e o registro */
+.mm-cur{display:inline-flex;flex-wrap:wrap;gap:var(--esp-1)}
+.mm-cur .btn-min{font-size:var(--fs-1)}
+.mm-cur-ok-bt.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.mm-cur-errado-bt.on{background:var(--erro);border-color:var(--erro);color:#fff}
+.mm-cur-duvida-bt.on{background:var(--atencao);border-color:var(--atencao);color:#fff}
+#btnMmCuradoria.on{background:var(--acao);border-color:var(--acao);color:#fff}
+.mm-cur-errado>.mm-cx{border-color:var(--erro);border-style:solid}
+.mm-cur-duvida>.mm-cx{border-color:var(--atencao)}
+.mm-cur-selo{font-size:var(--fs-1);border:1px solid currentColor;border-radius:var(--r-pilula);padding:0 var(--esp-1)}
+.mm-cur-selo-errado,.mmq-tp-errado{color:var(--erro)}
+.mm-cur-selo-duvida,.mmq-tp-duvida,.mmq-tp-fora,.mmq-tp-num{color:var(--atencao)}
+.mm-cur-selo-ok{color:var(--ok);border:none}
+.mm-cur-placar{font-size:var(--fs-2)}
+dialog.mmq-dlg{width:min(760px,96vw);max-width:min(760px,96vw)}
+.mmq-lista{display:flex;flex-direction:column;gap:var(--esp-2);max-height:40vh;overflow:auto;margin:var(--esp-2) 0}
+.mmq-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2)}
+.mmq-cam{display:flex;flex-wrap:wrap;gap:var(--esp-1);align-items:center}
+.mmq-nota{font-size:var(--fs-2)}
+.mmq-trecho{font-style:italic;font-size:var(--fs-2)}
 .rv-fora{margin-top:var(--esp-3)}
 .rv-fora>summary{cursor:pointer}
 .rv-fora-lin{font-size:var(--fs-2);color:var(--sutil);margin:var(--esp-1) 0}
@@ -10507,6 +10531,28 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="btn btn-verde" id="btnMmIaUsar" data-i18n="mmia_usar" disabled></button>
   </div>
 </dialog>
+<!-- (19.178.0) o registro de qualidade do mapa (mapa-curadoria.js): os pontos, o pedido de avaliação e a avaliação guardada -->
+<dialog id="dlgMmQual" class="ui-modal mmq-dlg">
+  <h3 data-i18n="mmq_titulo"></h3>
+  <p class="nota" data-i18n="mmq_ajuda"></p>
+  <p class="nota" id="mmQualSub"></p>
+  <div id="mmQualLista" class="mmq-lista"></div>
+  <div class="mmia-passo">
+    <strong data-i18n="mmq_passo1"></strong>
+    <button class="btn btn-azul" id="btnMmQualCopiar" data-i18n="mmq_copiar"></button>
+    <span class="nota" id="mmQualCopiadoMsg" role="status"></span>
+    <span id="mmQualGemini"></span>
+  </div>
+  <div class="mmia-passo">
+    <strong data-i18n="mmq_passo2"></strong>
+    <textarea id="mmQualResp" rows="8" data-i18n-ph="mmq_resp_ph"></textarea>
+  </div>
+  <p class="nota" id="mmQualAvalInfo" role="status"></p>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMmQualFechar" data-i18n="mmia_fechar"></button>
+    <button class="btn btn-verde" id="btnMmQualGuardar" data-i18n="mmq_guardar"></button>
+  </div>
+</dialog>
 <dialog id="dlgRv360" class="ui-modal diag-modal rv-dlg">
   <h3 id="rvTitulo"></h3>
   <p class="nota" data-i18n="rv_ajuda"></p>
@@ -14258,6 +14304,7 @@ window.__sqlPromise = initSqlJs({
 <script src="fuga.js"></script>
 <script src="mapa-mental.js"></script>
 <script src="mapa-ia.js"></script>
+<script src="mapa-curadoria.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

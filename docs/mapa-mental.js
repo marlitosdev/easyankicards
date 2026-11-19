@@ -66,6 +66,7 @@ function mmVirarCartoes() {
 }
 function mmTreinoAlternar(sim) {
   mmTreino = sim === undefined ? !mmTreino : !!sim;
+  if (mmTreino && typeof mmCuradoria !== "undefined") mmCuradoria = false;
   mmRevelados = {};
   matMapaPintar();
   try { matReg("ler", mmTreino ? "mapa: tentar lembrar" : "mapa: fim do treino", mmChaveResumo()); } catch (e) {}
@@ -269,6 +270,8 @@ function mmNoEl(no, prof, rec, chave) {
     s.title = t(no.foraDoResumo ? "mm_ia_fora_tip" : "mm_ia_num_tip", { n: (no.numFora || []).join(", ") });
     cx.append(s);
   }
+  /* (19.178.0) a curadoria de qualidade (mapa-curadoria.js): o veredito no galho e, no modo curadoria, os botões */
+  if (typeof mmCurNoEl === "function") mmCurNoEl(no, li, cx);
   if (no.peso >= 4) { const p = document.createElement("span"); p.className = "mm-peso"; p.textContent = t("mm_peso", { p: no.peso }); cx.append(p); }
   no.marcas.forEach((m) => { const s = document.createElement("span"); s.className = "mm-mk mm-mk-" + m; s.textContent = MM_ICO_MARCA[m] || "•"; s.title = t("mm_marca_" + m); cx.append(s); });
   if (fechado && no.filhos.length && !mmTreino) { const n = document.createElement("span"); n.className = "mm-conta"; n.textContent = "+" + no.filhos.length; cx.append(n); }
@@ -472,6 +475,8 @@ function matMapaPintar() {
     b.onclick = () => mmFiltroDefinir(f);
     vista.append(b);
   });
+  /* (19.178.0) a curadoria e o registro de qualidade, na mesma linha da vista */
+  if (typeof mmCurBarra === "function") mmCurBarra(arv, vista);
   box.append(barra, vista);
   if (!arv.nos) {
     const p = document.createElement("p"); p.className = "nota"; p.id = "mmVazio"; p.textContent = t("mm_vazio"); box.append(p);
@@ -526,6 +531,34 @@ function matMapaIr(linha) {
     if (el.classList) { el.classList.add("mm-alvo"); setTimeout(() => { try { el.classList.remove("mm-alvo"); } catch (e) {} }, 1600); }
   }
   return el;
+}
+/* (19.178.0) OS ATALHOS (fase 3): de onde se decide o que revisar — a ficha do tópico, os blocos da Revisão 360° e a
+ * véspera — o resumo abre JÁ no mapa, sem passar pela leitura. Só aparece onde há mapa: o resumo com 3 galhos ou mais
+ * (o mesmo limite do botão da leitura) ou com o mapa da IA guardado. */
+const mmTemCache = {};
+function mmTemMapa(chave) {
+  const r = chave && typeof matObter === "function" ? matObter(chave) : null;
+  if (!r) return false;
+  if (r.mapaIA && String(r.mapaIA.texto || "").trim()) return true;
+  const txt = String(r.texto || "");
+  if (!txt.trim()) return false;
+  const k = chave + "|" + txt.length;
+  if (mmTemCache[k] == null) { try { mmTemCache[k] = mmMontar(txt, {}).nos >= 3; } catch (e) { mmTemCache[k] = false; } }
+  return mmTemCache[k];
+}
+function mmAbrirNoMapa(disciplina, topico, opc, origem) {
+  try { matAbrirEditor({ disciplina, nome: topico }, "ler", opc); } catch (e) { return false; }
+  if (!matMapaOn) matMapaAlternar(true);
+  try { matReg("ler", "mapa aberto direto", (origem || "") + " · " + disciplina + " › " + topico); } catch (e) {}
+  return matMapaOn;
+}
+/* o botão "🗺 mapa", igual nos três lugares */
+function mmAtalhoBotao(id, fn) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "btn-min mm-atalho"; b.id = id;
+  b.textContent = t("mm_atalho"); b.title = t("mm_atalho_tip");
+  b.onclick = fn;
+  return b;
 }
 (function mmLigar() {
   try {

@@ -360,6 +360,8 @@ function rvItemEl(p, x, diario) {
   if (x.tipo !== "fonte" && x.temResumo) {
     b("btnRvGrifos_" + sufixo, x.grifos ? t("rv_bt_grifos", { n: x.grifos }) : t("rv_bt_resumo"), t("rv_bt_grifos_tip"), () => rvIrResumo(x));
   }
+  /* (19.178.0) 🗺 o mapa do resumo, direto */
+  if (x.tipo !== "fonte" && x.temResumo && typeof mmTemMapa === "function" && mmTemMapa(rvChaveMat(x))) ac.append(mmAtalhoBotao("btnRvMapa_" + sufixo, () => rvIrMapa(x)));
   if (x.tipo !== "fonte" && x.qs) b("btnRvQs_" + sufixo, t("rv_bt_questoes", { n: x.qs }), t("rv_bt_questoes_tip"), () => rvIrQuestoes(x));
   /* na prévia (ainda não montada) não há o que marcar: o plano nem existe */
   if (!feito && !rvPrevia) {
@@ -378,6 +380,27 @@ function rvIrResumo(x) {
   if (dlg && dlg.open && dlg.close) dlg.close();
   try { if (typeof matAbrirEditor === "function") matAbrirEditor({ disciplina: x.disciplina, nome: x.topico }, "ler"); } catch (e) {}
   try { if (x.grifos && typeof matSoGrifosAlternar === "function") matSoGrifosAlternar(true); } catch (e) {}
+}
+function rvChaveMat(x) {
+  try { if (typeof matChaveViva === "function") { const k = matChaveViva(x.disciplina, x.topico); if (k) return k; } } catch (e) {}
+  return typeof matChave === "function" ? matChave(x.disciplina, x.topico) : x.chave;
+}
+function rvIrMapa(x) {
+  const dlg = typeof document !== "undefined" ? document.getElementById("dlgRv360") : null;
+  if (dlg && dlg.open && dlg.close) dlg.close();
+  return typeof mmAbrirNoMapa === "function" ? mmAbrirNoMapa(x.disciplina, x.topico, undefined, "revisão 360") : false;
+}
+/* (19.178.0) os tópicos do plano que têm mapa, na ordem do plano, sem repetir (para a véspera) */
+function rvTopicosComMapa(p) {
+  const vistos = {}, out = [];
+  (p.dias || []).forEach((d) => d.blocos.forEach((b) => b.itens.forEach((x) => {
+    if (x.tipo === "fonte" || !x.temResumo) return;
+    const k = rvChaveMat(x);
+    if (vistos[k]) return;
+    vistos[k] = 1;
+    if (typeof mmTemMapa === "function" && mmTemMapa(k)) out.push(x);
+  })));
+  return out;
 }
 function rvIrQuestoes(x) {
   const dlg = typeof document !== "undefined" ? document.getElementById("dlgRv360") : null;
@@ -491,6 +514,21 @@ function rvPintar() {
     try { if (typeof qsUiCadernoAbrir === "function") { if (!(typeof qsUiFiltro !== "undefined" && qsUiFiltro.caderno)) qsUiCadernoAbrir(); if (typeof qsUiBizuAberto !== "undefined" && !qsUiBizuAberto) qsUiBizuAlternar(); } } catch (x) {}
   };
   vs.append(bBizu);
+  /* (19.178.0) na véspera, o mapa de cada tópico do plano: o esqueleto do assunto, sem reler o resumo inteiro */
+  const comMapa = rvTopicosComMapa(p);
+  if (comMapa.length) {
+    const dm = document.createElement("details"); dm.className = "rv-mapas"; dm.id = "rvVesperaMapas";
+    const sm = document.createElement("summary"); sm.textContent = t("rv_vespera_mapas", { n: comMapa.length });
+    dm.append(sm);
+    const lst = document.createElement("div"); lst.className = "rv-mapas-lista";
+    comMapa.forEach((x, i) => {
+      const bm = mmAtalhoBotao("btnRvVespMapa_" + i, () => rvIrMapa(x));
+      bm.textContent = "🗺 " + x.topico; bm.title = x.disciplina + " › " + x.topico;
+      lst.append(bm);
+    });
+    dm.append(lst);
+    vs.append(dm);
+  }
   box.append(vs);
   /* o que fica de fora */
   if (p.fora && p.fora.length) {
