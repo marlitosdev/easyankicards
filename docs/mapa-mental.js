@@ -24,7 +24,9 @@ let mmTreino = false;
 let mmRevelados = {};
 function mmTreinoLer() { try { const v = JSON.parse(localStorage.getItem(MM_TREINO_CH) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } }
 function mmTreinoGravar(m) { try { localStorage.setItem(MM_TREINO_CH, JSON.stringify(m)); } catch (e) {} }
-function mmChaveResumo() { return typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : ""; }
+/* (19.177.0) o mapa da IA (mapa-ia.js) tem o seu próprio treino e os seus recolhidos: chave do resumo + "|ia" */
+function mmEhIa() { return typeof mmFonteAtual === "function" && mmFonteAtual() === "ia"; }
+function mmChaveResumo() { const c = typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : ""; return c && mmEhIa() ? c + "|ia" : c; }
 function mmResultados() { return mmTreinoLer()[mmChaveResumo()] || {}; }
 function mmMarcarResultado(no, v) {
   const m = mmTreinoLer();
@@ -180,6 +182,8 @@ function mmMontar(texto, opc) {
       while (lista.length && lista[lista.length - 1].ind >= ind) lista.pop();
       const pai = lista.length ? lista[lista.length - 1].no : atual();
       const no = novo(k, linha, mmRotulo(li[3]));
+      /* (19.177.0) no mapa da IA os galhos de primeiro nível são itens de lista: cada um com a sua cor também */
+      if (o.corNaLista && pai === raiz) no.cor = corN++ % 6;
       pai.filhos.push(no);
       lista.push({ ind, no });
       return;
@@ -218,7 +222,7 @@ function mmNoEl(no, prof, rec, chave) {
   li.className = "mm-no" + (no.raiz ? " mm-raiz" : "") + (no.ramo ? " mm-ramo" : "") + (no.titulo && !no.ramo ? " mm-tit" : "")
     + (no.peso >= 4 ? " mm-peso-alto" : "") + (no.dica ? " mm-dica" : "") + (fechado && no.filhos.length ? " mm-fechado" : "")
     + (no.cor != null ? " mm-cor-" + no.cor : "") + (no.nota ? " mm-nota" : "") + (no.sem ? " mm-sem-" + no.sem : "")
-    + (no.marcas.length ? " mm-mkb-" + no.marcas[0] : "");
+    + (no.marcas.length ? " mm-mkb-" + no.marcas[0] : "") + (no.foraDoResumo ? " mm-ia-fora" : "") + (no.numFora ? " mm-ia-num" : "");
   li.id = "mmNo_" + no.id;
   const cx = document.createElement("div");
   cx.className = "mm-cx";
@@ -246,8 +250,9 @@ function mmNoEl(no, prof, rec, chave) {
   }
   if (!no.raiz) {
     rot.setAttribute("role", "button"); rot.tabIndex = 0;
-    if (!no.nota) rot.title = t(mmTreino ? "mm_revelar_tip" : "mm_ir_tip");
-    rot.onclick = () => (mmTreino ? mmRevelar(no) : matMapaIr(no.linha));
+    if (!no.nota) rot.title = t(mmTreino ? "mm_revelar_tip" : no.linha < 0 ? "mm_ia_sem_linha" : "mm_ir_tip");
+    /* (19.177.0) o galho da IA que não se achou no resumo não tem linha para onde ir */
+    rot.onclick = () => (mmTreino ? mmRevelar(no) : no.linha >= 0 ? matMapaIr(no.linha) : null);
     /* (19.176.0) teclado: Enter/Espaço = tocar; no treino, 1 = lembrei, 2 = não lembrei */
     rot.onkeydown = (ev) => {
       const k = ev && ev.key;
@@ -257,6 +262,13 @@ function mmNoEl(no, prof, rec, chave) {
   }
   cx.append(rot);
   if (no.titulo && mmLidos && mmLidos.has(mmNormTit(no.tituloCru))) { const ld = document.createElement("span"); ld.className = "mm-lido"; ld.textContent = t("mm_lido"); cx.append(ld); }
+  /* (19.177.0) a conferência do mapa da IA: o galho que não está no resumo, ou com número que o resumo não tem */
+  if (no.foraDoResumo || no.numFora) {
+    const s = document.createElement("span"); s.className = "mm-ia-selo";
+    s.textContent = t(no.foraDoResumo ? "mm_ia_fora" : "mm_ia_num");
+    s.title = t(no.foraDoResumo ? "mm_ia_fora_tip" : "mm_ia_num_tip", { n: (no.numFora || []).join(", ") });
+    cx.append(s);
+  }
   if (no.peso >= 4) { const p = document.createElement("span"); p.className = "mm-peso"; p.textContent = t("mm_peso", { p: no.peso }); cx.append(p); }
   no.marcas.forEach((m) => { const s = document.createElement("span"); s.className = "mm-mk mm-mk-" + m; s.textContent = MM_ICO_MARCA[m] || "•"; s.title = t("mm_marca_" + m); cx.append(s); });
   if (fechado && no.filhos.length && !mmTreino) { const n = document.createElement("span"); n.className = "mm-conta"; n.textContent = "+" + no.filhos.length; cx.append(n); }
@@ -332,8 +344,9 @@ function mmLidosAtual() {
 }
 let mmUltimo = null;            /* { chave, arvore } da última pintura */
 /* (19.176.0) o mapa é do resumo INTEIRO: ele mesmo é o navegador dos ramos (a barra de ramos some no modo mapa) */
-function mmChave() { return (typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : "") + "|*"; }
+function mmChave() { return (typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : "") + (mmEhIa() ? "|ia" : "|*"); }
 function mmArvoreAtual() {
+  if (mmEhIa() && typeof mmIaArvore === "function") { const a = mmIaArvore(); if (a) return a; }
   const txt = ($("matTexto") || {}).value || "";
   let ramos = [];
   try {
@@ -384,12 +397,20 @@ function matMapaPintar() {
   barra.className = "mm-barra";
   const res = document.createElement("span");
   res.className = "nota"; res.id = "mmResumo";
-  res.textContent = t("mm_resumo", { r: arv.ramos, n: arv.nos });
+  res.textContent = t(arv.ia ? "mm_resumo_ia" : "mm_resumo", { r: arv.ramos, n: arv.nos });
   const b1 = document.createElement("button"); b1.type = "button"; b1.className = "btn-min"; b1.id = "btnMmAbrirTudo"; b1.textContent = t("mm_abrir_tudo");
   b1.onclick = () => mmTodos(chave, true);
   const b2 = document.createElement("button"); b2.type = "button"; b2.className = "btn-min"; b2.id = "btnMmSoRamos"; b2.textContent = t("mm_so_ramos");
   b2.onclick = () => mmTodos(chave, false);
   barra.append(res, b1, b2);
+  /* (19.177.0) o mapa da IA: quando é ele que está à vista, a conferência dele logo no começo */
+  if (arv.ia && arv.conf) {
+    const c = arv.conf;
+    const cf = document.createElement("span"); cf.className = "nota mm-ia-conf" + (c.fora || c.num ? " mm-ia-alerta" : ""); cf.id = "mmIaConfMapa";
+    cf.textContent = t("mm_ia_conf_mapa", { d: typeof mmIaData === "function" ? mmIaData(arv.em) : "", ok: c.ok, n: c.total })
+      + (c.fora ? " " + t("mmia_conf_fora", { n: c.fora }) : "") + (c.num ? " " + t("mmia_conf_num", { n: c.num }) : "");
+    barra.append(cf);
+  }
   /* (19.175.0) o treino: ligar, o placar, recomeçar e os não lembrados em cartões */
   const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn-min" + (mmTreino ? " on" : ""); bt.id = "btnMmTreino";
   bt.textContent = t(mmTreino ? "mm_treino_sair" : "mm_treino"); bt.title = t("mm_treino_tip");
@@ -419,6 +440,23 @@ function matMapaPintar() {
   /* (19.176.0) vista e filtros, numa segunda linha: compacto, só grifados, só não lembrados */
   const vista = document.createElement("div");
   vista.className = "mm-barra mm-vista";
+  /* (19.177.0) qual mapa: o do resumo (a estrutura do texto) ou o da IA (condensado); e o botão de pedir/refazer o da IA */
+  const temIa = typeof mmIaGuardado === "function" && !!mmIaGuardado(typeof matAtual !== "undefined" && matAtual ? matAtual.chave : "");
+  if (temIa) {
+    [["texto", "btnMmFonteTexto", "mm_fonte_texto"], ["ia", "btnMmFonteIa", "mm_fonte_ia"]].forEach(([f, id, k]) => {
+      const on = (arv.ia ? "ia" : "texto") === f;
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn-min mm-fonte" + (on ? " on" : ""); b.id = id;
+      b.textContent = t(k); b.title = t(k + "_tip"); b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.onclick = () => mmFonteDefinir(f);
+      vista.append(b);
+    });
+  }
+  if (typeof mmIaAbrir === "function") {
+    const bi = document.createElement("button"); bi.type = "button"; bi.className = "btn-min"; bi.id = "btnMmIa";
+    bi.textContent = t(temIa ? "mm_ia_refazer" : "mm_ia_pedir"); bi.title = t("mm_ia_pedir_tip");
+    bi.onclick = () => mmIaAbrir();
+    vista.append(bi);
+  }
   const bk = document.createElement("button"); bk.type = "button"; bk.className = "btn-min" + (mmCompacto ? " on" : ""); bk.id = "btnMmCompacto";
   bk.textContent = t("mm_compacto"); bk.title = t("mm_compacto_tip"); bk.setAttribute("aria-pressed", mmCompacto ? "true" : "false");
   bk.onclick = () => mmCompactoAlternar();

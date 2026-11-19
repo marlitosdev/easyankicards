@@ -155,7 +155,7 @@ function jurIaBotao(opc) {
     const relogio = setInterval(() => { st.textContent = msgEspera(); }, 1000);
     try { reg("JURIS", "Gemini direto: consulta", (opc.rotulo || "") + " · " + pedido.length + " caracteres" + (busca ? " · com busca" : "")); } catch (e) {}
     try {
-      const r = await jurIaPerguntar(pedido, { busca });
+      const r = await jurIaPerguntar(pedido, { busca, modulo: opc.modulo });
       const caixa = $(opc.destino);
       if (caixa) { caixa.value = r.texto; try { if (caixa.oninput) caixa.oninput(); } catch (e) {} }
       st.className = "nota jur-ia-status ok";

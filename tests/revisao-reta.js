@@ -393,6 +393,98 @@ async function testes() {
     api.setLanguage("pt");
   }
 
+  /* ---------------- MA: (19.177.0) o mapa da IA, conferido no resumo e guardado com ele ---------------- */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const TXT = ["Os conectivos ligam termos e orações.", "",
+      "## Ramo — Conjunções Coordenativas", "",
+      "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, ==!contudo==.", "  - **Exceção:** ==~\"e\" com valor adversativo==", "",
+      "### Testes práticos", "", "1. **Teste da Conjunção Integrante:** troca por ISSO.", "",
+      "## Ramo — Conjunções Subordinadas", "", "Texto corrido do ramo."].join(NL);
+    const RESP = ["Claro! Aqui está o mapa:", "", "```markdown",
+      "- **Conjunções Coordenativas** — ligam orações independentes",
+      "  - **Aditivas** — e, nem",
+      "  - **Adversativas** — mas, porém, contudo",
+      "    - **Exceção:** \"e\" adversativo",
+      "- **Conjunções Subordinadas**",
+      "  - **Integrante** — troca por ISSO",
+      "  - **Causais** — porque, visto que, em 30 dias",
+      "```", "", "Espero ter ajudado!"].join(NL);
+    const ped = api.mmIaPedido(TXT, "Conectivos");
+    ok(/"Conectivos"/.test(ped) && /lista recuada/.test(ped) && /mas, porém, contudo\./.test(ped) && !/==/.test(ped) && /Não acrescente/.test(ped),
+      "MA1 o pedido: o tópico, as regras (lista recuada, nada de fora) e o resumo sem os sinais das marcas");
+    const limpo = api.mmIaLimparResposta(RESP);
+    ok(limpo.split(NL).length === 7 && /^- \*\*Conjunções Coordenativas/.test(limpo) && !/Claro|Espero|```/.test(limpo),
+      "MA2 da resposta fica só a lista (introdução, cerca de código e fecho saem): " + limpo.split(NL).length);
+    const A = api.mmIaMontar(RESP, TXT, "Conectivos");
+    const [co, su] = A.raiz.filhos;
+    ok(A.nos === 7 && A.ramos === 2 && co.cor === 0 && su.cor === 1 && A.raiz.label === "Conectivos", "MA3 a árvore da lista recuada, com a cor de cada ramo: " + A.nos + "/" + A.ramos);
+    const adv = co.filhos[1], exc = adv.filhos[0];
+    ok(co.conferido && co.linha === 2 && adv.linha === 5 && adv.marcas.join() === "importante" && exc.linha === 6 && exc.marcas.join() === "pegadinha",
+      "MA4 cada galho conferido leva à linha do resumo de onde saiu, com as SUAS marcas dela: " + JSON.stringify([co.linha, adv.linha, adv.marcas, exc.linha, exc.marcas]));
+    const integ = su.filhos[0], caus = su.filhos[1];
+    ok(integ.conferido && integ.linha === 10, "MA5 a palavra do galho dentro da linha também confere (Integrante → linha 10)");
+    ok(caus.foraDoResumo && caus.linha === -1 && caus.numFora && caus.numFora.join() === "30", "MA6 o galho que não está no resumo fica marcado; o número que o resumo não tem também");
+    ok(A.conf.total === 7 && A.conf.ok === 6 && A.conf.fora === 1 && A.conf.num === 1, "MA7 a conta da conferência: " + JSON.stringify(A.conf));
+    ok(api.mmIaAchar("Adversativo", [" mas porem adversativos "]).ok && !api.mmIaAchar("Causais", [" e nem "]).ok, "MA8 plural e gênero passam; palavra ausente não");
+    /* a tela */
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    api.matMapaAlternar(true);
+    const vista = () => api.$("matMapa").querySelectorAll("button").map((b) => b.id);
+    ok(vista().indexOf("btnMmIa") >= 0 && vista().indexOf("btnMmFonteIa") < 0 && /mapa com IA/.test(api.$("btnMmIa").textContent), "MA9 sem mapa da IA: só o botão de pedir; nada de alternar");
+    api.$("btnMmIa").onclick();
+    ok(/Cole a resposta/.test(api.$("mmIaConf").textContent) && api.$("btnMmIaUsar").disabled && api.$("btnMmIaApagar").hidden, "MA10 o diálogo abre vazio, sem poder usar");
+    ok(api.$("mmIaGm_config") || api.$("mmIaGm_bt"), "MA11 o Gemini direto (ou o caminho para configurar) ao lado do copiar");
+    api.$("mmIaResp").value = "Não sei fazer isso.";
+    api.$("mmIaResp").oninput();
+    ok(/Não achei a lista/.test(api.$("mmIaConf").textContent) && api.$("btnMmIaUsar").disabled, "MA12 resposta sem lista: avisa e não deixa usar");
+    api.$("mmIaResp").value = RESP;
+    api.$("mmIaResp").oninput();
+    const cf = api.$("mmIaConf").textContent;
+    ok(/7 galhos em 2 ramos/.test(cf) && /6 achados/.test(cf) && /1 não encontrados/.test(cf) && /1 com número/.test(cf) && !api.$("btnMmIaUsar").disabled, "MA13 a conferência antes de gravar: " + cf);
+    ok(api.$("mmIaForaLista").querySelectorAll("li").map((x) => x.textContent).join("|") === "Causais", "MA14 a lista do que não se achou");
+    api.$("btnMmIaUsar").onclick();
+    const g = api.matObter(ch).mapaIA;
+    ok(g && g.texto.split(NL).length === 7 && /^\d{4}-/.test(g.em), "MA15 o mapa fica no registro do resumo");
+    ok(JSON.parse(api.matParaBackup())[ch].mapaIA, "MA16 e vai no backup");
+    ok(api.mmFonteAtual() === "ia" && api.matMapaAtual() && /\|ia$/.test(api.mmChave()) && /\|ia$/.test(api.mmChaveResumo()), "MA17 usar liga o mapa da IA, com chave própria (treino e recolhidos separados)");
+    const noEl = (id) => api.$("matMapa").querySelectorAll("li").find((x) => x.id === id);
+    const cfM = api.$("matMapa").querySelectorAll(".mm-ia-conf")[0];
+    ok(/condensado pela IA/.test(api.$("matMapa").querySelectorAll(".nota").map((x) => x.textContent).join("|")), "MA18b a contagem do topo diz que o mapa é da IA");
+    ok(cfM && /6 de 7 galhos/.test(cfM.textContent) && /mm-ia-alerta/.test(cfM.className), "MA18 a conferência na barra do mapa: " + (cfM && cfM.textContent));
+    const nC = noEl("mmNo_l6");
+    ok(nC && /mm-ia-fora/.test(nC.className) && /não está no resumo/.test(nC.textContent), "MA19 o galho de fora tracejado, com o selo");
+    ok(/mm-mkb-importante/.test(noEl("mmNo_l2").className) && /mm-cor-0/.test(noEl("mmNo_l0").className), "MA20 as marcas do resumo e a cor do ramo no mapa da IA");
+    const nos = api.mmUltimoAtual().arvore;
+    api.mmMarcarResultado(nos.raiz.filhos[0].filhos[1], "n");
+    ok(Object.keys(api.mmResultados()).length === 1, "MA21 o treino do mapa da IA");
+    api.$("btnMmFonteTexto").onclick();
+    ok(api.mmFonteAtual() === "texto" && !api.$("matMapa").querySelectorAll(".mm-ia-conf").length && /\|\*$/.test(api.mmChave()) && !Object.keys(api.mmResultados()).length,
+      "MA22 '📄 do resumo' volta ao mapa do texto, com o treino dele (separado)");
+    ok(/refazer/.test(api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmIa").textContent), "MA23 com mapa da IA, o botão vira 'refazer'");
+    api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmFonteIa").onclick();
+    ok(api.mmFonteAtual() === "ia", "MA24 e '🤖 da IA' volta ao dele");
+    /* editou o resumo: a conferência é refeita na hora */
+    api.$("matTexto").value = TXT + NL + "- **Causais:** porque, visto que, em 30 dias.";
+    api.matMapaPintar();
+    ok(api.mmUltimoAtual().arvore.conf.fora === 0 && api.mmUltimoAtual().arvore.conf.num === 0 && !/mm-ia-fora/.test(noEl("mmNo_l6").className), "MA25 o resumo mudou, a conferência muda junto");
+    api.matGravar(ch, TXT + NL + "Mais uma linha.", { disciplina: "Português", topico: "Conectivos" });
+    ok(api.matObter(ch).mapaIA && api.matObter(ch).mapaIA.texto === g.texto, "MA26 gravar o resumo não apaga o mapa da IA");
+    api.$("btnMmIa").onclick();
+    ok(!api.$("btnMmIaApagar").hidden && /já tem um mapa da IA/.test(api.$("mmIaAviso").textContent), "MA27 refazer avisa que troca o mapa e oferece apagar");
+    api.mmIaApagar(ch);
+    ok(!api.matObter(ch).mapaIA && api.mmFonteAtual() === "texto", "MA28 apagar tira o mapa; volta o do texto");
+    ok(api.mmIaGravar(api.matChave("Português", "Inexistente"), RESP) === null, "MA29 sem resumo gravado, não guarda");
+    ["mm_resumo_ia", "mm_fonte_texto", "mm_fonte_ia", "mm_ia_pedir", "mm_ia_refazer", "mm_ia_conf_mapa", "mm_ia_fora", "mm_ia_num", "mm_ia_sem_linha", "mmia_titulo", "mmia_ajuda", "mmia_p",
+      "mmia_copiar", "mmia_copiado", "mmia_conf", "mmia_conf_fora", "mmia_conf_num", "mmia_conf_sem_lista", "mmia_usar", "mmia_apagar", "mmia_apagar_conf", "mmia_sem_resumo", "mmia_ja_tem", "mmia_cortado"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MA30 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+  }
+
   falhas.quantas = n;
   return falhas;
 }

@@ -860,6 +860,18 @@ dialog.ui-modal[open]{animation:uiEntra .22s cubic-bezier(.2,.9,.3,1.2)}
 .mm-nota>.mm-cx{border-style:dotted;background:none;font-size:var(--fs-2)}
 .mm-nota .mm-rot{font-weight:var(--peso-n);color:var(--sutil)}
 .mm-lido{font-size:var(--fs-1);color:var(--ok);border:1px solid var(--ok);border-radius:var(--r-pilula);padding:0 var(--esp-1)}
+/* (19.177.0) o mapa da IA: o galho que não se achou no resumo fica tracejado, com o selo de aviso */
+.mm-ia-fora>.mm-cx{border-style:dashed}
+.mm-ia-selo{font-size:var(--fs-1);color:var(--atencao);border:1px solid var(--atencao);border-radius:var(--r-pilula);padding:0 var(--esp-1)}
+.mm-ia-conf{font-size:var(--fs-2)}
+.mm-ia-alerta{color:var(--atencao)}
+.mm-fonte.on,#btnMmFonteTexto.on,#btnMmFonteIa.on{background:var(--acao);border-color:var(--acao);color:#fff}
+dialog.mmia-dlg{width:min(720px,96vw)}
+.mmia-passo{margin:var(--esp-3) 0;display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center}
+.mmia-passo textarea{width:100%;font-size:var(--fs-2)}
+.mmia-conf{margin:var(--esp-2) 0}
+.mmia-ruim{color:var(--erro)}
+.mmia-fora{margin:0 0 var(--esp-2);padding-left:var(--esp-5);font-size:var(--fs-2);color:var(--atencao)}
 #btnMmCompacto.on,#btnMmSoGrifos.on,#btnMmSoEsqueci.on{background:var(--acao);border-color:var(--acao);color:#fff}
 #dlgMaterial.mm-on #matEscopo,#dlgMaterial.mm-on #matCtrlLeitura{display:none}
 /* (19.175.0) tentar lembrar */
@@ -10472,6 +10484,29 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar"></button>
   </div>
 </dialog>
+<!-- (19.177.0) o mapa da IA (mapa-ia.js): copiar o pedido, colar a resposta, conferir no resumo, usar -->
+<dialog id="dlgMmIa" class="ui-modal mmia-dlg">
+  <h3 data-i18n="mmia_titulo"></h3>
+  <p class="nota" data-i18n="mmia_ajuda"></p>
+  <p class="nota mm-ia-alerta" id="mmIaAviso" hidden></p>
+  <div class="mmia-passo">
+    <strong data-i18n="mmia_passo1"></strong>
+    <button class="btn btn-azul" id="btnMmIaCopiar" data-i18n="mmia_copiar"></button>
+    <span class="nota" id="mmIaCopiadoMsg" role="status"></span>
+    <span id="mmIaGemini"></span>
+  </div>
+  <div class="mmia-passo">
+    <strong data-i18n="mmia_passo2"></strong>
+    <textarea id="mmIaResp" rows="10" data-i18n-ph="mmia_resp_ph"></textarea>
+  </div>
+  <p class="nota mmia-conf" id="mmIaConf" role="status" aria-live="polite"></p>
+  <ul class="mmia-fora" id="mmIaForaLista"></ul>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnMmIaApagar" data-i18n="mmia_apagar" hidden></button>
+    <button class="btn btn-cinza" id="btnMmIaFechar" data-i18n="mmia_fechar"></button>
+    <button class="btn btn-verde" id="btnMmIaUsar" data-i18n="mmia_usar" disabled></button>
+  </div>
+</dialog>
 <dialog id="dlgRv360" class="ui-modal diag-modal rv-dlg">
   <h3 id="rvTitulo"></h3>
   <p class="nota" data-i18n="rv_ajuda"></p>
@@ -14222,6 +14257,7 @@ window.__sqlPromise = initSqlJs({
 <script src="revisao-360.js"></script>
 <script src="fuga.js"></script>
 <script src="mapa-mental.js"></script>
+<script src="mapa-ia.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
