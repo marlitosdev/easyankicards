@@ -359,6 +359,33 @@ async function testes() {
     ["mm_treino", "mm_treino_sair", "mm_oculto", "mm_lembrei", "mm_nao_lembrei", "mm_placar", "mm_cartoes", "mm_selo_esqueci", "mm_recomecar"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MT14 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
+    /* (19.176.0) a interface do mapa */
+    ok(api.mmSemantica("Exceções constitucionais") === "peg" && api.mmSemantica("Pegadinhas comuns") === "peg" && api.mmSemantica("Como costuma cair em prova") === "prova" && api.mmSemantica("Regra") === "",
+      "MI1 o tipo pelo nome: exceção/pegadinha ⚠, cai em prova 🎯; regra sem cor");
+    const pr = api.mmPartirRotulo("Conjunções Subordinativas Adverbiais (Conformidade, Comparação, Finalidade)");
+    ok(pr.prin === "Conjunções Subordinativas Adverbiais" && pr.par === "(Conformidade, Comparação, Finalidade)" && api.mmPartirRotulo("Regra (CF88)").par === "",
+      "MI2 o parêntese do nome comprido vai menor, sem virar galho; o curto fica: " + JSON.stringify(pr));
+    const RG = api.mmMontar(["# Resumo geral", "", "Um parágrafo de abertura bem comprido que explica o assunto inteiro antes dos ramos e passa dos noventa caracteres.", "", "## Ramo — Um", "- **A:** a", "", "## Ramo — Dois", "- **B:** b"].join(NL), { titulo: "Tópico" }).raiz;
+    ok(RG.filhos.length === 3 && RG.filhos[0].nota && RG.filhos[1].ramo && RG.filhos[1].cor === 0 && RG.filhos[2].cor === 1,
+      "MI0 '# Resumo geral' não vira galho: a abertura é nota da raiz e os ramos saem direto dela, cada um com a sua cor: " + RG.filhos.map((x) => x.label.slice(0, 20)).join(" | "));
+    ok(sub.filhos[0].nota && !R.filhos[0].nota && !coord.filhos[0].nota && R.filhos[1].cor === 0 && R.filhos[2].cor === 1,
+      "MI3 o parágrafo LONGO sem negrito é nota (o curto e o item com negrito, não); cada galho de primeiro nível tem a sua cor");
+    api.matMapaAlternar(true);
+    ok(/mm-on/.test(api.$("dlgMaterial").className), "MI4 no modo mapa, a barra de ramos sai (classe mm-on no resumo)");
+    ok(/mm-nota/.test(api.$("mmNo_l14").className) && /^📝/.test(api.$("mmNo_l14").textContent) && /mm-cor-0/.test(api.$("mmNo_l2").className), "MI5 a nota discreta e a cor do ramo no desenho");
+    ok(/mm-mkb-importante/.test(api.$("mmNo_l5").className), "MI6 a faixa da marca no galho marcado");
+    api.$("btnMmCompacto").onclick();
+    ok(api.mmCompactoAtual() && !/mas, porém/.test(api.$("mmNo_l5").textContent), "MI7 só palavras-chave: o detalhe some");
+    api.$("btnMmCompacto").onclick();
+    ok(api.$("btnMmSoGrifos") && /\(2\)/.test(api.$("btnMmSoGrifos").textContent), "MI8 o filtro dos grifados com a contagem: " + (api.$("btnMmSoGrifos") || {}).textContent);
+    api.$("btnMmSoGrifos").onclick();
+    const vis = api.$("matMapa").querySelectorAll("li").filter((x) => /mm-no/.test(x.className)).map((x) => x.id);
+    ok(vis.indexOf("mmNo_l5") >= 0 && vis.indexOf("mmNo_l6") >= 0 && vis.indexOf("mmNo_l4") < 0 && vis.indexOf("mmNo_l2") >= 0, "MI9 só grifados: os marcados e o caminho até eles: " + vis.join());
+    api.$("btnMmSoGrifos").onclick();
+    ["mm_sem_peg", "mm_sem_prova", "mm_lido", "mm_compacto", "mm_f_grifos", "mm_f_esqueci"].forEach((k) => ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MI10 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+    ok(!/mm-on/.test(api.$("dlgMaterial").className), "MI11 fora do mapa, a barra de ramos volta");
     api.matTrocarModo("editar");
     ok(api.$("btnMatMapa").hidden, "MM15 editando, sem o botão");
     ["mm_btn", "mm_btn_on", "mm_tip", "mm_resumo", "mm_abrir_tudo", "mm_so_ramos", "mm_peso", "mm_vazio", "mm_ir_tip", "mm_marca_pegadinha"].forEach((k) =>

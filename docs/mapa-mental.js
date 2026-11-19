@@ -116,6 +116,22 @@ function mmRotulo(s0) {
   return { label: corte + "…", det: limpo.slice(corte.length).trim() };
 }
 
+/* (19.176.0) o TIPO do galho pelo nome: "Exceções", "Pegadinhas comuns" → ⚠; "Como costuma cair em prova" → 🎯. Os mesmos
+ * ícones e cores das marcas de pegadinha e de prova — uma legenda só. "Regra", "Conceito" ficam sem cor: cor em tudo
+ * não destaca nada. */
+function mmSemantica(label) {
+  const s = String(label || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/\bexce(cao|coes)\b|\bressalva|\bpegadinha|\bcuidado\b|\batencao\b|\bconfus/.test(s)) return "peg";
+  if (/cai(r|u)? em prova|costuma cair|como (e )?cobrad|cobranca em prova|na prova\b|bancas?\b.*cobr/.test(s)) return "prova";
+  return "";
+}
+/* o nome comprido termina num parêntese explicativo ("… (Conformidade, Comparação, …)"): o parêntese vai menor, sem
+ * virar galho — nos resumos ele quase sempre é explicação ("(CF88)", "(art. 150, I)"), não lista */
+function mmPartirRotulo(label) {
+  const m = String(label || "").match(/^(.{10,}?)\s*(\([^()]{6,}\))\s*$/);
+  return m && label.length > 40 ? { prin: m[1], par: m[2] } : { prin: label, par: "" };
+}
+
 /* A ÁRVORE. opc: { titulo, ramos: [{nome, peso}] } → { raiz, nos (total), ramos (quantos) } */
 function mmMontar(texto, opc) {
   const o = opc || {};
@@ -127,9 +143,10 @@ function mmMontar(texto, opc) {
   const tits = [];             /* [{nivel, no}] */
   let lista = [];              /* [{ind, no}] */
   const atual = () => (tits.length ? tits[tits.length - 1].no : raiz);
+  let corN = 0;
   const novo = (k, linha, rot, extra) => {
     nos++;
-    return Object.assign({ id: "l" + k, linha: k, label: rot.label, det: rot.det, marcas: mmMarcasDe(linha), filhos: [] }, extra || {});
+    return Object.assign({ id: "l" + k, linha: k, label: rot.label, det: rot.det, marcas: mmMarcasDe(linha), filhos: [], sem: mmSemantica(rot.label) }, extra || {});
   };
   String(texto || "").split("\n").forEach((linha, k) => {
     const s = linha.replace(/\s+$/, "");
@@ -144,8 +161,14 @@ function mmMontar(texto, opc) {
       const ehRamo = !!rm;
       if (rm) txt = rm[1];
       while (tits.length && tits[tits.length - 1].nivel >= nivel) tits.pop();
-      const no = novo(k, linha, { label: mmLimpar(txt), det: "" }, { titulo: true, ramo: ehRamo });
+      /* (19.176.0) "# Resumo geral" (ou o próprio nome do tópico) não é galho: é o cabeçalho do resumo. O que vem
+       * abaixo dele fica na raiz e os ramos saem direto dela, cada um com a sua cor */
+      const lt = norm(mmLimpar(txt));
+      if (!ehRamo && (/^resumo( geral)?$/.test(lt) || (o.titulo && lt === norm(o.titulo)))) { tits.length = 0; lista = []; return; }
+      const no = novo(k, linha, { label: mmLimpar(txt), det: "" }, { titulo: true, ramo: ehRamo, tituloCru: h[2] });
       if (ehRamo) { ramos++; const p = pesoDe[norm(mmLimpar(txt))]; if (p != null) no.peso = p; }
+      /* cada galho de primeiro nível (ramo ou título) tem a sua cor, que segue pelas linhas dele */
+      if (atual() === raiz) no.cor = corN++ % 6;
       atual().filhos.push(no);
       tits.push({ nivel, no });
       lista = [];
@@ -164,7 +187,10 @@ function mmMontar(texto, opc) {
     const dica = tr.match(/^(?:\?>|>>|>~?)\s?(.*)$/);
     const rot = mmRotulo(dica ? dica[1] : tr);
     if (!rot.label) return;
-    const no = novo(k, linha, rot, dica ? { dica: true } : {});
+    /* (19.176.0) o parágrafo corrido, sem termo em negrito, é NOTA: um galho discreto ("📝 …") que não compete com os
+     * termos-chave — o mapa é de palavras-chave, não de frases */
+    const nota = !dica && !/^\s*(?:==\S?\s*)?\*\*/.test(tr) && mmLimpar(tr).length > 90;
+    const no = novo(k, linha, rot, dica ? { dica: true } : (nota ? { nota: true } : {}));
     /* o parágrafo logo depois de um item, sem linha em branco no meio, continua o item */
     (lista.length ? lista[lista.length - 1].no : atual()).filhos.push(no);
   });
@@ -190,7 +216,9 @@ function mmNoEl(no, prof, rec, chave) {
   /* no treino, o que está aberto é o que você já revelou (a raiz sempre) */
   const fechado = mmTreino ? !(no.raiz || mmRevelados[no.caminho]) : !!rec[no.id];
   li.className = "mm-no" + (no.raiz ? " mm-raiz" : "") + (no.ramo ? " mm-ramo" : "") + (no.titulo && !no.ramo ? " mm-tit" : "")
-    + (no.peso >= 4 ? " mm-peso-alto" : "") + (no.dica ? " mm-dica" : "") + (fechado && no.filhos.length ? " mm-fechado" : "");
+    + (no.peso >= 4 ? " mm-peso-alto" : "") + (no.dica ? " mm-dica" : "") + (fechado && no.filhos.length ? " mm-fechado" : "")
+    + (no.cor != null ? " mm-cor-" + no.cor : "") + (no.nota ? " mm-nota" : "") + (no.sem ? " mm-sem-" + no.sem : "")
+    + (no.marcas.length ? " mm-mkb-" + no.marcas[0] : "");
   li.id = "mmNo_" + no.id;
   const cx = document.createElement("div");
   cx.className = "mm-cx";
@@ -203,15 +231,32 @@ function mmNoEl(no, prof, rec, chave) {
     tg.onclick = () => (mmTreino && fechado ? mmRevelar(no) : mmAlternar(chave, no.id));
     cx.append(tg);
   }
+  /* (19.176.0) o tipo do galho (⚠ exceção/pegadinha, 🎯 cai em prova), antes do nome */
+  if (no.sem) { const sm = document.createElement("span"); sm.className = "mm-sem"; sm.textContent = no.sem === "peg" ? "⚠" : "🎯"; sm.title = t("mm_sem_" + no.sem); cx.append(sm); }
   const rot = document.createElement("span");
   rot.className = "mm-rot";
-  rot.textContent = no.label;
+  if (no.nota) {
+    /* a nota: curta, discreta; o texto inteiro no balão e no próprio resumo */
+    rot.textContent = "📝 " + (no.label.length > 60 ? no.label.slice(0, 59).replace(/\s+\S*$/, "") + "…" : no.label);
+    rot.title = [no.label.replace(/…$/, ""), no.det].filter(Boolean).join(" ");
+  } else {
+    const pr = mmPartirRotulo(no.label);
+    rot.textContent = pr.prin;
+    if (pr.par) { const pa = document.createElement("span"); pa.className = "mm-par"; pa.textContent = " " + pr.par; rot.append(pa); }
+  }
   if (!no.raiz) {
     rot.setAttribute("role", "button"); rot.tabIndex = 0;
-    rot.title = t(mmTreino ? "mm_revelar_tip" : "mm_ir_tip");
+    if (!no.nota) rot.title = t(mmTreino ? "mm_revelar_tip" : "mm_ir_tip");
     rot.onclick = () => (mmTreino ? mmRevelar(no) : matMapaIr(no.linha));
+    /* (19.176.0) teclado: Enter/Espaço = tocar; no treino, 1 = lembrei, 2 = não lembrei */
+    rot.onkeydown = (ev) => {
+      const k = ev && ev.key;
+      if (k === "Enter" || k === " ") { if (ev.preventDefault) ev.preventDefault(); rot.onclick(); return; }
+      if (mmTreino && mmRevelados[no.caminho] && mmTemDentro(no) && (k === "1" || k === "2")) { if (ev.preventDefault) ev.preventDefault(); mmMarcarResultado(no, k === "1" ? "s" : "n"); }
+    };
   }
   cx.append(rot);
+  if (no.titulo && mmLidos && mmLidos.has(mmNormTit(no.tituloCru))) { const ld = document.createElement("span"); ld.className = "mm-lido"; ld.textContent = t("mm_lido"); cx.append(ld); }
   if (no.peso >= 4) { const p = document.createElement("span"); p.className = "mm-peso"; p.textContent = t("mm_peso", { p: no.peso }); cx.append(p); }
   no.marcas.forEach((m) => { const s = document.createElement("span"); s.className = "mm-mk mm-mk-" + m; s.textContent = MM_ICO_MARCA[m] || "•"; s.title = t("mm_marca_" + m); cx.append(s); });
   if (fechado && no.filhos.length && !mmTreino) { const n = document.createElement("span"); n.className = "mm-conta"; n.textContent = "+" + no.filhos.length; cx.append(n); }
@@ -238,7 +283,7 @@ function mmNoEl(no, prof, rec, chave) {
   } else if (res && res.v === "n") {
     const s = document.createElement("span"); s.className = "mm-esq-selo"; s.textContent = t("mm_selo_esqueci"); s.title = t("mm_selo_esqueci_tip", { d: (res.em || "").split("-").reverse().join("/") }); cx.append(s);
   }
-  if (no.det && (!mmTreino || !!mmRevelados[no.caminho])) {
+  if (no.det && !no.nota && (mmTreino ? !!mmRevelados[no.caminho] : !mmCompacto)) {
     const d = document.createElement("span");
     d.className = "mm-det";
     d.textContent = no.det.length > 180 ? no.det.slice(0, 179) + "…" : no.det;
@@ -246,17 +291,50 @@ function mmNoEl(no, prof, rec, chave) {
     cx.append(d);
   }
   li.append(cx);
-  if (no.filhos.length && !fechado) {
+  /* com filtro (só não lembrados / só grifados), aparece o caminho até cada galho que passa, tudo aberto */
+  const filhos = mmVis ? no.filhos.filter((f) => mmVis.has(f.caminho)) : no.filhos;
+  if (filhos.length && (!fechado || mmVis)) {
     const ul = document.createElement("ul");
-    no.filhos.forEach((f) => ul.append(mmNoEl(f, prof + 1, rec, chave)));
+    filhos.forEach((f) => ul.append(mmNoEl(f, prof + 1, rec, chave)));
     li.append(ul);
   }
   return li;
 }
+/* (19.176.0) a vista compacta (só as palavras-chave), o filtro e as seções lidas */
+const MM_COMPACTO_CH = "eac_mm_compacto";
+let mmCompacto = (() => { try { return localStorage.getItem(MM_COMPACTO_CH) === "1"; } catch (e) { return false; } })();
+let mmFiltro = "";              /* "" | "esqueci" | "grifos" */
+let mmVis = null;               /* com filtro: os caminhos que aparecem */
+let mmLidos = null;             /* os títulos de seção lidos (resumo-lidas.js) */
+function mmNormTit(s) { return typeof rlsNormal === "function" ? rlsNormal(s) : String(s || "").toLowerCase(); }
+function mmCompactoAlternar() { mmCompacto = !mmCompacto; try { localStorage.setItem(MM_COMPACTO_CH, mmCompacto ? "1" : "0"); } catch (e) {} matMapaPintar(); return mmCompacto; }
+function mmFiltroDefinir(f) { mmFiltro = mmFiltro === f ? "" : (f || ""); matMapaPintar(); return mmFiltro; }
+/* os caminhos que passam no filtro e os de cima deles */
+function mmVisiveis(arv, filtro) {
+  if (!filtro) return null;
+  const res = mmResultados();
+  const vis = new Set();
+  const passa = (no) => (filtro === "esqueci" ? !!(res[no.caminho] && res[no.caminho].v === "n") : no.marcas.length > 0);
+  const ir = (no) => { let tem = !no.raiz && passa(no); no.filhos.forEach((f) => { if (ir(f)) tem = true; }); if (tem) vis.add(no.caminho); return tem; };
+  ir(arv.raiz);
+  return vis;
+}
+function mmContar(arv, pred) { let n = 0; const ir = (no) => { if (!no.raiz && pred(no)) n++; no.filhos.forEach(ir); }; ir(arv.raiz); return n; }
+function mmLidosAtual() {
+  try {
+    if (typeof rlsSecoes !== "function" || typeof rlsMarcasDe !== "function" || !matAtual) return null;
+    const secs = rlsSecoes(($("matTexto") || {}).value || "");
+    const M = rlsMarcasDe(matAtual.chave);
+    const out = new Set();
+    secs.forEach((x) => { if (!x.vazia && rlsEstado(M[x.k], x.h) === "lida") out.add(mmNormTit(x.titulo)); });
+    return out;
+  } catch (e) { return null; }
+}
 let mmUltimo = null;            /* { chave, arvore } da última pintura */
-function mmChave() { return (typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : "") + "|" + (typeof matEscopo !== "undefined" ? matEscopo : ""); }
+/* (19.176.0) o mapa é do resumo INTEIRO: ele mesmo é o navegador dos ramos (a barra de ramos some no modo mapa) */
+function mmChave() { return (typeof matAtual !== "undefined" && matAtual && matAtual.chave ? matAtual.chave : "") + "|*"; }
 function mmArvoreAtual() {
-  const txt = typeof matTextoDoEscopo === "function" ? matTextoDoEscopo() : (($("matTexto") || {}).value || "");
+  const txt = ($("matTexto") || {}).value || "";
   let ramos = [];
   try {
     if (typeof matIndiceRamos === "function" && matAtual) ramos = matIndiceRamos().get(matChaveNormal(matAtual.chave)) || [];
@@ -338,11 +416,31 @@ function matMapaPintar() {
     bc.onclick = () => mmVirarCartoes();
     barra.append(bc);
   }
-  box.append(barra);
+  /* (19.176.0) vista e filtros, numa segunda linha: compacto, só grifados, só não lembrados */
+  const vista = document.createElement("div");
+  vista.className = "mm-barra mm-vista";
+  const bk = document.createElement("button"); bk.type = "button"; bk.className = "btn-min" + (mmCompacto ? " on" : ""); bk.id = "btnMmCompacto";
+  bk.textContent = t("mm_compacto"); bk.title = t("mm_compacto_tip"); bk.setAttribute("aria-pressed", mmCompacto ? "true" : "false");
+  bk.onclick = () => mmCompactoAlternar();
+  vista.append(bk);
+  const nG = mmContar(arv, (no) => no.marcas.length > 0);
+  const nE = mmContar(arv, (no) => !!(resT[no.caminho] && resT[no.caminho].v === "n"));
+  if (mmFiltro === "grifos" && !nG) mmFiltro = "";
+  if (mmFiltro === "esqueci" && !nE) mmFiltro = "";
+  [["grifos", "btnMmSoGrifos", "mm_f_grifos", nG], ["esqueci", "btnMmSoEsqueci", "mm_f_esqueci", nE]].forEach(([f, id, k, q]) => {
+    if (!q) return;
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn-min" + (mmFiltro === f ? " on" : ""); b.id = id;
+    b.textContent = t(k, { n: q }); b.title = t(k + "_tip"); b.setAttribute("aria-pressed", mmFiltro === f ? "true" : "false");
+    b.onclick = () => mmFiltroDefinir(f);
+    vista.append(b);
+  });
+  box.append(barra, vista);
   if (!arv.nos) {
     const p = document.createElement("p"); p.className = "nota"; p.id = "mmVazio"; p.textContent = t("mm_vazio"); box.append(p);
     return arv;
   }
+  mmLidos = mmLidosAtual();
+  mmVis = mmVisiveis(arv, mmFiltro);
   const ul = document.createElement("ul");
   ul.className = "mm-arv";
   ul.append(mmNoEl(arv.raiz, 0, mmRecolhidosDe(chave, arv), chave));
@@ -364,6 +462,9 @@ function matMapaAplicar(lendo) {
   }
   if (box) box.hidden = !matMapaOn;
   if (lei && pode) lei.hidden = matMapaOn;
+  /* (19.176.0) no modo mapa a barra de ramos e a dica de seleção saem: o mapa é o navegador dos ramos */
+  const dlg = $("dlgMaterial");
+  if (dlg && dlg.classList) dlg.classList.toggle("mm-on", matMapaOn);
   if (matMapaOn) matMapaPintar();
   return matMapaOn;
 }
@@ -376,6 +477,8 @@ function matMapaAlternar(sim) {
 /* tocar num nó: volta ao texto, no trecho daquela linha (ou do mais próximo acima que a leitura desenhou) */
 function matMapaIr(linha) {
   matMapaAlternar(false);
+  /* o mapa é do resumo inteiro: a leitura volta para "Tudo", onde a linha do galho é a mesma */
+  try { if (typeof matEscopo !== "undefined" && matEscopo !== "*" && typeof matEscopoEscolher === "function") matEscopoEscolher("*"); } catch (e) {}
   const lei = $("matLeitura");
   if (!lei || !lei.querySelector) return null;
   let el = null;
