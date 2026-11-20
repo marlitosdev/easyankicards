@@ -872,7 +872,7 @@ dialog.mmia-dlg{width:min(720px,96vw);max-width:min(720px,96vw)}
 .mmia-conf{margin:var(--esp-2) 0}
 .mmia-ruim{color:var(--erro)}
 .mmia-fora{margin:0 0 var(--esp-2);padding-left:var(--esp-5);font-size:var(--fs-2);color:var(--atencao)}
-#btnMmCompacto.on,#btnMmSoGrifos.on,#btnMmSoEsqueci.on{background:var(--acao);border-color:var(--acao);color:#fff}
+#btnMmCompacto.on,#btnMmSoGrifos.on,#btnMmSoEsqueci.on,#btnMmSoCorrigir.on{background:var(--acao);border-color:var(--acao);color:#fff}
 #dlgMaterial.mm-on #matEscopo,#dlgMaterial.mm-on #matCtrlLeitura{display:none}
 /* (19.175.0) tentar lembrar */
 #btnMmTreino.on{background:var(--acao);border-color:var(--acao);color:#fff}
@@ -944,6 +944,19 @@ dialog.mmq-dlg{width:min(760px,96vw);max-width:min(760px,96vw)}
 .mmq-cam{display:flex;flex-wrap:wrap;gap:var(--esp-1);align-items:center}
 .mmq-nota{font-size:var(--fs-2)}
 .mmq-trecho{font-style:italic;font-size:var(--fs-2)}
+/* (19.179.0) a avaliação ponto a ponto */
+.mmq-aval-tit{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center}
+.mmq-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-1);margin-top:var(--esp-1)}
+.mmq-v-incorreto{border-left:4px solid var(--erro)}
+.mmq-v-impreciso{border-left:4px solid var(--atencao)}
+.mmq-v-correto{border-left:4px solid var(--ok)}
+.mmq-resolvido{opacity:.65}
+.mmq-ver-incorreto{color:var(--erro)}
+.mmq-ver-impreciso{color:var(--atencao)}
+.mmq-ver-correto{color:var(--ok)}
+.mmq-res{font-size:var(--fs-1)}
+.mm-cur-selo-corrigir{color:var(--erro)}
+.mm-a-corrigir>.mm-cx{border-color:var(--erro)}
 .rv-fora{margin-top:var(--esp-3)}
 .rv-fora>summary{cursor:pointer}
 .rv-fora-lin{font-size:var(--fs-2);color:var(--sutil);margin:var(--esp-1) 0}
@@ -10548,6 +10561,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <textarea id="mmQualResp" rows="8" data-i18n-ph="mmq_resp_ph"></textarea>
   </div>
   <p class="nota" id="mmQualAvalInfo" role="status"></p>
+  <div id="mmQualAvalLista" class="mmq-lista mmq-aval" hidden></div>
   <div class="dlg-rodape">
     <button class="btn btn-cinza" id="btnMmQualFechar" data-i18n="mmia_fechar"></button>
     <button class="btn btn-verde" id="btnMmQualGuardar" data-i18n="mmq_guardar"></button>

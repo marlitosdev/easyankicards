@@ -593,6 +593,90 @@ async function testes() {
     api.matMapaAlternar(false);
   }
 
+  /* ---------------- MV: (19.179.0) a avaliação vira correção ---------------- */
+  {
+    /* ler a avaliação, nos formatos que as IAs devolvem */
+    const L = (x) => JSON.stringify(api0.mmQualLerAval(x));
+    const { api: api0 } = rodar();
+    const A1 = api0.mmQualLerAval("[1] INCORRETO — contudo é adversativa — Bechara, Moderna Gramática");
+    ok(A1.length === 1 && A1[0].n === 1 && A1[0].v === "incorreto" && A1[0].correcao === "contudo é adversativa" && A1[0].fonte === "Bechara, Moderna Gramática", "MV1 [n] VEREDITO — correção — fonte: " + L("[1] INCORRETO — contudo é adversativa — Bechara, Moderna Gramática"));
+    const A2 = api0.mmQualLerAval(["**[2]** **CORRETO** — art. 5º, CF", "3. IMPRECISO: falta o \"bem como\" - Cegalla", "[4] Incorrect — the fix — source"].join(NL));
+    ok(A2.length === 3 && A2[0].n === 2 && A2[0].v === "correto" && A2[0].correcao === "art. 5º, CF" && A2[1].n === 3 && A2[1].v === "impreciso" && A2[1].fonte === "Cegalla" && A2[2].v === "incorreto",
+      "MV2 negrito, '3.', dois-pontos, hífen e inglês: " + JSON.stringify(A2));
+    const A3 = api0.mmQualLerAval(["Outros problemas:", "- Aditivas — PARCIALMENTE CORRETO — falta \"bem como\" — gramática", "No todo, o mapa é correto e confiável.", "Não tenho certeza sobre o item 2."].join(NL));
+    ok(A3.length === 1 && A3[0].n === null && A3[0].termo === "Aditivas" && A3[0].v === "impreciso", "MV3 'Termo — VEREDITO' dos outros problemas; a frase solta fica de fora: " + JSON.stringify(A3));
+    ok(!api0.mmQualLerAval("[1] INCORRETO").some((x) => x.v === "correto") && api0.mmQualLerAval("[1] INCORRETO")[0].v === "incorreto", "MV4 'INCORRETO' não é lido como 'correto'");
+    /* a tela */
+    const { api } = rodar();
+    api.matIniciar();
+    const TXT = ["## Ramo — Conjunções Coordenativas", "",
+      "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, contudo.", "  - **Exceção:** \"e\" com valor adversativo", "",
+      "## Ramo — Conjunções Subordinadas", "", "* **Causais:** porque, visto que."].join(NL);
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    api.matMapaAlternar(true);
+    const no = (label) => { let achou = null; const ir = (x) => { if (x.label === label) achou = x; x.filhos.forEach(ir); }; ir(api.mmUltimoAtual().arvore.raiz); return achou; };
+    const li = (id) => api.$("matMapa").querySelectorAll("li").find((x) => x.id === id);
+    const btQ = (id) => api.$("mmQualAvalLista").querySelectorAll("button").find((b) => b.id === id);
+    api.mmCurMarcar(no("Adversativas"), "errado", "contudo?");
+    api.mmCurMarcar(no("Causais"), "duvida", "");
+    const ped = api.mmQualPedidoAtual();
+    ok(/\[1\] Conjunções Coordenativas › Adversativas/.test(ped) && /\[2\] Conjunções Subordinadas › Causais/.test(ped), "MV5 o pedido numerado");
+    /* depois do pedido, outro galho marcado: a numeração do pedido continua valendo */
+    api.mmCurMarcar(no("Exceção"), "errado", "");
+    api.mmQualGuardarAval(["[1] INCORRETO — contudo é adversativa, mas o resumo omite \"todavia\" — Bechara", "[2] CORRETO — Cegalla, p. 290",
+      "Outros problemas:", "- Aditivas — IMPRECISO — falta \"bem como\" — gramática normativa"].join(NL));
+    const P = api.mmQualAvalPontos(api.mmUltimoAtual().arvore);
+    ok(P.length === 3 && P[0].no && P[0].no.label === "Adversativas" && P[1].no && P[1].no.label === "Causais" && P[2].no && P[2].no.label === "Aditivas",
+      "MV6 cada ponto ligado ao seu galho — o [2] é Causais, como no pedido, mesmo com outro galho marcado depois: " + P.map((x) => x.no && x.no.label).join("|"));
+    api.matMapaPintar();
+    ok(/mm-a-corrigir/.test(li("mmNo_l3").className) && /✏ a corrigir/.test(li("mmNo_l3").textContent) && /mm-a-corrigir/.test(li("mmNo_l2").className) && !/mm-a-corrigir/.test(li("mmNo_l8").className),
+      "MV7 no mapa, '✏ a corrigir' nos galhos com INCORRETO/IMPRECISO (não no CORRETO)");
+    const bCorr = api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmSoCorrigir");
+    ok(bCorr && /a corrigir \(2\)/.test(bCorr.textContent), "MV7b o filtro '✏ a corrigir' com a contagem");
+    bCorr.onclick();
+    const visC = api.$("matMapa").querySelectorAll("li").filter((x) => /mm-no/.test(x.className)).map((x) => x.id);
+    ok(visC.indexOf("mmNo_l3") >= 0 && visC.indexOf("mmNo_l2") >= 0 && visC.indexOf("mmNo_l8") < 0, "MV7c só os galhos a corrigir e o caminho até eles: " + visC.join());
+    api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmSoCorrigir").onclick();
+    api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmQualidade").onclick();
+    ok(/✗ 1 incorreto.*~ 1 impreciso.*✓ 1 correto.*0 de 3 resolvido/.test(api.$("mmQualAvalTit").textContent), "MV8 o registro resume a avaliação: " + api.$("mmQualAvalTit").textContent);
+    ok(btQ("btnMmQualCorrigir_0") && btQ("btnMmQualCorrigido_0") && btQ("btnMmQualDiscordo_0") && btQ("btnMmQualAceitar_1") && btQ("btnMmQualAceitarTodos"),
+      "MV9 incorreto: corrigir / corrigido / discordo; correto: aceitar (e todos de uma vez)");
+    btQ("btnMmQualAceitarTodos").onclick();
+    const cC = api.mmCurDoMapa()[no("Causais").caminho];
+    ok(cC && cC.v === "ok" && /Cegalla, p\. 290/.test(cC.nota) && /1 de 3 resolvido/.test(api.$("mmQualAvalTit").textContent), "MV10 aceitar: o galho fica ✓ conferido, com a fonte na nota");
+    btQ("btnMmQualCorrigir_0").onclick();
+    const ta = api.$("matTexto");
+    ok(!api.$("dlgMmQual").open && api.matModoAtual() === "editar" && ta.value.slice(ta.selectionStart, ta.selectionEnd) === "* **Adversativas:** mas, porém, contudo.",
+      "MV11 'corrigir no resumo' abre a edição com a linha do galho selecionada: " + JSON.stringify(ta.value.slice(ta.selectionStart, ta.selectionEnd)));
+    api.matTrocarModo("ler");
+    api.matMapaAlternar(true);
+    const p0 = api.mmQualAvalPontos(api.mmUltimoAtual().arvore)[0];
+    api.mmQualResolver(p0, "corrigido");
+    const cA = api.mmCurDoMapa()[no("Adversativas").caminho];
+    ok(cA && cA.v === "ok" && /corrigido pela avaliação: contudo é adversativa/.test(cA.nota) && !/mm-a-corrigir/.test(li("mmNo_l3").className),
+      "MV12 '✓ corrigido': o galho passa a conferido, com a correção na nota, e o aviso sai do mapa");
+    const p2 = api.mmQualAvalPontos(api.mmUltimoAtual().arvore)[2];
+    api.mmQualResolver(p2, "discordo");
+    ok(!/mm-a-corrigir/.test(li("mmNo_l2").className) && !api.mmCurDoMapa()[no("Aditivas").caminho], "MV13 'discordo' tira o ponto sem mexer na curadoria");
+    api.mmQualResolver(api.mmQualAvalPontos(api.mmUltimoAtual().arvore)[2], "");
+    ok(/mm-a-corrigir/.test(li("mmNo_l2").className), "MV14 reabrir volta o aviso");
+    api.mmQualGuardarAval(api.mmQualAval().texto);
+    ok(Object.keys(api.mmQualAval().res).length === 2, "MV15 guardar a mesma avaliação de novo mantém o que já foi resolvido");
+    api.mmQualGuardarAval("[1] CORRETO — x");
+    ok(!Object.keys(api.mmQualAval().res).length, "MV16 uma avaliação nova recomeça");
+    api.mmQualGuardarAval("Gostei muito do mapa.");
+    api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmQualidade").onclick();
+    ok(/Não achei pontos/.test(api.$("mmQualAvalLista").textContent), "MV17 avaliação sem pontos: avisa e fica guardada como texto");
+    try { api.$("dlgMmQual").close(); } catch (x) {}
+    ["mm_f_corrigir", "mm_f_corrigir_tip", "mmq_selo_corrigir", "mmq_aval_tit", "mmq_aval_nada", "mmq_ver_incorreto", "mmq_ver_impreciso", "mmq_ver_correto", "mmq_correcao", "mmq_fonte", "mmq_sem_galho", "mmq_corrigir", "mmq_corrigido",
+      "mmq_discordo", "mmq_aceitar", "mmq_aceitar_todos", "mmq_reabrir", "mmq_res_corrigido", "mmq_res_aceito", "mmq_res_discordo", "mmq_nota_corrigido", "mmq_nota_aceito", "mmq_corrigir_toast"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MV18 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+  }
+
   falhas.quantas = n;
   return falhas;
 }

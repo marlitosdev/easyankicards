@@ -318,7 +318,7 @@ function mmNoEl(no, prof, rec, chave) {
 /* (19.176.0) a vista compacta (só as palavras-chave), o filtro e as seções lidas */
 const MM_COMPACTO_CH = "eac_mm_compacto";
 let mmCompacto = (() => { try { return localStorage.getItem(MM_COMPACTO_CH) === "1"; } catch (e) { return false; } })();
-let mmFiltro = "";              /* "" | "esqueci" | "grifos" */
+let mmFiltro = "";              /* "" | "esqueci" | "grifos" | "corrigir" (19.179.0: o que a avaliação apontou) */
 let mmVis = null;               /* com filtro: os caminhos que aparecem */
 let mmLidos = null;             /* os títulos de seção lidos (resumo-lidas.js) */
 function mmNormTit(s) { return typeof rlsNormal === "function" ? rlsNormal(s) : String(s || "").toLowerCase(); }
@@ -329,7 +329,8 @@ function mmVisiveis(arv, filtro) {
   if (!filtro) return null;
   const res = mmResultados();
   const vis = new Set();
-  const passa = (no) => (filtro === "esqueci" ? !!(res[no.caminho] && res[no.caminho].v === "n") : no.marcas.length > 0);
+  const passa = (no) => (filtro === "esqueci" ? !!(res[no.caminho] && res[no.caminho].v === "n")
+    : filtro === "corrigir" ? !!(typeof mmQualPendenteDe === "function" && mmQualPendenteDe(no)) : no.marcas.length > 0);
   const ir = (no) => { let tem = !no.raiz && passa(no); no.filhos.forEach((f) => { if (ir(f)) tem = true; }); if (tem) vis.add(no.caminho); return tem; };
   ir(arv.raiz);
   return vis;
@@ -468,7 +469,10 @@ function matMapaPintar() {
   const nE = mmContar(arv, (no) => !!(resT[no.caminho] && resT[no.caminho].v === "n"));
   if (mmFiltro === "grifos" && !nG) mmFiltro = "";
   if (mmFiltro === "esqueci" && !nE) mmFiltro = "";
-  [["grifos", "btnMmSoGrifos", "mm_f_grifos", nG], ["esqueci", "btnMmSoEsqueci", "mm_f_esqueci", nE]].forEach(([f, id, k, q]) => {
+  /* (19.179.0) o que a avaliação apontou e ainda não foi resolvido: num mapa grande, recolhido, não se veria */
+  const nC = typeof mmQualPendenteDe === "function" ? mmContar(arv, (no) => !!mmQualPendenteDe(no)) : 0;
+  if (mmFiltro === "corrigir" && !nC) mmFiltro = "";
+  [["grifos", "btnMmSoGrifos", "mm_f_grifos", nG], ["esqueci", "btnMmSoEsqueci", "mm_f_esqueci", nE], ["corrigir", "btnMmSoCorrigir", "mm_f_corrigir", nC]].forEach(([f, id, k, q]) => {
     if (!q) return;
     const b = document.createElement("button"); b.type = "button"; b.className = "btn-min" + (mmFiltro === f ? " on" : ""); b.id = id;
     b.textContent = t(k, { n: q }); b.title = t(k + "_tip"); b.setAttribute("aria-pressed", mmFiltro === f ? "true" : "false");
