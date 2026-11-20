@@ -272,24 +272,17 @@ async function testes() {
     const { api } = rodar();
     preparar(api, "Direito Financeiro", "Receita pública");
     api.leiAbrir("Direito Financeiro", "Receita pública");
-    [["btnLeiAjuda", "ajuda"], ["btnLeiLog", "registro"]].forEach(([id, nome]) => {
+    [["btnLeiCheia", "tela cheia"], ["btnLeiLog", "registro"]].forEach(([id, nome]) => {
       ok(/lei-redondo/.test(api.$(id).className || ""),
          "U17 o botao de " + nome + " nao tem forma propria: "
          + api.$(id).className);
       ok(!/btn-min/.test(api.$(id).className || ""),
          "U17b o botao de " + nome + " voltou a ser igual aos de trabalho");
     });
-    /* e a ajuda ganhou os dois recursos novos */
-    api.$("btnLeiAjuda").onclick();
-    const txt = api.$("leiAjudaCx").textContent || "";
-    ok(/editar/i.test(txt) && /emenda|artigo novo/i.test(txt),
-       "U17c a ajuda nao explica a edicao por artigo");
-    ok(/cai/i.test(txt) && /questões salvas|questoes salvas/i.test(txt),
-       "U17d a ajuda nao explica o aviso 'este artigo cai'");
-    /* letra e janela sao ajustes DIFERENTES, e a ajuda tem de dizer isso:
-     * foi exatamente essa confusao que me fez construir a coisa errada */
-    ok(/LETRA/.test(txt) && /JANELA/.test(txt),
-       "U17e a ajuda nao distingue o tamanho da letra do tamanho da janela");
+    /* (19.183.0) a ajuda saiu: os balões de cada botão já explicam */
+    ok(!api.$("btnLeiAjuda") && !api.$("dlgLeiAjuda"), "U17c o '?' da ajuda saiu do leitor (e a janela dela)");
+    ok(/tecla F/.test(api.$("btnLeiCheia").title || ""),
+       "U17d o ⛶ e' um icone; o nome e a tecla F vao no balao: " + api.$("btnLeiCheia").title);
   }
 
   /* ---- U18: editar um artigo sem tocar no resto ---- */
@@ -694,12 +687,12 @@ async function testes() {
     api.$("btnLeiCheia").onclick();
     ok(api.leiCheiaAtual() === true && pedidos === 1 && api.telaCheiaDe("lei") === true, "U10Ta 'Tela cheia' pede a tela cheia DE VERDADE ao navegador");
     ok(api.leiModoAtual() === "ler", "U10Tb entrando a editar, a tela cheia passa a ler (editar fica com a barra de gravar)");
-    ok(api.$("leiCheiaBarra").hidden === false && api.$("leiBarraLinha").hidden === true && api.$("leiRodape").hidden === true && api.$("leiApoio").hidden === true,
+    ok(api.$("leiCheiaBarra").hidden === false && api.$("leiBarraLinha").hidden === true && !api.$("leiRodape") && api.$("leiApoio").hidden === true,
        "U10Tc na tela cheia: so' a barra dela (cabecalho, barra de trabalho e rodape saem)");
     ok(api.t("mat_cheia_sair") && /Sair/.test(api.t("mat_cheia_sair")), "U10Td a saida esta' a vista, na barra: " + api.t("mat_cheia_sair"));
     /* repintar a lei (trocar de modo) nao traz nada de volta */
     api.leiTrocarModo("ler");
-    ok(api.$("leiBarraLinha").hidden === true && api.$("leiRodape").hidden === true && api.$("leiCheiaBarra").hidden === false, "U10Te repintar a lei na tela cheia nao traz a barra normal de volta");
+    ok(api.$("leiBarraLinha").hidden === true && !api.$("leiRodape") && api.$("leiCheiaBarra").hidden === false, "U10Te repintar a lei na tela cheia nao traz a barra normal de volta");
     /* coluna */
     ok(props["--lei-coluna"] === "62em" && api.$("btnLeiColMedia").getAttribute("aria-pressed") === "true", "U10Tf coluna 'media' (o mesmo teto da leitura normal): " + props["--lei-coluna"]);
     api.$("btnLeiColEstreita").onclick();
@@ -735,7 +728,7 @@ async function testes() {
     /* Esc do navegador */
     d.fullscreenElement = null;
     api.docDisparar("fullscreenchange");
-    ok(api.leiCheiaAtual() === false && api.$("leiCheiaBarra").hidden === true && api.$("leiBarraLinha").hidden === false && api.$("leiRodape").hidden === false && api.$("leiApoio").hidden === false,
+    ok(api.leiCheiaAtual() === false && api.$("leiCheiaBarra").hidden === true && api.$("leiBarraLinha").hidden === false && api.$("leiApoio").hidden === false,
        "U10Tq Esc (o navegador sai da tela cheia): a lei sai junto, com tudo de volta");
     ok(tecla("+") === false, "U10Tr fora da tela cheia, + nao e' sequestrado");
     /* Esc sem a API (chega como 'cancel' no dialogo): sai da tela cheia, nao fecha a lei */
@@ -757,6 +750,10 @@ async function testes() {
     /* lei e resumo nao se atrapalham: o dono da tela cheia e' um so' */
     api.$("btnLeiCheia").onclick();
     ok(api.telaCheiaDe("lei") === true && api.telaCheiaDe("resumo") === false && api.telaCheiaSair("resumo") === false && d.fullscreenElement === raiz, "U10Tw o resumo nao desfaz a tela cheia que a lei pediu");
+    /* (19.183.0) a tecla F liga e desliga a tela cheia — nunca enquanto se digita */
+    ok(tecla("f") === true && api.leiCheiaAtual() === false, "U10Ty a tecla F sai da tela cheia");
+    ok(tecla("F") === true && api.leiCheiaAtual() === true, "U10Tz a tecla F entra na tela cheia");
+    ok(tecla("f", { tagName: "TEXTAREA" }) === false && api.leiCheiaAtual() === true, "U10Tz2 digitando, F e' so' uma letra");
     await api.$("btnLeiFechar").onclick();
     ok(api.leiCheiaAtual() === false && d.fullscreenElement === null, "U10Tx fechar a lei na tela cheia devolve a tela");
   }
@@ -770,11 +767,11 @@ async function testes() {
     api.leiGravar();
     api.leiTrocarModo("ler");
 
-    /* COM UMA LEI SO A FILA REPETIRIA O TITULO: fica recolhida atras do botao "leis" da barra */
-    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false,
-       "U10 com uma lei so, a fila fica recolhida e o botao 'leis' aparece");
+    /* (19.183.0) A FILA É O MENU DO TÍTULO: fechada, e o chip ao lado do título diz quantos artigos */
+    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false && /art\. ▾/.test(api.$("btnLeiFilaMais").textContent),
+       "U10 a fila fica fechada e o menu do titulo aparece: " + api.$("btnLeiFilaMais").textContent);
     api.$("btnLeiFilaMais").onclick();
-    ok(api.$("leiFila").hidden === false, "U10a o botao 'leis' abre a fila");
+    ok(api.$("leiFila").hidden === false && /lei-fila-menu/.test(api.$("leiFila").className), "U10a o menu do titulo abre a fila como pop-over");
     api.$("btnLeiCheia").onclick();
 
     /* NA LEITURA AMPLIADA SÓ FICA A LEI.
@@ -791,12 +788,12 @@ async function testes() {
        "U10c a leitura sumiu junto com o resto — sobrou nada");
     ok(/lei-cheia/.test(api.$("dlgLeiSeca").className || ""),
        "U10d a janela nao entrou em modo ampliado");
-    ok(/sair|voltar/i.test(api.$("btnLeiCheia").textContent || ""),
-       "U10e o botao nao oferece a saida: " + api.$("btnLeiCheia").textContent);
+    ok(/sair|voltar/i.test(api.$("btnLeiCheia").title || ""),
+       "U10e o balao do botao nao oferece a saida: " + api.$("btnLeiCheia").title);
 
     api.$("btnLeiCheia").onclick();
-    ok(api.$("leiFila").hidden === false, "U10f sair da tela cheia nao trouxe a fila de volta (aberta pela pessoa)");
-    ok(api.$("btnLeiFilaMais").hidden === false, "U10f2 nem o botao 'leis'");
+    ok(api.$("leiFila").hidden === true, "U10f entrar na tela cheia fecha o menu (pop-over) — ele nao volta aberto");
+    ok(api.$("btnLeiFilaMais").hidden === false, "U10f2 sair da tela cheia nao trouxe o menu do titulo de volta");
     ok(api.$("leiOnde").hidden === false, "U10g sair nao trouxe o marcador de volta");
     ok(!/lei-cheia/.test(api.$("dlgLeiSeca").className || ""),
        "U10h a janela ficou presa no modo ampliado");
@@ -842,38 +839,6 @@ async function testes() {
        + api.$("leiLeitura").style.fontSize);
   }
 
-  /* ---- U12: ajuda ---- */
-  {
-    const { api } = rodar();
-    preparar(api, "Direito Financeiro", "Receita pública");
-    api.leiAbrir("Direito Financeiro", "Receita pública");
-    api.$("btnLeiAjuda").onclick();
-    ok(api.$("dlgLeiAjuda").open === true, "U12 a ajuda nao abriu");
-
-    const itens = api.$("leiAjudaCx").querySelectorAll(".duv-item");
-    ok(itens.length === api.LEI_AJUDA.length && itens.length >= 12,
-       "U12b a ajuda tem " + itens.length + " itens para "
-       + api.LEI_AJUDA.length + " recursos");
-
-    /* AJUDA QUE MOSTRA O NOME DA CHAVE É PIOR QUE AJUDA NENHUMA.
-     * t() devolve a propria chave quando falta a traducao — foi assim
-     * que "lei_proc_btn" chegou a aparecer num botao. */
-    const txt = itens.map((i) => i.textContent).join(" ");
-    ok(!/lei_aj_/.test(txt),
-       "U12c a ajuda esta mostrando o nome interno das chaves: "
-       + txt.slice(0, 120));
-
-    /* cada recurso da janela precisa estar explicado */
-    [["recitar", /reconhecer e lembrar|sensação de/i],
-     ["fonte", /data|atualizad/i],
-     ["marcador|parei", /artigo/i],
-     ["capítulo", /minutos|sess/i],
-     ["etiqueta|órfão", /artigo/i]].forEach(([oque, comQue]) => {
-      const achou = itens.some((i) => new RegExp(oque, "i").test(i.textContent)
-        && comQue.test(i.textContent));
-      ok(achou, "U12d a ajuda nao explica '" + oque + "'");
-    });
-  }
 
   /* ---- U13: registro próprio, com hoje e erros ---- */
   {
@@ -956,7 +921,7 @@ async function testes() {
     api.leiIniciar();
     api.leiAbrir("Direito Financeiro", "Receita pública");
     ["btnLeiModoLer", "btnLeiModoEditar", "btnLeiModoRecitar", "btnLeiNavegar",
-     "btnLeiCheia", "btnLeiAjuda", "btnLeiLog", "btnLeiMaior", "btnLeiMenor",
+     "btnLeiCheia", "btnLeiFilaMais", "btnLeiLog", "btnLeiMaior", "btnLeiMenor",
      "btnLeiMarcaDest", "btnLeiMarcaImp", "btnLeiMarcaDuv",
      "btnLeiMarcaProva", "btnLeiMarcaPeg"].forEach((id) => {
       ok(typeof api.$(id).onclick === "function",
@@ -1103,17 +1068,13 @@ async function testes() {
       return wraps.map((w) => (w.children || []).find(
         (c) => (c.className || "").indexOf("lei-chip-x") >= 0));
     };
-    ok(acharX().length === 2,
-       "U21-pre esperava um \"x\" por lei da fila (2 leis), achou "
-       + acharX().length);
+    ok(acharX().filter(Boolean).length === 0 && !!api.$("btnLeiFilaBib"),
+       "U21-pre (19.183.0) o ✖ saiu do leitor; o menu leva a Biblioteca, onde se desliga");
+    const desligar = (id) => api.leiBibDesligar(api.leiDe(id), { chave: ch, topico: "Despesa pública" });
 
     /* CANCELAR não muda nada */
     {
-      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
-        .filter((b) => /4\.320/.test(b.textContent))[0];
-      const x = alvo.parentNode.children.find(
-        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
-      const p = x.onclick();
+      const p = desligar(id4320);
       api.uiModalResponder(false);
       await p;
       ok(api.leisDoTopico(ch).some((l) => l.id === id4320),
@@ -1126,11 +1087,7 @@ async function testes() {
      * depois — foi exatamente essa troca muda que confundiu um usuário de verdade. */
     {
       ok(api.matResumosAtual()[ch].leiId === id4320, "U21a2 (confere o cenario) a 4.320 e' a preferida do topico antes de desvincular");
-      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
-        .filter((b) => /4\.320/.test(b.textContent))[0];
-      const x = alvo.parentNode.children.find(
-        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
-      const p = x.onclick();
+      const p = desligar(id4320);
       const msg = api.$("uiModalMsg").textContent;
       ok(/4\.320/.test(msg) && /LC 101/.test(msg),
         "U21a3 a confirmacao nomeia as DUAS leis (a que sai e a que assume), nao so' a que sai: " + msg);
@@ -1167,11 +1124,7 @@ async function testes() {
     /* DESVINCULAR A ÚLTIMA lei do tópico — cai no estado "sem lei",
      * igual a um tópico que nunca teve nenhuma */
     {
-      const alvo = api.$("leiFila").querySelectorAll(".lei-chip")
-        .filter((b) => /LC 101/.test(b.textContent))[0];
-      const x = alvo.parentNode.children.find(
-        (c) => (c.className || "").indexOf("lei-chip-x") >= 0);
-      const p = x.onclick();
+      const p = desligar("lei_lc101");
       api.uiModalResponder(true);
       await p;
 
@@ -1207,9 +1160,7 @@ async function testes() {
     ok(api.leiIdAtualValor() === "lei_lc101c" && api.matResumosAtual()[ch].leiId === id4320,
       "U21j0 cenario: lendo a LC 101, mas a preferida do topico continua sendo a 4.320");
 
-    const alvo = api.$("leiFila").querySelectorAll(".lei-chip").filter((b) => /LC 101/.test(b.textContent))[0];
-    const x = alvo.parentNode.children.find((c) => (c.className || "").indexOf("lei-chip-x") >= 0);
-    const p = x.onclick();
+    const p = api.leiBibDesligar(api.leiDe("lei_lc101c"), { chave: ch, topico: "Restos a pagar" });
     api.uiModalResponder(true);
     await p;
 
@@ -1697,8 +1648,8 @@ async function testes() {
 
     ok(api.$("leiTexto").readOnly === false,
        "U25 antes da primeira gravação, o campo deveria estar editável");
-    ok(api.$("btnLeiSalvar").disabled === false,
-       "U25b antes da primeira gravação, gravar deveria estar ativo");
+    ok(api.$("btnLeiSalvar").disabled === false && api.$("btnLeiSalvar").hidden === false,
+       "U25b antes da primeira gravação, gravar deveria estar ativo e a vista");
 
     api.$("leiTexto").value = L4320;
     api.leiGravar();
@@ -1712,9 +1663,8 @@ async function testes() {
      * (matMarcarSelecao) grava por JS mesmo com o campo so-leitura, e
      * SEM o botao de gravar ativo nao ha como persistir a marca — a
      * pessoa via a cor pintar, clicava em "gravar" e nada acontecia. */
-    ok(api.$("btnLeiSalvar").disabled === false,
-       "U25d com a lei ja gravada, gravar deveria continuar ativo — e' o "
-       + "unico jeito de persistir uma marca, ja que o campo e' so-leitura");
+    ok(api.$("btnLeiSalvar").disabled === false && api.$("btnLeiSalvar").hidden === true,
+       "U25d (19.183.0) com a lei ja gravada, o 'gravar' sai da barra (o grifo grava sozinho) — mas continua ligado");
     api.leiTrocarModo("editar");
     ok(api.$("leiTextoTravado").hidden === false,
        "U25e a nota explicando o motivo do bloqueio nao apareceu");
@@ -1750,6 +1700,14 @@ async function testes() {
     ok(/==!receita derivada==/.test(api.leiDe(idLei).texto),
        "U25g clicar no botao de gravar (com o campo travado) nao "
        + "persistiu uma marca nova");
+
+    /* (19.183.0) O GRIFO SE GRAVA SOZINHO na lei gravada */
+    api.$("leiTexto").value = api.$("leiTexto").value.replace("Tributo é a", "==?Tributo== é a");
+    ok(api.leiGrifoGravar() === true && /==\?Tributo==/.test(api.leiDe(idLei).texto) && /grifo salvo/.test(api.$("leiEstado").textContent),
+       "U25h o grifo na lei gravada se grava sozinho e avisa: " + api.$("leiEstado").textContent);
+    ok(api.leiGrifoGravar() === false, "U25i sem mudanca, nada a gravar");
+    const fonteMat = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "material.js"), "utf8");
+    ok(/leiGrifoGravar\(\)/.test(fonteMat), "U25j o grifo da lei (matMarcarSelecao) chama a gravacao automatica");
   }
 
   /* ---- U26: nota por trecho — sétima marca, com texto anexado, sem

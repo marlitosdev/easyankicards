@@ -272,8 +272,7 @@ async function testes() {
     const reg = api.leiDe("lei_r");
     const kc = (o) => api.leiChavePintura(o, reg.texto, {});
     ok(kc(Object.assign({}, reg, { parei: "1", pareiIndice: 7 })) === kc(reg), "T2a a posicao do marcador nao entra na chave do cache");
-    const aj = api.t("lei_aj_onde_d");
-    ok(/ADCT/.test(aj) && /Biblioteca/.test(aj) && /continue aqui/.test(aj) && /Onde parou/.test(aj), "T3 a ajuda conta a posicao, a abertura no marcador, a Biblioteca e o registro");
+    /* (19.183.0) T3 conferia o texto da janela de ajuda, que saiu do leitor */
   }
 
   return Object.assign(falhas, { quantas: n });

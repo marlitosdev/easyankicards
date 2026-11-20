@@ -271,8 +271,8 @@ async function testes() {
     api.leiAbrir("Sistema Tributário", "Suspensão do crédito", ctn.id);
     const fila = api.$("leiFila");
     const txt = (fila.textContent || "");
-    ok(/Lei 5\.172\/1966 · 12 artigos/.test(txt) && /Constituição · 10 artigos/.test(txt) && !/CONSTITUIÇÃO DA REPÚBLICA/.test(txt) && api.$("btnLeiNova").textContent === "＋ colar",
-      "R2 a fila com nomes curtos e os botões encolhidos: " + txt);
+    ok(/Lei 5\.172\/1966 · 12 artigos/.test(txt) && /Constituição · 10 artigos/.test(txt) && !/CONSTITUIÇÃO DA REPÚBLICA/.test(txt) && !/colar/.test(txt) && /biblioteca/.test(txt),
+      "R2 (19.183.0) o menu com nomes curtos, as Leis do edital e a Biblioteca (colar saiu): " + txt);
     ok(api.ledEditalDoTopico("Sistema Tributário", "Suspensão do crédito") === e.id && api.$("btnLeiFilaEdital"), "R3 a fila oferece '📚 leis do edital' quando o tópico é de um edital");
     api.$("btnLeiFilaEdital").onclick();
     ok(api.$("dlgLeisEd").open && api.$("dlgLeiSeca").open && /Suspensão do crédito/.test(api.$("ledFoco").textContent), "R3a abre as Leis do edital por cima da leitura, com o tópico em destaque");

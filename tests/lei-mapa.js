@@ -388,10 +388,8 @@ async function testes() {
    * ============================================================== */
   {
     const { api } = montar();
-    ok(api.LEI_AJUDA.indexOf("mapa") >= 0 && api.LEI_AJUDA.indexOf("capitulos") < 0 && api.LEI_AJUDA.indexOf("ranking") < 0 && api.LEI_AJUDA.indexOf("artigo") < 0, "A1 a ajuda tem 'mapa' no lugar de capitulos, ranking e artigo: " + api.LEI_AJUDA.join(","));
-    api.leiAjudaAbrir();
-    const tx = api.$("leiAjudaCx").textContent;
-    ok(/Ir para…: o mapa da lei/.test(tx) && !/undefined/.test(tx) && !/lei_aj_/.test(tx), "A2 o texto da ajuda existe e nao mostra chave crua: " + tx.slice(0, 80));
+    /* (19.183.0) a janela de ajuda saiu: quem explica o mapa e' o balao do "ir para…" */
+    ok(!api.LEI_AJUDA && !api.leiAjudaAbrir && /mapa da lei/i.test(api.$("btnLeiNavegar").title || ""), "A1 sem a ajuda; o balao do 'ir para…' diz que e' o mapa da lei");
   }
 
   return Object.assign(falhas, { quantas: n });

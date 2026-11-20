@@ -3223,6 +3223,8 @@ function matMarcarSelecao(tipo, onde) {
     leiSujo = true;
     leiTrocarModo("ler");
     if ($("leiEstado")) $("leiEstado").textContent = t(parcial ? "mat_marcado_parcial" : "mat_marcado_nao_salvo");
+    /* (19.183.0) na lei já gravada, o grifo se grava sozinho (o rodapé com "gravar" saiu) */
+    if (typeof leiGrifoGravar === "function" && leiGrifoGravar() && parcial && $("leiEstado")) $("leiEstado").textContent = t("lei_grifo_salvo_parcial");
     return true;
   }
   matSujo = true;

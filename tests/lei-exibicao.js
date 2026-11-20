@@ -59,10 +59,9 @@ async function testes() {
     const ini = html.indexOf('id="leiGavExibir"');
     const corpo = html.slice(ini, html.indexOf("<!-- SÓ EDITÁVEL", ini));
     const linhas = corpo.split('<div class="lei-pop-linha">').slice(1);
-    ok(linhas.length === 4, "P3 quatro linhas (leitura ampliada, letra, janela, localizador): " + linhas.length);
-    ok(/id="btnLeiCheia"/.test(linhas[0])
-      && ["btnLeiMenor", "btnLeiMaior", "btnLeiFonteReset", "leiFonteAtual"].every((id) => linhas[1].indexOf('id="' + id + '"') >= 0)
-      && ["btnLeiJanelaMenos", "btnLeiJanelaMais", "leiJanelaNome"].every((id) => linhas[2].indexOf('id="' + id + '"') >= 0), "P3a cada controle na sua linha");
+    ok(linhas.length === 3 && !/id="btnLeiCheia"/.test(corpo), "P3 (19.183.0) tres linhas (letra, janela, localizador): a tela cheia virou o ⛶ do canto: " + linhas.length);
+    ok(["btnLeiMenor", "btnLeiMaior", "btnLeiFonteReset", "leiFonteAtual"].every((id) => linhas[0].indexOf('id="' + id + '"') >= 0)
+      && ["btnLeiJanelaMenos", "btnLeiJanelaMais", "leiJanelaNome"].every((id) => linhas[1].indexOf('id="' + id + '"') >= 0), "P3a cada controle na sua linha");
     ok(ouvintes(api) === base + 2, "P4 abrir registra os ouvintes de clique fora e de Esc: " + (ouvintes(api) - base));
 
     /* dentro dele NAO fecha; o proprio botao alterna */
@@ -138,9 +137,9 @@ async function testes() {
    * C: O CSS E O HTML
    * ============================================================== */
   {
-    const pp = regra("\\.lei-pop");
+    const pp = regra("\\n\\.lei-pop, \\.lei-fila\\.lei-fila-menu");
     ok(/position:fixed/.test(pp) && /z-index:\d+/.test(pp) && /box-shadow/.test(pp) && /width:min\(340px,calc\(100vw - 16px\)\)/.test(pp), "C1 o pop-over e' fixo, por cima e cabe na tela: " + pp);
-    ok(/\.lei-pop\[hidden\]\{display:none\}/.test(html), "C2 escondido de verdade (display:flex venceria o atributo hidden)");
+    ok(/\.lei-pop\[hidden\], \.lei-fila\.lei-fila-menu\[hidden\]\{display:none\}/.test(html), "C2 escondido de verdade (display:flex venceria o atributo hidden)");
     ok(!/\.lei-gaveta/.test(html) && !/lei-gaveta/.test(html), "C3 a faixa antiga nao existe mais");
     ok(/<div class="lei-pop" id="leiGavExibir"[^>]*hidden>/.test(html), "C4 o pop-over no HTML nasce hidden");
   }

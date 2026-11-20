@@ -250,7 +250,7 @@ async function testes() {
     ok(/\.lei-art-flag/.test(html) && /@media \(hover:none\)\{\.lei-art-flag\{opacity:\.8\}\}/.test(html), "T3 a bandeirinha tem estilo, e no toque (sem hover) fica bem visivel");
     ok(!/lei-onde-ir\b/.test(html), "T4 o estilo do link disfarçado saiu");
     ok(api.t("lei_continuar", { a: "4º" }) === "Continuar no art. 4º ▶" && api.t("lei_onde_comecar", { a: "1º" }) === "Começar do art. 1º ▶", "T5 os textos dos botoes");
-    ok(/PARA MARCAR/.test(api.t("lei_aj_onde_d")) && /PARA VOLTAR/.test(api.t("lei_aj_onde_d")) && /li até este artigo/.test(api.t("lei_aj_onde_d")), "T6 a ajuda explica como marcar, como voltar e o que o marcador quer dizer");
+    /* (19.183.0) a janela de ajuda saiu: a faixa "Onde parei" ja' explica como marcar */
     ok(/^Grifo feito/.test(api.t("mat_marcado_nao_salvo")), "T7 o aviso do grifo nao se confunde com o marcador: " + api.t("mat_marcado_nao_salvo"));
     ok(api.t("lei_parei_em") === "lei_parei_em" && api.t("lei_nao_comecou") === "lei_nao_comecou", "T8 os textos da faixa antiga sairam");
   }

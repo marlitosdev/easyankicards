@@ -536,7 +536,7 @@ function novo() {
   await api.$("btnLeiFechar").onclick();
   ok("o botão fechar fecha mesmo", api.$("dlgLeiSeca").open === false);
   api.leiAbrir("Direito Financeiro", "Leis Orcamentarias");
-  await api.$("btnLeiFechar2").onclick();
+  await api.$("btnLeiFechar").onclick();
   ok("o fechar do rodapé também", api.$("dlgLeiSeca").open === false);
 
   /* e o material tem porta para ela */

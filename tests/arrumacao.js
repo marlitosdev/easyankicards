@@ -212,19 +212,19 @@ async function testes() {
      * linha; gravar e registrar estudo moram juntos no rodape. */
     const posDe = (trecho) => bloco.indexOf(trecho);
     const cab = bloco.slice(posDe('<div class="lei-cab">'), posDe('<div class="lei-info"'));
-    ok(/id="btnLeiAjuda"/.test(cab) && /id="btnLeiLog"/.test(cab) && /id="btnLeiFechar"/.test(cab),
-       "A3j ajuda, registro e fechar estao no cabecalho, ao lado do titulo");
+    ok(!/id="btnLeiAjuda"/.test(bloco) && /id="btnLeiCheia"/.test(cab) && /id="btnLeiLog"/.test(cab) && /id="btnLeiFechar"/.test(cab) && /id="leiEstado"/.test(cab) && /id="btnLeiFilaMais"/.test(cab),
+       "A3j (19.183.0) o cabecalho: o menu das leis no titulo; o aviso, a tela cheia, o registro e fechar no canto (a ajuda saiu)");
     ok(/<div class="lei-info" id="leiInfo">\s*<div class="lei-proc" id="leiProc" hidden><\/div>\s*<div class="lei-onde" id="leiOnde" hidden><\/div>\s*<\/div>/.test(bloco),
        "A3k a procedencia e o 'onde parei' estao na MESMA faixa (.lei-info)");
     const linha = bloco.slice(posDe('<div class="lei-barra-linha"'), posDe('id="leiGavExibir"'));
     ok(/id="btnLeiModoLer"/.test(linha) && /id="leiMarcas"/.test(linha) && /id="btnLeiMarcaNota"/.test(linha),
        "A3l os modos e as seis marcas dividem uma linha so");
-    ok(!/id="btnLeiSalvar"/.test(linha), "A3m o gravar saiu da barra");
-    const rodape = bloco.slice(posDe('<div class="dlg-rodape" id="leiRodape"'), posDe('</dialog>'));
-    ok(/id="btnLeiSalvar"/.test(rodape) && /id="btnLeiLido"/.test(rodape) && /id="btnLeiFechar2"/.test(rodape),
-       "A3n o gravar, o registrar estudo e o fechar estao juntos no rodape");
-    ok(posDe('id="btnLeiSalvar"') < posDe('id="btnLeiLido"'), "A3o o gravar vem antes de 'registrar estudo'");
-    ok(api.t("lei_lido") === "Registrar estudo", "A3p o botao se chama 'Registrar estudo': " + api.t("lei_lido"));
+    const fim = bloco.slice(posDe('<span class="lei-barra-fim">'), posDe('id="leiGavExibir"'));
+    ok(/id="btnLeiExibir"/.test(fim) && /id="btnLeiSalvar"/.test(fim) && /id="btnLeiLido"/.test(fim),
+       "A3m (19.183.0) o fim da barra: Aa, gravar (so' no texto livre) e estudei");
+    ok(!/id="leiRodape"/.test(bloco) && !/id="btnLeiFechar2"/.test(bloco), "A3n o rodape saiu (o fechar de baixo repetia o de cima)");
+    ok(posDe('id="btnLeiSalvar"') < posDe('id="btnLeiLido"'), "A3o o gravar vem antes de 'estudei'");
+    ok(api.t("lei_lido") === "✓ estudei" && api.t("lei_gav_exibir") === "Aa", "A3p os nomes curtos: " + api.t("lei_lido") + " / " + api.t("lei_gav_exibir"));
 
     /* "IR PARA…" NAO E MAIS GAVETA: abre o mapa da lei direto. A gaveta de
      * exibicao continua, fechada, e clicar de novo fecha. */

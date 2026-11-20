@@ -1519,8 +1519,24 @@ dialog.ui-modal.lei-cita-dlg[open]{display:flex;flex-direction:column}
   padding-bottom:6px;border-bottom:1px solid var(--borda)}
 .lei-barra-linha .mat-topo{margin:0;padding:0;border:none}
 .lei-barra-linha .mat-barra{margin:0}
-.lei-estado{align-self:center}
+.lei-estado{align-self:center;font-size:var(--fs-1);white-space:nowrap}
 .lei-estado:empty{display:none}
+/* (19.183.0) o título e o menu das leis numa linha; o menu é um chip discreto ("194 art. ▾", "1 de 2 leis ▾") */
+.lei-tit-linha{display:flex;align-items:center;gap:var(--esp-2);min-width:0;flex-wrap:wrap}
+.lei-tit-linha h3{margin:0;min-width:0}
+.lei-tit-menu{border-radius:var(--r-pilula);font-size:var(--fs-1);padding:2px var(--esp-2)}
+/* a fila de leis como pop-over (lei aberta pelo tópico): uma lei por linha, o resto embaixo */
+.lei-fila.lei-fila-menu{overflow:auto;max-height:70vh;margin:0;align-items:stretch;gap:var(--esp-1)}
+.lei-fila.lei-fila-menu .lei-chip-wrap{display:flex}
+.lei-fila.lei-fila-menu .lei-chip-wrap .lei-chip{flex:1 1 auto;text-align:left}
+.lei-fila.lei-fila-menu .lei-chip{text-align:left}
+/* o fim da barra: Aa, gravar, estudei */
+.lei-barra-fim{margin-left:auto;display:inline-flex;gap:var(--esp-2);align-items:center}
+.lei-aa{font-weight:var(--peso-f);min-width:34px}
+/* o selo das leis que esta altera, na linha da procedência */
+.lei-alvo-selo{border-radius:var(--r-pilula)}
+.lei-alvo-selo.lei-alvo-falta{border-color:var(--atencao);color:var(--atencao)}
+.lei-faixa-alvo.lei-pop{width:min(560px,calc(100vw - 16px));max-height:60vh;overflow:auto;gap:var(--esp-1)}
 /* o menu "fonte e versão": um botão que abre a lista das ações de procedência */
 .lei-mais{position:relative}
 .lei-mais>summary{list-style:none;cursor:pointer;font-family:inherit;font-size:11px;padding:2px 8px;
@@ -3077,10 +3093,10 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
    Janela larga e baixa continuaria pedindo rolagem a cada dois artigos. */
 /* O POP-OVER DE EXIBIÇÃO: flutua sob o botão (a posição vem do JS, a partir do retângulo dele) e não
    empurra a lei. "display:flex" venceria o atributo hidden, por isso a regra do [hidden]. */
-.lei-pop{position:fixed;z-index:30;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;
+.lei-pop, .lei-fila.lei-fila-menu{position:fixed;z-index:30;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;
   width:min(340px,calc(100vw - 16px));padding:10px 12px;border:1px solid var(--borda);border-radius:12px;
   background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.lei-pop[hidden]{display:none}
+.lei-pop[hidden], .lei-fila.lei-fila-menu[hidden]{display:none}
 .lei-pop-linha{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .lei-pop-linha>.nota{min-width:52px}
 /* AS SEIS MARCAS DO LEITOR SÃO PONTOS COLORIDOS, com a cor do grifo no texto; o nome vem na dica (title).
@@ -11356,15 +11372,22 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
        errado ou de quando se está aprendendo o app, não de quem está lendo a lei. -->
   <div class="lei-cab">
     <div class="lei-cab-tit">
-      <h3 id="leiTitulo"></h3>
+      <!-- (19.183.0) O TÍTULO É O MENU DAS LEIS DO TÓPICO: trocar de lei, desligar, colar, usar uma guardada, leis do edital.
+           Era uma fila inteira acima da lei (e um botão "leis" para abri-la); agora é um pop-over que só abre quando se pede. -->
+      <div class="lei-tit-linha">
+        <h3 id="leiTitulo"></h3>
+        <button type="button" class="btn-min lei-tit-menu" id="btnLeiFilaMais" data-i18n-title="lei_fila_btn_aj" aria-haspopup="true" hidden></button>
+      </div>
       <p class="nota" id="leiSub"></p>
       <p class="nota ger-np-erro" id="leiAvisoNome" role="status" hidden></p>
       <!-- (19.182.0) sem lei ligada, mas a biblioteca tem a que o tópico cita: ligar e ler (lei-vinculo.js) -->
       <p class="lv-faixa" id="leiSugVinculo" role="status" hidden></p>
     </div>
     <span class="lei-apoio" id="leiApoio">
-      <button class="lei-redondo" id="btnLeiAjuda"
-        title="Ajuda: explica, um a um, para que serve cada recurso desta janela.">?</button>
+      <!-- (19.183.0) o aviso do grifo ("✓ grifo salvo") mora aqui: o rodapé saiu -->
+      <span class="nota lei-estado" id="leiEstado" role="status" aria-live="polite"></span>
+      <!-- (19.183.0) TELA CHEIA À VISTA, no canto de sempre (morava dentro de "exibição"); a tecla F também -->
+      <button class="lei-redondo" id="btnLeiCheia" data-i18n-title="lei_cheia_tip" aria-label="⛶">⛶</button>
       <button class="lei-redondo" id="btnLeiLog"
         title="Registro: só o que aconteceu aqui dentro — o que você marcou, gravou e leu, e os erros. Serve para relatar um problema.">☰</button>
       <button class="btn-min btn-min-perigo" id="btnLeiFechar" data-i18n="lei_fechar"
@@ -11436,9 +11459,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
          O "gravar" e o "registrar estudo" vivem no rodapé, juntos. -->
     <button class="btn-min btn-min-ok" id="btnLeiNavegar" data-i18n="lei_gav_navegar"
       title="O mapa da lei: capítulos, artigos, parágrafos e incisos, e os artigos que mais caem nas suas questões."></button>
-    <button class="btn-min" id="btnLeiExibir" data-i18n="lei_gav_exibir"
-      title="Tamanho da letra, tamanho da janela e leitura ampliada."></button>
-    <button class="btn-min" id="btnLeiFilaMais" data-i18n="lei_fila_btn" data-i18n-title="lei_fila_btn_aj" hidden></button>
   </div>
   <!-- As MESMAS seis marcas do resumo: ter duas convenções seria pedir
        para a pessoa decorar o app em vez da lei. -->
@@ -11456,15 +11476,21 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="marca marca-nota" id="btnLeiMarcaNota" data-i18n="lei_marca_nota"
       title="Nota — marca o trecho selecionado e abre a caixa para escrever uma anotação sua ali; esta marca guarda o que você escreveu."></button>
   </div>
+  <!-- (19.183.0) O FIM DA LINHA: "Aa" (letra, janela, localizador), "gravar" (só enquanto a lei é texto livre — depois
+       os grifos se gravam sozinhos) e "estudei" (o antigo "Registrar estudo" do rodapé, que saiu) -->
+  <span class="lei-barra-fim">
+    <button class="btn-min lei-aa" id="btnLeiExibir" data-i18n="lei_gav_exibir" data-i18n-title="lei_gav_exibir_tip"></button>
+    <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar" hidden
+      title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
+    <button class="btn-min btn-min-ok" id="btnLeiLido" data-i18n="lei_lido"
+      title="Registra no diário o seu estudo desta lei, com o tempo estimado. Se um capítulo estiver aberto no mapa, conta só o tempo dele."></button>
+  </span>
   </div>
 
 
   <!-- O POP-OVER DE EXIBIÇÃO. Fechado por padrão e FLUTUANTE (não empurra a lei): responde uma
        pergunta que se faz uma vez por sessão, não a cada artigo. "ir para…" abre o mapa. -->
   <div class="lei-pop" id="leiGavExibir" role="group" hidden>
-    <div class="lei-pop-linha">
-    <button class="btn-min" id="btnLeiCheia" data-i18n="lei_cheia" data-i18n-title="mat_tip_cheia"></button>
-    </div>
     <div class="lei-pop-linha">
     <span class="nota" data-i18n="lei_letra_rot"></span>
     <button class="btn-min" id="btnLeiMenor" title="Letra menor.">A&#8722;</button>
@@ -11533,7 +11559,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="lei-carga-lin"><span class="lei-carga-giro" aria-hidden="true"></span><span id="leiCargaTxt"></span></div>
     <div class="lei-carga-trilho" aria-hidden="true"><span id="leiCargaBarra"></span></div>
   </div>
-  <div class="lei-faixa-alvo" id="leiFaixaAlvo" role="status" hidden></div>
+  <!-- (19.183.0) as leis que esta altera: um pop-over aberto pelo selo "↗ altera N leis" (leiAlvoSeloPintar) -->
+  <div class="lei-pop lei-faixa-alvo" id="leiFaixaAlvo" role="group" hidden></div>
   <!-- (v18.83.0) a fila dos artigos nunca vistos: o da vez, "li — próximo", as questões dele -->
   <div class="lei-fila-nv" id="leiFilaNV" role="status" hidden></div>
   <!-- (19.43.0) O LOCALIZADOR: linha de altura zero logo ACIMA da leitura; a faixa desce para dentro dela (absolute),
@@ -11560,15 +11587,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </div>
   </div>
   <div class="lei-anexos" id="leiAnexos" hidden></div>
-  <div class="dlg-rodape" id="leiRodape">
-    <span class="nota lei-estado" id="leiEstado"></span>
-    <button class="btn btn-azul" id="btnLeiSalvar" data-i18n="lei_salvar"
-      title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
-    <button class="btn btn-verde" id="btnLeiLido" data-i18n="lei_lido"
-      title="Registra no diário o seu estudo desta lei, com o tempo estimado. Se um capítulo estiver aberto no mapa, conta só o tempo dele."></button>
-    <button class="btn btn-cinza" id="btnLeiFechar2" data-i18n="help_close"
-      title="Fecha a lei."></button>
-  </div>
 </dialog>
 
 <dialog id="dlgLeiProc" class="ui-modal">
@@ -12691,15 +12709,6 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="btn btn-verde" id="btnLeiMesConfirmar" data-i18n="lei_mes_confirmar"></button>
     <button class="btn btn-azul" id="btnLeiMesDistintas" data-i18n="lei_mes_distintas"></button>
     <button class="btn btn-cinza" id="btnLeiMesFechar" data-i18n="help_close"></button>
-  </div>
-</dialog>
-
-<dialog id="dlgLeiAjuda" class="ui-modal diag-modal">
-  <h3 data-i18n="lei_ajuda_titulo"></h3>
-  <p class="nota" data-i18n="lei_ajuda_intro"></p>
-  <div id="leiAjudaCx" class="duv-lista"></div>
-  <div class="dlg-rodape">
-    <button class="btn btn-cinza" id="btnLeiAjudaFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 

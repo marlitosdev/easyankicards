@@ -48,7 +48,8 @@ async function testes() {
     ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false, "F1 uma lei so: fila recolhida e botao 'leis' a vista");
     api.$("btnLeiFilaMais").onclick();
     ok(api.$("leiFila").hidden === false && /btn-min-ok/.test(api.$("btnLeiFilaMais").className), "F1a o botao abre a fila e fica marcado");
-    ok(achar(api.$("leiFila"), (c) => c.id === "btnLeiNova").length === 1 && achar(api.$("leiFila"), (c) => /lei-chip/.test(c.className || "")).length >= 1, "F1b a fila tem as leis e o 'colar uma lei nova'");
+    ok(achar(api.$("leiFila"), (c) => c.id === "btnLeiNova" || c.id === "btnLeiVincular").length === 0 && achar(api.$("leiFila"), (c) => c.id === "btnLeiFilaBib").length === 1 && achar(api.$("leiFila"), (c) => /lei-chip/.test(c.className || "")).length >= 1,
+      "F1b (19.183.0) o menu tem as leis e a Biblioteca; colar/usar guardada sairam (Leis do edital e Biblioteca fazem)");
     api.$("btnLeiFilaMais").onclick();
     ok(api.$("leiFila").hidden === true && !/btn-min-ok/.test(api.$("btnLeiFilaMais").className), "F1c tocar de novo recolhe");
     /* a leitura ampliada esconde a fila e o botao; sair devolve o estado */
@@ -56,7 +57,7 @@ async function testes() {
     api.$("btnLeiCheia").onclick();
     ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === true, "F2 leitura ampliada esconde a fila e o botao");
     api.$("btnLeiCheia").onclick();
-    ok(api.$("leiFila").hidden === false && api.$("btnLeiFilaMais").hidden === false, "F2a sair devolve a fila que a pessoa tinha aberto");
+    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false, "F2a sair devolve o menu do titulo (fechado: e' pop-over)");
     /* reabrir recolhe de novo */
     api.leiAbrir("Direito", "Tributário", l.id);
     ok(api.$("leiFila").hidden === true, "F3 reaberta, nasce recolhida");
@@ -67,7 +68,13 @@ async function testes() {
     const l2 = api.leiGuardar({ id: "lei_b", nome: "Lei B", texto: "Art. 1º Outra." });
     api.leiLigar(l.id, ch); api.leiLigar(l2.id, ch);
     api.leiAbrir("Direito", "Tributário", l.id);
-    ok(api.$("leiFila").hidden === false && api.$("btnLeiFilaMais").hidden === true, "F4 com duas leis a fila fica a vista e nao ha botao 'leis'");
+    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false && /lei 1 de 2/.test(api.$("btnLeiFilaMais").textContent),
+      "F4 (19.183.0) com duas leis o menu do titulo diz qual e' a aberta: " + api.$("btnLeiFilaMais").textContent);
+    api.$("btnLeiFilaMais").onclick();
+    const outra = achar(api.$("leiFila"), (c) => /Lei B/.test(c.textContent || "") && (c.className || "").split(" ").indexOf("lei-chip") >= 0)[0];
+    outra.onclick();
+    ok(api.leiIdAtualValor() === "lei_b" && api.$("leiFila").hidden === true && /lei 2 de 2/.test(api.$("btnLeiFilaMais").textContent),
+      "F4a trocar de lei pelo menu: a leitura troca e o menu fecha");
   }
   {
     /* tópico sem lei: a fila é o convite para colar/usar */
@@ -80,7 +87,7 @@ async function testes() {
     /* aberta pela Biblioteca: so a propria lei */
     const { api, l } = montar();
     api.leiAbrirAvulsa(l.id);
-    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === false, "F6 aberta pela Biblioteca: recolhida, com o botao");
+    ok(api.$("leiFila").hidden === true && api.$("btnLeiFilaMais").hidden === true, "F6 aberta pela Biblioteca: sem fila e sem menu (o titulo ja diz qual e')");
   }
 
   /* ==============================================================
@@ -114,7 +121,7 @@ async function testes() {
     const { api, l } = montar();
     api.leiAbrir("Direito", "Tributário", l.id);
     ["btnLeiModoLer", "btnLeiModoEditar", "btnLeiModoRecitar", "btnLeiNavegar", "btnLeiExibir", "btnLeiFilaMais",
-      "btnLeiSalvar", "btnLeiLido", "btnLeiFechar", "btnLeiFechar2", "btnLeiAjuda", "btnLeiLog", "btnLeiCheia",
+      "btnLeiSalvar", "btnLeiLido", "btnLeiFechar", "btnLeiLog", "btnLeiCheia",
       "btnLeiMaior", "btnLeiMenor", "btnLeiFonteReset", "btnLeiJanelaMais", "btnLeiJanelaMenos",
       "btnLeiMarcaDest", "btnLeiMarcaImp", "btnLeiMarcaDuv", "btnLeiMarcaProva", "btnLeiMarcaPeg", "btnLeiMarcaNota"].forEach((id) => {
       ok(api.$(id) && typeof api.$(id).onclick === "function", "B1 o botao " + id + " ficou sem acao (ou sumiu)");

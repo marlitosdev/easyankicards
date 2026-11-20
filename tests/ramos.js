@@ -1728,7 +1728,7 @@ async function testes() {
       const ctx = a.leiAlvoCtxAtual();
       ok(!!ctx && ctx.porCurto["Constituição Federal"].escolhida.id === cf.id && ctx.porCurto["Constituição Federal"].decidida === false && ctx.porCurto["ADCT"].escolhida.id === adct.id && ctx.porCurto["Constituição Federal"].artigos === 2 && ctx.porCurto["ADCT"].artigos === 1, "R47m ao ler a emenda o app SUGERE a lei de cada alvo (a Constituicao e o ADCT separado), sem que estejam ligadas ao topico");
       const faixa = a.$("leiFaixaAlvo");
-      ok(faixa.hidden === false && /Esta lei ALTERA Constituição Federal: 2 artigo/.test(faixa.textContent) && /Esta lei ALTERA ADCT/.test(faixa.textContent) && /Sugestão do app/.test(faixa.textContent) && !/Escolha sua/.test(faixa.textContent), "R47n a faixa avisa que a lei ALTERA a Constituicao e que a lei consultada e' sugestao: " + faixa.textContent.slice(0, 200));
+      ok(faixa.hidden === true && achar(a.$("leiProc"), (e) => e.id === "btnLeiAlvoSelo").length === 1 && /Esta lei ALTERA Constituição Federal: 2 artigo/.test(faixa.textContent) && /Esta lei ALTERA ADCT/.test(faixa.textContent) && /Sugestão do app/.test(faixa.textContent) && !/Escolha sua/.test(faixa.textContent), "R47n (19.183.0) o selo na procedencia; a lista (fechada) avisa que a lei ALTERA a Constituicao e que a lei consultada e' sugestao: " + faixa.textContent.slice(0, 200));
       const regs = a.leiLacunasRegAtual();
       const chavesReg = Object.keys(regs);
       ok(chavesReg.length >= 2 && chavesReg.some((k) => regs[k].num === "43" && regs[k].lacuna.descricao === "caput") && chavesReg.some((k) => regs[k].num === "43" && regs[k].lacuna.descricao === "§§ 1º a 3º") && chavesReg.every((k) => regs[k].leiAlvoId === cf.id || regs[k].leiAlvoId === adct.id), "R47o cada '...' do art. 43 virou um chip registrado (caput; §§ 1º a 3º), apontando para a lei sugerida: " + chavesReg.join());
@@ -1776,7 +1776,7 @@ async function testes() {
       const selos = a.$("leiLeitura").querySelectorAll(".lei-alt-chip-rec");
       ok(selos.length === 3 && selos.every((b) => /alterado por/.test(b.textContent)), "R48d lendo a Constituicao, 3 artigos ganham o selo (43, 145 e o 124 do ADCT): " + selos.length);
       selos[0].onclick();
-      ok(a.$("leiTexto").value === EC && a.$("leiFaixaAlvo").hidden === false, "R48e clicar no selo abre a EMENDA (e a faixa dela aparece)");
+      ok(a.$("leiTexto").value === EC && achar(a.$("leiProc"), (e) => e.id === "btnLeiAlvoSelo").length === 1, "R48e clicar no selo abre a EMENDA (e o selo '↗ altera' dela aparece na procedencia)");
       const rel = a.leiRelatorioVinculos();
       ok(/LEIS QUE ALTERAM OUTRAS/.test(rel) && /Emenda Constitucional 132\/2023 altera Constituição Federal: 2 artigo\(s\) citado\(s\) · consultaria «Constituição Federal» \(alta; identificada pelo texto como a Constituição\) · achou 2 artigo\(s\), 2 com trecho omitido, 2 já constam na lei consultada/.test(rel), "R48f o relatorio traz, por alvo, a lei que seria consultada e quantos artigos ja' constam: " + (rel.split("\n").filter((l) => /altera /.test(l)).join(" || ")));
       ok(/altera ADCT: 1 artigo\(s\) citado\(s\) · consultaria «ADCT - Ato das Disposições Constitucionais Transitórias» \(alta; lei separada do ADCT\) · achou 0 artigo\(s\)/.test(rel), "R48g o ADCT separado e' a candidata (alta) e o relatorio diz que nao achou o art. 124 nela");
@@ -2976,33 +2976,30 @@ async function testes() {
       const ctn = a.leiGuardar({ nome: "Lei 5.172/1966 - Código Tributário Nacional", texto: CTN, topicos: [] });
       const lc = a.leiGuardar({ nome: "LC 214/2025", texto: LC, topicos: [] });
       const faixa = () => a.$("leiFaixaAlvo");
-      const btnAlternar = () => achar(faixa(), (e) => cls(e, "lei-faixa-alternar"))[0];
+      /* (19.183.0) a faixa saiu da leitura: um selo na linha da procedência e a lista inteira num pop-over */
+      const selo = () => achar(a.$("leiProc"), (e) => e.id === "btnLeiAlvoSelo")[0];
       a.leiAbrir("X", "Y", lc.id);
       const ctx = a.leiAlvoCtxAtual();
       ok(Object.keys(ctx.porCurto).length === 4, "R73 a LC realmente cita 4 leis diferentes: " + Object.keys(ctx.porCurto).join(" | "));
-      ok(faixa().hidden === false && !/Esta lei ALTERA/.test(faixa().textContent) && /Esta lei altera 4 outras leis · 3 fora da sua biblioteca/.test(faixa().textContent),
-        "R73a acima do limite, a faixa vira resumo (so' o CTN esta' na biblioteca, as outras 3 nao): " + faixa().textContent);
-      ok(!!btnAlternar() && btnAlternar().textContent === a.t("lei_alvo_faixa_expandir"), "R73b o botao do resumo diz 'ver todas'");
-      btnAlternar().onclick();
-      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && /Esta lei ALTERA Decreto-Lei nº 37\/1966/.test(faixa().textContent)
+      ok(!!selo() && /↗ altera 4 leis · 3 fora da biblioteca/.test(selo().textContent) && cls(selo(), "lei-alvo-falta") && faixa().hidden === true,
+        "R73a o selo resume (so' o CTN esta' na biblioteca) e a lista fica fechada: " + (selo() && selo().textContent));
+      selo().onclick();
+      ok(faixa().hidden === false && /Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && /Esta lei ALTERA Decreto-Lei nº 37\/1966/.test(faixa().textContent)
         && /Esta lei ALTERA Lei nº 10\.931\/2004/.test(faixa().textContent) && /Esta lei ALTERA Lei nº 7\.998\/1990/.test(faixa().textContent),
-        "R73c expandido, as 4 linhas completas aparecem (nenhuma lei sumiu): " + faixa().textContent);
-      ok(btnAlternar().textContent === a.t("lei_alvo_faixa_recolher"), "R73d o botao agora diz 'recolher'");
-      ok(a.lojaLer("eac_lei_faixa_alvo_expandida") === "1", "R73e a escolha de expandir fica guardada");
-      /* reabrir outra lei e voltar: a escolha nao e' por lei, e' geral (como os anexos) */
-      const outra = a.leiGuardar({ nome: "Lei qualquer", texto: "Art. 1º Texto.", topicos: [] });
-      a.leiAbrir("", "", outra.id);
-      a.leiAbrir("X", "Y", lc.id);
-      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && btnAlternar().textContent === a.t("lei_alvo_faixa_recolher"), "R73f reabrir a lei mantem expandido");
-      btnAlternar().onclick();
-      ok(!/Esta lei ALTERA/.test(faixa().textContent) && /Esta lei altera 4 outras leis/.test(faixa().textContent) && a.lojaLer("eac_lei_faixa_alvo_expandida") === "0", "R73g recolher volta ao resumo e guarda a escolha");
-      /* com poucas leis (<= limite), a faixa nunca resume — mostra tudo direto, sem botao */
+        "R73b tocar no selo abre a lista inteira (nenhuma lei sumiu): " + faixa().textContent.slice(0, 120));
+      ok(cls(faixa(), "lei-pop"), "R73c a lista e' um pop-over (nao empurra a leitura)");
+      selo().onclick();
+      ok(faixa().hidden === true, "R73d tocar de novo fecha");
+      /* com uma lei so', o selo diz qual */
       a.leiApagar(ctn.id);
       const LC2 = ["LEI COMPLEMENTAR Nº 1, DE 2025", "", "Art. 1º A Lei nº 5.172, de 25 de outubro de 1966 (Código Tributário Nacional), passa a vigorar com as seguintes alterações:", "",
         '"Art. 9º ' + pts, pts + '" (NR)', "", "Art. 2º Esta Lei Complementar entra em vigor na data de sua publicação."].join(NL);
       const lc2 = a.leiGuardar({ nome: "LC 1/2025", texto: LC2, topicos: [] });
       a.leiAbrir("X", "Y", lc2.id);
-      ok(/Esta lei ALTERA Lei nº 5\.172\/1966/.test(faixa().textContent) && !btnAlternar(), "R73h com 1 lei so' (abaixo do limite), a faixa mostra a linha direto, sem botao de resumo");
+      ok(!!selo() && /↗ altera Lei nº 5\.172\/1966 · 1 fora da biblioteca/.test(selo().textContent), "R73h com uma lei so', o selo diz qual: " + (selo() && selo().textContent));
+      const comum = a.leiGuardar({ nome: "Lei qualquer", texto: "Art. 1º Texto.", topicos: [] });
+      a.leiAbrir("X", "Y", comum.id);
+      ok(!selo(), "R73i lei que nao altera outras: sem selo");
     }
 
     /* R39: exigir a trilha completa para dar o ramo como estudado */

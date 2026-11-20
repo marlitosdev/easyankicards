@@ -419,6 +419,8 @@ function leiAbrir(disciplina, topico, id, opc) {
   leiFlutLimpar();
   leiFilaAberta = false;
   leiSujo = false;
+  /* (19.183.0) o aviso do grifo ("✓ grifo salvo") é da lei que estava aberta: não atravessa para a próxima */
+  if ($("leiEstado")) $("leiEstado").textContent = "";
 
   $("leiTexto").value = l ? String(l.texto || "") : "";
   /* UMA PINTURA SÓ. Antes o modo era trocado aqui (o que já pintava a
@@ -960,49 +962,10 @@ function leiPintarFila() {
     b.textContent = leiNomeCurto(l) + " · " + t("lei_n_artigos", { n: p.total })
       + (p.pct ? " · " + p.pct + "%" : "");
     b.title = l.nome + " — " + t("lei_chip_ajuda", { n: (l.topicos || []).length });
-    b.onclick = () => leiTrocarPara(l.id);
-    /* DESVINCULAR ESTE TÓPICO DESTA LEI — não apagar a lei, que segue na
-     * biblioteca e ligada a quem mais a usa. Existe porque o link entre
-     * uma citação e uma lei podia sair errado sem jeito nenhum de
-     * corrigir: leiDesligar já fazia a metade certa do trabalho, só não
-     * tinha botão nenhum que a chamasse. */
-    const x = document.createElement("button");
-    x.type = "button";
-    x.className = "lei-chip-x";
-    x.textContent = "✖";
-    x.title = t("lei_chip_desvincular_aj", { l: l.nome });
-    x.setAttribute("aria-label", x.title);
-    x.onclick = async (ev) => {
-      if (ev && ev.stopPropagation) ev.stopPropagation();
-      const cons = leiConsequenciaDesligar(l, leiAtual.chave);
-      const msg = cons.eraPreferida && cons.proxima
-        ? t("lei_chip_desvincular_conf_troca", { l: l.nome, tp: leiAtual.topico, outra: cons.proxima.nome })
-        : t("lei_chip_desvincular_conf", { l: l.nome, tp: leiAtual.topico });
-      const ok = await uiConfirm(msg);
-      if (!ok) return;
-      /* leiDesligarTopico já desliga E, se esta lei era a preferida do tópico, reaponta
-       * matResumos[chave].leiId para a que sobrar — sem isso leiDoTopicoAtual continuaria
-       * devolvendo a lei que acabou de sair, como se nada tivesse mudado. A TELA (o que
-       * está aberto agora) segue outra regra: se era ESTA lei que a pessoa estava lendo,
-       * a leitura pula para QUALQUER outra que sobre (cons.restantes[0], já calculado
-       * acima) — mesmo quando a lei aberta não era a "preferida" do tópico (ex.: a pessoa
-       * trocou de chip na mão). "proxima" só existe quando eraPreferida; para a tela, o
-       * que importa é só "sobrou alguma?". */
-      leiDesligarTopico(l, leiAtual.chave);
-      reg("LEI", "lei desvinculada do topico", l.nome + " · " + leiAtual.topico);
-      if (leiIdAtual === l.id) {
-        if (cons.restantes[0]) leiTrocarPara(cons.restantes[0].id);
-        else {
-          leiIdAtual = "";
-          $("leiTexto").value = "";
-          leiTrocarModo("editar");
-          leiPintar();
-        }
-      } else {
-        leiPintar();
-      }
-    };
-    wrap.append(b, x);
+    b.onclick = () => { leiGavetaFechar(); leiTrocarPara(l.id); };
+    /* (19.183.0) O "✖" (desligar este tópico desta lei) saiu do leitor: desligar é coisa rara e mora na Biblioteca
+     * (cada lei, "desligar" por tópico — leiBibDesligar), a um toque pelo menu ("🗂 biblioteca"). */
+    wrap.append(b);
     cx.append(wrap);
   });
 
@@ -1020,54 +983,33 @@ function leiPintarFila() {
     cx.prepend(rot);
   }
 
-  const bNova = document.createElement("button");
-  bNova.className = "lei-chip lei-chip-add";
-  bNova.id = "btnLeiNova";
-  bNova.textContent = t("lei_colar_nova");
-  bNova.title = t("lei_colar_nova_ajuda");
-  bNova.onclick = () => leiNovaAbrir();
-
-  /* vincular uma lei que já está na biblioteca é o gesto que faz a
-   * reforma valer: a 4.320 do tópico de receita serve o de despesa sem
-   * ser colada de novo */
+  /* (19.183.0) COM LEI LIGADA, a fila é o menu do título: trocar de lei, as Leis do edital e a Biblioteca. "Colar uma lei
+   * nova" e "usar uma já guardada" saíram daqui: as Leis do edital ligam as leis que o edital cita (uma a uma ou "ligar
+   * todas") e incluem as que faltam, e a Biblioteca liga QUALQUER lei a um tópico ("ligar a um tópico") e desliga.
+   * SEM LEI NENHUMA, a fila continua à vista e com os dois — é a única saída de quem chega a uma lei seca vazia. */
+  const vazio = !lista.length;
   const outras = leisLista().filter((l) =>
     !(l.topicos || []).some((c) => leisChaveComparavel(c)
       === leisChaveComparavel(leiAtual.chave)));
-
-  let bV = null;
-  if (outras.length) {
-    bV = document.createElement("button");
-    bV.className = "lei-chip lei-chip-add";
-    /* ID FIXO: o teste que garante a existência deste botão o procurava
-     * pela PALAVRA "vincular" no rótulo — e quebrou no dia em que o
-     * rótulo virou "usar uma lei já guardada". Um teste que depende do
-     * texto do botão cobra a redação, não a função; um id não muda
-     * quando a frase melhora. */
-    bV.id = "btnLeiVincular";
-    bV.textContent = t(outras.length === 1 ? "lei_vincular_1" : "lei_vincular",
-                       { n: outras.length });
-    bV.title = t("lei_vincular_ajuda");
-    bV.onclick = () => leiVincularAbrir();
-  }
-
-  /* SEM LEI NENHUMA NESTE TÓPICO, reaproveitar é a escolha melhor que
-   * colar de novo — então "usar uma lei já guardada" vem primeiro e com
-   * destaque, em vez de ficar igual a "colar nova" na fila. Com o tópico
-   * já servido, a urgência de não duplicar já passou e os dois voltam ao
-   * mesmo peso visual. */
-  const vazio = !lista.length;
-  /* com a lei já ligada, os dois botões encolhem: a frase inteira fica no balão */
-  if (!vazio) {
-    bNova.textContent = t("lei_colar_nova_curto");
-    if (bV) bV.textContent = t("lei_vincular_curto", { n: outras.length });
-  }
-  if (vazio && bV) {
-    bV.classList.add("lei-chip-destaque");
-    cx.append(bV, bNova);
-  } else {
-    if (bV) bV.classList.remove("lei-chip-destaque");
+  if (vazio) {
+    const bNova = document.createElement("button");
+    bNova.className = "lei-chip lei-chip-add";
+    bNova.id = "btnLeiNova";
+    bNova.textContent = t("lei_colar_nova");
+    bNova.title = t("lei_colar_nova_ajuda");
+    bNova.onclick = () => leiNovaAbrir();
+    let bV = null;
+    if (outras.length) {
+      /* ID FIXO: o teste procura o botão pelo id, não pela frase (que já mudou uma vez) */
+      bV = document.createElement("button");
+      bV.className = "lei-chip lei-chip-add lei-chip-destaque";
+      bV.id = "btnLeiVincular";
+      bV.textContent = t(outras.length === 1 ? "lei_vincular_1" : "lei_vincular", { n: outras.length });
+      bV.title = t("lei_vincular_ajuda");
+      bV.onclick = () => leiVincularAbrir();
+      cx.append(bV);
+    }
     cx.append(bNova);
-    if (bV) cx.append(bV);
   }
   /* (19.140.0) AS LEIS DO EDITAL a um toque: as do tópico, as do resto do edital por disciplina e peso, e o que falta */
   const edT = typeof ledEditalDoTopico === "function" ? ledEditalDoTopico(leiAtual.disciplina, leiAtual.topico) : "";
@@ -1078,8 +1020,19 @@ function leiPintarFila() {
     be.id = "btnLeiFilaEdital";
     be.textContent = t("lei_fila_edital");
     be.title = t("lei_fila_edital_aj");
-    be.onclick = () => { if (typeof ledAbrir === "function") ledAbrir(edT, { disciplina: leiAtual.disciplina, topico: leiAtual.topico }); };
+    be.onclick = () => { leiGavetaFechar(); if (typeof ledAbrir === "function") ledAbrir(edT, { disciplina: leiAtual.disciplina, topico: leiAtual.topico }); };
     cx.append(be);
+  }
+  /* (19.183.0) a Biblioteca: ligar outra lei (mesmo uma que o edital não cita) e desligar */
+  if (!vazio && typeof leiBibAbrir === "function") {
+    const bb = document.createElement("button");
+    bb.type = "button";
+    bb.className = "lei-chip lei-chip-add";
+    bb.id = "btnLeiFilaBib";
+    bb.textContent = t("lei_fila_bib");
+    bb.title = t("lei_fila_bib_aj");
+    bb.onclick = () => { leiGavetaFechar(); leiBibAbrir(); };
+    cx.append(bb);
   }
 
   const ajuda = $("leiTextoAjuda");
@@ -1219,6 +1172,8 @@ function leiPintarProcedencia() {
       cx.append(bN);
     }
   }
+  /* (19.183.0) o selo das leis que esta altera fecha a linha */
+  leiAlvoSeloPintar();
 }
 
 /* Os repetidos de uma lei guardada, sem refazer a leitura a cada repintura
@@ -1535,21 +1490,37 @@ function leiNomeCurto(l) {
   return corte.length > 30 ? corte.slice(0, 29).trim() + "…" : corte;
 }
 
-function leiFilaColapsavel() {
-  if (!leiAtual || !leiIdAtual) return false;
-  if (!leiAtual.chave) return true;
+/* (19.183.0) a fila é MENU (pop-over sob o título) quando a lei está aberta pelo tópico; aberta pela Biblioteca, não há
+ * fila (o título já diz qual é); sem lei, a fila fica à vista — é o caminho para pôr uma lei no tópico */
+function leiFilaModoMenu() {
+  return !!(leiAtual && leiAtual.chave && leiIdAtual);
+}
+/* "194 art. ▾" com uma lei; "lei 1 de 2 · 194 art. ▾" com mais */
+function leiFilaMenuRotulo() {
   const lista = leisDoTopico(leiAtual.chave);
-  return lista.length === 1 && lista[0].id === leiIdAtual;
+  const p = leiProgresso(leiIdAtual) || { total: 0 };
+  const i = lista.findIndex((l) => l.id === leiIdAtual);
+  return lista.length > 1
+    ? t("lei_menu_rot_n", { i: i + 1, n: lista.length, a: p.total })
+    : t("lei_menu_rot", { a: p.total });
 }
 function leiFilaAplicar() {
   const fila = $("leiFila");
-  const colapsavel = leiFilaColapsavel();
-  if (fila) fila.hidden = leiCheia || (colapsavel && !leiFilaAberta);
+  const menu = leiFilaModoMenu();
+  const avulsa = !!(leiAtual && !leiAtual.chave);
+  if (!menu) leiFilaAberta = false;
+  if (fila) {
+    if (fila.classList) fila.classList.toggle("lei-fila-menu", menu);
+    fila.hidden = leiCheia || avulsa || (menu && !leiFilaAberta);
+  }
   const b = $("btnLeiFilaMais");
   if (b) {
-    b.hidden = !colapsavel || leiCheia;
-    if (b.classList) b.classList.toggle("btn-min-ok", colapsavel && leiFilaAberta);
+    b.hidden = !menu || leiCheia;
+    if (!b.hidden) b.textContent = leiFilaMenuRotulo();
+    if (b.classList) b.classList.toggle("btn-min-ok", menu && leiFilaAberta);
+    if (b.setAttribute) b.setAttribute("aria-expanded", menu && leiFilaAberta ? "true" : "false");
   }
+  if (menu && leiFilaAberta && fila && !fila.hidden) leiPopPosicionar(fila, b);
 }
 
 function leiCheiaAplicar() {
@@ -1559,7 +1530,7 @@ function leiCheiaAplicar() {
   /* NA TELA CHEIA SÓ FICA A LEI e a barra dela (sair, ir para…, letra, coluna). Cabeçalho, barra de trabalho e
    * rodapé saíam só em parte: a "tela cheia" era uma janela de 1100 px com tudo à volta, e a saída morava dentro
    * do pop-over "exibição", que ela mesma deixava de difícil acesso. */
-  const ref = ["leiSub", "leiApoio", "leiBarraLinha", "leiRodape"];
+  const ref = ["leiSub", "leiApoio", "leiBarraLinha"];
   ref.forEach((id) => { const el = $(id); if (el) el.hidden = leiCheia; });
   const barra = $("leiCheiaBarra");
   if (barra) barra.hidden = !leiCheia;
@@ -1576,9 +1547,11 @@ function leiCheiaAplicar() {
   const mc = $("leiMarcas");
   if (mc) mc.hidden = leiCheia || leiModo !== "ler";
 
+  /* (19.183.0) o ⛶ é um ícone no canto do cabeçalho: o nome vai no balão (com a tecla F) */
   const b = $("btnLeiCheia");
   if (b) {
-    b.textContent = t(leiCheia ? "lei_cheia_sair" : "lei_cheia");
+    b.title = t(leiCheia ? "lei_cheia_sair" : "lei_cheia_tip");
+    if (b.setAttribute) b.setAttribute("aria-pressed", leiCheia ? "true" : "false");
     if (b.classList) b.classList.toggle("btn-min-ok", leiCheia);
   }
 }
@@ -1605,11 +1578,14 @@ function leiCheiaTrocar(sim) {
  * elemento fixed não é recortado pela rolagem da janela. */
 let leiPopAberto = null;      /* {fora, tecla} dos ouvintes do pop-over aberto */
 
+/* (19.183.0) TRÊS POP-OVERS, UM POR VEZ: "Aa" (exibição), o menu das leis (título) e as leis que esta altera (selo).
+ * [pop-over, botão que o abre] */
+const LEI_POPS = [["leiGavExibir", "btnLeiExibir"], ["leiFila", "btnLeiFilaMais"], ["leiFaixaAlvo", "btnLeiAlvoSelo"]];
+
 function leiGavetaFechar() {
-  const g = $("leiGavExibir");
-  if (g) g.hidden = true;
-  const b = $("btnLeiExibir");
-  if (b && b.classList) b.classList.toggle("btn-min-ok", false);
+  ["leiGavExibir", "leiFaixaAlvo"].forEach((id) => { const g = $(id); if (g) g.hidden = true; });
+  ["btnLeiExibir", "btnLeiAlvoSelo"].forEach((id) => { const b = $(id); if (b && b.classList) b.classList.toggle("btn-min-ok", false); });
+  if (leiFilaAberta) { leiFilaAberta = false; if (leiAtual) leiFilaAplicar(); }
   if (leiPopAberto) {
     try {
       document.removeEventListener("click", leiPopAberto.fora);
@@ -1620,34 +1596,39 @@ function leiGavetaFechar() {
 }
 
 /* debaixo do botão, alinhado à esquerda dele e sem sair da janela; sem lugar embaixo, sobe */
-function leiGavetaPosicionar() {
-  const pop = $("leiGavExibir"), btn = $("btnLeiExibir");
+function leiPopPosicionar(pop, btn) {
   if (!pop || !btn || pop.hidden !== false || !pop.style) return;
   const r = (btn.getBoundingClientRect && btn.getBoundingClientRect()) || null;
   if (!r) return;
   const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
   const altoJan = (typeof window !== "undefined" && window.innerHeight) || 640;
-  const larg = Math.min(340, jan - 16);
+  const larg = Math.min(pop.offsetWidth || 340, jan - 16);
   pop.style.left = Math.max(8, Math.min(r.left, jan - larg - 8)) + "px";
   const alto = pop.offsetHeight || 0;
   const cabe = r.bottom + 4 + alto <= altoJan - 8;
   pop.style.top = (cabe || r.top - alto - 4 < 8 ? r.bottom + 4 : r.top - alto - 4) + "px";
 }
+function leiGavetaPosicionar() { leiPopPosicionar($("leiGavExibir"), $("btnLeiExibir")); }
 
 /* Abre o pop-over (ou fecha, se já estava aberto). Devolve se abriu. */
 function leiGaveta(qual) {
   const alvo = $(qual);
+  const par = LEI_POPS.find((x) => x[0] === qual);
+  const b = $(par ? par[1] : "btnLeiExibir");
   const abrindo = alvo ? alvo.hidden !== false : false;
   leiGavetaFechar();
   if (abrindo && alvo) {
-    alvo.hidden = false;
-    const b = $("btnLeiExibir");
-    if (b && b.classList) b.classList.toggle("btn-min-ok", true);
-    leiGavetaPosicionar();
+    if (qual === "leiFila") { leiFilaAberta = true; leiFilaAplicar(); }
+    else {
+      alvo.hidden = false;
+      if (b && b.classList) b.classList.toggle("btn-min-ok", true);
+      leiPopPosicionar(alvo, b);
+    }
     /* o clique que ABRE também chega ao documento: quem está dentro do pop-over ou no botão não fecha */
     const fora = (ev) => {
       const alvoClique = ev && ev.target;
-      if (alvoClique && ((alvo.contains && alvo.contains(alvoClique)) || (b && b.contains && b.contains(alvoClique)))) return;
+      const bAgora = $(par ? par[1] : "btnLeiExibir");
+      if (alvoClique && ((alvo.contains && alvo.contains(alvoClique)) || (bAgora && bAgora.contains && bAgora.contains(alvoClique)))) return;
       leiGavetaFechar();
     };
     const tecla = (ev) => {
@@ -1775,12 +1756,31 @@ function leiPintarEdicaoLivre() {
   const b = $("btnLeiSalvar");
   if (b) {
     b.title = t(travado ? "lei_salvar_travado_ajuda" : "lei_salvar_livre_ajuda");
+    /* (19.183.0) com a lei gravada, o texto é só leitura e os grifos se gravam sozinhos (leiGrifoGravar): o botão só
+     * aparece enquanto a lei ainda é texto livre (colagem nova) — ou se sobrou algo por gravar */
+    b.hidden = travado && !leiSujo;
   }
   const nota = $("leiTextoTravado");
   if (nota) {
     nota.hidden = !(travado && leiModo === "editar");
     if (!nota.hidden) nota.textContent = t("lei_texto_travado");
   }
+}
+
+/* (19.183.0) O GRIFO SE GRAVA SOZINHO na lei já gravada: o texto é só leitura, então a única mudança possível no campo é
+ * a marca. Gravar a marca é uma escrita leve (só o texto, sem repintar nem avisar): desfazer continua sendo marcar de
+ * novo ou limpar as marcas. Numa lei ainda livre (colagem que não foi gravada), nada muda — ela tem o "gravar". */
+function leiGrifoGravar() {
+  if (!leiAtual || !leiIdAtual || !leiEmCamada()) return false;
+  const l = leiDe(leiIdAtual);
+  const txt = String($("leiTexto").value || "");
+  if (!l || txt === String(l.texto || "")) { leiSujo = false; return false; }
+  leiGuardar({ id: l.id, texto: txt });
+  leiSujo = false;
+  if ($("leiEstado")) $("leiEstado").textContent = t("lei_grifo_salvo");
+  if ($("btnLeiSalvar")) $("btnLeiSalvar").hidden = true;
+  try { leiReg("gravar", "grifo gravado sozinho", l.nome); } catch (e) {}
+  return true;
 }
 
 /* A LEITURA, ARTIGO A ARTIGO.
@@ -1860,24 +1860,28 @@ function leiAlvoEscolher(curto, id) {
   try { leiReg("consulta", "lei consultada escolhida", curto + " → " + ((leiDe(id) || {}).nome || id)); } catch (e) {}
   leiPintar();
 }
-/* ACIMA de um pequeno número de leis citadas, a faixa some de linha em linha — a LC 214/2025
- * real altera ~35 leis, e 35 linhas de "Esta lei ALTERA Lei nº X…" empurram o Art. 1º para
- * fora da tela, o mesmo problema que a lista de anexos tinha (ver leiAnexosOcultosLer). Acima
- * do limite, some só um resumo ("altera N outras leis · M fora da sua biblioteca") com um botão
- * para expandir a lista inteira; a escolha de expandir fica lembrada entre leis, do mesmo jeito. */
-const LEI_FAIXA_ALVO_LIMITE = 3;
-let _leiFaixaAlvoExpandida = null;
-function leiFaixaAlvoExpandidaLer() {
-  if (_leiFaixaAlvoExpandida === null) {
-    try { _leiFaixaAlvoExpandida = localStorage.getItem("eac_lei_faixa_alvo_expandida") === "1"; }
-    catch (e) { _leiFaixaAlvoExpandida = false; }
-  }
-  return _leiFaixaAlvoExpandida;
-}
-function leiFaixaAlvoAlternar() {
-  _leiFaixaAlvoExpandida = !leiFaixaAlvoExpandidaLer();
-  try { localStorage.setItem("eac_lei_faixa_alvo_expandida", _leiFaixaAlvoExpandida ? "1" : "0"); } catch (e) {}
-  leiFaixaAlvoPintar(leiAlvoCtx);
+/* (19.183.0) AS LEIS QUE ESTA ALTERA NÃO OCUPAM MAIS A LEITURA. Eram uma faixa larga acima do Art. 1º (com "ver todas"
+ * acima de três leis); agora são um selo na linha da procedência ("↗ altera 4 leis · 4 fora da biblioteca") e a lista,
+ * inteira, num pop-over que abre no toque. O selo de cada artigo ("altera a Lei X · art. 9º") continua no artigo. */
+let leiAlvoCtxDe = "";              /* de que lei é o leiAlvoCtx (a procedência pinta antes da leitura) */
+function leiAlvoSeloPintar() {
+  const velho = $("btnLeiAlvoSelo");
+  if (velho && velho.parentNode && velho.parentNode.removeChild) velho.parentNode.removeChild(velho);
+  const ctx = leiAlvoCtx, cx = $("leiProc");
+  if (!ctx || !cx || cx.hidden || !leiIdAtual || leiAlvoCtxDe !== leiIdAtual) return null;
+  const curtos = Object.keys(ctx.porCurto);
+  const fora = curtos.filter((cu) => !ctx.porCurto[cu].cands.length).length;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "btnLeiAlvoSelo";
+  b.className = "btn-min lei-alvo-selo" + (fora ? " lei-alvo-falta" : "");
+  b.textContent = (curtos.length === 1 ? t("lei_alvo_selo_1", { lei: curtos[0] }) : t("lei_alvo_selo", { n: curtos.length }))
+    + (fora ? " · " + t("lei_alvo_selo_fora", { m: fora }) : "");
+  b.title = t("lei_alvo_faixa_tip");
+  if (b.setAttribute) b.setAttribute("aria-haspopup", "true");
+  b.onclick = () => leiGaveta("leiFaixaAlvo");
+  cx.append(b);
+  return b;
 }
 /* uma linha da faixa: "esta lei ALTERA a Constituição Federal…", qual lei será consultada e o que fazer se não há */
 function leiFaixaAlvoLinha(cu, p) {
@@ -1922,40 +1926,11 @@ function leiFaixaAlvoPintar(ctx) {
   const box = $("leiFaixaAlvo");
   if (!box) return;
   box.innerHTML = "";
-  box.hidden = !ctx;
+  if (!ctx) box.hidden = true;
+  leiAlvoSeloPintar();
   if (!ctx) return;
-  const curtos = Object.keys(ctx.porCurto);
-  const muitas = curtos.length > LEI_FAIXA_ALVO_LIMITE;
-  if (muitas && !leiFaixaAlvoExpandidaLer()) {
-    const ausentes = curtos.filter((cu) => !ctx.porCurto[cu].cands.length).length;
-    const lin = document.createElement("div");
-    lin.className = "lei-faixa-lin";
-    const tx = document.createElement("span");
-    tx.textContent = t("lei_alvo_faixa_resumo", { n: curtos.length, m: ausentes });
-    tx.title = t("lei_alvo_faixa_tip");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-min lei-faixa-alternar";
-    btn.textContent = t("lei_alvo_faixa_expandir");
-    btn.title = t("lei_alvo_faixa_expandir_tip");
-    btn.onclick = leiFaixaAlvoAlternar;
-    lin.append(tx, btn);
-    box.append(lin);
-    return;
-  }
-  if (muitas) {
-    const lin = document.createElement("div");
-    lin.className = "lei-faixa-lin";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-min lei-faixa-alternar";
-    btn.textContent = t("lei_alvo_faixa_recolher");
-    btn.title = t("lei_alvo_faixa_recolher_tip");
-    btn.onclick = leiFaixaAlvoAlternar;
-    lin.append(btn);
-    box.append(lin);
-  }
-  curtos.forEach((cu) => { box.append(leiFaixaAlvoLinha(cu, ctx.porCurto[cu])); });
+  /* o pop-over traz a lista inteira, uma linha por lei alterada */
+  Object.keys(ctx.porCurto).forEach((cu) => { box.append(leiFaixaAlvoLinha(cu, ctx.porCurto[cu])); });
 }
 /* o "…" de um artigo citado: com o alvo achado, ele diz a que dispositivos corresponde ("= §§ 1º a 3º · art. 43 de Constituição Federal") */
 function leiLacunaChip(id, reg) {
@@ -2159,6 +2134,7 @@ function leiPintarLeitura() {
   /* as citações de outras leis (só se há uma linha que abre com aspas + "Art."): o custo é zero nas demais */
   const cit = /^\s*[“"«]\s*Art/m.test(bruto) ? leiLerCitacoes(bruto.split("\n"), l ? leiOpcDaLei(l).recusados : {}) : null;
   try { leiAlvoCtx = leiAlvosCtx(l, cit); } catch (e) { leiAlvoCtx = null; }
+  leiAlvoCtxDe = l ? l.id : "";
   leiRecebidasAtual = null;
   try { if (l && !leiAlvoCtx) leiRecebidasAtual = { mapa: leiAlteracoesRecebidas(Object.assign({}, l, { texto: bruto })), adct: leiSecoes(bruto).adct }; } catch (e) { leiRecebidasAtual = null; }
   leiFaixaAlvoPintar(leiAlvoCtx);
@@ -6906,7 +6882,28 @@ async function leiBibDesligar(l, u) {
   if (!ok) return false;
   leiDesligarTopico(l, u.chave);
   try { reg("LEI", "lei desvinculada do tópico (biblioteca)", l.nome + " · " + u.chave); } catch (e) {}
+  try { leiAposDesligar(l, u.chave); } catch (e) {}
   leiBibPintar();
+  return true;
+}
+
+/* (19.183.0) DESLIGAR PELA BIBLIOTECA COM A LEI ABERTA NO TÓPICO (o "🗂 biblioteca" do menu do título abre por cima do
+ * leitor): a leitura acompanha — se era ESTA a lei na tela, pula para qualquer outra que sobre no tópico (mesmo que não
+ * seja a "preferida"); sem nenhuma, volta ao estado "sem lei". Era o que o "✖" do chip fazia no leitor. */
+function leiAposDesligar(l, chave) {
+  const dlg = $("dlgLeiSeca");
+  if (!l || !leiAtual || !leiAtual.chave || !dlg || !dlg.open) return false;
+  if (leisChaveComparavel(leiAtual.chave) !== leisChaveComparavel(chave)) return false;
+  if (leiIdAtual === l.id) {
+    const resto = leisDoTopico(leiAtual.chave);
+    if (resto[0]) leiTrocarPara(resto[0].id);
+    else {
+      leiIdAtual = "";
+      $("leiTexto").value = "";
+      leiTrocarModo("editar");
+      leiPintar();
+    }
+  } else leiPintar();
   return true;
 }
 
@@ -11032,60 +11029,6 @@ async function leiFechar() {
   leiVoltarPara();
 }
 
-/* ---------------------------------------------------------------------
- * AJUDA
- *
- * Escrita como mapa da janela, não como lista de botões: cada item diz
- * PARA QUE serve e POR QUE existe. "Recitar: esconde o texto" é inútil
- * sem o "porque reler dá sensação de saber" — é o porquê que faz a
- * pessoa usar o recurso em vez de achá-lo estranho.
- * ------------------------------------------------------------------ */
-
-/* A ORDEM É A DA JORNADA, e não a da barra de botões: como o texto
- * chega aqui, como se lê, como se marca, como se testa, como se
- * registra. Quem abre a ajuda está perdido em algum ponto do caminho, e
- * um índice na ordem do caminho é o que deixa achar o ponto.
- *
- * "consulta" e "sinais" entraram com os recursos que descrevem — o ⚖ da
- * tela de questões e as bordas coloridas do artigo. Ajuda que não
- * acompanha a tela vira a segunda fonte de verdade, e a errada. */
-const LEI_AJUDA = [
-  "fila", "proc", "consulta", "onde", "modos", "mapa",
-  "editar", "marcas", "sinais", "cartoes", "cai", "recitar",
-  "cheia", "gravar", "lido", "log",
-];
-
-function leiAjudaAbrir() {
-  const cx = $("leiAjudaCx");
-  if (!cx) return;
-  cx.innerHTML = "";
-  LEI_AJUDA.forEach((id) => {
-    const item = document.createElement("div");
-    item.className = "duv-item";
-    const tit = document.createElement("div");
-    tit.className = "duv-titulo";
-    tit.textContent = t("lei_aj_" + id + "_t");
-    const txt = document.createElement("div");
-    /* "lei-aj-d" existe por causa do parágrafo.
-     *
-     * Três destas explicações passaram a ter mais de um parágrafo — os
-     * dois exercícios do "testar", os dois limites das marcas, os dois
-     * botões da fila. Elas são escritas com "\n\n" e entram por
-     * textContent, e textContent NÃO quebra linha sozinho: sem um
-     * white-space que preserve a quebra, os parágrafos viram um
-     * paredão de texto corrido — pior de ler do que a versão curta que
-     * eles substituíram.
-     *
-     * A classe é própria e não mexe em ".nota", que é usada em dezenas
-     * de lugares onde a quebra não foi pensada. */
-    txt.className = "nota lei-aj-d";
-    txt.textContent = t("lei_aj_" + id + "_d");
-    item.append(tit, txt);
-    cx.append(item);
-  });
-  abrirModal("dlgLeiAjuda");
-  leiReg("ajuda", "ajuda aberta", "");
-}
 
 /* ---------------------------------------------------------------------
  * LIGAR OS BOTÕES
@@ -11128,13 +11071,10 @@ function leiIniciar() {
   if ($("leiLeitura")) $("leiLeitura").onscroll = () => { leiFlutAgendar(); leiLocAgendar(); };
   liga("btnLeiLoc", "localizador (exibição)", () => leiLocDefinir(!leiLocLigado()));
   leiLocPintarBotao();
-  liga("btnLeiFilaMais", "leis deste tópico", () => { leiFilaAberta = !leiFilaAberta; leiFilaAplicar(); });
+  liga("btnLeiFilaMais", "menu das leis do tópico", () => leiGaveta("leiFila"));
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
-  liga("btnLeiAjuda", "ajuda", () => leiAjudaAbrir());
-  liga("btnLeiAjudaFechar", "fechar ajuda", () => $("dlgLeiAjuda").close());
   liga("btnLeiLog", "registro", () => leiLogAbrir());
   liga("btnLeiFechar", "fechar", () => leiFechar());
-  liga("btnLeiFechar2", "fechar", () => leiFechar());
   liga("btnLeiLido", "li este material", () => leiRegistrarLeitura());
   liga("btnLeiMaior", "letra maior", () => leiFonteMudar(2));
   liga("btnLeiMenor", "letra menor", () => leiFonteMudar(-2));
@@ -11160,9 +11100,12 @@ function leiIniciar() {
     });
     /* na tela cheia, + e − mudam a letra; nunca enquanto se digita (o "testar" tem campo de resposta) */
     $("dlgLeiSeca").addEventListener("keydown", (e) => {
-      if (!leiCheia || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!e || e.ctrlKey || e.metaKey || e.altKey) return;
       const alvo = e.target || {};
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || "") || alvo.isContentEditable) return;
+      /* (19.183.0) F liga e desliga a tela cheia (o ⛶ do canto faz o mesmo) */
+      if (e.key === "f" || e.key === "F") { leiCheiaTrocar(); if (e.preventDefault) e.preventDefault(); return; }
+      if (!leiCheia) return;
       if (e.key === "+" || e.key === "=") { leiFonteMudar(2); if (e.preventDefault) e.preventDefault(); }
       else if (e.key === "-" || e.key === "_") { leiFonteMudar(-2); if (e.preventDefault) e.preventDefault(); }
     });
@@ -11472,7 +11415,7 @@ if (typeof module !== "undefined" && module.exports) {
     leiClozeConferir, leiClozeAplicar, leiRanking, leiIrPintar, leiIrIr,
     leiTextoDoTopico, leiAplicarNoTopico, leiEtiquetaDe, leiDoTopicoAtual,
     leiReg, leiLogTexto, leiLogAbrir, leiLogPintar, leiLogFiltrado,
-    leiAjudaAbrir, leiCheiaTrocar, leiFonteMudar, LEI_AJUDA, LEI_LOG_CHAVE,
+    leiCheiaTrocar, leiFonteMudar, LEI_LOG_CHAVE, leiGrifoGravar, leiFilaMenuRotulo,
     leiGaveta, leiMarcadorMudar, leiArtigoDoTopo, leiFlutAtualizar, leiRetomar, leiContinuarLei,
     leiEdAbrir, leiEdSalvar, leiEdApagar, leiEdTrocar, leiEdSujo, leiEmCamada,
     leiFonteDefinir, leiFontePintar, leiFonteCarregar, leiJanelaMudar, leiJanelaAplicar, LEI_JANELAS,

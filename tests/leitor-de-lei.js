@@ -396,10 +396,7 @@ async function testes() {
     const nota = Array.from(api.$("leiRecitar").children || []).filter((x) => (x.tag || "") === "p")[0];
     ok(nota && /FECHADO/i.test(nota.textContent || "") && !/LACUNAS/i.test(nota.textContent || ""),
        "L7b a tela nao anuncia so o exercicio de artigo fechado: " + JSON.stringify(nota && nota.textContent));
-    ok(!/lacuna/i.test(api.t("lei_aj_recitar_d").split("Para treinar")[0]),
-       "L7c a ajuda do modo continua descrevendo o exercicio de lacunas como uma opcao do botao");
-    ok(/virar cartões/.test(api.t("lei_aj_recitar_d")),
-       "L7d a ajuda nao aponta para onde ficou o treino com lacunas (os cartoes)");
+    /* (19.183.0) L7c/L7d conferiam o texto da janela de ajuda, que saiu do leitor */
     /* toque no artigo continua revelando o texto (o exercicio em si) */
     const cab = todos.filter((x) => /lei-rec-cab/.test(x.className || ""))[0];
     ok(!!cab && typeof cab.onclick === "function", "L7e o artigo fechado perdeu o toque que revela o texto");
