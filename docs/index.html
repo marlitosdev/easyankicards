@@ -886,16 +886,42 @@ dialog.mmia-dlg{width:min(720px,96vw);max-width:min(720px,96vw)}
 .mm-placar{font-size:var(--fs-2)}
 #matLeitura .mm-alvo{outline:2px solid var(--acao);border-radius:var(--r-p)}
 /* (19.173.0) a fuga rápida */
-dialog.fuga-dlg{width:min(640px,96vw)}
+dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .hdr-fuga{font-weight:var(--peso-m);white-space:nowrap}
-.fuga-relogio{font-size:var(--fs-5);font-weight:var(--peso-f);text-align:center;margin:var(--esp-1) 0 var(--esp-2);color:var(--acao)}
+/* (19.185.0) a fuga refeita: um item por vez, o relógio com trilho, "como funciona" e "o que entra" */
+.fuga-topo{display:flex;align-items:center;justify-content:space-between;gap:var(--esp-3)}
+.fuga-topo h3{margin:0}
+.fuga-relogio{font-size:var(--fs-5);font-weight:var(--peso-f);color:var(--acao);white-space:nowrap}
 .fuga-relogio.fuga-acabou{color:var(--ok)}
-.fuga-lista{display:flex;flex-direction:column;gap:var(--esp-2);max-height:60vh;overflow:auto}
-.fuga-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
-.fuga-cab{font-size:var(--fs-2);color:var(--sutil);margin-bottom:var(--esp-1)}
-.fuga-txt{font-size:var(--fs-4);line-height:1.45}
-.fuga-verso{margin-top:var(--esp-2);padding-top:var(--esp-2);border-top:1px dashed var(--borda);color:var(--ok)}
-.fuga-item .btn-min{margin-top:var(--esp-2)}
+.fuga-trilho{height:4px;border-radius:var(--r-pilula);background:var(--borda);overflow:hidden;margin:var(--esp-2) 0}
+.fuga-trilho span{display:block;height:100%;width:100%;background:var(--acao);transition:width 1s linear}
+.fuga-como{margin:var(--esp-2) 0 0;font-size:var(--fs-2)}
+.fuga-como summary{cursor:pointer;color:var(--sutil)}
+.fuga-como-txt{white-space:pre-line;margin:var(--esp-2) 0 0;line-height:1.5}
+.fuga-chips{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:center;margin:var(--esp-2) 0 0}
+.fuga-chip{border-radius:var(--r-pilula);opacity:.65}
+.fuga-chip-on{opacity:1;border-color:var(--acao);color:var(--acao)}
+.fuga-chip-sep{color:var(--sutil)}
+.fuga-palco{min-height:220px;max-height:60vh;overflow:auto}
+.fuga-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-3)}
+.fuga-cab{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--esp-2);font-size:var(--fs-2);color:var(--sutil);margin-bottom:var(--esp-1)}
+.fuga-cab-tipo{font-weight:var(--peso-f);color:var(--texto)}
+.fuga-cab-orig{text-align:right}
+.fuga-conta{margin:0 0 var(--esp-2)}
+.fuga-txt{font-size:var(--fs-5);line-height:1.45}
+.fuga-motivo{margin-top:var(--esp-2)}
+.fuga-verso{margin-top:var(--esp-3);padding-top:var(--esp-2);border-top:1px dashed var(--borda);font-size:var(--fs-4);line-height:1.5}
+.fuga-verso-txt{margin-top:var(--esp-1);color:var(--texto)}
+.fuga-acertou{color:var(--ok)}
+.fuga-errou{color:var(--erro)}
+.fuga-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin-top:var(--esp-3)}
+.fuga-ops{display:flex;flex-direction:column;gap:var(--esp-1);margin-top:var(--esp-2)}
+.fuga-op{text-align:left;white-space:normal}
+.fuga-fim{padding:var(--esp-2) 0}
+.fuga-fim-tit{font-size:var(--fs-5);font-weight:var(--peso-f);margin:0 0 var(--esp-2)}
+.fuga-corrente{margin:var(--esp-2) 0}
+.fuga-sec{margin:var(--esp-3) 0 var(--esp-1);font-size:var(--fs-1);font-weight:var(--peso-f);letter-spacing:.06em;text-transform:uppercase;color:var(--sutil)}
+.fuga-res-lin{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--esp-2);padding:var(--esp-1) 0;border-bottom:1px solid var(--borda)}
 /* (19.172.0) a Revisão 360° */
 .rv-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--atencao);border-radius:var(--r-m)}
 .rv-aviso-txt{flex:1 1 220px;font-size:var(--fs-3)}
@@ -10580,12 +10606,25 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 <!-- (19.172.0) A REVISÃO 360° DA RETA FINAL (revisao-360.js): os blocos R1, R2… até a véspera -->
 <!-- (19.173.0) ⚡ FUGA RÁPIDA: 5 itens curtos de outras disciplinas, 3 minutos (fuga.js) -->
 <dialog id="dlgFuga" class="ui-modal fuga-dlg">
-  <h3 data-i18n="fuga_titulo"></h3>
+  <!-- (19.185.0) um item por vez; "como funciona" explica o "outros 5" e a corrente; "o que entra" liga as fontes e a duração -->
+  <div class="fuga-topo">
+    <h3 data-i18n="fuga_titulo"></h3>
+    <div class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></div>
+  </div>
+  <div class="fuga-trilho" aria-hidden="true"><span id="fugaTrilho"></span></div>
   <p class="nota" id="fugaSub"></p>
-  <div class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></div>
-  <div id="fugaLista" class="fuga-lista"></div>
+  <div id="fugaLista" class="fuga-palco"></div>
+  <!-- abaixo do item: o item é o que importa; a orientação e as opções ficam à mão sem empurrá-lo -->
+  <details class="fuga-como" id="fugaComo">
+    <summary data-i18n="fuga_como_tit"></summary>
+    <div class="nota fuga-como-txt" data-i18n="fuga_como_txt"></div>
+  </details>
+  <details class="fuga-como" id="fugaOpcoes">
+    <summary data-i18n="fuga_opcoes_tit"></summary>
+    <div class="fuga-chips" id="fugaChips"></div>
+  </details>
   <div class="dlg-rodape">
-    <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros"></button>
+    <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros" data-i18n-title="fuga_outros_tip"></button>
     <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar"></button>
   </div>
 </dialog>

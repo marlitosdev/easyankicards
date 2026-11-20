@@ -1,0 +1,220 @@
+/* =====================================================================
+ * ⚡ A FUGA RÁPIDA REFEITA (19.185.0)
+ *
+ * Era uma lista fixa de 5 textos com "ver resposta". O que o app ganhou depois não chegava nela.
+ *
+ * O QUE PRECISA SER VERDADE:
+ *  G1. a rodada pega um item de cada tipo, NA ORDEM da corrente (cartão → questão → artigo → pegadinha → julgado →
+ *      mapa → prazo → dica), fora da disciplina de agora e sem repetir disciplina enquanto houver outra;
+ *  G2. "outros 5" continua de onde parou e não repete nada desta fuga; o relógio não recomeça;
+ *  G3. as fontes ligam e desligam (lembrado); só disciplinas dos editais em andamento; o que saiu nas últimas fugas
+ *      vai para o fim;
+ *  G4. as fontes novas: questões do caderno, artigos que caem (os que você erra primeiro), julgados, pegadinhas da lei,
+ *      ramos esquecidos do mapa;
+ *  G5. um por vez: virar, sabia/não sabia, a questão respondida ali, "lido" que não conta; o fim da rodada diz por
+ *      onde a corrente segue; o resumo junta as rodadas e manda os cartões para "De novo" só a pedido;
+ *  G6. "como funciona" explica o "outros 5" e a corrente (aberto na primeira vez); teclas.
+ * ===================================================================== */
+const { rodar } = require("./fumaca.js");
+
+async function testes() {
+  const falhas = [];
+  let n = 0;
+  const ok = (c, m) => { n++; if (!c) falhas.push(m); };
+  const NL = String.fromCharCode(10);
+  const semear = () => { let s = 7; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; };
+  const C = (d, i, p, uid) => ({ tipo: "cartao", disciplina: d, topico: "T", frente: "frente " + i, verso: "verso " + i, peso: p, uid: uid || "" });
+  const Q = (d, i, gab) => ({ tipo: "questao", id: "q" + i, disciplina: d, topico: "T", frente: "enunciado " + i, q: { id: "q" + i, tipo: "ce", gabarito: gab || "C", comentario: "porque sim " + i }, peso: 3 });
+  const A = (d, i) => ({ tipo: "artigo", lei: "Lei " + i, leiId: "lei_" + i, num: String(i), rotulo: "Art. " + i, disciplina: d, topico: "T", frente: "Art. " + i, verso: "texto " + i, motivo: "cai", peso: 5 });
+  const M = (tipo, d, i) => ({ tipo, disciplina: d, topico: "T", texto: tipo + " " + i + " de " + d });
+  const J = (d, i) => ({ tipo: "julgado", id: "j" + i, disciplina: d, topico: "T", frente: "Súmula " + i, verso: "tese " + i, peso: 2 });
+  const MP = (d, i) => ({ tipo: "mapa", chave: "c" + i, caminho: "0." + i, disciplina: d, topico: "T", frente: "ramo " + i, verso: "filhos " + i });
+  const P = (d, i) => ({ tipo: "prazo", lei: "Lei P", leiId: "lp", num: String(i), rotulo: "Art. " + i, texto: "prazo de " + i + " dias", disciplina: d });
+  const D = (d, i) => ({ tipo: "dica", disciplina: d, topico: "T", texto: "dica " + i });
+  const fontes = () => ({
+    cartoes: [C("Português", 1, 9), C("Tributário", 2, 8, "u2"), C("Administrativo", 3, 7)],
+    questoes: [Q("Tributário", 1), Q("Constitucional", 2, "E")],
+    artigos: [A("Administrativo", 1), A("Constitucional", 2)],
+    marcas: [M("pegadinha", "Contabilidade", 1), M("importante", "Informática", 2), M("pegadinha", "Português", 3)],
+    julgados: [J("Informática", 1), J("Tributário", 2)],
+    mapa: [MP("Contabilidade", 1)], prazos: [P("Administrativo", 1)], dicas: [D("Lógica", 1)], discs: new Set(),
+  });
+  const todas = { cartoes: true, questoes: true, leis: true, julgados: true, marcas: true, mapa: true, dicas: true };
+
+  /* G1 e G2: a corrente */
+  {
+    const { api } = rodar();
+    const F = fontes();
+    const r = api.fugaSortear({ disc: "Português", rnd: semear(), fontes: F, ativas: todas, vistos: [] });
+    ok(r.itens.map((x) => x.tipo).join() === "cartao,questao,artigo,pegadinha,julgado" && r.proxInicio === 5,
+      "G1 uma de cada, na ordem da corrente: " + r.itens.map((x) => x.tipo).join() + " · próx " + r.proxInicio);
+    ok(r.itens.every((x) => x.disciplina !== "Português"), "G1a nada da disciplina de agora");
+    const ds = r.itens.map((x) => x.disciplina);
+    ok(new Set(ds).size === ds.length, "G1b sem repetir disciplina na rodada enquanto há outra: " + ds.join());
+    const r2 = api.fugaSortear({ disc: "Português", rnd: semear(), fontes: F, ativas: todas, vistos: [], excluir: r.itens.map(api.fugaChave), inicio: r.proxInicio });
+    ok(r2.itens.map((x) => x.tipo).slice(0, 4).join() === "mapa,prazo,dica,cartao" && r2.itens.every((x) => r.itens.indexOf(x) < 0 && r.itens.map(api.fugaChave).indexOf(api.fugaChave(x)) < 0),
+      "G2 'outros 5' continua de onde parou (mapa, prazo, dica, cartão…) e não repete: " + r2.itens.map((x) => x.tipo).join());
+  }
+
+  /* G3: as fontes, os editais, as últimas fugas */
+  {
+    const { api } = rodar();
+    const F = fontes();
+    const sem = api.fugaSortear({ disc: "", rnd: semear(), fontes: F, ativas: Object.assign({}, todas, { cartoes: false, questoes: false }), vistos: [] });
+    ok(!sem.itens.some((x) => x.tipo === "cartao" || x.tipo === "questao"), "G3 fonte desligada não entra: " + sem.itens.map((x) => x.tipo).join());
+    const ed = api.fugaSortear({ disc: "", rnd: semear(), fontes: F, ativas: todas, vistos: [], discs: new Set(["tributario"]) });
+    ok(ed.itens.length && ed.itens.every((x) => x.disciplina === "Tributário"), "G3a só as disciplinas dos editais em andamento: " + ed.itens.map((x) => x.disciplina).join());
+    const F2 = { cartoes: [C("Penal", 1, 9), C("Civil", 2, 8)], questoes: [], artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    const v = api.fugaSortear({ disc: "", rnd: semear(), fontes: F2, ativas: todas, vistos: [api.fugaChave(F2.cartoes[0])], n: 1 });
+    ok(v.itens[0] && v.itens[0].frente === "frente 2", "G3b o que saiu nas últimas fugas vai para o fim");
+    api.fugaPrefDefinir({ fontes: { mapa: false }, min: 5 });
+    const pf = api.fugaPref();
+    ok(pf.fontes.mapa === false && pf.fontes.cartoes === true && pf.min === 5, "G3c 'o que entra' e a duração ficam lembrados");
+    api.fugaPrefDefinir({ fontes: { cartoes: false, questoes: false, leis: false, julgados: false, marcas: false, mapa: false, dicas: false } });
+    ok(api.fugaPref().fontes.cartoes === true, "G3d nunca todas desligadas (a fuga ficaria vazia sem dizer por quê)");
+  }
+
+  /* G4: as fontes reais */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar(); api.qsUiIniciar && api.qsUiIniciar();
+    api.qsTodas().push({ id: "qx1", tipo: "ce", enunciado: "A imunidade recíproca alcança as autarquias?", gabarito: "C", tentativas: [{ acertou: false }], disciplina: "Tributário", topico: "Imunidades", chave: "" });
+    api.qsTodas().push({ id: "qx2", tipo: "ce", enunciado: "Questão dominada que já saiu do caderno.", gabarito: "E", tentativas: [{ acertou: false }, { acertou: true }, { acertou: true }], disciplina: "Tributário", topico: "Imunidades" });
+    const qs = api.fugaQuestoes();
+    ok(qs.length === 1 && qs[0].id === "qx1" && qs[0].q.gabarito === "C", "G4 as questões do caderno (a dominada não): " + qs.map((x) => x.id).join());
+    api.jurGravar({ tribunal: "STF", classe: "Súmula Vinculante", numero: "29", tese: "É constitucional a adoção, no cálculo do valor de taxa, de um ou mais elementos da base de cálculo própria de determinado imposto.", topicos: ["direito tributário›taxas"] });
+    const js = api.fugaJulgados();
+    ok(js.length === 1 && /29/.test(js[0].frente) && /taxa/.test(js[0].verso) && js[0].peso === 2, "G4a os julgados: o nome na frente, a tese no verso (súmula primeiro)");
+    api.leiGuardar({ id: "lei_pg", nome: "Lei PG", texto: "Art. 1º O prazo é ==~de 5 anos, não de 10== para tudo." + NL + "Art. 2º Outro.", topicos: [] });
+    ok(api.fugaMarcas().some((x) => x.tipo === "pegadinha" && x.texto === "de 5 anos, não de 10" && x.origem === "Lei PG"), "G4b as pegadinhas marcadas na própria lei");
+    api.matGravar(api.matChave("Constitucional", "Direitos"), "Texto ==~não confunda prazo com decadência aqui== e ==!o ponto principal da aula==.", { disciplina: "Constitucional", topico: "Direitos" });
+    const mk = api.fugaMarcas();
+    ok(mk.some((x) => x.tipo === "pegadinha" && x.texto === "não confunda prazo com decadência aqui" && x.disciplina === "Constitucional") && mk.some((x) => x.tipo === "importante"), "G4c as dos resumos continuam");
+    api.leiGuardar({ id: "lei_f", nome: "Lei F", texto: ["Art. 1º Disposição geral.", "", "Art. 2º O recurso tem prazo de 15 (quinze) dias.", "", "Art. 3º (Revogado) O prazo de 10 dias."].join(NL) });
+    const pz = api.fugaPrazos(semear());
+    ok(pz.some((x) => /Art\. 2º/.test(x.rotulo) && x.lei === "Lei F" && x.leiId === "lei_f") && !pz.some((x) => /Art\. 3º/.test(x.rotulo)), "G4d os artigos com prazo (não o revogado), com a lei para abrir");
+    /* os artigos que caem: uma passada pelas questões; o que você erra vem primeiro, com a disciplina das questões */
+    api.leiGuardar({ id: "lei_9999", nome: "Lei 9.999/2001", texto: ["Art. 1º Disposição geral sobre tudo.", "", "Art. 2º O lançamento se faz em 30 dias contados da ciência."].join(NL), topicos: [] });
+    api.qsTodas().push({ id: "qa1", tipo: "ce", enunciado: "Conforme o art. 2º da Lei 9.999/2001, o lançamento se faz em 60 dias.", gabarito: "E", tentativas: [{ acertou: false }, { acertou: false }], disciplina: "Financeiro", topico: "Lançamento" });
+    api.qsTodas().push({ id: "qa2", tipo: "ce", enunciado: "O art. 1º da Lei 9.999/2001 trata de disposição geral.", gabarito: "C", tentativas: [{ acertou: true }], disciplina: "Financeiro", topico: "Lançamento" });
+    const arts = api.fugaArtigos();
+    const a2 = arts.find((x) => x.leiId === "lei_9999" && x.num === "2");
+    ok(!!a2 && arts.indexOf(a2) < arts.findIndex((x) => x.leiId === "lei_9999" && x.num === "1") && /você erra/.test(a2.motivo) && a2.disciplina === "Financeiro" && /30 dias/.test(a2.verso),
+      "G4f os artigos que caem, o que você erra primeiro, com a disciplina das questões: " + JSON.stringify(arts.map((x) => x.num + ":" + x.disciplina)));
+    /* o mapa: um ramo marcado "não lembrei" no tentar lembrar */
+    const ch = api.matChave("Penal", "Crimes");
+    api.matGravar(ch, ["# Crimes", "- Furto", "  - subtrair coisa alheia móvel", "- Roubo", "  - com violência ou grave ameaça"].join(NL), { disciplina: "Penal", topico: "Crimes" });
+    const arv = api.mmArvoreDaChave(ch);
+    let alvo = null;
+    const ir = (no) => { if (!alvo && /Roubo/.test(no.label || "")) alvo = no; (no.filhos || []).forEach(ir); };
+    if (arv) ir(arv.raiz);
+    ok(!!alvo, "G4e-pre o mapa do resumo tem o ramo 'Roubo'");
+    if (alvo) api.loja.setItem("eac_mm_treino", JSON.stringify({ [ch]: { [alvo.caminho]: { v: "n", em: "2026-11-20" } } }));
+    const mp = api.fugaMapa();
+    ok(mp.length === 1 && /Roubo/.test(mp[0].frente) && /violência/.test(mp[0].verso) && mp[0].disciplina === "Penal", "G4e os ramos esquecidos do mapa: " + JSON.stringify(mp.map((x) => x.frente)));
+  }
+
+  /* G5: a janela, um por vez */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
+    const S = () => api.fugaEstado();
+    ok(api.$("dlgFuga").open && S().rodada === 1 && S().itens.length === 5 && api.$("fugaItem_0"), "G5 abre a rodada 1 com o 1º item");
+    ok(/item 1 de 5 · rodada 1/.test(api.$("fugaLista").textContent), "G5a o contador: " + api.$("fugaLista").textContent.slice(0, 80));
+    ok(!api.$("fugaVerso") || !/verso 2/.test(api.$("fugaLista").textContent), "G5b o verso do cartão começa escondido");
+    api.$("btnFugaVirar").onclick();
+    ok(/verso/.test(api.$("fugaLista").textContent) && api.$("btnFugaSabia") && api.$("btnFugaNaoSabia"), "G5c virar mostra o verso e 'sabia'/'não sabia'");
+    api.$("btnFugaNaoSabia").onclick();
+    ok(S().i === 1 && S().itens[1].tipo === "questao" && api.$("btnFugaQ_C"), "G5d 'não sabia' segue para a questão, com Certo/Errado");
+    api.$("btnFugaQ_C").onclick();
+    ok(/Acertou — gabarito: C/.test(api.$("fugaLista").textContent) && /porque sim/.test(api.$("fugaLista").textContent) && S().respostas[1].sabia === true,
+      "G5e a questão se responde ali: certo/errado, o gabarito e o comentário");
+    api.$("btnFugaProx").onclick();
+    api.$("btnFugaVirar").onclick();
+    ok(api.$("btnFugaIr") && /abrir na lei/.test(api.$("btnFugaIr").textContent), "G5f o artigo oferece abrir na lei");
+    api.$("btnFugaSabia").onclick();
+    ok(S().itens[3].tipo === "pegadinha" && api.$("btnFugaLido"), "G5g a pegadinha é só de ler: 'lido'");
+    api.$("btnFugaLido").onclick();
+    api.$("btnFugaVirar").onclick(); api.$("btnFugaSabia").onclick();
+    ok(S().fase === "fimRodada" && /Rodada 1: 3 sabia · 1 não sabia · 1 lido/.test(api.$("fugaLista").textContent),
+      "G5h o fim da rodada conta (o 'lido' à parte): " + api.$("fugaLista").textContent.slice(0, 90));
+    ok(/começa por 🗺 ramo esquecido do mapa/.test(api.$("fugaLista").textContent) && /relógio não recomeça/i.test(api.$("fugaLista").textContent),
+      "G5i diz por onde a corrente segue e que o relógio não recomeça");
+    const fim = api.fugaEstado().min;
+    api.$("btnFugaSeguir").onclick();
+    ok(S().rodada === 2 && S().itens[0].tipo === "mapa" && S().fase === "item", "G5j 'outros 5' abre a rodada 2 a partir do mapa");
+    /* no meio da rodada: o que ficou sem resposta não conta */
+    api.$("btnFugaOutros").onclick();
+    ok(S().rodada === 3 && S().respostas.length === 5, "G5k 'outros 5' no meio da rodada: a seguinte, sem contar o que ficou sem resposta");
+    ok(api.fugaEstado().min === fim, "G5l o relógio é o mesmo (não recomeça)");
+    api.fugaTerminar();
+    const rs = api.$("fugaLista").textContent;
+    ok(S().fase === "resumo" && /5 itens em 3 rodada\(s\): 3 sabia, 1 não sabia/.test(rs) && /Os que você não sabia/.test(rs), "G5m o resumo junta as rodadas: " + rs.slice(0, 120));
+  }
+  {
+    /* mandar para "De novo": só o cartão não sabido, só a pedido */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const F = { cartoes: [C("Tributário", 9, 9, "uid_9")], questoes: [], artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    api.fugaAbrir({ fontes: F, disc: "", rnd: semear() });
+    ok(!api.loja.getItem("eac_cartao_estudo") || !/uid_9/.test(api.loja.getItem("eac_cartao_estudo")), "G5o abrir e responder não grava nada na agenda");
+    api.$("btnFugaVirar").onclick(); api.$("btnFugaNaoSabia").onclick();
+    api.$("btnFugaTerminar").onclick();
+    ok(api.$("btnFugaMandar") && /mandar 1 cartão/.test(api.$("btnFugaMandar").textContent), "G5p o resumo oferece mandar o cartão para 'De novo'");
+    api.$("btnFugaMandar").onclick();
+    const ag = JSON.parse(api.loja.getItem("eac_cartao_estudo") || "{}");
+    ok(ag.uid_9 && (ag.uid_9.h || []).slice(-1)[0] === 1 && /em "De novo"/.test(api.$("btnFugaMandar").textContent) && api.$("btnFugaMandar").disabled === true,
+      "G5q o cartão vai para 'De novo' na agenda (uma vez): " + JSON.stringify(ag.uid_9 && ag.uid_9.h));
+    ok(api.fugaMandarRevisao() === 0, "G5r mandar de novo não grava outra vez");
+  }
+
+  {
+    /* o anúncio da corrente pula o tipo vazio, como a rodada de verdade (sem ramos esquecidos, segue o prazo) */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const F = Object.assign(fontes(), { mapa: [] });
+    api.fugaAbrir({ fontes: F, disc: "Português", rnd: semear() });
+    for (let k = 0; k < 5; k++) api.fugaProximo();
+    ok(/começa por ⏳ prazo/.test(api.$("fugaLista").textContent), "G5s sem ramos esquecidos, o anúncio já diz que a próxima começa pelo prazo: " + api.$("fugaLista").textContent.slice(0, 160));
+    api.fugaOutros();
+    ok(api.fugaEstado().itens[0].tipo === "prazo", "G5t e a rodada começa mesmo pelo prazo");
+  }
+
+  /* G6: como funciona, chips e teclas */
+  {
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
+    ok(api.$("fugaComo").open === true, "G6 'como funciona' vem aberto na primeira vez");
+    const txt = api.t("fuga_como_txt");
+    ok(/OUTROS 5" CONTINUA A CORRENTE/.test(txt) && /cartão → questão → artigo/.test(txt) && /RELÓGIO NÃO RECOMEÇA/.test(txt) && /não conta/.test(txt) && /"De novo"/.test(txt),
+      "G6a a orientação explica o 'outros 5', a ordem da corrente, o relógio e o fim");
+    ok(/não recomeça o relógio/.test(api.t("fuga_outros_tip")), "G6b o balão do 'outros 5' diz o mesmo");
+    api.fugaFechar();
+    api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
+    ok(api.$("fugaComo").open === false, "G6c da segunda vez em diante, fechado");
+    ok(api.$("btnFugaF_cartoes") && /\(3\)/.test(api.$("btnFugaF_cartoes").textContent), "G6d os chips dizem quantos itens cada fonte tem: " + (api.$("btnFugaF_cartoes") && api.$("btnFugaF_cartoes").textContent));
+    api.$("btnFugaF_julgados").onclick();
+    ok(api.fugaPref().fontes.julgados === false && !/fuga-chip-on/.test(api.$("btnFugaF_julgados").className), "G6e tocar no chip desliga a fonte");
+    api.$("btnFugaMin_5").onclick();
+    ok(api.fugaPref().min === 5 && /⏱ 5:00|⏱ 4:5\d/.test(api.$("fugaRelogio").textContent), "G6f 5 min: o relógio recomeça com 5 — " + api.$("fugaRelogio").textContent);
+    /* teclas */
+    const dlg = api.$("dlgFuga");
+    const tecla = (key, alvo) => { let parou = false; (dlg._ouv && dlg._ouv.keydown || []).forEach((fn) => fn({ key, target: alvo || { tagName: "DIV" }, preventDefault() { parou = true; } })); return parou; };
+    ok(tecla(" ") === true && api.fugaEstado().revelado === true, "G6g espaço vira");
+    ok(tecla("s") === true && api.fugaEstado().i === 1, "G6h S = sabia, e segue");
+    ok(tecla("e") === true && api.fugaEstado().revelado === true, "G6i E responde a questão");
+    ok(tecla("ArrowRight") === true && api.fugaEstado().i === 2, "G6j → próximo");
+    ok(tecla(" ", { tagName: "INPUT" }) === false, "G6k digitando, a tecla não vale");
+    ["fuga_como_tit", "fuga_como_txt", "fuga_outros_tip", "fuga_corrente", "fuga_conta", "fuga_resumo", "fuga_mandar", "fuga_tipo_questao", "fuga_tipo_mapa", "fuga_f_leis", "fuga_vazia"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "G6l falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.fugaPintar({ itens: [] });
+    ok(api.$("fugaVazia"), "G6m sem material, diz de onde ele vem");
+  }
+
+  return Object.assign(falhas, { quantas: n });
+}
+
+module.exports = { testes };
