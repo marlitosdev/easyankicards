@@ -895,9 +895,22 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-relogio.fuga-acabou{color:var(--ok)}
 .fuga-trilho{height:4px;border-radius:var(--r-pilula);background:var(--borda);overflow:hidden;margin:var(--esp-2) 0}
 .fuga-trilho span{display:block;height:100%;width:100%;background:var(--acao);transition:width 1s linear}
-.fuga-como{margin:var(--esp-2) 0 0;font-size:var(--fs-2)}
-.fuga-como summary{cursor:pointer;color:var(--sutil)}
-.fuga-como-txt{white-space:pre-line;margin:var(--esp-2) 0 0;line-height:1.5}
+.fuga-topo-dir{display:inline-flex;align-items:center;gap:var(--esp-2)}
+.fuga-redondo-on{border-color:var(--acao);color:var(--acao)}
+.fuga-painel{margin:0 0 var(--esp-2);padding:var(--esp-2) var(--esp-3);border:1px solid var(--borda);border-radius:var(--r-m)}
+.fuga-como-txt{white-space:pre-line;line-height:1.5}
+/* as bolinhas da rodada */
+.fuga-passos{display:flex;align-items:center;gap:var(--esp-2);margin:0 0 var(--esp-2)}
+.fuga-rodada{font-size:var(--fs-1);font-weight:var(--peso-f);color:var(--sutil);margin-right:var(--esp-1)}
+.fuga-passo{width:30px;height:30px;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  border:2px solid var(--borda);background:transparent;font-size:var(--fs-3);cursor:pointer}
+.fuga-passo:disabled{cursor:default}
+.fuga-passo-atual{border-color:var(--acao);box-shadow:0 0 0 2px var(--acao)}
+.fuga-passo-ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 22%,transparent)}
+.fuga-passo-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 22%,transparent)}
+.fuga-passo-lido{border-color:var(--sutil);opacity:.6}
+.fuga-cartao{margin:0;max-height:none}
+.fuga-notas{margin-top:var(--esp-3)}
 .fuga-chips{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:center;margin:var(--esp-2) 0 0}
 .fuga-chip{border-radius:var(--r-pilula);opacity:.65}
 .fuga-chip-on{opacity:1;border-color:var(--acao);color:var(--acao)}
@@ -906,7 +919,7 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-3)}
 .fuga-cab{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--esp-2);font-size:var(--fs-2);color:var(--sutil);margin-bottom:var(--esp-1)}
 .fuga-cab-tipo{font-weight:var(--peso-f);color:var(--texto)}
-.fuga-cab-orig{text-align:right}
+.fuga-cab-orig{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
 .fuga-conta{margin:0 0 var(--esp-2)}
 .fuga-txt{font-size:var(--fs-5);line-height:1.45}
 .fuga-motivo{margin-top:var(--esp-2)}
@@ -10602,23 +10615,19 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
 <!-- (19.172.0) A REVISÃO 360° DA RETA FINAL (revisao-360.js): os blocos R1, R2… até a véspera -->
 <!-- (19.173.0) ⚡ FUGA RÁPIDA: 5 itens curtos de outras disciplinas, 3 minutos (fuga.js) -->
 <dialog id="dlgFuga" class="ui-modal fuga-dlg">
-  <!-- (19.185.0) um item por vez; "como funciona" explica o "outros 5" e a corrente; "o que entra" liga as fontes e a duração -->
+  <!-- (19.187.0) pouco texto: as bolinhas da rodada dizem que há outros itens; ⓘ (como funciona) e ⚙ (o que entra) no canto -->
   <div class="fuga-topo">
-    <h3 data-i18n="fuga_titulo"></h3>
-    <div class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></div>
+    <h3 data-i18n="fuga_titulo" data-i18n-title="fuga_tip"></h3>
+    <span class="fuga-topo-dir">
+      <button type="button" class="lei-redondo" id="btnFugaComo" data-i18n-title="fuga_como_tit" aria-expanded="false">i</button>
+      <button type="button" class="lei-redondo" id="btnFugaOpcoes" data-i18n-title="fuga_opcoes_tit" aria-expanded="false">⚙</button>
+      <span class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></span>
+    </span>
   </div>
   <div class="fuga-trilho" aria-hidden="true"><span id="fugaTrilho"></span></div>
-  <p class="nota" id="fugaSub"></p>
+  <div class="nota fuga-painel fuga-como-txt" id="fugaComo" data-i18n="fuga_como_txt" hidden></div>
+  <div class="fuga-painel" id="fugaOpcoes" hidden><div class="fuga-chips" id="fugaChips"></div></div>
   <div id="fugaLista" class="fuga-palco"></div>
-  <!-- abaixo do item: o item é o que importa; a orientação e as opções ficam à mão sem empurrá-lo -->
-  <details class="fuga-como" id="fugaComo">
-    <summary data-i18n="fuga_como_tit"></summary>
-    <div class="nota fuga-como-txt" data-i18n="fuga_como_txt"></div>
-  </details>
-  <details class="fuga-como" id="fugaOpcoes">
-    <summary data-i18n="fuga_opcoes_tit"></summary>
-    <div class="fuga-chips" id="fugaChips"></div>
-  </details>
   <div class="dlg-rodape">
     <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros" data-i18n-title="fuga_outros_tip"></button>
     <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar"></button>

@@ -121,12 +121,21 @@ async function testes() {
     api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
     const S = () => api.fugaEstado();
     ok(api.$("dlgFuga").open && S().rodada === 1 && S().itens.length === 5 && api.$("fugaItem_0"), "G5 abre a rodada 1 com o 1º item");
-    ok(/item 1 de 5 · rodada 1/.test(api.$("fugaLista").textContent), "G5a o contador: " + api.$("fugaLista").textContent.slice(0, 80));
+    /* (19.187.0) as bolinhas dizem que há outros itens, sem texto */
+    const passos = () => [0, 1, 2, 3, 4].map((k) => api.$("btnFugaPasso_" + k));
+    ok(passos().every(Boolean) && !api.$("btnFugaPasso_5") && /fuga-passo-atual/.test(passos()[0].className) && !/item 1 de 5/.test(api.$("fugaLista").textContent),
+      "G5a as 5 bolinhas da rodada no topo, a atual em destaque (sem o 'item 1 de 5')");
+    passos()[2].onclick();
+    ok(S().i === 2 && /fuga-passo-atual/.test(api.$("btnFugaPasso_2").className), "G5a2 tocar numa bolinha leva ao item dela");
+    api.$("btnFugaPasso_0").onclick();
+    ok(S().i === 0, "G5a3 e volta");
     ok(!api.$("fugaVerso") || !/verso 2/.test(api.$("fugaLista").textContent), "G5b o verso do cartão começa escondido");
     api.$("btnFugaVirar").onclick();
     ok(/verso/.test(api.$("fugaLista").textContent) && api.$("btnFugaSabia") && api.$("btnFugaNaoSabia"), "G5c virar mostra o verso e 'sabia'/'não sabia'");
     api.$("btnFugaNaoSabia").onclick();
     ok(S().i === 1 && S().itens[1].tipo === "questao" && api.$("btnFugaQ_C"), "G5d 'não sabia' segue para a questão, com Certo/Errado");
+    ok(/fuga-passo-erro/.test(api.$("btnFugaPasso_0").className) && api.$("btnFugaPasso_0").disabled === true && /fuga-passo-atual/.test(api.$("btnFugaPasso_1").className),
+      "G5d2 a bolinha respondida fica com a cor do resultado (e não reabre)");
     api.$("btnFugaQ_C").onclick();
     ok(/Acertou — gabarito: C/.test(api.$("fugaLista").textContent) && /porque sim/.test(api.$("fugaLista").textContent) && S().respostas[1].sabia === true,
       "G5e a questão se responde ali: certo/errado, o gabarito e o comentário");
@@ -137,10 +146,9 @@ async function testes() {
     ok(S().itens[3].tipo === "pegadinha" && api.$("btnFugaLido"), "G5g a pegadinha é só de ler: 'lido'");
     api.$("btnFugaLido").onclick();
     api.$("btnFugaVirar").onclick(); api.$("btnFugaSabia").onclick();
-    ok(S().fase === "fimRodada" && /Rodada 1: 3 sabia · 1 não sabia · 1 lido/.test(api.$("fugaLista").textContent),
+    ok(S().fase === "fimRodada" && /Rodada 1: ✓ 3 · ✗ 1 · lidos 1/.test(api.$("fugaLista").textContent),
       "G5h o fim da rodada conta (o 'lido' à parte): " + api.$("fugaLista").textContent.slice(0, 90));
-    ok(/começa por 🗺 ramo esquecido do mapa/.test(api.$("fugaLista").textContent) && /relógio não recomeça/i.test(api.$("fugaLista").textContent),
-      "G5i diz por onde a corrente segue e que o relógio não recomeça");
+    ok(/A próxima começa por 🗺 ramo esquecido do mapa/.test(api.$("fugaLista").textContent), "G5i diz, curto, por onde a próxima rodada começa");
     const fim = api.fugaEstado().min;
     api.$("btnFugaSeguir").onclick();
     ok(S().rodada === 2 && S().itens[0].tipo === "mapa" && S().fase === "item", "G5j 'outros 5' abre a rodada 2 a partir do mapa");
@@ -207,19 +215,56 @@ async function testes() {
     ok(/3–5 min/.test(api.t("fuga_btn_menu")), "G7g o menu diz 3–5 min: " + api.t("fuga_btn_menu"));
   }
 
+  {
+    /* (19.187.0) G8: o cartão da fuga é o cartão do estudo */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const nota = { card: { front: "O prazo é de {{c1::5 anos::quantos anos?}} contados do {{c2::fato gerador}}.", back: "", more: "Decadência — prazo para lançar" }, disciplina: "Tributário", topico: "Decadência", chave: "" };
+    const mc = { card: { kind: "mc", front: "Qual tributo é vinculado?", options: ["Imposto", "Taxa", "Empréstimo"], correct: 1, back: "A taxa é vinculada a uma atividade estatal." }, disciplina: "Tributário", topico: "Espécies", chave: "" };
+    const F = { cartoes: [
+      { tipo: "cartao", disciplina: "Tributário", topico: "Decadência", frente: "x", verso: "y", peso: 5, uid: "g1#c1", cn: 1, nota },
+      { tipo: "cartao", disciplina: "Financeiro", topico: "Espécies", frente: "x", verso: "y", peso: 4, uid: "g2", cn: 0, nota: mc }],
+      questoes: [], artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    api.fugaAbrir({ fontes: F, disc: "", rnd: () => 0 });
+    const S = () => api.fugaEstado();
+    const x0 = S().itens[S().i];
+    if (x0.uid !== "g1#c1") api.$("btnFugaPasso_" + S().itens.findIndex((x) => x.uid === "g1#c1")).onclick();
+    const cart = () => api.$("fugaLista").querySelectorAll(".est-cartao")[0];
+    ok(cart() && /quantos anos?/.test(cart().textContent) && /fato gerador/.test(cart().textContent) && !/5 anos/.test(cart().textContent),
+      "G8 a lacuna como no estudo: a dica no buraco, as outras lacunas preenchidas: " + (cart() && cart().textContent.slice(0, 90)));
+    api.$("btnFugaVirar").onclick();
+    ok(/5 anos/.test(cart().textContent) && api.$("fugaLista").querySelectorAll(".est-cl-r").length === 1 && api.$("btnFugaSaiba"), "G8a virada: a resposta em destaque e o '✚ saiba mais'");
+    ok([1, 2, 3, 4].every((k) => api.$("btnFugaNota" + k)) && /De novo|de novo/i.test(api.$("btnFugaNota1").textContent), "G8b as quatro notas do estudo, com o nome de cada uma: " + api.$("btnFugaNota1").textContent);
+    api.$("btnFugaNota3").onclick();
+    const ag = JSON.parse(api.loja.getItem("eac_cartao_estudo") || "{}");
+    ok(ag["g1#c1"] && (ag["g1#c1"].h || []).slice(-1)[0] === 3 && S().respostas[0].sabia === true && S().respostas[0].nota === 3,
+      "G8c a nota vale na agenda dos cartões, como no estudo: " + JSON.stringify(ag["g1#c1"] && ag["g1#c1"].h));
+    /* a múltipla escolha: escolher revela e sugere a nota */
+    ok(S().itens[S().i].uid === "g2" && api.$("btnFugaOp_0"), "G8d o cartão de múltipla escolha mostra as alternativas");
+    api.$("btnFugaOp_0").onclick();
+    ok(/est-op-erro/.test(api.$("btnFugaOp_0").className) && /est-op-ok/.test(api.$("btnFugaOp_1").className) && /est-nota-sug/.test(api.$("btnFugaNota1").className),
+      "G8e a escolha errada fica marcada, a certa aparece, e a nota sugerida é 'de novo'");
+    const dlg = api.$("dlgFuga");
+    (dlg._ouv && dlg._ouv.keydown || []).forEach((fn) => fn({ key: "1", target: { tagName: "DIV" }, preventDefault() {} }));
+    ok(S().fase === "fimRodada" && S().respostas[1].nota === 1, "G8f a tecla 1 dá a nota, como no estudo");
+    api.fugaTerminar();
+    ok(!api.$("btnFugaMandar") || api.$("btnFugaMandar").disabled === true, "G8g o cartão já revisado não pede 'mandar para De novo'");
+  }
+
   /* G6: como funciona, chips e teclas */
   {
     const { api } = rodar();
     api.matIniciar(); api.leiIniciar();
     api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
-    ok(api.$("fugaComo").open === true, "G6 'como funciona' vem aberto na primeira vez");
+    ok(api.$("fugaComo").hidden === true && api.$("fugaOpcoes").hidden === true, "G6 pouco texto: 'como funciona' e 'o que entra' fechados no ⓘ e no ⚙");
     const txt = api.t("fuga_como_txt");
-    ok(/OUTROS 5" CONTINUA A CORRENTE/.test(txt) && /cartão → questão → artigo/.test(txt) && /RELÓGIO NÃO RECOMEÇA/.test(txt) && /não conta/.test(txt) && /"De novo"/.test(txt),
-      "G6a a orientação explica o 'outros 5', a ordem da corrente, o relógio e o fim");
+    ok(/bolinhas/.test(txt) && /outros 5/.test(txt) && /cartão → questão → artigo/.test(txt) && /não recomeça/.test(txt) && txt.length < 420,
+      "G6a o ⓘ explica as bolinhas, o 'outros 5', a sequência e o relógio — curto: " + txt.length);
     ok(/não recomeça o relógio/.test(api.t("fuga_outros_tip")), "G6b o balão do 'outros 5' diz o mesmo");
-    api.fugaFechar();
-    api.fugaAbrir({ fontes: fontes(), disc: "Português", rnd: semear() });
-    ok(api.$("fugaComo").open === false, "G6c da segunda vez em diante, fechado");
+    api.$("btnFugaComo").onclick();
+    ok(api.$("fugaComo").hidden === false, "G6c o ⓘ abre o 'como funciona'");
+    api.$("btnFugaOpcoes").onclick();
+    ok(api.$("fugaComo").hidden === true && api.$("fugaOpcoes").hidden === false, "G6c2 o ⚙ abre o 'o que entra' (um painel por vez)");
     ok(api.$("btnFugaF_cartoes") && /\(3\)/.test(api.$("btnFugaF_cartoes").textContent), "G6d os chips dizem quantos itens cada fonte tem: " + (api.$("btnFugaF_cartoes") && api.$("btnFugaF_cartoes").textContent));
     api.$("btnFugaF_julgados").onclick();
     ok(api.fugaPref().fontes.julgados === false && !/fuga-chip-on/.test(api.$("btnFugaF_julgados").className), "G6e tocar no chip desliga a fonte");
@@ -233,7 +278,7 @@ async function testes() {
     ok(tecla("e") === true && api.fugaEstado().revelado === true, "G6i E responde a questão");
     ok(tecla("ArrowRight") === true && api.fugaEstado().i === 2, "G6j → próximo");
     ok(tecla(" ", { tagName: "INPUT" }) === false, "G6k digitando, a tecla não vale");
-    ["fuga_como_tit", "fuga_como_txt", "fuga_outros_tip", "fuga_corrente", "fuga_conta", "fuga_resumo", "fuga_mandar", "fuga_tipo_questao", "fuga_tipo_mapa", "fuga_f_leis", "fuga_vazia"].forEach((k) =>
+    ["fuga_como_tit", "fuga_como_txt", "fuga_outros_tip", "fuga_corrente", "fuga_rodada_tip", "fuga_passo_tip", "fuga_nota_tip", "fuga_resumo", "fuga_mandar", "fuga_tipo_questao", "fuga_tipo_mapa", "fuga_f_leis", "fuga_vazia"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "G6l falta " + k + " em " + lg); }));
     api.setLanguage("pt");
     api.fugaPintar({ itens: [] });

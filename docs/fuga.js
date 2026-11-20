@@ -20,6 +20,11 @@
  *    e o relógio NÃO recomeça (a fuga inteira dura o tempo escolhido). "Como funciona" diz isso na própria janela;
  *  · NO FIM, o resumo de todas as rodadas: os cartões que você não sabia vão, se você quiser, para "De novo" na agenda
  *    dos cartões; os outros itens abrem no lugar deles.
+ * (19.187.0) O CARTÃO DA FUGA É O CARTÃO DO ESTUDO: a lacuna com a dica, a múltipla escolha, as fórmulas, "✚ saiba
+ * mais", as citações ligadas, os avisos (cartão difícil, ramo do mapa) e as QUATRO NOTAS com o intervalo de cada uma —
+ * que valem na agenda dos cartões, como no estudo. E A RODADA SE VÊ: as 5 bolinhas no topo dizem que há outros itens (a
+ * atual em destaque, as respondidas com a cor do resultado; tocar numa leva a ela), no lugar do "item 1 de 5" e das
+ * linhas de explicação — que viraram ⓘ e ⚙ no canto.
  * (19.186.0) A RESPOSTA À QUESTÃO ENTRA NO HISTÓRICO DELA (origem "fuga"): sem isso, uma questão que você acerta sempre
  * na fuga nunca saía do caderno (que a tira com 2 acertos seguidos) e voltava sempre. E FECHAR A JANELA ENCERRA A FUGA
  * por qualquer caminho (Esc, "voltar ao estudo"): o relógio para e o registro anota o que foi feito — antes, só o
@@ -28,7 +33,6 @@
 const FUGA_SEG = 180;
 const FUGA_PREF_CH = "eac_fuga_pref";
 const FUGA_VISTOS_CH = "eac_fuga_vistos";
-const FUGA_COMO_CH = "eac_fuga_como_visto";
 const FUGA_VISTOS_MAX = 80;
 const FUGA_RE_PRAZO = /\b\d+\s*(?:\([^)]{1,30}\)\s*)?(?:dias?|meses|m[eê]s|anos?|horas?)\b/i;
 const FUGA_RE_PEG = /==~((?:[^=\n]|=(?!=))+)==/g;
@@ -142,7 +146,9 @@ function fugaCartoes() {
     const c = n.card;
     const frente = String(c.front || "").replace(/\{\{c\d+::([\s\S]*?)\}\}/g, (m, x) => { const p = x.split("::"); return p[1] ? "[" + p[1] + "]" : "[…]"; });
     const verso = fugaLimpo([c.front && /\{\{c\d+::/.test(c.front) ? c.front : "", c.back].filter(Boolean).join(" — "));
-    out.push({ tipo: "cartao", disciplina: n.disciplina || "", topico: n.topico || "", frente: fugaLimpo(frente).slice(0, 400), verso: verso.slice(0, 500), peso, uid });
+    const mc = /#c(\d+)$/.exec(uid);
+    out.push({ tipo: "cartao", disciplina: n.disciplina || "", topico: n.topico || "", frente: fugaLimpo(frente).slice(0, 400), verso: verso.slice(0, 500), peso, uid,
+      nota: n, cn: mc ? Number(mc[1]) : 0 });
   });
   return out.sort((a, b) => b.peso - a.peso);
 }
@@ -381,11 +387,8 @@ function fugaAbrir(opc) {
   fugaTique();
   try { if (fugaRelogio) clearInterval(fugaRelogio); fugaRelogio = setInterval(fugaTique, 1000); } catch (e) {}
   try { reg("ESTUDO", "fuga rápida aberta", fugaS.min + " min · " + Object.keys(pref.fontes).filter((k) => pref.fontes[k]).join(", ")); } catch (e) {}
-  /* "como funciona" vem aberto na primeira vez */
-  const como = typeof document !== "undefined" ? document.getElementById("fugaComo") : null;
-  let viu = false;
-  try { viu = localStorage.getItem(FUGA_COMO_CH) === "1"; localStorage.setItem(FUGA_COMO_CH, "1"); } catch (e) {}
-  if (como) como.open = !viu;
+  /* (19.187.0) "como funciona" e "o que entra" ficam fechados no ⓘ e no ⚙ do canto: a rodada (as bolinhas) é que se explica */
+  fugaPainel("");
   fugaChipsPintar();
   if (typeof abrirModal === "function") abrirModal("dlgFuga");
   return true;
@@ -400,6 +403,7 @@ function fugaNovaRodada() {
   fugaS.itens = r.itens;
   fugaS.inicio = r.proxInicio;
   fugaS.i = 0;
+  fugaS.passados = {};
   fugaS.revelado = false;
   fugaS.fase = r.itens.length ? "item" : (fugaS.respostas.length ? "resumo" : "vazio");
   r.itens.forEach((x) => fugaS.vistos.push(fugaChave(x)));
@@ -441,11 +445,27 @@ function fugaResponderQuestao(letra) {
   fugaPintar();
   return certo;
 }
+function fugaRespondido(x) { return !!(fugaS && fugaS.respostas.some((r) => r.item === x)); }
+/* ir a um item da rodada (as bolinhas): os já respondidos não reabrem */
+function fugaIr(k) {
+  if (!fugaS || fugaS.fase !== "item" || !fugaS.itens[k] || fugaRespondido(fugaS.itens[k])) return false;
+  fugaS.i = k;
+  fugaS.revelado = false;
+  fugaPintar();
+  return true;
+}
 function fugaProximo() {
   if (!fugaS) return false;
-  fugaS.i++;
+  const n = fugaS.itens.length;
+  /* o que se deixa sem resposta ("próximo" sem responder) fica para trás: a rodada acaba quando todos foram respondidos
+   * ou passados — e a bolinha dele continua tocável enquanto a rodada está aberta */
+  fugaS.passados = fugaS.passados || {};
+  fugaS.passados[fugaS.i] = true;
+  let prox = -1;
+  for (let d = 1; d <= n; d++) { const k = (fugaS.i + d) % n; if (!fugaRespondido(fugaS.itens[k]) && !fugaS.passados[k]) { prox = k; break; } }
   fugaS.revelado = false;
-  if (fugaS.i >= fugaS.itens.length) {
+  fugaS.i = prox >= 0 ? prox : n;
+  if (prox < 0) {
     fugaS.fase = "fimRodada";
     const da = fugaS.respostas.filter((r) => r.rodada === fugaS.rodada);
     const c = fugaContas(da);
@@ -455,6 +475,37 @@ function fugaProximo() {
   return true;
 }
 /* a linha do registro do fim (uma vez por fuga, por qualquer caminho) */
+/* A NOTA DO CARTÃO (1 de novo · 2 difícil · 3 bom · 4 fácil), como no estudo: vale na agenda e no livro de fatos */
+function fugaNotaCartao(nota) {
+  const x = fugaItemAtual();
+  if (!x || x.tipo !== "cartao" || !x.uid || !fugaS.revelado || typeof agdResponder !== "function") return false;
+  try { if (typeof estcCarregarAgenda === "function") estcCarregarAgenda(); } catch (e) {}
+  const agora = Date.now();
+  const antes = estcRegs[x.uid];
+  estcRegs[x.uid] = agdResponder(antes, nota, agora);
+  try { if (typeof estcSalvarAgenda === "function") estcSalvarAgenda(); } catch (e) {}
+  try {
+    if (typeof fatoGravar === "function" && typeof fatoDeCartao === "function") {
+      const n = x.nota || {};
+      const f = fatoDeCartao({ id: x.uid, nota: n, cn: x.cn }, nota, agora, { chave: n.chave || "", disciplina: n.disciplina, topico: n.topico, antes: antes || null });
+      if (f) fatoGravar(f);
+    }
+  } catch (e) {}
+  x.notado = nota;
+  x.enviado = true;
+  try { reg("ESTUDO", "fuga rápida: cartão revisado", "nota " + nota + " · " + String(x.frente || "").slice(0, 50)); } catch (e) {}
+  fugaS.respostas.push({ item: x, sabia: nota >= 2, nota, rodada: fugaS.rodada });
+  return fugaProximo();
+}
+/* a múltipla escolha do cartão: a escolha revela (e sugere a nota) */
+function fugaEscolherOpcao(i) {
+  const x = fugaItemAtual();
+  if (!x || fugaS.revelado) return false;
+  x.escEst = i;
+  fugaS.revelado = true;
+  fugaPintar();
+  return true;
+}
 function fugaRegistrarFim(como) {
   if (!fugaS || fugaS.registrado) return false;
   fugaS.registrado = true;
@@ -523,6 +574,134 @@ function fugaOrigem(x) {
   if (x.tipo === "prazo" || x.tipo === "artigo") return [x.lei, x.rotulo].filter(Boolean).join(", ");
   return [x.disciplina, x.topico].filter(Boolean).join(" › ") + (x.origem ? " · " + x.origem : "");
 }
+/* curto, no cabeçalho do item: o tópico (a origem inteira vai no balão) */
+function fugaOrigemCurta(x) {
+  if (x.tipo === "prazo" || x.tipo === "artigo") return x.rotulo || x.lei || "";
+  return x.topico || x.disciplina || x.origem || "";
+}
+/* ⓘ e ⚙: um painel aberto por vez, logo abaixo do topo */
+function fugaPainel(qual) {
+  if (typeof document === "undefined") return "";
+  [["fugaComo", "btnFugaComo"], ["fugaOpcoes", "btnFugaOpcoes"]].forEach(([id, bt]) => {
+    const el = document.getElementById(id), b = document.getElementById(bt);
+    const abre = id === qual && el && el.hidden !== false;
+    if (el) el.hidden = !abre;
+    if (b && b.setAttribute) b.setAttribute("aria-expanded", abre ? "true" : "false");
+    if (b && b.classList) b.classList.toggle("fuga-redondo-on", !!abre);
+  });
+  return qual;
+}
+/* AS BOLINHAS DA RODADA: dizem que há outros itens sem uma palavra. A atual em destaque; as respondidas com a cor do
+ * resultado; tocar numa ainda sem resposta leva a ela. */
+function fugaPassosEl(S) {
+  const f = fugaEl("div", "fuga-passos");
+  f.id = "fugaPassos";
+  const rot = fugaEl("span", "fuga-rodada", t("fuga_rodada", { r: S.rodada }));
+  rot.title = t("fuga_rodada_tip", { r: S.rodada, n: S.itens.length });
+  f.append(rot);
+  S.itens.forEach((x, k) => {
+    const r = S.respostas.find((y) => y.item === x);
+    const est = r ? (r.lido ? " fuga-passo-lido" : r.sabia ? " fuga-passo-ok" : " fuga-passo-erro") : "";
+    const b = fugaEl("button", "fuga-passo" + est + (k === S.i && S.fase === "item" ? " fuga-passo-atual" : ""), FUGA_ICO[x.tipo] || "•");
+    b.type = "button";
+    b.id = "btnFugaPasso_" + k;
+    b.title = t("fuga_passo_tip", { k: k + 1, n: S.itens.length, t: fugaRotuloTipo(x), o: fugaOrigem(x) });
+    if (b.setAttribute) b.setAttribute("aria-label", b.title);
+    b.disabled = !!r;
+    b.onclick = () => fugaIr(k);
+    f.append(b);
+  });
+  return f;
+}
+/* O CARTÃO DO ESTUDO: o mesmo desenho e os mesmos recursos (est-* de estudo-cartoes.js) */
+function fugaPintarCartao(box, x, S) {
+  const n = x.nota, c = (n && n.card) || {};
+  const cx = fugaEl("div", "est-cartao fuga-cartao");
+  cx.id = "fugaItem_" + S.i;
+  cx.append(fugaEl("div", "est-cab", (c.titulo || "").trim() || n.topico || n.disciplina || ""));
+  let reg = null;
+  try { reg = typeof estcLerJSON === "function" ? (estcLerJSON(ESTC_CH_REGS, {})[x.uid] || null) : null; } catch (e) { reg = null; }
+  if (reg && typeof ESTC_LEECH_LIMIAR !== "undefined" && (reg.l || 0) >= ESTC_LEECH_LIMIAR) cx.append(fugaEl("div", "est-leech", t("est_leech", { n: reg.l })));
+  try { const pr = typeof mmCartaoProblemas === "function" ? mmCartaoProblemas(n) : []; if (pr.length) cx.append(mmCartaoAvisoEl(pr, S.revelado, n)); } catch (e) {}
+  const txt = (s0) => (typeof estcTxt === "function" ? estcTxt(s0) : String(s0 || ""));
+  const frente = fugaEl("div", "est-frente");
+  if (c.kind === "mc") {
+    frente.append(fugaEl("div", "est-txt", txt(c.front)));
+    const ops = fugaEl("div", "est-ops");
+    (c.options || []).forEach((o, i) => {
+      const certa = i === c.correct;
+      const b = fugaEl("button", "est-op" + (S.revelado && certa ? " est-op-ok" : "") + (S.revelado && x.escEst === i && !certa ? " est-op-erro" : ""));
+      b.type = "button";
+      b.id = "btnFugaOp_" + i;
+      b.append(fugaEl("span", "est-op-l", typeof letra === "function" ? letra(i) : String.fromCharCode(65 + i)), fugaEl("span", "est-op-t", txt(o)));
+      b.disabled = S.revelado;
+      b.onclick = () => fugaEscolherOpcao(i);
+      ops.append(b);
+    });
+    frente.append(ops);
+  } else if (x.cn && typeof estcClozeNos === "function") {
+    const tx = fugaEl("div", "est-txt");
+    estcClozeNos(tx, c.front, x.cn, S.revelado);
+    frente.append(tx);
+  } else {
+    frente.append(fugaEl("div", "est-txt", txt(c.front)));
+  }
+  frente.id = "fugaFrente";
+  cx.append(frente);
+  if (typeof matTexDesenharEm === "function") { try { matTexDesenharEm(frente); } catch (e) {} }
+  if (S.revelado) {
+    const verso = fugaEl("div", "est-verso");
+    verso.id = "fugaVerso";
+    if (c.kind !== "mc" && !x.cn && c.back) verso.append(fugaEl("div", "est-hr"), fugaEl("div", "est-txt est-resp", txt(c.back)));
+    else if (c.back) verso.append(fugaEl("div", "est-just", txt(c.back)));
+    cx.append(verso);
+    if (typeof matTexDesenharEm === "function") { try { matTexDesenharEm(verso); } catch (e) {} }
+    let corpo = null;
+    if (c.more) {
+      const sb = fugaEl("button", "est-saiba-b", "✚ " + t("est_saiba"));
+      sb.type = "button";
+      sb.id = "btnFugaSaiba";
+      corpo = fugaEl("div", "est-saiba");
+      if (typeof estcSaibaMais === "function") estcSaibaMais(corpo, c.more); else corpo.textContent = txt(c.more);
+      if (typeof matTexDesenharEm === "function") { try { matTexDesenharEm(corpo); } catch (e) {} }
+      corpo.hidden = true;
+      sb.onclick = () => { corpo.hidden = !corpo.hidden; };
+      cx.append(sb, corpo);
+    }
+    /* as citações da resposta e do "saiba mais" (a frente da lacuna também: o texto em volta já estava à vista) */
+    try {
+      const base = typeof estcCitBase === "function" ? estcCitBase(n) : { disciplina: n.disciplina, topico: n.topico, onde: "cartao" };
+      if (typeof citLigarEm === "function") {
+        if (x.cn) citLigarEm(frente, base);
+        citLigarEm(verso, base);
+        if (corpo) citLigarEm(corpo, base);
+      }
+    } catch (e) {}
+  }
+  box.append(cx);
+  /* a parte de baixo: virar, ou as quatro notas com o intervalo de cada uma */
+  const acoes = fugaEl("div", "fuga-acoes");
+  if (!S.revelado) {
+    if (c.kind !== "mc") acoes.append(fugaBt(t("fuga_virar"), () => fugaVirar(), "btn-min-ok", "btnFugaVirar", t("fuga_virar_tip")));
+    box.append(acoes);
+    return;
+  }
+  const notas = fugaEl("div", "est-notas fuga-notas");
+  let prev = [];
+  try { prev = typeof agdPrevisao === "function" ? agdPrevisao(reg, Date.now()) : []; } catch (e) { prev = []; }
+  const sug = c.kind === "mc" && x.escEst != null ? (x.escEst === c.correct ? 3 : 1) : 0;
+  [1, 2, 3, 4].forEach((k, i) => {
+    const b = fugaEl("button", "est-nota est-nota-" + k + (sug === k ? " est-nota-sug" : ""));
+    b.type = "button";
+    b.id = "btnFugaNota" + k;
+    if (prev[i] != null && typeof agdFormatar === "function" && typeof estcUnidadesTxt === "function") b.append(fugaEl("span", "est-nota-t", agdFormatar(prev[i], estcUnidadesTxt())));
+    b.append(fugaEl("span", "est-nota-r", t("est_nota" + k)));
+    b.title = t("fuga_nota_tip", { k });
+    b.onclick = () => fugaNotaCartao(k);
+    notas.append(b);
+  });
+  box.append(notas);
+}
 /* as citações de lei ficam clicáveis (a prévia do artigo), como no resumo */
 function fugaLigarCitas(el, x) {
   try { if (typeof citLigarEm === "function") citLigarEm(el, { disciplina: x.disciplina || "", topico: x.topico || "", onde: "resumo" }); } catch (e) {}
@@ -559,9 +738,6 @@ function fugaPintar(resLegado) {
   }
   box.innerHTML = "";
   const S = fugaS || { fase: "vazio", itens: [], respostas: [] };
-  const sub = document.getElementById("fugaSub");
-  const m = (S && S.min) || fugaPref().min;
-  if (sub) sub.textContent = S.disc ? t("fuga_sub_disc", { d: S.disc, m }) : t("fuga_sub", { m });
   const outros = document.getElementById("btnFugaOutros");
   if (outros) outros.textContent = t(S.fase === "resumo" ? "fuga_outros_mais" : "fuga_outros");
   if (S.fase === "vazio") {
@@ -570,17 +746,21 @@ function fugaPintar(resLegado) {
     box.append(p);
     return;
   }
-  if (S.fase === "fimRodada") return fugaPintarFimRodada(box, S);
+  if (S.fase === "fimRodada") { box.append(fugaPassosEl(S)); return fugaPintarFimRodada(box, S); }
   if (S.fase === "resumo") return fugaPintarResumo(box, S);
   const x = S.itens[S.i];
   if (!x) return;
+  box.append(fugaPassosEl(S));
+  /* o cartão de verdade (com a nota da biblioteca): o desenho do estudo */
+  if (x.tipo === "cartao" && x.nota && x.nota.card && x.uid) return fugaPintarCartao(box, x, S);
   const c = fugaEl("div", "fuga-item fuga-" + x.tipo);
   c.id = "fugaItem_" + S.i;
   const cab = fugaEl("div", "fuga-cab");
   cab.append(fugaEl("span", "fuga-cab-tipo", (FUGA_ICO[x.tipo] || "•") + " " + fugaRotuloTipo(x)));
-  cab.append(fugaEl("span", "fuga-cab-orig", fugaOrigem(x)));
+  const orig = fugaEl("span", "fuga-cab-orig", fugaOrigemCurta(x));
+  orig.title = fugaOrigem(x);
+  cab.append(orig);
   c.append(cab);
-  c.append(fugaEl("div", "nota fuga-conta", t("fuga_conta", { i: S.i + 1, n: S.itens.length, r: S.rodada })));
   const frente = fugaEl("div", "fuga-txt", x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica" || x.tipo === "prazo" ? (x.tipo === "prazo" ? x.rotulo + " — " + t("fuga_prazo_q") : x.texto) : x.frente);
   frente.id = "fugaFrente";
   fugaLigarCitas(frente, x);
@@ -660,7 +840,7 @@ function fugaPintarFimRodada(box, S) {
   p.id = "fugaFimRodada";
   const cd = fugaContas(da);
   p.append(fugaEl("div", "fuga-fim-tit", t("fuga_fim_rodada", { r: S.rodada, s: cd.s, n: cd.n, l: cd.l })));
-  if (S.rodada > 1) p.append(fugaEl("div", "nota", t("fuga_ate_agora", { n: S.respostas.length, s: fugaContas(S.respostas).s })));
+
   const tp = fugaProximoTipo();
   p.append(fugaEl("p", "nota fuga-corrente", t("fuga_corrente", { t: tp ? (FUGA_ICO[tp === "marca" ? "pegadinha" : tp] || "") + " " + t("fuga_tipo_" + (tp === "marca" ? "pegadinha" : tp)) : "—" })));
   const ac = fugaEl("div", "fuga-acoes");
@@ -701,6 +881,10 @@ function fugaPintarResumo(box, S) {
     liga("btnHdrFuga", () => fugaAbrir());
     liga("btnMatFuga", () => fugaAbrir());
     liga("btnFugaOutros", () => fugaOutros());
+    liga("btnFugaComo", () => fugaPainel("fugaComo"));
+    /* (19.187.0) o "como funciona" não abre mais sozinho: a marca de já visto não serve */
+    try { localStorage.removeItem("eac_fuga_como_visto"); } catch (e) {}
+    liga("btnFugaOpcoes", () => fugaPainel("fugaOpcoes"));
     liga("btnFugaFechar", () => fugaFechar());
     /* teclas: espaço vira, S sabia, N não sabia, → próximo; nunca enquanto se digita */
     const d = document.getElementById("dlgFuga");
@@ -713,12 +897,15 @@ function fugaPintarResumo(box, S) {
       const k = String(e.key || "").toLowerCase();
       const x = fugaItemAtual();
       let feito = false;
-      if ((k === " " || k === "enter") && x && !fugaS.revelado && x.tipo !== "questao") feito = fugaVirar();
+      const cartaoDeVerdade = x && x.tipo === "cartao" && x.nota && x.uid;
+      if (cartaoDeVerdade && fugaS.revelado && /^[1-4]$/.test(k)) feito = fugaNotaCartao(Number(k));
+      else if (cartaoDeVerdade && fugaS.revelado && (k === "s" || k === "n")) feito = fugaNotaCartao(k === "s" ? 3 : 1);
+      else if ((k === " " || k === "enter") && x && !fugaS.revelado && x.tipo !== "questao") feito = fugaVirar();
       else if (k === "s" && x && (fugaS.revelado || /pegadinha|importante|dica/.test(x.tipo)) && x.tipo !== "questao") feito = fugaResponder(true, /pegadinha|importante|dica/.test(x.tipo));
       else if (k === "n" && x && fugaS.revelado && x.tipo !== "questao") feito = fugaResponder(false);
       else if (k === "arrowright" && x && fugaS.revelado) feito = fugaProximo();
-      else if (k === "c" && x && x.tipo === "questao" && !fugaS.revelado) feito = fugaResponderQuestao("C") !== false;
-      else if (k === "e" && x && x.tipo === "questao" && !fugaS.revelado) feito = fugaResponderQuestao("E") !== false;
+      else if (k === "c" && x && x.tipo === "questao" && !fugaS.revelado) { fugaResponderQuestao("C"); feito = true; }
+      else if (k === "e" && x && x.tipo === "questao" && !fugaS.revelado) { fugaResponderQuestao("E"); feito = true; }
       if (feito && e.preventDefault) e.preventDefault();
     });
   } catch (e) {}
