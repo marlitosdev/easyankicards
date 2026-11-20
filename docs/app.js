@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.191.0";
+const VERSAO = "19.192.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -329,6 +329,9 @@ try {
 // a abertura entra ANTES de qualquer análise, senão o registro começa
 // pelo meio da história
 reg("INICIO", "aplicativo aberto", "v" + VERSAO);
+/* (19.192.0) a capa da abertura diz a versão que está carregando: o HTML já a traz escrita; aqui ela é confirmada pelo
+ * número do próprio app (se um dia os dois divergirem, vale o do app que carregou) */
+try { const av = document.getElementById("aberturaVersao"); if (av) av.textContent = "v" + VERSAO; } catch (e) {}
 
 /* O registro é UM só, com os eventos de cada modo marcados por prefixo. Ter
  * dois registros separados criaria a pergunta "em qual deles está?" — e a

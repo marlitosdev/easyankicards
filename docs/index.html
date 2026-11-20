@@ -131,6 +131,7 @@ body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Rob
 .abertura-cx{display:flex;flex-direction:column;align-items:center;gap:var(--esp-3)}
 .abertura-ico{border-radius:var(--r-g);box-shadow:var(--sombra-2)}
 .abertura-nome{font-size:var(--fs-5);font-weight:var(--peso-f);color:var(--texto);letter-spacing:.2px}
+.abertura-versao{font-size:var(--fs-2);color:var(--sutil);letter-spacing:.3px;margin-top:calc(-1 * var(--esp-2))}
 .abertura-barra{width:140px;height:3px;border-radius:var(--r-pilula);background:var(--borda);overflow:hidden}
 .abertura-fio{display:block;width:40%;height:100%;border-radius:var(--r-pilula);background:var(--acao);animation:aberturaFio 1.1s ease-in-out infinite}
 @keyframes aberturaFio{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
@@ -8767,6 +8768,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="abertura-cx">
     <img class="abertura-ico" src="icon-192.png" alt="" width="72" height="72">
     <div class="abertura-nome">EasyAnkiCards</div>
+    <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
+         script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
+    <div class="abertura-versao" id="aberturaVersao">v19.192.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
