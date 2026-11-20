@@ -134,8 +134,18 @@ async function testes() {
     ok(/verso/.test(api.$("fugaLista").textContent) && api.$("btnFugaSabia") && api.$("btnFugaNaoSabia"), "G5c virar mostra o verso e 'sabia'/'não sabia'");
     api.$("btnFugaNaoSabia").onclick();
     ok(S().i === 1 && S().itens[1].tipo === "questao" && api.$("btnFugaQ_C"), "G5d 'não sabia' segue para a questão, com Certo/Errado");
-    ok(/fuga-passo-erro/.test(api.$("btnFugaPasso_0").className) && api.$("btnFugaPasso_0").disabled === true && /fuga-passo-atual/.test(api.$("btnFugaPasso_1").className),
-      "G5d2 a bolinha respondida fica com a cor do resultado (e não reabre)");
+    const marca0 = api.$("btnFugaPasso_0").querySelectorAll(".fuga-passo-marca")[0];
+    ok(/fuga-passo-erro/.test(api.$("btnFugaPasso_0").className) && marca0 && marca0.textContent === "✗" && /fuga-passo-atual/.test(api.$("btnFugaPasso_1").className),
+      "G5d2 a bolinha respondida fica com a cor do resultado e a marca ✗ no canto");
+    /* (19.188.0) voltar a um item respondido: reabre para rever, com o que você marcou, sem pedir de novo */
+    api.$("btnFugaPasso_0").onclick();
+    ok(S().i === 0 && S().revelado === true && api.$("fugaFeito") && /não sabia/.test(api.$("fugaFeito").textContent) && !api.$("fugaLista").querySelectorAll("#btnFugaSabia").length,
+      "G5d3 a bolinha respondida reabre o item para rever: 'Você marcou: não sabia'");
+    ok(api.$("btnFugaAnt").disabled === true, "G5d4 no primeiro item, o ‹ fica apagado");
+    api.$("btnFugaSeg").onclick();
+    ok(S().i === 1 && S().revelado === false && api.$("btnFugaQ_C"), "G5d5 › vai ao vizinho (a questão, ainda sem resposta)");
+    api.$("btnFugaAnt").onclick(); api.$("btnFugaProx").onclick();
+    ok(S().i === 1, "G5d6 'próximo' de quem está revendo leva ao próximo SEM resposta");
     api.$("btnFugaQ_C").onclick();
     ok(/Acertou — gabarito: C/.test(api.$("fugaLista").textContent) && /porque sim/.test(api.$("fugaLista").textContent) && S().respostas[1].sabia === true,
       "G5e a questão se responde ali: certo/errado, o gabarito e o comentário");
@@ -239,6 +249,12 @@ async function testes() {
     const ag = JSON.parse(api.loja.getItem("eac_cartao_estudo") || "{}");
     ok(ag["g1#c1"] && (ag["g1#c1"].h || []).slice(-1)[0] === 3 && S().respostas[0].sabia === true && S().respostas[0].nota === 3,
       "G8c a nota vale na agenda dos cartões, como no estudo: " + JSON.stringify(ag["g1#c1"] && ag["g1#c1"].h));
+    /* rever o cartão já revisado: a nota dada, sem as quatro de novo (a agenda não leva uma segunda nota) */
+    const iG1 = S().itens.findIndex((x) => x.uid === "g1#c1");
+    api.$("btnFugaPasso_" + iG1).onclick();
+    ok(api.$("fugaFeito") && /Revisado: Bom/.test(api.$("fugaFeito").textContent) && !api.$("fugaLista").querySelectorAll(".fuga-notas").length,
+      "G8c2 rever o cartão mostra a nota dada ('Revisado: Bom'), sem pedir outra: " + (api.$("fugaFeito") && api.$("fugaFeito").textContent));
+    api.$("btnFugaProx").onclick();
     /* a múltipla escolha: escolher revela e sugere a nota */
     ok(S().itens[S().i].uid === "g2" && api.$("btnFugaOp_0"), "G8d o cartão de múltipla escolha mostra as alternativas");
     api.$("btnFugaOp_0").onclick();
@@ -249,6 +265,48 @@ async function testes() {
     ok(S().fase === "fimRodada" && S().respostas[1].nota === 1, "G8f a tecla 1 dá a nota, como no estudo");
     api.fugaTerminar();
     ok(!api.$("btnFugaMandar") || api.$("btnFugaMandar").disabled === true, "G8g o cartão já revisado não pede 'mandar para De novo'");
+  }
+
+  {
+    /* (19.188.0) G9: de onde saiu o artigo — a lei, a questão, e o aviso quando a lei foi deduzida; abrir na lei pelo tópico */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const ch = api.matChave("Administrativo", "Atos");
+    api.matGravar(ch, "Resumo dos atos.", { disciplina: "Administrativo", topico: "Atos", concurso: "TJ" });
+    const textoLei = Array.from({ length: 60 }, (_, i) => "Art. " + (i + 1) + (i < 9 ? "º" : ".") + " Texto do artigo " + (i + 1) + " da lei.").join(NL);
+    const l = api.leiGuardar({ id: "lei_9784", nome: "Lei 9.784/1999 Lei de Processo Administrativo", texto: textoLei, topicos: [] });
+    api.leiLigar(l.id, ch);
+    const q1 = { id: "qo1", tipo: "ce", enunciado: "Segundo o art. 55, atos com defeitos sanáveis podem ser convalidados pela Administração.", gabarito: "C", tentativas: [{ acertou: false }], disciplina: "Administrativo", topico: "Atos", chave: ch };
+    const q2 = { id: "qo2", tipo: "ce", enunciado: "O art. 54 da Lei 9.784/1999 fixa o prazo de decadência.", gabarito: "C", tentativas: [{ acertou: true }], disciplina: "Administrativo", topico: "Atos", chave: ch };
+    api.qsTodas().push(q1, q2);
+    const a1 = api.qsArtigosDaQuestao(q1)[0], a2 = api.qsArtigosDaQuestao(q2)[0];
+    ok(a1 && a1.leiId === l.id && a1.como === "topico" && /art. 55, atos/.test(a1.trecho), "G9 a questão sem a lei escrita: a lei do tópico, marcada como suposta, com o trecho: " + JSON.stringify(a1));
+    ok(a2 && a2.como === "nomeada", "G9a a questão que escreve a lei: 'nomeada'");
+    /* o nome por extenso logo depois da citação também é a lei escrita ("art. 128 do Código Tributário Nacional") */
+    const ctn = { nome: "Lei 5.172/1966 - Código Tributário Nacional", apelido: "CTN" };
+    ok(api.qsNomeiaLei(" do Código Tributário Nacional, a responsabilidade", ctn) && api.qsNomeiaLei(" do CTN.", ctn) && !api.qsNomeiaLei(" da Constituição Federal", ctn) && api.qsNomeiaLei(" da Lei de Processo Administrativo", l),
+      "G9a2 reconhece o nome por extenso e o apelido logo depois da citação");
+    const a55 = api.fugaArtigos().find((x) => x.leiId === l.id && x.num === "55");
+    ok(a55 && a55.soDeduzida === true && a55.fonte.q === q1 && /9.784/.test(a55.frente) && /9.784/.test(a55.leiCurta),
+      "G9b o item diz a lei e guarda a questão de onde saiu: " + (a55 && a55.frente));
+    const F = { cartoes: [], questoes: [], artigos: [a55], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    api.fugaAbrir({ fontes: F, disc: "", rnd: () => 0 });
+    const tx = api.$("fugaLista").textContent;
+    ok(/9.784/.test(tx) && /Segundo o art. 55/.test(tx) && api.$("fugaOrigemAviso") && /não diz a lei/.test(api.$("fugaOrigemAviso").textContent) && api.$("btnFugaOrigemQ"),
+      "G9c a fuga mostra a lei, o trecho da questão, o aviso de que a lei foi suposta e 'ver a questão': " + tx.slice(0, 200));
+    ok(/foi suposta por ser a lei do tópico «Atos» que tem o Art. 55/.test(api.$("fugaOrigemAviso").textContent), "G9c2 diz POR QUE esta lei: a do tópico que tem o artigo: " + api.$("fugaOrigemAviso").textContent);
+    ok(!api.$("fugaFrente").querySelectorAll("button").length, "G9d a frente do artigo não vira link (o 'Art. 55' tracejado que não levava a nada)");
+    api.$("btnFugaVirar").onclick();
+    api.$("btnFugaIr").onclick();
+    ok(api.$("dlgLeiSeca").open === true && api.leiCtxDoLeitor().topico === "Atos" && api.leiIdAtualValor() === l.id,
+      "G9e 'abrir na lei' abre PELO TÓPICO da questão (não solta): " + JSON.stringify(api.leiCtxDoLeitor().topico));
+    /* a questão que escreve a lei: o motivo é a própria citação */
+    const a54 = api.fugaArtigos().find((x) => x.leiId === l.id && x.num === "54");
+    api.fugaAbrir({ fontes: Object.assign({}, F, { artigos: [a54] }), disc: "", rnd: () => 0 });
+    ok(/a questão cita “art\. 54 da Lei 9\.784\/1999”/.test(api.$("fugaOrigemAviso").textContent) && /fuga-origem-ok/.test(api.$("fugaOrigemAviso").className),
+      "G9c3 lei escrita na questão: o motivo é a citação, sem alerta: " + api.$("fugaOrigemAviso").textContent);
+    api.leiAbrirAvulsa(l.id);
+    ok(api.$("leiTextoAjuda").hidden === true, "G9f aberta pela Biblioteca, sem o 'cole aqui só se a lei ainda não existe'");
   }
 
   /* G6: como funciona, chips e teclas */

@@ -1367,6 +1367,16 @@ function qsBizuTexto(grupos) {
  * ===================================================================== */
 const QS_IRMA_PASSO = 5;
 const qsMemoArtigos = new Map();
+/* (19.188.0) o trecho logo depois da citação nomeia esta lei? Pelo apelido ("CTN", "LRF") ou pela parte descritiva do
+ * nome ("Código Tributário Nacional" de "Lei 5.172/1966 - Código Tributário Nacional") */
+function qsNomeiaLei(depois, lei) {
+  if (!lei) return false;
+  const tx = " " + qsSemAcento(String(depois || "")).replace(/\s+/g, " ") + " ";
+  const nome = String(lei.nome || "");
+  const desc = (nome.split(/\s+[-–—]\s+/)[1] || nome.replace(/^.*?\d[\d.]*\/\d{2,4}\s*/, "")).trim();
+  const cands = [lei.apelido, desc].map((x) => qsSemAcento(String(x || "")).replace(/\s+/g, " ").trim()).filter((x) => x.length >= 3);
+  return cands.some((x) => (x.length <= 6 ? new RegExp("[^a-z0-9]" + x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[^a-z0-9]").test(tx) : tx.indexOf(x) >= 0));
+}
 function qsArtigosDaQuestao(q) {
   if (!q || typeof leiCitacoesNoTexto !== "function" || typeof leiResolverCitacao !== "function") return [];
   const txt = [q.enunciado, q.comentario, q.gabarito].filter(Boolean).join(" \n ");
@@ -1383,10 +1393,19 @@ function qsArtigosDaQuestao(q) {
   cits.forEach((c) => {
     const res = c.leiId ? { lei: lista.find((x) => x.id === c.leiId) } : leiResolverCitacao(c, lista, dt);
     if (!res || !res.lei) return;
+    /* (19.188.0) COMO a lei foi decidida — "vinculo" (você fixou), "alteradora", "nomeada" (o texto diz a lei), "deduzida"
+     * (a lei dita antes no parágrafo) ou "topico" (o texto NÃO diz a lei: é a do tópico, que tem o artigo) — e o TRECHO
+     * de onde saiu. Sem isso, "Art. 55" aparecia na fuga sem dizer de qual lei nem de qual questão. */
+    let como = c.leiId ? "vinculo" : res.via === "alteradora" ? "alteradora" : c.rotulo ? "nomeada" : res.deduzida ? "deduzida" : "topico";
+    const ini = Number.isFinite(c.ini) ? c.ini : -1, fim = Number.isFinite(c.fim) ? c.fim : -1;
+    /* o nome por extenso logo depois ("art. 128 do Código Tributário Nacional") também é a lei escrita, mesmo quando a
+     * leitura da citação não o pega como rótulo: aí ela é "nomeada", não suposta */
+    if ((como === "topico" || como === "deduzida") && fim >= 0 && qsNomeiaLei(txt.slice(fim, fim + 70), res.lei)) como = "nomeada";
+    const trecho = ini >= 0 ? (ini > 70 ? "…" : "") + txt.slice(Math.max(0, ini - 70), Math.min(txt.length, fim + 70)).replace(/\s+/g, " ").trim() + (fim + 70 < txt.length ? "…" : "") : "";
     const nums = (c.artigos && c.artigos.length) ? c.artigos.map((a) => ({ num: a.num, numCru: a.numCru || a.num })) : [{ num: c.num, numCru: c.numCru || c.num }];
     nums.forEach((n) => {
       const k = res.lei.id + ":" + leiNumNormal(n.num);
-      if (!vistos[k]) { vistos[k] = { chave: k, leiId: res.lei.id, num: leiNumNormal(n.num), numCru: n.numCru, sub: [] }; arts.push(vistos[k]); }
+      if (!vistos[k]) { vistos[k] = { chave: k, leiId: res.lei.id, num: leiNumNormal(n.num), numCru: n.numCru, sub: [], como, trecho, citado: c.texto || "" }; arts.push(vistos[k]); }
       (c.incisos || []).concat(c.paragrafos || []).forEach((s) => { if (vistos[k].sub.indexOf(s) < 0) vistos[k].sub.push(s); });
     });
   });

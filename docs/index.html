@@ -902,14 +902,33 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 /* as bolinhas da rodada */
 .fuga-passos{display:flex;align-items:center;gap:var(--esp-2);margin:0 0 var(--esp-2)}
 .fuga-rodada{font-size:var(--fs-1);font-weight:var(--peso-f);color:var(--sutil);margin-right:var(--esp-1)}
-.fuga-passo{width:30px;height:30px;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;
+.fuga-passo{position:relative;width:30px;height:30px;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;
   border:2px solid var(--borda);background:transparent;font-size:var(--fs-3);cursor:pointer}
-.fuga-passo:disabled{cursor:default}
+/* a marca do feito, no canto da bolinha */
+.fuga-passo-marca{position:absolute;right:-5px;bottom:-5px;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:var(--fs-1);font-weight:var(--peso-f);line-height:1;color:var(--panel);background:var(--sutil)}
+.fuga-passo-ok .fuga-passo-marca{background:var(--ok)}
+.fuga-passo-erro .fuga-passo-marca{background:var(--erro)}
+.fuga-nav{border-radius:var(--r-pilula);min-width:30px;font-weight:var(--peso-f)}
+/* o item já respondido: o que você marcou */
+.fuga-feito{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--esp-2);margin-top:var(--esp-3);
+  padding:var(--esp-2) var(--esp-3);border-radius:var(--r-m);border:1px solid var(--borda)}
+.fuga-feito-txt{font-weight:var(--peso-f)}
+.fuga-feito-ok{border-color:var(--ok)}
+.fuga-feito-ok .fuga-feito-txt{color:var(--ok)}
+.fuga-feito-erro{border-color:var(--erro)}
+.fuga-feito-erro .fuga-feito-txt{color:var(--erro)}
 .fuga-passo-atual{border-color:var(--acao);box-shadow:0 0 0 2px var(--acao)}
-.fuga-passo-ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 22%,transparent)}
-.fuga-passo-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 22%,transparent)}
+.fuga-passo-ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 35%,transparent)}
+.fuga-passo-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 35%,transparent)}
 .fuga-passo-lido{border-color:var(--sutil);opacity:.6}
 .fuga-cartao{margin:0;max-height:none}
+/* de onde saiu o artigo: o trecho da questão, e o aviso quando a lei foi deduzida */
+.fuga-origem{margin-top:var(--esp-2);padding:var(--esp-2) var(--esp-3);border-left:3px solid var(--borda);font-size:var(--fs-2)}
+.fuga-origem-txt{font-style:italic;color:var(--sutil);line-height:1.45}
+.fuga-origem-aviso{margin:var(--esp-1) 0;color:var(--atencao)}
+.fuga-origem-aviso.fuga-origem-ok{color:var(--sutil)}
+.fuga-origem .btn-min{margin-top:var(--esp-1)}
 .fuga-notas{margin-top:var(--esp-3)}
 .fuga-chips{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:center;margin:var(--esp-2) 0 0}
 .fuga-chip{border-radius:var(--r-pilula);opacity:.65}

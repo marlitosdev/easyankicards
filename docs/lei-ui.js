@@ -947,6 +947,9 @@ function leiPintarFila() {
       chip.textContent = atual.nome;
       cx.append(rot, chip);
     }
+    /* (19.188.0) aberta pela Biblioteca (a fuga, a citação): a lei já existe — o "cole aqui só se ela ainda não existe" não cabe */
+    const aj = $("leiTextoAjuda");
+    if (aj) aj.hidden = true;
     return;
   }
   const lista = leisDoTopico(leiAtual.chave);

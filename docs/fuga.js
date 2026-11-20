@@ -183,8 +183,10 @@ function fugaArtigos() {
     as.forEach((a) => {
       if (!a || !a.leiId || vistos[a.chave]) return;
       vistos[a.chave] = true;
-      const r = agg[a.chave] || (agg[a.chave] = { leiId: a.leiId, num: a.num, q: 0, e: 0, a: 0, discs: {}, tops: {} });
+      const r = agg[a.chave] || (agg[a.chave] = { leiId: a.leiId, num: a.num, q: 0, e: 0, a: 0, discs: {}, tops: {}, fontes: [] });
       r.q++;
+      /* (19.188.0) de onde saiu: as questões que citam (a nomeada primeiro — é a que diz a lei com todas as letras) */
+      r.fontes.push({ q, como: a.como || "", trecho: a.trecho || "", citado: a.citado || "" });
       if (q.disciplina) r.discs[q.disciplina] = (r.discs[q.disciplina] || 0) + 1;
       if (q.topico) r.tops[q.topico] = (r.tops[q.topico] || 0) + 1;
       (q.tentativas || []).forEach((tt) => { if (tt && tt.acertou && !tt.chute) r.a++; else if (tt) r.e++; });
@@ -204,12 +206,26 @@ function fugaArtigos() {
     let nota = "";
     try { nota = typeof leiNotaDe === "function" ? String(leiNotaDe(l.id, r.num) || "") : ""; } catch (e) { nota = ""; }
     const tp = fugaDoTopico((l.topicos || [])[0]);
-    out.push({ tipo: "artigo", lei: l.nome || "", leiId: l.id, num: r.num, rotulo: a.rotulo || ("Art. " + r.num),
+    const ordem = { vinculo: 0, nomeada: 1, alteradora: 2, deduzida: 3, topico: 4 };
+    const fonte = r.fontes.slice().sort((x, y) => (ordem[x.como] == null ? 5 : ordem[x.como]) - (ordem[y.como] == null ? 5 : ordem[y.como]))[0] || null;
+    /* a lei que NENHUMA questão nomeia (todas sem a lei escrita) é uma dedução: pesa menos e a fuga avisa */
+    const soDeduzida = r.fontes.length && r.fontes.every((f) => f.como === "topico" || f.como === "deduzida");
+    const curta = fugaLeiRotulo(l);
+    out.push({ tipo: "artigo", lei: l.nome || "", leiCurta: curta || l.nome || "", leiId: l.id, num: r.num, rotulo: a.rotulo || ("Art. " + r.num),
       disciplina: maisDe(r.discs) || tp.disciplina, topico: maisDe(r.tops) || tp.topico,
-      frente: a.rotulo + (nota ? " — " + fugaLimpo(nota) : ""), verso: corpo.slice(0, 900),
-      motivo: t(erra ? "fuga_art_erra" : "fuga_art_cai", { q: r.q, e: r.e }), peso: (erra ? 10 : 0) + r.q });
+      frente: a.rotulo + " · " + (curta || l.nome || "") + (nota ? " — " + fugaLimpo(nota) : ""), verso: corpo.slice(0, 900),
+      motivo: t(erra ? "fuga_art_erra" : "fuga_art_cai", { q: r.q, e: r.e }), peso: (erra ? 10 : 0) + r.q - (soDeduzida ? 3 : 0),
+      fonte, soDeduzida: !!soDeduzida });
   });
   return out.sort((a, b) => b.peso - a.peso);
+}
+/* o nome da lei que diz QUAL é: o número ("Lei 9.784/1999"); sem número, o nome curto do leitor ("Constituição") */
+function fugaLeiRotulo(l) {
+  const nome = String((l && l.nome) || "").trim();
+  const m = nome.match(/^(.{0,30}?\d[\d.]*\/\d{2,4})/);
+  if (m) return m[1].trim();
+  try { if (typeof leiNomeCurto === "function") return leiNomeCurto(l); } catch (e) {}
+  return nome.length > 30 ? nome.slice(0, 29) + "…" : nome;
 }
 /* os trechos marcados nos resumos E nas leis: [{ tipo: "pegadinha" | "importante", disciplina, topico, texto }] */
 function fugaMarcas() {
@@ -446,13 +462,30 @@ function fugaResponderQuestao(letra) {
   return certo;
 }
 function fugaRespondido(x) { return !!(fugaS && fugaS.respostas.some((r) => r.item === x)); }
-/* ir a um item da rodada (as bolinhas): os já respondidos não reabrem */
+function fugaRespostaDe(x) { return (fugaS && fugaS.respostas.find((r) => r.item === x)) || null; }
+/* (19.188.0) IR A QUALQUER ITEM DA RODADA (as bolinhas, ‹ ›, as setas): o ainda sem resposta abre para responder; o já
+ * respondido abre para REVER — virado, com o que você marcou, sem pedir a resposta de novo. Vale também do fim da rodada. */
 function fugaIr(k) {
-  if (!fugaS || fugaS.fase !== "item" || !fugaS.itens[k] || fugaRespondido(fugaS.itens[k])) return false;
+  if (!fugaS || (fugaS.fase !== "item" && fugaS.fase !== "fimRodada") || !fugaS.itens[k]) return false;
+  fugaS.fase = "item";
   fugaS.i = k;
-  fugaS.revelado = false;
+  fugaS.revelado = fugaRespondido(fugaS.itens[k]);
   fugaPintar();
   return true;
+}
+/* ‹ › : o vizinho, respondido ou não; depois do último, o fim da rodada (se não falta nenhum) */
+function fugaNav(d) {
+  if (!fugaS || !fugaS.itens.length) return false;
+  const n = fugaS.itens.length;
+  const de = fugaS.fase === "fimRodada" ? n : fugaS.i;
+  const k = de + d;
+  if (k < 0) return false;
+  if (k >= n) {
+    if (fugaS.itens.every(fugaRespondido)) { fugaS.fase = "fimRodada"; fugaS.i = n; fugaPintar(); return true; }
+    const falta = fugaS.itens.findIndex((x) => !fugaRespondido(x));
+    return falta >= 0 ? fugaIr(falta) : false;
+  }
+  return fugaIr(k);
 }
 function fugaProximo() {
   if (!fugaS) return false;
@@ -576,7 +609,8 @@ function fugaOrigem(x) {
 }
 /* curto, no cabeçalho do item: o tópico (a origem inteira vai no balão) */
 function fugaOrigemCurta(x) {
-  if (x.tipo === "prazo" || x.tipo === "artigo") return x.rotulo || x.lei || "";
+  if (x.tipo === "artigo") return x.leiCurta || x.lei || "";
+  if (x.tipo === "prazo") return x.rotulo || x.lei || "";
   return x.topico || x.disciplina || x.origem || "";
 }
 /* ⓘ e ⚙: um painel aberto por vez, logo abaixo do topo */
@@ -599,18 +633,25 @@ function fugaPassosEl(S) {
   const rot = fugaEl("span", "fuga-rodada", t("fuga_rodada", { r: S.rodada }));
   rot.title = t("fuga_rodada_tip", { r: S.rodada, n: S.itens.length });
   f.append(rot);
+  const nav = (d, txt, id, tip) => { const b = fugaBt(txt, () => fugaNav(d), "fuga-nav", id, tip); return b; };
+  const ant = nav(-1, "‹", "btnFugaAnt", t("fuga_ant_tip"));
+  ant.disabled = S.fase === "item" && S.i <= 0;
+  f.append(ant);
   S.itens.forEach((x, k) => {
     const r = S.respostas.find((y) => y.item === x);
     const est = r ? (r.lido ? " fuga-passo-lido" : r.sabia ? " fuga-passo-ok" : " fuga-passo-erro") : "";
     const b = fugaEl("button", "fuga-passo" + est + (k === S.i && S.fase === "item" ? " fuga-passo-atual" : ""), FUGA_ICO[x.tipo] || "•");
     b.type = "button";
     b.id = "btnFugaPasso_" + k;
-    b.title = t("fuga_passo_tip", { k: k + 1, n: S.itens.length, t: fugaRotuloTipo(x), o: fugaOrigem(x) });
+    /* a marca no canto: dá para ver de longe o que já foi feito, e como */
+    if (r) b.append(fugaEl("span", "fuga-passo-marca", r.lido ? "·" : r.sabia ? "✓" : "✗"));
+    const estado = r ? t(r.lido ? "fuga_passo_lido" : r.sabia ? "fuga_passo_sabia" : "fuga_passo_nao") : t("fuga_passo_falta");
+    b.title = t("fuga_passo_tip", { k: k + 1, n: S.itens.length, t: fugaRotuloTipo(x), o: fugaOrigem(x) }) + " · " + estado;
     if (b.setAttribute) b.setAttribute("aria-label", b.title);
-    b.disabled = !!r;
     b.onclick = () => fugaIr(k);
     f.append(b);
   });
+  f.append(nav(1, "›", "btnFugaSeg", t("fuga_seg_tip")));
   return f;
 }
 /* O CARTÃO DO ESTUDO: o mesmo desenho e os mesmos recursos (est-* de estudo-cartoes.js) */
@@ -684,6 +725,11 @@ function fugaPintarCartao(box, x, S) {
   if (!S.revelado) {
     if (c.kind !== "mc") acoes.append(fugaBt(t("fuga_virar"), () => fugaVirar(), "btn-min-ok", "btnFugaVirar", t("fuga_virar_tip")));
     box.append(acoes);
+    return;
+  }
+  const resp = fugaRespostaDe(x);
+  if (resp) {
+    box.append(fugaFeitoEl(resp, x));
     return;
   }
   const notas = fugaEl("div", "est-notas fuga-notas");
@@ -763,9 +809,30 @@ function fugaPintar(resLegado) {
   c.append(cab);
   const frente = fugaEl("div", "fuga-txt", x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica" || x.tipo === "prazo" ? (x.tipo === "prazo" ? x.rotulo + " — " + t("fuga_prazo_q") : x.texto) : x.frente);
   frente.id = "fugaFrente";
-  fugaLigarCitas(frente, x);
+  if (x.tipo !== "artigo" && x.tipo !== "prazo") fugaLigarCitas(frente, x);
   c.append(frente);
   if (x.motivo) c.append(fugaEl("div", "nota fuga-motivo", x.motivo));
+  /* (19.188.0) DE ONDE SAIU: o trecho da questão que cita o artigo; quando a questão não escreve a lei, o aviso de que
+   * ela foi deduzida — e "ver a questão" leva lá, onde o link da citação deixa trocar a lei ou fixar a certa (🔗) */
+  if (x.tipo === "artigo" && x.fonte) {
+    const o = fugaEl("div", "fuga-origem");
+    o.id = "fugaOrigem";
+    if (x.fonte.trecho) o.append(fugaEl("div", "fuga-origem-txt", "“" + x.fonte.trecho + "”"));
+    /* POR QUE ESTA LEI — sempre dito: a questão escreve a lei, o vínculo é seu, a lei citada altera esta, ou (o caso que
+     * pede atenção) a questão NÃO diz a lei e o app a supôs pelo tópico ou pela lei citada antes no parágrafo */
+    const como = x.fonte.como || "nomeada";
+    const suposta = como === "topico" || como === "deduzida";
+    const tpQ = (x.fonte.q && x.fonte.q.topico) || x.topico || "";
+    const av = fugaEl("div", "fuga-origem-aviso" + (suposta ? "" : " fuga-origem-ok"),
+      t("fuga_lei_por_" + (["topico", "deduzida", "nomeada", "vinculo", "alteradora"].indexOf(como) >= 0 ? como : "nomeada"),
+        { l: x.leiCurta || x.lei, a: x.rotulo, tp: tpQ, c: x.fonte.citado || x.rotulo }));
+    av.id = "fugaOrigemAviso";
+    o.append(av);
+    if (x.fonte.q && typeof qsUiResponderAbrir === "function") {
+      o.append(fugaBt(t("fuga_ver_questao"), () => qsUiResponderAbrir([x.fonte.q], "aba", "fuga"), "", "btnFugaOrigemQ", t("fuga_ver_questao_tip")));
+    }
+    c.append(o);
+  }
   const acoes = fugaEl("div", "fuga-acoes");
   if (x.tipo === "questao") {
     const q = x.q;
@@ -784,7 +851,7 @@ function fugaPintar(resLegado) {
       c.append(ops);
     }
     if (S.revelado) {
-      const ultima = S.respostas[S.respostas.length - 1];
+      const ultima = fugaRespostaDe(x);
       const fb = fugaEl("div", "fuga-verso " + (ultima && ultima.sabia ? "fuga-acertou" : "fuga-errou"),
         t(ultima && ultima.sabia ? "fuga_q_acertou" : "fuga_q_errou", { g: String(q.gabarito || "").toUpperCase() }));
       const extra = fugaLimpo(q.dica || q.comentario || "");
@@ -793,8 +860,10 @@ function fugaPintar(resLegado) {
       fugaLigarCitas(fb, x);
       c.append(fb);
       acoes.innerHTML = "";
-      acoes.append(fugaBt(t("fuga_proximo"), () => fugaProximo(), "btn-min-ok", "btnFugaProx"));
+      acoes.append(fugaBt(t("fuga_proximo"), () => fugaSeguir(), "btn-min-ok", "btnFugaProx"));
     }
+  } else if (fugaRespondido(x) && (x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica")) {
+    acoes.append(fugaFeitoEl(fugaRespostaDe(x), x));
   } else if (x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica") {
     /* o que é só para ler: lido, segue */
     acoes.append(fugaBt(t("fuga_lido"), () => fugaResponder(true, true), "btn-min-ok", "btnFugaLido", t("fuga_lido_tip")));
@@ -805,8 +874,11 @@ function fugaPintar(resLegado) {
     v.id = "fugaVerso";
     fugaLigarCitas(v, x);
     c.append(v);
-    acoes.append(fugaBt(t("fuga_sabia"), () => fugaResponder(true), "btn-min-ok", "btnFugaSabia", t("fuga_sabia_tip")));
-    acoes.append(fugaBt(t("fuga_nao_sabia"), () => fugaResponder(false), "btn-min-perigo", "btnFugaNaoSabia", t("fuga_nao_sabia_tip")));
+    if (fugaRespondido(x)) acoes.append(fugaFeitoEl(fugaRespostaDe(x), x));
+    else {
+      acoes.append(fugaBt(t("fuga_sabia"), () => fugaResponder(true), "btn-min-ok", "btnFugaSabia", t("fuga_sabia_tip")));
+      acoes.append(fugaBt(t("fuga_nao_sabia"), () => fugaResponder(false), "btn-min-perigo", "btnFugaNaoSabia", t("fuga_nao_sabia_tip")));
+    }
   }
   /* abrir no lugar dele (sem fechar a fuga: a janela abre por cima) */
   const ir = fugaIrBotao(x);
@@ -814,9 +886,41 @@ function fugaPintar(resLegado) {
   c.append(acoes);
   box.append(c);
 }
+/* (19.188.0) O QUE VOCÊ MARCOU neste item: "✓ sabia", "✗ não sabia", "✓ lido" ou a nota do cartão — e o próximo */
+function fugaFeitoEl(resp, x) {
+  const d = fugaEl("div", "fuga-feito " + (resp.lido ? "fuga-feito-lido" : resp.sabia ? "fuga-feito-ok" : "fuga-feito-erro"));
+  d.id = "fugaFeito";
+  const txt = resp.nota ? t("fuga_feito_nota", { n: t("est_nota" + resp.nota) }) : t(resp.lido ? "fuga_feito_lido" : resp.sabia ? "fuga_feito_sabia" : "fuga_feito_nao");
+  d.append(fugaEl("span", "fuga-feito-txt", txt));
+  d.append(fugaBt(t("fuga_proximo"), () => fugaSeguir(), "btn-min-ok", "btnFugaProx"));
+  return d;
+}
+/* "próximo" depois de responder ou de rever: o próximo SEM resposta; sem nenhum, o fim da rodada */
+function fugaSeguir() {
+  if (!fugaS) return false;
+  if (!fugaRespondido(fugaS.itens[fugaS.i])) return fugaProximo();
+  const n = fugaS.itens.length;
+  for (let d = 1; d <= n; d++) { const k = (fugaS.i + d) % n; if (!fugaRespondido(fugaS.itens[k])) return fugaIr(k); }
+  fugaS.fase = "fimRodada"; fugaS.i = n; fugaPintar();
+  return true;
+}
+/* o tópico para abrir a lei: o da questão de onde o artigo saiu (se a lei está ligada a ele), o do item, ou o primeiro
+ * tópico a que a lei está ligada; sem nenhum, a lei abre solta (pela Biblioteca) */
+function fugaTopicoDaLei(x) {
+  const l = typeof leiDe === "function" ? leiDe(x.leiId) : null;
+  const nada = { disciplina: "", topico: "" };
+  if (!l || typeof matChave !== "function" || typeof leisDoTopico !== "function") return nada;
+  const ligada = (d, tp) => !!(d && tp && leisDoTopico(matChave(d, tp)).some((y) => y.id === l.id));
+  const q = x.fonte && x.fonte.q;
+  if (q && ligada(q.disciplina, q.topico)) return { disciplina: q.disciplina, topico: q.topico };
+  if (ligada(x.disciplina, x.topico)) return { disciplina: x.disciplina, topico: x.topico };
+  for (const c of (l.topicos || [])) { const tp = fugaDoTopico(c); if (ligada(tp.disciplina, tp.topico)) return tp; }
+  return nada;
+}
 function fugaIrBotao(x) {
   if ((x.tipo === "artigo" || x.tipo === "prazo") && x.leiId && typeof leiAbrirNoArtigo === "function") {
-    return fugaBt(t("fuga_ir_lei"), () => leiAbrirNoArtigo("", "", x.leiId, x.num), "", "btnFugaIr");
+    /* (19.188.0) PELO TÓPICO, não solta: a leitura conta para ele e o leitor vem inteiro (consulta ao lado, leis do tópico) */
+    return fugaBt(t("fuga_ir_lei"), () => { const tp = fugaTopicoDaLei(x); leiAbrirNoArtigo(tp.disciplina, tp.topico, x.leiId, x.num); }, "", "btnFugaIr");
   }
   if (x.tipo === "julgado" && typeof jurAbrir === "function" && x.disciplina && x.topico) {
     return fugaBt(t("fuga_ir_jur"), () => jurAbrir(x.disciplina, x.topico, "ler"), "", "btnFugaIr");
@@ -897,13 +1001,14 @@ function fugaPintarResumo(box, S) {
       const k = String(e.key || "").toLowerCase();
       const x = fugaItemAtual();
       let feito = false;
-      const cartaoDeVerdade = x && x.tipo === "cartao" && x.nota && x.uid;
+      const cartaoDeVerdade = x && x.tipo === "cartao" && x.nota && x.uid && !fugaRespondido(x);
       if (cartaoDeVerdade && fugaS.revelado && /^[1-4]$/.test(k)) feito = fugaNotaCartao(Number(k));
       else if (cartaoDeVerdade && fugaS.revelado && (k === "s" || k === "n")) feito = fugaNotaCartao(k === "s" ? 3 : 1);
       else if ((k === " " || k === "enter") && x && !fugaS.revelado && x.tipo !== "questao") feito = fugaVirar();
-      else if (k === "s" && x && (fugaS.revelado || /pegadinha|importante|dica/.test(x.tipo)) && x.tipo !== "questao") feito = fugaResponder(true, /pegadinha|importante|dica/.test(x.tipo));
-      else if (k === "n" && x && fugaS.revelado && x.tipo !== "questao") feito = fugaResponder(false);
-      else if (k === "arrowright" && x && fugaS.revelado) feito = fugaProximo();
+      else if (k === "s" && x && !fugaRespondido(x) && (fugaS.revelado || /pegadinha|importante|dica/.test(x.tipo)) && x.tipo !== "questao") feito = fugaResponder(true, /pegadinha|importante|dica/.test(x.tipo));
+      else if (k === "n" && x && !fugaRespondido(x) && fugaS.revelado && x.tipo !== "questao") feito = fugaResponder(false);
+      else if (k === "arrowright" && (x || fugaS.fase === "fimRodada")) feito = fugaNav(1);
+      else if (k === "arrowleft" && (x || fugaS.fase === "fimRodada")) feito = fugaNav(-1);
       else if (k === "c" && x && x.tipo === "questao" && !fugaS.revelado) { fugaResponderQuestao("C"); feito = true; }
       else if (k === "e" && x && x.tipo === "questao" && !fugaS.revelado) { fugaResponderQuestao("E"); feito = true; }
       if (feito && e.preventDefault) e.preventDefault();
