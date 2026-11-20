@@ -1052,6 +1052,11 @@ function ledPintar() {
       tx.append(ledEl("div", "led-lei-meta", x.nums.length
         ? t("led_foco_nums", { f: ledFaixas(x.nums, x.P.leit, 12), l: x.leit.lidos, t: x.leit.total })
         : t(x.T.ligada ? "led_foco_sem_art" : "lv_foco_sem_art_cit")));
+      /* (19.189.0) os ★ importantes desta lei para este edital */
+      try {
+        const nImp = typeof liLista === "function" ? liLista(x.id, M.edId).length : 0;
+        if (nImp) tx.append(ledEl("div", "led-lei-meta li-led", t("li_led_n", { n: nImp })));
+      } catch (e) {}
       lin.append(tx);
       const acF = ledEl("div", "led-lei-acoes");
       /* (19.182.0) achada pelo edital, mas SEM vínculo com o tópico: ler solta não conta para ele — ligar e ler primeiro */

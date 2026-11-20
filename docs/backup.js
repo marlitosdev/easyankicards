@@ -77,6 +77,8 @@ const BK_CHAVES = {
   material: ["eac_resumos", "eac_questoes", "eac_qs_sessao", "eac_mat_prova",
              /* (19.175.0) o "tentar lembrar" do mapa do resumo: o que você não lembrou fica marcado (mapa-mental.js) */
              "eac_mm_treino", "eac_mm_curadoria",
+             /* (19.189.0) os artigos importantes de cada lei, por edital (IA e você): lei-importantes.js */
+             "eac_lei_importantes",
              "eac_leis", "eac_cit_vinculos", "eac_rascunhos", "eac_fora_da_agenda", "eac_qs_hist", "eac_mc_parei", "eac_lixeira",
              /* (19.122.0) o livro de fatos (fatos.js): cada resposta e cada revisão de cartão; mora no IndexedDB */
              "eac_fatos",

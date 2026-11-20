@@ -217,6 +217,29 @@ function fugaArtigos() {
       motivo: t(erra ? "fuga_art_erra" : "fuga_art_cai", { q: r.q, e: r.e }), peso: (erra ? 10 : 0) + r.q - (soDeduzida ? 3 : 0),
       fonte, soDeduzida: !!soDeduzida });
   });
+  /* (19.189.0) OS ★ IMPORTANTES (IA ou você) entram na frente: o que já veio das questões ganha o selo; o que não veio
+   * entra com o motivo da lista */
+  try {
+    if (typeof liTodos === "function") {
+      liTodos().forEach((im) => {
+        const ja = out.find((x) => x.leiId === im.leiId && x.num === im.num);
+        const motivoImp = t(im.de === "ia" ? "fuga_imp_ia" : "fuga_imp_voce", { e: im.edId && typeof liEditalNome === "function" ? liEditalNome(im.edId) : t("li_geral") }) + (im.motivo ? " — " + im.motivo : "");
+        if (ja) { ja.imp = im; ja.motivoImp = motivoImp; ja.peso += 14; return; }
+        const l = typeof leiDe === "function" ? leiDe(im.leiId) : null;
+        if (!l || !l.texto) return;
+        if (!efetivosDe[l.id]) { try { efetivosDe[l.id] = leiArtigosEfetivos(l); } catch (e) { efetivosDe[l.id] = []; } }
+        const a = efetivosDe[l.id].find((x) => x.num === im.num);
+        if (!a || a.revogado) return;
+        const corpo = fugaLimpo(a.corpo || a.texto || "");
+        if (corpo.length < 10) return;
+        const curta = fugaLeiRotulo(l);
+        const tp = fugaDoTopico((l.topicos || [])[0]);
+        out.push({ tipo: "artigo", lei: l.nome || "", leiCurta: curta, leiId: l.id, num: im.num, rotulo: a.rotulo || ("Art. " + im.num),
+          disciplina: tp.disciplina, topico: tp.topico, frente: a.rotulo + " · " + curta, verso: corpo.slice(0, 900),
+          motivo: "", peso: 14, fonte: null, imp: im, motivoImp });
+      });
+    }
+  } catch (e) {}
   return out.sort((a, b) => b.peso - a.peso);
 }
 /* o nome da lei que diz QUAL é: o número ("Lei 9.784/1999"); sem número, o nome curto do leitor ("Constituição") */
@@ -774,6 +797,27 @@ function fugaChipsPintar() {
     cx.append(b);
   });
 }
+/* (19.189.0) O QUE A FUGA REGISTROU: as notas de cartão (agenda), as respostas de questão (histórico) e os cartões
+ * mandados para "De novo". Ler, virar e "sabia/não sabia" dos outros itens não gravam nada — e a linha diz isso. */
+function fugaRegistrado() {
+  const rs = (fugaS && fugaS.respostas) || [];
+  return {
+    cartoes: rs.filter((r) => r.nota || (r.item && r.item.tipo === "cartao" && r.item.enviado)).length,
+    questoes: rs.filter((r) => r.item && r.item.tipo === "questao" && r.item.gravada).length,
+  };
+}
+function fugaRegistroPintar() {
+  const el = typeof document !== "undefined" ? document.getElementById("fugaRegistro") : null;
+  if (!el) return null;
+  const g = fugaRegistrado();
+  const partes = [];
+  if (g.cartoes) partes.push(t("fuga_reg_cartoes", { n: g.cartoes }));
+  if (g.questoes) partes.push(t("fuga_reg_questoes", { n: g.questoes }));
+  el.textContent = partes.length ? t("fuga_reg_sim", { o: partes.join(" · ") }) : t("fuga_reg_nada");
+  el.title = t("fuga_reg_tip");
+  if (el.classList) el.classList.toggle("fuga-registro-sim", partes.length > 0);
+  return g;
+}
 function fugaPintar(resLegado) {
   const box = typeof document !== "undefined" ? document.getElementById("fugaLista") : null;
   if (!box) return;
@@ -784,6 +828,7 @@ function fugaPintar(resLegado) {
   }
   box.innerHTML = "";
   const S = fugaS || { fase: "vazio", itens: [], respostas: [] };
+  fugaRegistroPintar();
   const outros = document.getElementById("btnFugaOutros");
   if (outros) outros.textContent = t(S.fase === "resumo" ? "fuga_outros_mais" : "fuga_outros");
   if (S.fase === "vazio") {
@@ -811,6 +856,7 @@ function fugaPintar(resLegado) {
   frente.id = "fugaFrente";
   if (x.tipo !== "artigo" && x.tipo !== "prazo") fugaLigarCitas(frente, x);
   c.append(frente);
+  if (x.motivoImp) { const mi = fugaEl("div", "fuga-imp", "★ " + x.motivoImp); mi.id = "fugaImp"; c.append(mi); }
   if (x.motivo) c.append(fugaEl("div", "nota fuga-motivo", x.motivo));
   /* (19.188.0) DE ONDE SAIU: o trecho da questão que cita o artigo; quando a questão não escreve a lei, o aviso de que
    * ela foi deduzida — e "ver a questão" leva lá, onde o link da citação deixa trocar a lei ou fixar a certa (🔗) */
@@ -990,6 +1036,7 @@ function fugaPintarResumo(box, S) {
     try { localStorage.removeItem("eac_fuga_como_visto"); } catch (e) {}
     liga("btnFugaOpcoes", () => fugaPainel("fugaOpcoes"));
     liga("btnFugaFechar", () => fugaFechar());
+    liga("btnFugaX", () => fugaFechar());
     /* teclas: espaço vira, S sabia, N não sabia, → próximo; nunca enquanto se digita */
     const d = document.getElementById("dlgFuga");
     /* (19.186.0) fechar por qualquer caminho encerra a fuga (o Esc não passa pelo "voltar ao estudo") */

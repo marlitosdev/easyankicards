@@ -2201,7 +2201,9 @@ function leiPintarLeitura() {
       + (risco && risco.erros > risco.acertos ? " lei-art-perigo"
          : (risco && risco.prova ? " lei-art-caiu" : ""))
       /* (19.172.0) para o filtro de leitura: cai nas suas questões (ou caiu em prova) / você erra mais do que acerta */
-      + (leiVerCai(risco) ? " lei-art-q" : "") + (leiVerErra(risco) ? " lei-art-erro" : "");
+      + (leiVerCai(risco) ? " lei-art-q" : "") + (leiVerErra(risco) ? " lei-art-erro" : "")
+      /* (19.189.0) ★ importante para o edital (IA ou você) */
+      + (leiImpDe(a.num) ? " lei-art-imp" : "");
     /* =================================================================
      * O NÚMERO DO ARTIGO NÃO É CHAVE ÚNICA
      *
@@ -2364,7 +2366,16 @@ function leiPintarLeitura() {
     bNota.title = temNota || t("lei_nota_add_ajuda");
     bNota.onclick = () => leiNotaAbrir(a);
 
-    cab.append(bCloze, bEd, bCorr, bNota);
+    /* (19.189.0) ★ importante: tocar marca ou tira (o motivo, quando há, no balão) */
+    const imp = leiImpDe(a.num);
+    const bImp = document.createElement("button");
+    bImp.type = "button";
+    bImp.className = "btn-min lei-art-b lei-art-imp-b" + (imp ? " lei-art-imp-on lei-art-imp-" + (imp.de === "ia" ? "ia" : "voce") : "");
+    bImp.textContent = imp ? "★" : "☆";
+    bImp.title = imp ? t(imp.de === "ia" ? "li_estrela_ia" : "li_estrela_voce") + (imp.motivo ? " — " + imp.motivo : "") : t("li_estrela_add");
+    bImp.setAttribute("aria-label", bImp.title);
+    bImp.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); if (typeof liAlternar === "function") liAlternar(a.num); };
+    cab.append(bCloze, bEd, bCorr, bNota, bImp);
     const chips = leiChipsDeAlteracao(a, cit);
     const recebidas = leiChipsRecebidos(a, leiRecebidasAtual);
 
@@ -3872,7 +3883,7 @@ function leiRolarParaUnidades(bloco, textoArt, unidades, num) {
  * Nada aqui é desenhado até ser aberto: lei de 424 artigos abre com os títulos, e os artigos
  * de um capítulo só entram na tela quando ele se abre.
  * ===================================================================== */
-const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei", "ineditos", "semcartao"];
+const LEI_IR_FILTROS = ["todos", "caem", "erros", "prova", "parei", "ineditos", "semcartao", "importantes"];
 let leiIrFiltro = "todos";
 let leiIrAbertos = null;          /* ids dos nós abertos: sobrevivem a repintar */
 let leiIrPrimeiro = null;         /* o que o Enter da busca faz */
@@ -4537,6 +4548,12 @@ function leiIrPintar() {
     const p0 = sc.itens[0];
     if (p0) leiIrPrimeiro = () => leiIrIr(p0.a.num, p0.a.indice);
     return;
+  }
+  /* (19.189.0) os ★ importantes da lei para o edital, na ordem da lei */
+  if (leiIrFiltro === "importantes") {
+    let nums = [];
+    try { nums = typeof liLista === "function" ? liLista(leiIdAtual, liEditalAtual()) : []; } catch (e) { nums = []; }
+    return lista(nums.map((n) => ({ a: leiIrPrimeiroArtigo(d, n), r: d.ranking[n] || null })).filter((x) => x.a), t("li_ir_vazio"));
   }
   if (leiIrFiltro !== "todos") {
     return lista(leiIrItensDoFiltro(d, leiIrFiltro),
@@ -10747,7 +10764,11 @@ function leiClozeAplicar() {
  * para LER só esses: "só os que caem" (citado nas suas questões ou marcado "caiu em prova") e "só onde erro". Os
  * títulos de capítulo e seção ficam, para situar; nada muda no texto. Sem nenhum artigo citado, o seletor não aparece.
  * ===================================================================== */
-let leiVerFiltro = "";          /* "" | "caem" | "erro" */
+let leiVerFiltro = "";          /* "" | "caem" | "erro" | "imp" */
+/* (19.189.0) o artigo é importante (★) para o edital da lei aberta? */
+function leiImpDe(num) {
+  try { return typeof liEh === "function" && leiIdAtual ? liEh(leiIdAtual, liEditalAtual(), num) : null; } catch (e) { return null; }
+}
 let leiVerTem = false;
 function leiVerCai(r) { return !!r && ((r.questoes || 0) > 0 || (r.prova || 0) > 0); }
 function leiVerErra(r) { return !!r && (r.erros || 0) > (r.acertos || 0); }
@@ -10765,7 +10786,7 @@ function leiVerTitulos() {
   const ehTit = (el) => tem(el, "lei-div");
   kids.forEach((el) => { if (ehTit(el) && el.classList) el.classList.remove("lei-ver-tit"); });
   if (!leiVerFiltro) return 0;
-  const cls = leiVerFiltro === "caem" ? "lei-art-q" : "lei-art-erro";
+  const cls = leiVerFiltro === "caem" ? "lei-art-q" : leiVerFiltro === "imp" ? "lei-art-imp" : "lei-art-erro";
   let n = 0;
   kids.forEach((el, k) => {
     if (!tem(el, cls)) return;
@@ -10781,10 +10802,10 @@ function leiVerTitulos() {
 }
 function leiVerClasses() {
   const cx = $("leiLeitura");
-  if (cx && cx.classList) { cx.classList.toggle("lei-ver-caem", leiVerFiltro === "caem"); cx.classList.toggle("lei-ver-erro", leiVerFiltro === "erro"); }
-  ["btnLeiVerTudo", "btnLeiVerCaem", "btnLeiVerErro"].forEach((id, k) => {
+  if (cx && cx.classList) { cx.classList.toggle("lei-ver-caem", leiVerFiltro === "caem"); cx.classList.toggle("lei-ver-erro", leiVerFiltro === "erro"); cx.classList.toggle("lei-ver-imp", leiVerFiltro === "imp"); }
+  ["btnLeiVerTudo", "btnLeiVerCaem", "btnLeiVerErro", "btnLeiVerImp"].forEach((id, k) => {
     const b = $(id); if (!b) return;
-    const on = leiVerFiltro === ["", "caem", "erro"][k];
+    const on = leiVerFiltro === ["", "caem", "erro", "imp"][k];
     b.setAttribute("aria-pressed", on ? "true" : "false");
     if (b.classList) b.classList.toggle("on", on);
   });
@@ -10792,14 +10813,20 @@ function leiVerClasses() {
 }
 function leiVerPintar(ranking) {
   const n = leiVerContar(ranking);
-  leiVerTem = n.caem > 0;
+  /* (19.189.0) os importantes (★) da lei para o edital */
+  let nImp = 0;
+  try { nImp = typeof liLista === "function" && leiIdAtual ? liLista(leiIdAtual, liEditalAtual()).length : 0; } catch (e) { nImp = 0; }
+  n.imp = nImp;
+  /* o seletor aparece com artigo citado OU com lei aberta pelo tópico (é onde a IA pode sugerir os importantes) */
+  leiVerTem = n.caem > 0 || nImp > 0 || !!(leiAtual && leiAtual.chave && leiIdAtual);
   if (leiVerFiltro === "erro" && !n.erro) leiVerFiltro = "";
   if (leiVerFiltro === "caem" && !n.caem) leiVerFiltro = "";
+  if (leiVerFiltro === "imp" && !nImp) leiVerFiltro = "";
   const box = $("leiVer");
   if (box) {
     const cx = $("leiLeitura");
     box.hidden = !leiVerTem || !!(cx && cx.hidden);
-    [["btnLeiVerTudo", "", "lei_ver_tudo", 0], ["btnLeiVerCaem", "caem", "lei_ver_caem", n.caem], ["btnLeiVerErro", "erro", "lei_ver_erro", n.erro]].forEach(([id, f, k, q]) => {
+    [["btnLeiVerTudo", "", "lei_ver_tudo", 0], ["btnLeiVerCaem", "caem", "lei_ver_caem", n.caem], ["btnLeiVerErro", "erro", "lei_ver_erro", n.erro], ["btnLeiVerImp", "imp", "li_ver_imp", nImp]].forEach(([id, f, k, q]) => {
       const b = $(id);
       if (!b) return;
       b.textContent = t(k, { n: q });
@@ -10816,7 +10843,7 @@ function leiVerPintar(ranking) {
   return n;
 }
 function leiVerDefinir(f) {
-  leiVerFiltro = f === "caem" || f === "erro" ? f : "";
+  leiVerFiltro = f === "caem" || f === "erro" || f === "imp" ? f : "";
   leiVerClasses();
   try { leiReg("leitura", "ler: " + (leiVerFiltro || "lei inteira"), leiIdAtual || ""); } catch (e) {}
   return leiVerFiltro;
@@ -11059,6 +11086,9 @@ function leiIniciar() {
   liga("btnLeiVerTudo", "ler a lei inteira", () => leiVerDefinir(""));
   liga("btnLeiVerCaem", "ler só os que caem", () => leiVerDefinir("caem"));
   liga("btnLeiVerErro", "ler só onde erro", () => leiVerDefinir("erro"));
+  /* (19.189.0) os artigos importantes (★) e a IA que os sugere */
+  liga("btnLeiVerImp", "ler só os importantes", () => leiVerDefinir("imp"));
+  liga("btnLeiImpIA", "artigos importantes (IA)", () => { if (typeof liAbrir === "function") liAbrir(leiIdAtual, liEditalAtual()); });
   liga("btnLeiModoEditar", "editar", () => leiTrocarModo("editar"));
   liga("btnLeiModoRecitar", "recitar", () => leiTrocarModo("recitar"));
   liga("btnLeiSalvar", "gravar", () => leiGravar());

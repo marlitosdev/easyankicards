@@ -135,7 +135,8 @@ async function testes() {
     const l = api.leiGuardar({ id: "lei_v", nome: "Lei V", texto: LEI });
     api.leiAbrir("Direito Tributário", "Sistema tributário", l.id);
     api.leiTrocarModo("ler");
-    ok(api.$("leiVer").hidden, "L1 sem questão citando a lei, sem o seletor");
+    /* (19.189.0) com a lei aberta pelo tópico o seletor aparece (os ★ importantes e a IA); sem questão, "caem" e "erro" apagados */
+    ok(!api.$("leiVer").hidden && api.$("btnLeiVerCaem").disabled === true && api.$("btnLeiVerErro").disabled === true, "L1 sem questão citando a lei: o seletor aparece com 'caem' e 'erro' apagados");
     api.qsAplicar([
       { tipo: "ce", enunciado: "Nos termos do art. 4º, o tributo se define pela destinação.", gabarito: "C", comentario: "", chave: ch },
       { tipo: "ce", enunciado: "O art. 4º trata da natureza do tributo.", gabarito: "E", comentario: "", chave: ch },

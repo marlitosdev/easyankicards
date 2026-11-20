@@ -1035,6 +1035,31 @@ dialog.mmq-dlg{width:min(760px,96vw);max-width:min(760px,96vw)}
 .lei-ver .btn-min.on{background:var(--acao);border-color:var(--acao);color:#fff}
 #leiLeitura.lei-ver-caem .lei-art:not(.lei-art-q),#leiLeitura.lei-ver-erro .lei-art:not(.lei-art-erro),
 #leiLeitura.lei-ver-caem .lei-div:not(.lei-ver-tit),#leiLeitura.lei-ver-erro .lei-div:not(.lei-ver-tit){display:none}
+/* (19.189.0) ★ os importantes: o filtro, a estrela no artigo (sempre à vista quando marcada) e a janela da lista */
+#leiLeitura.lei-ver-imp .lei-art:not(.lei-art-imp),#leiLeitura.lei-ver-imp .lei-div:not(.lei-ver-tit){display:none}
+.lei-art-imp-on{opacity:1 !important;font-weight:var(--peso-f)}
+.lei-art-imp-ia{color:var(--info);border-color:var(--info)}
+.lei-art-imp-voce{color:var(--atencao);border-color:var(--atencao)}
+.li-ia-btn{border-style:dashed}
+dialog.li-dlg{width:min(720px,96vw);max-width:min(720px,96vw)}
+.li-lista{display:flex;flex-direction:column;gap:var(--esp-1);max-height:40vh;overflow:auto;margin:var(--esp-2) 0}
+.li-lin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);padding:var(--esp-1) 0;border-bottom:1px solid var(--borda)}
+.li-de{font-size:var(--fs-1);color:var(--sutil)}
+.li-ia .li-de{color:var(--info)}
+.li-voce .li-de{color:var(--atencao)}
+.li-motivo{font-size:var(--fs-2);color:var(--sutil);flex:1 1 200px}
+.li-tirar{margin-left:auto}
+.li-ia{margin:var(--esp-2) 0}
+.li-ia summary{cursor:pointer;font-weight:var(--peso-f)}
+.li-ia-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin:var(--esp-2) 0}
+.li-ia textarea{width:100%;box-sizing:border-box;margin:0 0 var(--esp-2)}
+.li-sug{display:flex;flex-direction:column;gap:var(--esp-1);margin-top:var(--esp-2)}
+.li-sug-lin{display:flex;gap:var(--esp-2);align-items:baseline}
+.li-sec{font-size:var(--fs-1);font-weight:var(--peso-f);letter-spacing:.06em;text-transform:uppercase;color:var(--sutil)}
+.li-led{color:var(--atencao)}
+.fuga-imp{margin-top:var(--esp-2);font-size:var(--fs-2);color:var(--atencao)}
+.fuga-registro{margin-right:auto;font-size:var(--fs-2)}
+.fuga-registro.fuga-registro-sim{color:var(--ok)}
 /* (19.172.0) o caderno de erros e chutes e o bizu */
 .qs-caderno{display:flex;flex-wrap:wrap;align-items:flex-start;gap:var(--esp-2);margin:var(--esp-2) 0}
 #btnQsCaderno.on{background:var(--acao);border-color:var(--acao);color:#fff}
@@ -10641,6 +10666,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <button type="button" class="lei-redondo" id="btnFugaComo" data-i18n-title="fuga_como_tit" aria-expanded="false">i</button>
       <button type="button" class="lei-redondo" id="btnFugaOpcoes" data-i18n-title="fuga_opcoes_tit" aria-expanded="false">⚙</button>
       <span class="fuga-relogio" id="fugaRelogio" role="timer" aria-live="off"></span>
+      <!-- (19.189.0) fechar a janela (o mesmo que "sair e voltar") -->
+      <button type="button" class="dlg-x" id="btnFugaX" data-i18n-title="fuga_x_tip" aria-label="✖">✖</button>
     </span>
   </div>
   <div class="fuga-trilho" aria-hidden="true"><span id="fugaTrilho"></span></div>
@@ -10649,7 +10676,29 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div id="fugaLista" class="fuga-palco"></div>
   <div class="dlg-rodape">
     <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros" data-i18n-title="fuga_outros_tip"></button>
-    <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar"></button>
+    <!-- (19.189.0) o que a fuga registrou (ou que nada foi registrado), ao lado do "sair e voltar" -->
+    <span class="nota fuga-registro" id="fugaRegistro" role="status" aria-live="polite"></span>
+    <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar" data-i18n-title="fuga_voltar_tip"></button>
+  </div>
+</dialog>
+<!-- (19.189.0) ★ OS ARTIGOS IMPORTANTES da lei para o edital (lei-importantes.js): a lista, a IA que sugere, você confere -->
+<dialog id="dlgLeiImp" class="ui-modal li-dlg">
+  <h3 id="liTitulo"></h3>
+  <p class="nota" id="liSub"></p>
+  <div id="liLista" class="li-lista"></div>
+  <details class="li-ia" id="liIa">
+    <summary data-i18n="li_ia_tit"></summary>
+    <p class="nota" data-i18n="li_ia_aj"></p>
+    <div class="li-ia-acoes">
+      <button type="button" class="btn-min" id="btnLiCopiar" data-i18n="li_copiar"></button>
+      <span id="liGemini"></span>
+    </div>
+    <textarea id="liResp" rows="6" data-i18n-ph="li_resp_ph"></textarea>
+    <button type="button" class="btn-min btn-min-ok" id="btnLiConferir" data-i18n="li_conferir"></button>
+    <div id="liSug" class="li-sug" hidden></div>
+  </details>
+  <div class="dlg-rodape">
+    <button class="btn btn-cinza" id="btnLiFechar" data-i18n="help_close"></button>
   </div>
 </dialog>
 <!-- (19.177.0) o mapa da IA (mapa-ia.js): copiar o pedido, colar a resposta, conferir no resumo, usar -->
@@ -11649,6 +11698,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="btn-min" id="btnLeiVerTudo" aria-pressed="true"></button>
     <button type="button" class="btn-min" id="btnLeiVerCaem" aria-pressed="false"></button>
     <button type="button" class="btn-min" id="btnLeiVerErro" aria-pressed="false"></button>
+    <!-- (19.189.0) os ★ importantes para o edital e a IA que os sugere (lei-importantes.js) -->
+    <button type="button" class="btn-min" id="btnLeiVerImp" aria-pressed="false"></button>
+    <button type="button" class="btn-min li-ia-btn" id="btnLeiImpIA" data-i18n="li_ia_btn" data-i18n-title="li_ia_btn_tip"></button>
   </div>
   <div class="lei-loc-linha" id="leiLocLinha" hidden><nav class="lei-loc" id="leiLoc" aria-label="Localizador"></nav></div>
   <div class="mat-leitura" id="leiLeitura" hidden></div>
@@ -13069,6 +13121,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button class="btn-min" id="btnLeiIrF_parei" data-i18n="lei_ir_f_parei"></button>
     <button class="btn-min" id="btnLeiIrF_ineditos" data-i18n="lei_ir_f_ineditos" data-i18n-title="lei_ir_f_ineditos_tip"></button>
     <button class="btn-min" id="btnLeiIrF_semcartao" data-i18n="lei_ir_f_semcartao" data-i18n-title="lei_ir_f_semcartao_tip"></button>
+    <button class="btn-min" id="btnLeiIrF_importantes" data-i18n="li_ir_f" data-i18n-title="li_ir_f_tip"></button>
     <!-- (v18.73.0) quais artigos DESTA lei têm cartão, quais não, quais caem em questão (a barra do leitor fica nos 6 botões) -->
     <button class="btn-min btn-min-ok" id="btnLeiCobertura" data-i18n="lei_cov_btn" data-i18n-title="lei_cov_tip"></button>
   </div>
@@ -14466,6 +14519,7 @@ window.__sqlPromise = initSqlJs({
 <script src="mapa-imprimir.js"></script>
 <script src="lei-vinculo.js"></script>
 <script src="lei-consulta.js"></script>
+<script src="lei-importantes.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

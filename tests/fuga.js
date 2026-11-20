@@ -309,6 +309,28 @@ async function testes() {
     ok(api.$("leiTextoAjuda").hidden === true, "G9f aberta pela Biblioteca, sem o 'cole aqui só se a lei ainda não existe'");
   }
 
+  {
+    /* (19.189.0) G10: o ✖ e o "sair e voltar", com o que foi registrado */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const q = { id: "qr1", tipo: "ce", enunciado: "Questão do caderno para registrar na fuga.", gabarito: "C", tentativas: [{ acertou: false }], disciplina: "Tributário", topico: "T" };
+    api.qsTodas().push(q);
+    const nota = { card: { front: "Frente {{c1::resposta}}", back: "" }, disciplina: "Penal", topico: "P", chave: "" };
+    const F = { cartoes: [{ tipo: "cartao", disciplina: "Penal", topico: "P", frente: "x", verso: "y", peso: 5, uid: "gr#c1", cn: 1, nota }],
+      questoes: api.fugaQuestoes(), artigos: [], marcas: [{ tipo: "pegadinha", disciplina: "Civil", topico: "C", texto: "pegadinha para ler" }], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    api.fugaAbrir({ fontes: F, disc: "", rnd: () => 0 });
+    ok(api.$("btnFugaX") && /Nada registrado/.test(api.$("fugaRegistro").textContent) && /sair e voltar/.test(api.t("fuga_voltar")),
+      "G10 o ✖ no canto, 'sair e voltar' e 'Nada registrado' enquanto nada foi gravado");
+    api.$("btnFugaVirar").onclick(); api.$("btnFugaNota3").onclick();
+    api.$("btnFugaQ_C").onclick();
+    ok(/Registrado: 1 cartão\(ões\) na agenda · 1 questão\(ões\) no histórico/.test(api.$("fugaRegistro").textContent) && /fuga-registro-sim/.test(api.$("fugaRegistro").className),
+      "G10a depois da nota do cartão e da questão, a linha diz o que foi registrado: " + api.$("fugaRegistro").textContent);
+    api.$("btnFugaProx").onclick(); api.$("btnFugaLido").onclick();
+    ok(api.fugaEstado().respostas.length === 3 && /1 cartão\(ões\) na agenda · 1 questão/.test(api.$("fugaRegistro").textContent), "G10b o 'lido' não registra nada (a linha não muda)");
+    api.$("btnFugaX").onclick();
+    ok(api.$("dlgFuga").open !== true && api.fugaEstado().registrado === true, "G10c o ✖ fecha e encerra a fuga (como o Esc)");
+  }
+
   /* G6: como funciona, chips e teclas */
   {
     const { api } = rodar();
