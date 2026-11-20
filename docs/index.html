@@ -922,7 +922,10 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-passo-atual{border-color:var(--acao);box-shadow:0 0 0 2px var(--acao)}
 .fuga-passo-ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 35%,transparent)}
 .fuga-passo-erro{border-color:var(--erro);background:color-mix(in srgb,var(--erro) 35%,transparent)}
-.fuga-passo-lido{border-color:var(--sutil);opacity:.6}
+.fuga-passo-lido{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 20%,transparent)}
+.fuga-passo-lido .fuga-passo-marca{background:var(--ok)}
+.fuga-vazio-tit{font-weight:var(--peso-f);margin:0 0 var(--esp-2)}
+.fuga-vazio-lin{margin:0 0 var(--esp-1);line-height:1.45}
 .fuga-cartao{margin:0;max-height:none}
 /* de onde saiu o artigo: o trecho da questão, e o aviso quando a lei foi deduzida */
 .fuga-origem{margin-top:var(--esp-2);padding:var(--esp-2) var(--esp-3);border-left:3px solid var(--borda);font-size:var(--fs-2)}
@@ -930,6 +933,8 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-origem-aviso{margin:var(--esp-1) 0;color:var(--atencao)}
 .fuga-origem-aviso.fuga-origem-ok{color:var(--sutil)}
 .fuga-origem .btn-min{margin-top:var(--esp-1)}
+.fuga-fonte-onde{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-3);color:var(--sutil);line-height:1.45}
+.fuga-fonte-ed{font-weight:var(--peso-m);color:var(--texto)}
 .fuga-notas{margin-top:var(--esp-3)}
 .fuga-chips{display:flex;flex-wrap:wrap;gap:var(--esp-1) var(--esp-2);align-items:center;margin:var(--esp-2) 0 0}
 .fuga-chip{border-radius:var(--r-pilula);opacity:.65}
@@ -945,6 +950,9 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-motivo{margin-top:var(--esp-2)}
 .fuga-verso{margin-top:var(--esp-3);padding-top:var(--esp-2);border-top:1px dashed var(--borda);font-size:var(--fs-4);line-height:1.5}
 .fuga-verso-txt{margin-top:var(--esp-1);color:var(--texto)}
+.fuga-q-sec{margin-top:var(--esp-3);font-size:var(--fs-3);line-height:1.5}
+.fuga-q-sec-tit{font-size:var(--fs-1);font-weight:var(--peso-f);color:var(--sutil);margin-bottom:var(--esp-1)}
+.fuga-q-dica{border-left:3px solid var(--atencao);padding-left:var(--esp-2)}
 .fuga-acertou{color:var(--ok)}
 .fuga-errou{color:var(--erro)}
 .fuga-acoes{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin-top:var(--esp-3)}
@@ -8862,7 +8870,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.193.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.194.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>

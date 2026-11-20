@@ -250,27 +250,39 @@ function fugaLeiRotulo(l) {
   try { if (typeof leiNomeCurto === "function") return leiNomeCurto(l); } catch (e) {}
   return nome.length > 30 ? nome.slice(0, 29) + "…" : nome;
 }
-/* os trechos marcados nos resumos E nas leis: [{ tipo: "pegadinha" | "importante", disciplina, topico, texto }] */
+/* os trechos marcados nos resumos E nas leis: [{ tipo: "pegadinha" | "importante", disciplina, topico, texto, onde }]
+ * (19.194.0) "onde" diz de onde a marca saiu, para abrir a fonte com o trecho em destaque: { resumo: chave } ou
+ * { leiId, num, rotulo } (o artigo que contém a marca) */
 function fugaMarcas() {
   const out = [];
-  const juntar = (txt, disciplina, topico, origem) => {
+  const juntar = (txt, disciplina, topico, origem, ondeDe) => {
     if (String(txt || "").indexOf("==") < 0) return;
     [[FUGA_RE_PEG, "pegadinha"], [FUGA_RE_IMP, "importante"]].forEach(([re, tipo]) => {
       String(txt).replace(re, (m, x) => {
         const s = fugaLimpo(x);
-        if (s.length >= 12) out.push(Object.assign({ tipo, disciplina: disciplina || "", topico: topico || "", texto: s.slice(0, 400) }, origem ? { origem } : {}));
+        if (s.length >= 12) {
+          const o = Object.assign({ tipo, disciplina: disciplina || "", topico: topico || "", texto: s.slice(0, 400) }, origem ? { origem } : {});
+          const w = ondeDe ? ondeDe(m) : null;
+          if (w) o.onde = w;
+          out.push(o);
+        }
         return m;
       });
     });
   };
   const rs = typeof matResumos !== "undefined" ? matResumos : {};
-  Object.keys(rs).forEach((k) => { const r = rs[k]; juntar(r && r.texto, r && r.disciplina, r && r.topico); });
+  Object.keys(rs).forEach((k) => { const r = rs[k]; juntar(r && r.texto, r && r.disciplina, r && r.topico, "", () => ({ resumo: k })); });
   /* (19.185.0) as pegadinhas que você marcou na própria letra da lei */
   try {
     leisLista().forEach((l) => {
       if (!l || String(l.texto || "").indexOf("==") < 0) return;
       const tp = fugaDoTopico((l.topicos || [])[0]);
-      juntar(l.texto, tp.disciplina, tp.topico, l.nome);
+      let arts = null;
+      juntar(l.texto, tp.disciplina, tp.topico, l.nome, (m) => {
+        if (arts === null) { try { arts = typeof leiArtigos === "function" ? leiArtigos(l.texto) : []; } catch (e) { arts = []; } }
+        const a = arts.find((y) => String((y && y.texto) || "").indexOf(m) >= 0);
+        return { leiId: l.id, num: a ? a.num : "", rotulo: a ? (a.rotulo || ("Art. " + (a.numCru || a.num))) : "" };
+      });
     });
   } catch (e) {}
   return out;
@@ -368,9 +380,10 @@ function fugaSortear(opc) {
   const o = opc || {};
   const rnd = o.rnd || Math.random;
   const n = o.n || 5;
-  const atual = fugaNorm(o.disc !== undefined ? o.disc : fugaDiscAtual());
+  /* (19.194.0) "ampliar": sem o corte da disciplina de agora e dos editais (o que a pessoa pede quando o escopo secou) */
+  const atual = o.amplo ? "" : fugaNorm(o.disc !== undefined ? o.disc : fugaDiscAtual());
   const F = o.fontes || fugaFontesTodas(rnd);
-  const discs = o.discs || F.discs || new Set();
+  const discs = o.amplo ? new Set() : (o.discs || F.discs || new Set());
   const ativas = o.ativas || fugaPref().fontes;
   const excluir = new Set(o.excluir || []);
   const vistos = o.vistos || [];
@@ -437,8 +450,11 @@ function fugaNovaRodada() {
   if (!fugaS) return null;
   const pref = fugaPref();
   const r = fugaSortear({ disc: fugaS.disc, rnd: fugaS.rnd, fontes: fugaS.fontes, ativas: pref.fontes, excluir: fugaS.vistos,
-    vistos: fugaVistosLer(), inicio: fugaS.inicio });
-  fugaS.rodada++;
+    vistos: fugaVistosLer(), inicio: fugaS.inicio, amplo: !!fugaS.amplo });
+  /* uma tentativa vazia não é rodada: ampliar ou ligar uma fonte depois do vazio começa da rodada 1 */
+  if (fugaS.fase !== "vazio" || fugaS.rodada === 0) fugaS.rodada++;
+  /* secou no meio da fuga: o resumo diz por quê */
+  fugaS.esgotou = !r.itens.length && fugaS.respostas.length > 0;
   fugaS.itens = r.itens;
   fugaS.inicio = r.proxInicio;
   fugaS.i = 0;
@@ -449,6 +465,63 @@ function fugaNovaRodada() {
   fugaVistosJuntar(r.itens.map(fugaChave));
   fugaPintar();
   return r;
+}
+/* =====================================================================
+ * (19.194.0) QUANDO NÃO HÁ O QUE MOSTRAR NO ESCOPO
+ * A fuga dizia "ainda não há material" mesmo com centenas de itens — só que todos da disciplina de agora, ou fora dos
+ * editais em andamento, ou de fontes desligadas no ⚙. E o relógio corria e "outros 5" não fazia nada. Agora o vazio
+ * diz POR QUE (com quantos itens ficaram de fora em cada corte) e oferece a saída de cada um: "incluir mesmo assim"
+ * (amplia o escopo nesta fuga) e "o que entra" (o ⚙ com as fontes).
+ * ===================================================================== */
+const FUGA_FONTE_LISTAS = { cartoes: ["cartoes"], questoes: ["questoes"], leis: ["artigos", "prazos"], julgados: ["julgados"], marcas: ["marcas"], mapa: ["mapa"], dicas: ["dicas"] };
+function fugaPorQueVazio() {
+  const S = fugaS;
+  if (!S) return null;
+  let F = S.fontes;
+  if (!F) { try { F = fugaFontesTodas(S.rnd || Math.random); } catch (e) { F = {}; } }
+  const ativas = fugaPref().fontes;
+  const atual = S.amplo ? "" : fugaNorm(S.disc);
+  const discs = S.amplo ? new Set() : (F.discs || new Set());
+  const vistos = new Set(S.vistos || []);
+  const d = { tudo: 0, desligadas: [], nDesligadas: 0, atual: 0, edital: 0, discsFora: [], vistos: 0, sobra: 0 };
+  Object.keys(FUGA_FONTE_LISTAS).forEach((k) => {
+    const itens = [].concat(...FUGA_FONTE_LISTAS[k].map((c) => F[c] || []));
+    d.tudo += itens.length;
+    if (!itens.length) return;
+    if (ativas[k] === false) { d.desligadas.push(k); d.nDesligadas += itens.length; return; }
+    itens.forEach((x) => {
+      const dn = fugaNorm(x.disciplina);
+      if (atual && dn && dn === atual) d.atual++;
+      else if (discs.size && dn && !discs.has(dn)) { d.edital++; if (d.discsFora.indexOf(x.disciplina) < 0) d.discsFora.push(x.disciplina); }
+      else if (vistos.has(fugaChave(x))) d.vistos++;
+      else d.sobra++;
+    });
+  });
+  return d;
+}
+/* o bloco do "por quê": uma linha por corte, com a saída de cada um */
+function fugaPorQueEl(d) {
+  const S = fugaS || {};
+  const box = fugaEl("div", "fuga-vazio");
+  box.id = "fugaPorQue";
+  if (!d || !d.tudo) { box.append(fugaEl("p", "nota", t("fuga_vazia"))); return box; }
+  const lin = (txt) => box.append(fugaEl("p", "fuga-vazio-lin", txt));
+  if (d.atual) lin(t("fuga_vz_atual", { n: d.atual, d: S.disc }));
+  if (d.edital) lin(t("fuga_vz_edital", { n: d.edital, l: d.discsFora.slice(0, 3).join(", ") + (d.discsFora.length > 3 ? "…" : "") }));
+  if (d.desligadas.length) lin(t("fuga_vz_desligadas", { n: d.nDesligadas, l: d.desligadas.map((k) => t("fuga_f_" + k)).join(", ") }));
+  if (d.vistos) lin(t("fuga_vz_vistos", { n: d.vistos }));
+  const ac = fugaEl("div", "fuga-acoes");
+  if (d.atual || d.edital) ac.append(fugaBt(t("fuga_vz_ampliar"), () => fugaAmpliar(), "btn-min-ok", "btnFugaAmpliar", t("fuga_vz_ampliar_tip")));
+  if (d.desligadas.length) ac.append(fugaBt(t("fuga_vz_fontes"), () => fugaPainel("fugaOpcoes"), "", "btnFugaVzFontes", t("fuga_vz_fontes_tip")));
+  if (d.atual || d.edital || d.desligadas.length) box.append(ac);
+  return box;
+}
+/* amplia o escopo nesta fuga (a disciplina de agora e as fora dos editais entram) e tenta de novo */
+function fugaAmpliar() {
+  if (!fugaS) return null;
+  fugaS.amplo = true;
+  try { reg("ESTUDO", "fuga rápida: escopo ampliado", fugaS.disc || "—"); } catch (e) {}
+  return fugaNovaRodada();
 }
 /* "outros 5": no meio da rodada, o que ficou sem resposta não conta; a corrente segue */
 function fugaOutros() {
@@ -630,11 +703,101 @@ function fugaOrigem(x) {
   if (x.tipo === "prazo" || x.tipo === "artigo") return [x.lei, x.rotulo].filter(Boolean).join(", ");
   return [x.disciplina, x.topico].filter(Boolean).join(" › ") + (x.origem ? " · " + x.origem : "");
 }
-/* curto, no cabeçalho do item: o tópico (a origem inteira vai no balão) */
+/* curto, no cabeçalho do item: o tópico (a origem inteira vai no balão). A marca e a dica têm o bloco "de onde saiu"
+ * embaixo do texto, com tudo: no cabeçalho, nada (repetir o tópico só disputava espaço) */
 function fugaOrigemCurta(x) {
   if (x.tipo === "artigo") return x.leiCurta || x.lei || "";
   if (x.tipo === "prazo") return x.rotulo || x.lei || "";
+  if (fugaTemFonte(x)) return "";
   return x.topico || x.disciplina || x.origem || "";
+}
+/* =====================================================================
+ * (19.194.0) DE ONDE SAIU A PEGADINHA
+ * A pegadinha (e o "importante", e a dica) aparecia só com o tópico no canto: sem o edital, sem a disciplina, sem
+ * jeito de ver o trecho no lugar dele. Agora, embaixo do texto: o edital em andamento que cobra o tópico, "disciplina
+ * › tópico", a lei e o artigo (quando a marca é da lei), e "ver no resumo" / "ver na lei", que abre a fonte por cima
+ * da fuga e pisca no trecho — como "abrir na lei" faz com o artigo.
+ * ===================================================================== */
+function fugaTemFonte(x) { return !!x && (x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica"); }
+/* o nome do edital em andamento que cobra o tópico ("" sem edital) */
+function fugaEditalNome(disciplina, topico) {
+  try {
+    if (!disciplina || !topico || typeof lvEditalDoTopico !== "function") return "";
+    const id = lvEditalDoTopico(disciplina, topico);
+    if (!id) return "";
+    const e = (typeof editais !== "undefined" ? editais : []).find((y) => String(y.id) === String(id));
+    return e ? String(e.nome || "").trim() : "";
+  } catch (e) { return ""; }
+}
+function fugaFonteEl(x) {
+  const o = fugaEl("div", "fuga-origem fuga-fonte");
+  o.id = "fugaFonte";
+  const linha = fugaEl("div", "fuga-fonte-onde");
+  linha.id = "fugaFonteOnde";
+  let partes = 0;
+  const ed = fugaEditalNome(x.disciplina, x.topico);
+  if (ed) { const e = fugaEl("span", "fuga-fonte-ed", "📋 " + ed); e.title = t("fuga_fonte_ed_tip"); linha.append(e); partes++; }
+  const dt = [x.disciplina, x.topico].filter(Boolean).join(" › ");
+  if (dt) { linha.append(fugaEl("span", "fuga-fonte-top", dt)); partes++; }
+  const w = x.onde || {};
+  if (w.leiId) {
+    let nome = x.origem || "";
+    try { const l = typeof leiDe === "function" ? leiDe(w.leiId) : null; if (l) nome = fugaLeiRotulo(l) || nome; } catch (e) {}
+    linha.append(fugaEl("span", "fuga-fonte-lei", "⚖ " + [nome, w.rotulo].filter(Boolean).join(", ")));
+    partes++;
+  } else if (x.origem) { linha.append(fugaEl("span", "fuga-fonte-lei", x.origem)); partes++; }
+  if (!partes) linha.append(fugaEl("span", "fuga-fonte-top", t("fuga_fonte_sem")));
+  o.append(linha);
+  const b = fugaFonteBotao(x);
+  if (b) o.append(b);
+  return o;
+}
+function fugaFonteBotao(x) {
+  const w = (x && x.onde) || {};
+  if (w.leiId && typeof leiAbrir === "function") return fugaBt(t("fuga_ver_lei"), () => fugaAbrirFonte(x), "", "btnFugaFonte", t("fuga_ver_lei_tip"));
+  if (w.resumo && typeof matAbrirEditor === "function") return fugaBt(t("fuga_ver_resumo"), () => fugaAbrirFonte(x), "", "btnFugaFonte", t("fuga_ver_resumo_tip"));
+  return null;
+}
+/* pisca a marca (<mark>) cujo texto começa como o da pegadinha; devolve se achou */
+function fugaPiscarMarca(caixa, texto) {
+  const so = (v) => fugaNorm(v).replace(/\s+/g, " ");
+  const alvo = so(texto).slice(0, 30);
+  if (!caixa || !caixa.querySelectorAll || alvo.length < 8) return false;
+  const nos = caixa.querySelectorAll("mark");
+  for (let i = 0; i < nos.length; i++) {
+    if (so(nos[i].textContent).indexOf(alvo) < 0) continue;
+    const el = nos[i];
+    try { el.scrollIntoView({ block: "center" }); } catch (e) {}
+    if (el.classList) el.classList.add("mat-piscando");
+    setTimeout(() => { try { el.classList.remove("mat-piscando"); } catch (e) {} }, 2400);
+    return true;
+  }
+  return false;
+}
+/* abre a fonte (o resumo na leitura, ou a lei no artigo) por cima da fuga e destaca o trecho */
+function fugaAbrirFonte(x) {
+  const w = (x && x.onde) || {};
+  let achou = false;
+  if (w.leiId) {
+    const tp = fugaTopicoDaLei({ leiId: w.leiId, disciplina: x.disciplina, topico: x.topico });
+    if (w.num && typeof leiAbrirNoArtigo === "function") leiAbrirNoArtigo(tp.disciplina, tp.topico, w.leiId, w.num);
+    else {
+      leiAbrir(tp.disciplina, tp.topico, w.leiId, { semRetomar: true });
+      try { if (typeof leiModo !== "undefined" && leiModo !== "ler") leiTrocarModo("ler"); } catch (e) {}
+    }
+    /* depois do salto ao artigo, a própria marca; a lei grande entra na tela aos pedaços: tenta de novo */
+    const tentar = (k) => {
+      if (fugaPiscarMarca(typeof document !== "undefined" ? document.getElementById("leiLeitura") : null, x.texto)) { achou = true; return; }
+      if (k < 3) setTimeout(() => tentar(k + 1), 500);
+    };
+    setTimeout(() => tentar(0), 450);
+  } else if (w.resumo && typeof matAbrirEditor === "function") {
+    const tp = fugaDoTopico(w.resumo);
+    matAbrirEditor({ disciplina: x.disciplina || tp.disciplina, nome: x.topico || tp.topico, chave: w.resumo }, "ler");
+    try { achou = typeof matIrPara === "function" ? !!matIrPara(x.texto, "texto") : false; } catch (e) { achou = false; }
+  } else return false;
+  try { if (typeof reg === "function") reg("FUGA", achou ? "fonte da marca aberta no trecho" : "fonte da marca aberta", String(x.texto || "").slice(0, 50)); } catch (e) {}
+  return true;
 }
 /* ⓘ e ⚙: um painel aberto por vez, logo abaixo do topo */
 function fugaPainel(qual) {
@@ -667,7 +830,8 @@ function fugaPassosEl(S) {
     b.type = "button";
     b.id = "btnFugaPasso_" + k;
     /* a marca no canto: dá para ver de longe o que já foi feito, e como */
-    if (r) b.append(fugaEl("span", "fuga-passo-marca", r.lido ? "·" : r.sabia ? "✓" : "✗"));
+    /* (19.194.0) o "lido" é feito: ✓ verde como o "sabia" (era um "·" apagado, que parecia não ter contado) */
+    if (r) b.append(fugaEl("span", "fuga-passo-marca", r.lido || r.sabia ? "✓" : "✗"));
     const estado = r ? t(r.lido ? "fuga_passo_lido" : r.sabia ? "fuga_passo_sabia" : "fuga_passo_nao") : t("fuga_passo_falta");
     b.title = t("fuga_passo_tip", { k: k + 1, n: S.itens.length, t: fugaRotuloTipo(x), o: fugaOrigem(x) }) + " · " + estado;
     if (b.setAttribute) b.setAttribute("aria-label", b.title);
@@ -784,7 +948,11 @@ function fugaChipsPintar() {
   const F = fugaS && fugaS.fontes;
   Object.keys(FUGA_FONTES).forEach((k) => {
     const n = F ? FUGA_FONTES[k].reduce((s, tp) => s + ((F[{ cartao: "cartoes", questao: "questoes", artigo: "artigos", prazo: "prazos", julgado: "julgados", marca: "marcas", mapa: "mapa", dica: "dicas" }[tp]] || []).length), 0) : null;
-    const b = fugaBt(t("fuga_f_" + k) + (n != null ? " (" + n + ")" : ""), () => { fugaPrefDefinir({ fontes: { [k]: !fugaPref().fontes[k] } }); fugaChipsPintar(); },
+    const b = fugaBt(t("fuga_f_" + k) + (n != null ? " (" + n + ")" : ""), () => {
+      fugaPrefDefinir({ fontes: { [k]: !fugaPref().fontes[k] } }); fugaChipsPintar();
+      /* (19.194.0) com a fuga vazia, ligar uma fonte já sorteia */
+      if (fugaS && fugaS.fase === "vazio") fugaNovaRodada();
+    },
       "fuga-chip" + (p.fontes[k] ? " fuga-chip-on" : ""), "btnFugaF_" + k, t("fuga_f_tip"));
     b.setAttribute && b.setAttribute("aria-pressed", p.fontes[k] ? "true" : "false");
     cx.append(b);
@@ -831,10 +999,14 @@ function fugaPintar(resLegado) {
   fugaRegistroPintar();
   const outros = document.getElementById("btnFugaOutros");
   if (outros) outros.textContent = t(S.fase === "resumo" ? "fuga_outros_mais" : "fuga_outros");
+  if (outros) outros.disabled = S.fase === "vazio";
   if (S.fase === "vazio") {
-    const p = fugaEl("p", "nota", t("fuga_vazia"));
+    /* (19.194.0) o vazio diz POR QUE: sem material nenhum, de onde ele vem; com material fora do escopo, o corte e a saída */
+    const d = fugaPorQueVazio();
+    const p = fugaEl("p", "fuga-vazio-tit", t(d && d.tudo ? "fuga_vz_tit" : "fuga_vz_tit_nada"));
     p.id = "fugaVazia";
     box.append(p);
+    box.append(fugaPorQueEl(d));
     return;
   }
   if (S.fase === "fimRodada") { box.append(fugaPassosEl(S)); return fugaPintarFimRodada(box, S); }
@@ -858,6 +1030,7 @@ function fugaPintar(resLegado) {
   c.append(frente);
   if (x.motivoImp) { const mi = fugaEl("div", "fuga-imp", "★ " + x.motivoImp); mi.id = "fugaImp"; c.append(mi); }
   if (x.motivo) c.append(fugaEl("div", "nota fuga-motivo", x.motivo));
+  if (fugaTemFonte(x)) c.append(fugaFonteEl(x));
   /* (19.188.0) DE ONDE SAIU: o trecho da questão que cita o artigo; quando a questão não escreve a lei, o aviso de que
    * ela foi deduzida — e "ver a questão" leva lá, onde o link da citação deixa trocar a lei ou fixar a certa (🔗) */
   if (x.tipo === "artigo" && x.fonte) {
@@ -900,11 +1073,39 @@ function fugaPintar(resLegado) {
       const ultima = fugaRespostaDe(x);
       const fb = fugaEl("div", "fuga-verso " + (ultima && ultima.sabia ? "fuga-acertou" : "fuga-errou"),
         t(ultima && ultima.sabia ? "fuga_q_acertou" : "fuga_q_errou", { g: String(q.gabarito || "").toUpperCase() }));
-      const extra = fugaLimpo(q.dica || q.comentario || "");
-      if (extra) fb.append(fugaEl("div", "fuga-verso-txt", extra.slice(0, 700)));
       if (x.gravada) fb.append(fugaEl("div", "nota fuga-gravada", t("fuga_q_gravada")));
-      fugaLigarCitas(fb, x);
       c.append(fb);
+      /* (19.194.0) o comentário INTEIRO e a SUA DICA, cada um com o seu título. Antes era "q.dica || q.comentario"
+       * cortado em 700 caracteres: a questão com dica escondia o comentário, e o comentário longo saía pela metade.
+       * O comentário sai como na tela da questão (formatado, com as citações de lei e julgado ligadas). */
+      const base = (() => { try { return typeof qsUiCitBase === "function" ? qsUiCitBase(q) : null; } catch (e) { return null; } })();
+      const ligar = (el) => {
+        try { if (base && typeof citLigarEm === "function") { citLigarEm(el, base); return; } } catch (e) {}
+        fugaLigarCitas(el, x);
+      };
+      if (String(q.comentario || "").trim()) {
+        const sec = fugaEl("div", "fuga-q-sec");
+        sec.id = "fugaQComent";
+        sec.append(fugaEl("div", "fuga-q-sec-tit", t("qs_coment_tit")));
+        const cm = fugaEl("div", "fuga-q-sec-txt");
+        let feito = false;
+        try { if (typeof qsUiComentario === "function") { qsUiComentario(cm, q); feito = !!String(cm.textContent || "").trim(); } } catch (e) { feito = false; }
+        if (!feito) { cm.textContent = String(q.comentario); ligar(cm); }
+        sec.append(cm);
+        c.append(sec);
+      }
+      const minha = String(((typeof qsDicaDeQuestao === "function" && q.id) ? qsDicaDeQuestao(q.id) : "") || q.dica || "");
+      if (minha.trim()) {
+        const sec = fugaEl("div", "fuga-q-sec fuga-q-dica");
+        sec.id = "fugaQDica";
+        sec.append(fugaEl("div", "fuga-q-sec-tit", "💡 " + t("qs_dica_dobra")));
+        const dc = fugaEl("div", "fuga-q-sec-txt qs-minha-dica");
+        try { dc.innerHTML = typeof matParaHtml === "function" ? matParaHtml(minha) : ""; } catch (e) { dc.innerHTML = ""; }
+        if (!String(dc.textContent || "").trim()) dc.textContent = minha;
+        ligar(dc);
+        sec.append(dc);
+        c.append(sec);
+      }
       acoes.innerHTML = "";
       acoes.append(fugaBt(t("fuga_proximo"), () => fugaSeguir(), "btn-min-ok", "btnFugaProx"));
     }
@@ -989,7 +1190,7 @@ function fugaPintarFimRodada(box, S) {
   const p = fugaEl("div", "fuga-fim");
   p.id = "fugaFimRodada";
   const cd = fugaContas(da);
-  p.append(fugaEl("div", "fuga-fim-tit", t("fuga_fim_rodada", { r: S.rodada, s: cd.s, n: cd.n, l: cd.l })));
+  p.append(fugaEl("div", "fuga-fim-tit", t("fuga_fim_rodada", { r: S.rodada, f: da.length, tt: S.itens.length, s: cd.s, n: cd.n, l: cd.l })));
 
   const tp = fugaProximoTipo();
   p.append(fugaEl("p", "nota fuga-corrente", t("fuga_corrente", { t: tp ? (FUGA_ICO[tp === "marca" ? "pegadinha" : tp] || "") + " " + t("fuga_tipo_" + (tp === "marca" ? "pegadinha" : tp)) : "—" })));
@@ -1003,7 +1204,11 @@ function fugaPintarResumo(box, S) {
   const r = S.respostas;
   const p = fugaEl("div", "fuga-fim");
   p.id = "fugaResumo";
-  p.append(fugaEl("div", "fuga-fim-tit", r.length ? t("fuga_resumo", { n: r.length, s: fugaContas(r).s, ns: fugaContas(r).n, r: S.rodada }) : t("fuga_resumo_vazio")));
+  p.append(fugaEl("div", "fuga-fim-tit", r.length ? t("fuga_resumo", { n: r.length, s: fugaContas(r).s, ns: fugaContas(r).n, l: fugaContas(r).l, r: S.rodada }) : t("fuga_resumo_vazio")));
+  if (S.esgotou) {
+    p.append(fugaEl("p", "fuga-vazio-tit", t("fuga_vz_esgotou")));
+    p.append(fugaPorQueEl(fugaPorQueVazio()));
+  }
   const nao = r.filter((x) => !x.sabia && !x.lido);
   if (nao.length) {
     p.append(fugaEl("div", "fuga-sec", t("fuga_nao_sabia_lista")));

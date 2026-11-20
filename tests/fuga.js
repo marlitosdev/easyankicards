@@ -13,6 +13,8 @@
  *      ramos esquecidos do mapa;
  *  G5. um por vez: virar, sabia/não sabia, a questão respondida ali, "lido" que não conta; o fim da rodada diz por
  *      onde a corrente segue; o resumo junta as rodadas e manda os cartões para "De novo" só a pedido;
+ *  G11. (19.194.0) a pegadinha diz de onde saiu (edital, disciplina › tópico, lei e artigo) e abre a fonte no trecho;
+ *  G12–G14. (19.194.0) a questão com o comentário inteiro e a dica; o vazio que diz por quê; o lido é feito;
  *  G6. "como funciona" explica o "outros 5" e a corrente (aberto na primeira vez); teclas.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
@@ -156,8 +158,8 @@ async function testes() {
     ok(S().itens[3].tipo === "pegadinha" && api.$("btnFugaLido"), "G5g a pegadinha é só de ler: 'lido'");
     api.$("btnFugaLido").onclick();
     api.$("btnFugaVirar").onclick(); api.$("btnFugaSabia").onclick();
-    ok(S().fase === "fimRodada" && /Rodada 1: ✓ 3 · ✗ 1 · lidos 1/.test(api.$("fugaLista").textContent),
-      "G5h o fim da rodada conta (o 'lido' à parte): " + api.$("fugaLista").textContent.slice(0, 90));
+    ok(S().fase === "fimRodada" && /Rodada 1: 5 de 5 feitos — ✓ 3 sabia · ✗ 1 não sabia · 👁 1 lido/.test(api.$("fugaLista").textContent),
+      "G5h o fim da rodada conta os feitos (o 'lido' é feito, à parte de sabia/não sabia): " + api.$("fugaLista").textContent.slice(0, 90));
     ok(/A próxima começa por 🗺 ramo esquecido do mapa/.test(api.$("fugaLista").textContent), "G5i diz, curto, por onde a próxima rodada começa");
     const fim = api.fugaEstado().min;
     api.$("btnFugaSeguir").onclick();
@@ -168,7 +170,7 @@ async function testes() {
     ok(api.fugaEstado().min === fim, "G5l o relógio é o mesmo (não recomeça)");
     api.fugaTerminar();
     const rs = api.$("fugaLista").textContent;
-    ok(S().fase === "resumo" && /5 itens em 3 rodada\(s\): 3 sabia, 1 não sabia/.test(rs) && /Os que você não sabia/.test(rs), "G5m o resumo junta as rodadas: " + rs.slice(0, 120));
+    ok(S().fase === "resumo" && /5 itens feitos em 3 rodada\(s\): 3 sabia, 1 não sabia, 1 lido/.test(rs) && /Os que você não sabia/.test(rs), "G5m o resumo junta as rodadas: " + rs.slice(0, 120));
   }
   {
     /* mandar para "De novo": só o cartão não sabido, só a pedido */
@@ -329,6 +331,120 @@ async function testes() {
     ok(api.fugaEstado().respostas.length === 3 && /1 cartão\(ões\) na agenda · 1 questão/.test(api.$("fugaRegistro").textContent), "G10b o 'lido' não registra nada (a linha não muda)");
     api.$("btnFugaX").onclick();
     ok(api.$("dlgFuga").open !== true && api.fugaEstado().registrado === true, "G10c o ✖ fecha e encerra a fuga (como o Esc)");
+  }
+
+  {
+    /* (19.194.0) G11: DE ONDE SAIU A PEGADINHA — o edital, "disciplina › tópico", a lei e o artigo; "ver no resumo" e
+     * "ver na lei" abrem a fonte por cima da fuga e destacam o trecho */
+    const D = "Direito Administrativo", T = "Atos administrativos";
+    const montar = () => {
+      const r = rodar();
+      const { api } = r;
+      api.matIniciar(); api.edIniciar(); api.leiIniciar();
+      api.edCriar("ISS Teste", ["# ISS | prova: 2027-06-01 | horas: 20", "@ " + D + " :: 4", "+ " + T + " :: 5"].join(NL));
+      const ch = api.matChave(D, T);
+      api.matGravar(ch, "Introdução do tópico." + NL + NL + "O ato ==~não confunda revogação com anulação de jeito nenhum== e segue.", { disciplina: D, topico: T });
+      api.leiGuardar({ id: "lei_fx", nome: "Lei 9.784/1999", texto: ["Art. 1º Disposição geral.", "", "Art. 2º A anulação tem ==~prazo decadencial de cinco anos, não dez== para a administração."].join(NL), topicos: [ch] });
+      const mk = api.fugaMarcas();
+      return Object.assign(r, { ch, mr: mk.find((x) => /revogação/.test(x.texto)), ml: mk.find((x) => /decadencial/.test(x.texto)) });
+    };
+    const so = (m) => ({ cartoes: [], questoes: [], artigos: [], marcas: m ? [m] : [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() });
+    {
+      const { api, ch, mr, ml } = montar();
+      ok(mr && mr.onde && mr.onde.resumo === ch, "G11 a marca do resumo sabe de que resumo saiu: " + JSON.stringify(mr && mr.onde));
+      ok(ml && ml.onde && ml.onde.leiId === "lei_fx" && ml.onde.num === "2" && /Art\. 2/.test(ml.onde.rotulo), "G11a a marca da lei sabe a lei e o artigo: " + JSON.stringify(ml && ml.onde));
+      api.fugaAbrir({ fontes: so(mr), disc: "", rnd: () => 0 });
+      const onde = api.$("fugaFonteOnde");
+      ok(onde && /📋 ISS Teste/.test(onde.textContent) && onde.textContent.indexOf(D + " › " + T) >= 0, "G11b embaixo do texto: o edital e 'disciplina › tópico': " + (onde && onde.textContent));
+      const b = api.$("btnFugaFonte");
+      ok(b && b.textContent === api.t("fuga_ver_resumo") && /destaca este trecho/.test(b.title), "G11c o botão 'ver no resumo' diz o que faz");
+      b.onclick();
+      ok(api.$("dlgMaterial").open === true && api.$("dlgFuga").open === true, "G11d abre o resumo POR CIMA da fuga (ela continua aberta)");
+    }
+    {
+      const { api, ml } = montar();
+      api.fugaAbrir({ fontes: so(ml), disc: "", rnd: () => 0 });
+      const onde = api.$("fugaFonteOnde");
+      ok(onde && /⚖ Lei 9\.784\/1999, Art\. 2/.test(onde.textContent) && onde.textContent.indexOf(D + " › " + T) >= 0, "G11e a marca da lei diz a lei e o artigo: " + (onde && onde.textContent));
+      const b = api.$("btnFugaFonte");
+      ok(b && b.textContent === api.t("fuga_ver_lei"), "G11f o botão 'ver na lei'");
+      b.onclick();
+      ok(api.$("dlgLeiSeca").open === true && api.leiIdAtualValor() === "lei_fx" && api.leiCtxDoLeitor().topico === T, "G11g abre a lei PELO TÓPICO, no artigo da marca");
+    }
+    {
+      const { api } = montar();
+      const F = so(null); F.dicas = [{ tipo: "dica", disciplina: D, topico: T, texto: "uma dica do caderno de erros" }];
+      api.fugaAbrir({ fontes: F, disc: "", rnd: () => 0 });
+      ok(api.$("fugaFonteOnde") && /ISS Teste/.test(api.$("fugaFonteOnde").textContent) && !api.$("btnFugaFonte"), "G11h a dica também diz de onde é (sem botão: não há trecho para abrir)");
+      ["fuga_ver_resumo", "fuga_ver_resumo_tip", "fuga_ver_lei", "fuga_ver_lei_tip", "fuga_fonte_ed_tip", "fuga_fonte_sem"].forEach((k) =>
+        ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "G11i falta " + k + " em " + lg); }));
+      api.setLanguage("pt");
+    }
+  }
+
+  {
+    /* (19.194.0) G12: a questão mostra o comentário INTEIRO e a SUA DICA (antes: um ou outro, cortado em 700) */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar(); api.qsUiIniciar && api.qsUiIniciar();
+    const longo = "Começo do comentário. " + "Explicação longa do ponto. ".repeat(40) + "FIM DO COMENTÁRIO.";
+    api.qsTodas().push({ id: "qd1", tipo: "ce", enunciado: "A questão com dica e comentário longo é cobrada?", gabarito: "C", comentario: longo, dica: "Minha dica: lembrar do prazo", tentativas: [{ acertou: false }], disciplina: "Tributário", topico: "T" });
+    const F = { cartoes: [], questoes: api.fugaQuestoes().filter((x) => x.id === "qd1"), artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    api.fugaAbrir({ fontes: F, disc: "", rnd: () => 0 });
+    ok(!api.$("fugaQDica") || api.$("fugaQDica").isConnected === false, "G12 antes de responder, nada de dica (seria gabarito disfarçado)");
+    api.$("btnFugaQ_C").onclick();
+    const cm = api.$("fugaQComent"), dc = api.$("fugaQDica");
+    ok(cm && /FIM DO COMENTÁRIO/.test(cm.textContent) && /gabarito comentado/.test(cm.textContent), "G12a o comentário inteiro, com o título: " + (cm && cm.textContent.length));
+    ok(dc && /lembrar do prazo/.test(dc.textContent) && /a sua dica/.test(dc.textContent), "G12b a sua dica também (a dica não esconde mais o comentário)");
+  }
+
+  {
+    /* (19.194.0) G13: SEM NADA NO ESCOPO, a fuga diz por quê e oferece a saída */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const so = (o) => Object.assign({ cartoes: [], questoes: [], artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() }, o);
+    api.fugaAbrir({ fontes: so({}), disc: "", rnd: () => 0 });
+    ok(/Ainda não há material/.test(api.$("fugaVazia").textContent) && /cartões que você erra/.test(api.$("fugaPorQue").textContent) && api.$("btnFugaOutros").disabled === true,
+      "G13 sem material nenhum: diz de onde ele vem, e 'outros 5' fica desligado");
+    /* tudo da disciplina de agora */
+    const F = so({ marcas: [{ tipo: "pegadinha", disciplina: "Português", topico: "T", texto: "uma pegadinha de português" }] });
+    api.fugaAbrir({ fontes: F, disc: "Português", rnd: () => 0 });
+    ok(/Nada para mostrar dentro do escopo/.test(api.$("fugaVazia").textContent) && /1 item\(ns\) são de Português, a disciplina que você está estudando agora/.test(api.$("fugaPorQue").textContent) && api.$("btnFugaAmpliar"),
+      "G13a só da disciplina de agora: diz isso e oferece 'incluir mesmo assim': " + api.$("fugaPorQue").textContent);
+    api.$("btnFugaAmpliar").onclick();
+    ok(api.fugaEstado().fase === "item" && api.fugaEstado().itens.length === 1 && api.fugaEstado().rodada === 1 && api.$("btnFugaOutros").disabled === false,
+      "G13b 'incluir mesmo assim' sorteia a rodada 1 com ela");
+    /* fora dos editais */
+    api.fugaAbrir({ fontes: so({ dicas: [{ tipo: "dica", disciplina: "Controle Externo", topico: "T", texto: "dica fora do edital" }], discs: new Set(["tributario"]) }), disc: "", rnd: () => 0 });
+    ok(/fora dos editais em andamento \(Controle Externo\)/.test(api.$("fugaPorQue").textContent) && api.$("btnFugaAmpliar"), "G13c fora dos editais: diz quais disciplinas");
+    /* fonte desligada: o ⚙ e, ao ligar, já sorteia */
+    api.fugaPrefDefinir({ fontes: { marcas: false } });
+    api.fugaAbrir({ fontes: so({ marcas: [{ tipo: "pegadinha", disciplina: "Civil", topico: "T", texto: "pegadinha desligada" }] }), disc: "", rnd: () => 0 });
+    ok(/fontes desligadas: ⚠ pegadinhas/.test(api.$("fugaPorQue").textContent) && api.$("btnFugaVzFontes") && !/incluir mesmo assim/.test(api.$("fugaPorQue").textContent), "G13d fonte desligada: diz qual e leva ao ⚙: " + api.$("fugaPorQue").textContent);
+    api.$("btnFugaVzFontes").onclick();
+    ok(api.$("fugaOpcoes").hidden === false, "G13e '⚙ o que entra' abre as fontes");
+    api.$("btnFugaF_marcas").onclick();
+    ok(api.fugaEstado().fase === "item" && api.fugaEstado().itens.length === 1, "G13f ligar a fonte com a fuga vazia já sorteia");
+    api.fugaPrefDefinir({ fontes: { marcas: true } });
+    /* secou no meio: o resumo diz por quê */
+    api.fugaAbrir({ fontes: so({ marcas: [{ tipo: "pegadinha", disciplina: "Civil", topico: "T", texto: "a única pegadinha" }] }), disc: "", rnd: () => 0 });
+    api.$("btnFugaLido").onclick();
+    api.fugaOutros();
+    ok(api.fugaEstado().fase === "resumo" && /Acabaram os itens dentro do escopo/.test(api.$("fugaLista").textContent) && /1 item\(ns\) já saíram nesta fuga/.test(api.$("fugaLista").textContent),
+      "G13g secou no meio: o resumo diz que acabou e por quê");
+    ["fuga_vz_tit", "fuga_vz_tit_nada", "fuga_vz_esgotou", "fuga_vz_atual", "fuga_vz_edital", "fuga_vz_desligadas", "fuga_vz_vistos", "fuga_vz_ampliar", "fuga_vz_ampliar_tip", "fuga_vz_fontes", "fuga_vz_fontes_tip"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "G13h falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
+
+  {
+    /* (19.194.0) G14: o "lido" da pegadinha é FEITO — bolinha com ✓ e na conta dos feitos */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    api.fugaAbrir({ fontes: { cartoes: [], questoes: [], artigos: [], marcas: [{ tipo: "pegadinha", disciplina: "Civil", topico: "T", texto: "pegadinha que se lê" }], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() }, disc: "", rnd: () => 0 });
+    api.$("btnFugaLido").onclick();
+    const b = api.$("btnFugaPasso_0");
+    ok(b && /fuga-passo-lido/.test(b.className) && /✓/.test(b.textContent), "G14 a bolinha do lido leva ✓: " + (b && b.textContent));
+    ok(/1 de 1 feitos/.test(api.$("fugaLista").textContent) && /1 lido/.test(api.$("fugaLista").textContent), "G14a o fim da rodada conta o lido entre os feitos: " + api.$("fugaLista").textContent.slice(0, 90));
   }
 
   /* G6: como funciona, chips e teclas */
