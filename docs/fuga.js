@@ -19,7 +19,11 @@
  *  · "OUTROS 5" É UMA CORRENTE: a rodada seguinte começa do tipo onde a anterior parou, nunca repete um item desta fuga,
  *    e o relógio NÃO recomeça (a fuga inteira dura o tempo escolhido). "Como funciona" diz isso na própria janela;
  *  · NO FIM, o resumo de todas as rodadas: os cartões que você não sabia vão, se você quiser, para "De novo" na agenda
- *    dos cartões; os outros itens abrem no lugar deles. Fora isso, nada é gravado além de linhas no registro.
+ *    dos cartões; os outros itens abrem no lugar deles.
+ * (19.186.0) A RESPOSTA À QUESTÃO ENTRA NO HISTÓRICO DELA (origem "fuga"): sem isso, uma questão que você acerta sempre
+ * na fuga nunca saía do caderno (que a tira com 2 acertos seguidos) e voltava sempre. E FECHAR A JANELA ENCERRA A FUGA
+ * por qualquer caminho (Esc, "voltar ao estudo"): o relógio para e o registro anota o que foi feito — antes, só o
+ * "terminar e ver o resumo" anotava, e o relógio seguia contando escondido.
  * ===================================================================== */
 const FUGA_SEG = 180;
 const FUGA_PREF_CH = "eac_fuga_pref";
@@ -430,6 +434,9 @@ function fugaResponderQuestao(letra) {
   const certo = String(letra || "").toUpperCase() === gab;
   fugaS.revelado = true;
   x.escolha = String(letra || "").toUpperCase();
+  /* (19.186.0) no histórico da questão, como qualquer resposta (o caderno decide se ela já está dominada) */
+  x.gravada = false;
+  try { if (typeof qsTentativaAvulsa === "function") x.gravada = !!qsTentativaAvulsa(x.q.id, x.escolha, "fuga"); } catch (e) { x.gravada = false; }
   fugaS.respostas.push({ item: x, sabia: certo, rodada: fugaS.rodada });
   fugaPintar();
   return certo;
@@ -447,14 +454,28 @@ function fugaProximo() {
   fugaPintar();
   return true;
 }
+/* a linha do registro do fim (uma vez por fuga, por qualquer caminho) */
+function fugaRegistrarFim(como) {
+  if (!fugaS || fugaS.registrado) return false;
+  fugaS.registrado = true;
+  const s = fugaS.respostas;
+  try { reg("ESTUDO", "fuga rápida encerrada", fugaS.rodada + " rodada(s) · " + s.length + " item(ns) · " + fugaContas(s).s + " sabia · " + fugaContas(s).n + " não sabia" + (como ? " · " + como : "")); } catch (e) {}
+  return true;
+}
 function fugaTerminar() {
   if (!fugaS) return false;
   fugaS.fase = "resumo";
-  const s = fugaS.respostas;
-  try { reg("ESTUDO", "fuga rápida encerrada", fugaS.rodada + " rodada(s) · " + s.length + " item(ns) · " + fugaContas(s).s + " sabia · " + fugaContas(s).n + " não sabia"); } catch (e) {}
+  fugaRegistrarFim("");
   fugaPintar();
   return true;
 }
+/* a janela fechou (Esc, "voltar ao estudo"): o relógio para e o registro anota o que foi feito */
+function fugaAoFechar() {
+  try { if (fugaRelogio) clearInterval(fugaRelogio); } catch (e) {}
+  fugaRelogio = null;
+  if (fugaS && fugaS.respostas.length) fugaRegistrarFim("fechada");
+}
+function fugaRelogioAtivo() { return !!fugaRelogio; }
 /* os cartões que você não sabia vão para "De novo" na agenda dos cartões (a única gravação da fuga, e só a pedido) */
 function fugaMandarRevisao() {
   if (!fugaS) return 0;
@@ -472,8 +493,7 @@ function fugaMandarRevisao() {
   return cards.length;
 }
 function fugaFechar() {
-  try { if (fugaRelogio) clearInterval(fugaRelogio); } catch (e) {}
-  fugaRelogio = null;
+  fugaAoFechar();
   const d = typeof document !== "undefined" ? document.getElementById("dlgFuga") : null;
   if (d && d.open && d.close) d.close();
 }
@@ -589,6 +609,7 @@ function fugaPintar(resLegado) {
         t(ultima && ultima.sabia ? "fuga_q_acertou" : "fuga_q_errou", { g: String(q.gabarito || "").toUpperCase() }));
       const extra = fugaLimpo(q.dica || q.comentario || "");
       if (extra) fb.append(fugaEl("div", "fuga-verso-txt", extra.slice(0, 700)));
+      if (x.gravada) fb.append(fugaEl("div", "nota fuga-gravada", t("fuga_q_gravada")));
       fugaLigarCitas(fb, x);
       c.append(fb);
       acoes.innerHTML = "";
@@ -683,6 +704,8 @@ function fugaPintarResumo(box, S) {
     liga("btnFugaFechar", () => fugaFechar());
     /* teclas: espaço vira, S sabia, N não sabia, → próximo; nunca enquanto se digita */
     const d = document.getElementById("dlgFuga");
+    /* (19.186.0) fechar por qualquer caminho encerra a fuga (o Esc não passa pelo "voltar ao estudo") */
+    if (d && d.addEventListener) d.addEventListener("close", () => fugaAoFechar());
     if (d && d.addEventListener) d.addEventListener("keydown", (e) => {
       if (!e || e.ctrlKey || e.metaKey || e.altKey || !fugaS) return;
       const alvo = e.target || {};

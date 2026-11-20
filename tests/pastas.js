@@ -297,7 +297,7 @@ async function testes() {
     ok(api.$("leiBibEdFaixa").hidden === false && /📋 ISS/.test(api.$("leiBibEdFaixaTxt").textContent), "R6a a pasta do edital mostra o caminho para as Leis do edital: " + api.$("leiBibEdFaixa").hidden + " " + api.$("leiBibEdFaixaTxt").textContent + " · " + chipEd.textContent);
     api.$("btnLeiBibLed").onclick();
     ok(api.$("dlgLeisEd").open && !api.$("dlgLeiBib").open, "R6b o botão abre as Leis do edital");
-    ["lei_nome_cf", "lei_colar_nova_curto", "lei_vincular_curto", "lei_fila_edital", "lei_fila_edital_aj", "lei_bib_e_todas", "lei_bib_e_nao", "lei_bib_e_lendo", "lei_bib_e_ok",
+    ["lei_nome_cf", "lei_fila_edital", "lei_fila_edital_aj", "lei_bib_e_todas", "lei_bib_e_nao", "lei_bib_e_lendo", "lei_bib_e_ok",
       "lei_bib_anel_aj", "lei_bib_ed_faixa", "lei_bib_ed_bt"].forEach((k) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "R7 falta " + k + " em " + l); }));
     api.setLanguage("pt");

@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.185.0";
+const VERSAO = "19.186.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -541,16 +541,6 @@ function uiTexto(titulo, valor, dois, extra) {
   });
 }
 
-/* QUEM PEDE A PRÓXIMA ABERTURA SEM EMPILHAR.
- * showModal() promove o <dialog> à top layer do navegador com backdrop
- * próprio — é isso que faz a gaveta de jurisprudência subir POR CIMA de
- * uma questão em andamento e devolvê-la intacta ao fechar (ver o
- * comentário de jurAbrir). É comportamento bom demais para trocar globalmente
- * só para o painel lado a lado poder existir. Em vez disso, um diálogo
- * pode se inscrever aqui para a ÚNICA próxima chamada de abrirModal(),
- * que aí usa show() (não-modal, sem backdrop, posicionável por CSS) —
- * e a inscrição se apaga sozinha depois de usada. */
-const _abrirNaoModalUmaVez = new Set();
 /* as janelas abertas por abrirModal, na ordem em que foram abertas: quem quer aparecer DENTRO da janela
  * de cima (o aviso da lixeira) precisa saber qual é. A top layer do navegador não deixa perguntar. */
 const _modaisAbertos = new Set();
@@ -672,11 +662,9 @@ if (typeof document !== "undefined" && document.addEventListener) {
 function abrirModal(id) {
   const d = typeof id === "string" ? document.getElementById(id) : id;
   if (!d) return null;
-  const naoModal = _abrirNaoModalUmaVez.has(d.id);
-  _abrirNaoModalUmaVez.delete(d.id);
   try {
     if (!d.open) {
-      if (naoModal) d.show(); else { d.showModal(); document.documentElement.classList.add("tem-modal"); }
+      d.showModal(); document.documentElement.classList.add("tem-modal");
       _modaisAbertos.delete(d); _modaisAbertos.add(d);
       /* (19.103.0) aberto a partir de um painel armado: esta é a janela a vigiar */
       /* só logo depois de armar: uma janela qualquer aberta mais tarde, já em outra tela, não é "a que o painel abriu" */

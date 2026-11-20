@@ -181,6 +181,32 @@ async function testes() {
     ok(api.fugaEstado().itens[0].tipo === "prazo", "G5t e a rodada começa mesmo pelo prazo");
   }
 
+  {
+    /* (19.186.0) a questão respondida na fuga entra no histórico dela; fechar por qualquer caminho encerra a fuga */
+    const { api } = rodar();
+    api.matIniciar(); api.leiIniciar();
+    const q = { id: "qf1", tipo: "ce", enunciado: "A taxa pode ter base de cálculo própria de imposto?", gabarito: "E", tentativas: [{ q: "2026-11-01T10:00:00.000Z", resp: "C", acertou: false }], disciplina: "Tributário", topico: "Taxas" };
+    api.qsTodas().push(q);
+    const F = { cartoes: [], questoes: api.fugaQuestoes(), artigos: [], marcas: [], julgados: [], mapa: [], prazos: [], dicas: [], discs: new Set() };
+    ok(F.questoes.length === 1, "G7-pre a questão do caderno entra na fuga");
+    api.fugaAbrir({ fontes: F, disc: "", rnd: semear() });
+    api.$("btnFugaQ_E").onclick();
+    const ult = q.tentativas[q.tentativas.length - 1];
+    ok(q.tentativas.length === 2 && ult.resp === "E" && ult.acertou === true && ult.origem === "fuga", "G7 a resposta da fuga entra no histórico da questão, com a origem: " + JSON.stringify(ult));
+    ok(/Anotada no histórico da questão/.test(api.$("fugaLista").textContent), "G7a a fuga diz que anotou");
+    api.qsTentativaAvulsa("qf1", "E", "fuga");
+    ok(api.qsCadernoEstado(q).dentro === false && api.qsCadernoEstado(q).motivo === "dominada", "G7b dois acertos seguidos (na fuga) tiram a questão do caderno: " + JSON.stringify(api.qsCadernoEstado(q)));
+    ok(api.qsTentativaAvulsa("nao_existe", "C", "fuga") === null, "G7c questão que não existe: nada");
+    /* o Esc fecha a janela sem passar pelo "voltar ao estudo": o evento de fechar encerra a fuga */
+    api.fugaAoFechar();
+    ok(api.fugaRelogioAtivo() === false && api.fugaEstado().registrado === true, "G7d fechar por qualquer caminho para o relógio e anota o fim no registro");
+    api.fugaAoFechar();
+    ok(api.fugaEstado().registrado === true, "G7e uma linha só, mesmo fechando de novo");
+    const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "fuga.js"), "utf8");
+    ok(/addEventListener\("close", \(\) => fugaAoFechar\(\)\)/.test(html), "G7f a janela da fuga ouve o fechar (Esc incluído)");
+    ok(/3–5 min/.test(api.t("fuga_btn_menu")), "G7g o menu diz 3–5 min: " + api.t("fuga_btn_menu"));
+  }
+
   /* G6: como funciona, chips e teclas */
   {
     const { api } = rodar();

@@ -1903,6 +1903,21 @@ function qsResponder(escolha, gravar, opc) {
   return { acertou, gabarito: q.gabarito, comentario: q.comentario, resp, chute };
 }
 
+/* (19.186.0) UMA RESPOSTA FORA DE RODADA (a fuga rápida): entra no histórico da questão como qualquer outra, com a
+ * origem — é o que deixa o caderno ver que ela foi dominada (2 acertos seguidos). Não mexe na rodada em andamento. */
+function qsTentativaAvulsa(id, escolha, origem, gravar) {
+  const q = qsBanco.find((x) => x.id === id);
+  if (!q) return null;
+  const resp = String(escolha || "").toUpperCase().slice(0, 1);
+  if (!resp) return null;
+  const tent = { q: new Date().toISOString(), resp, acertou: resp === String(q.gabarito || "").toUpperCase() };
+  if (origem) tent.origem = origem;
+  q.tentativas = (q.tentativas || []).concat([tent]);
+  qsSalvar(gravar, q.chave);
+  try { if (typeof fatoGravar === "function") fatoGravar(fatoDeResposta(q, tent)); } catch (e) {}
+  return tent;
+}
+
 /* "foi chute" DEPOIS do gabarito (ou "não foi"): corrige a tentativa desta passagem — a última da questão — e a rodada */
 function qsMarcarChute(sim, gravar) {
   const q = qsAtual();

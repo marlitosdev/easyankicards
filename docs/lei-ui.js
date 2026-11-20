@@ -1708,8 +1708,8 @@ function leiTrocarModo(modo) {
 
   /* O FOCO PRECISA ESTAR DENTRO DO PAINEL CERTO.
    *
-   * Quando o diálogo abre com .show() em vez de .showModal() (_abrirNaoModalUmaVez, app.js) — não é modal de verdade, então o
-   * navegador nunca move o foco para dentro dele sozinho. Sem foco em
+   * O navegador nem sempre põe o foco dentro do painel da leitura sozinho (o "lado a lado" antigo abria a janela sem
+   * ser modal, e ainda acontece ao trocar de modo). Sem foco em
    * lugar nenhum do painel, Page Down e as setas rolam o documento por
    * trás em vez do texto da lei. leiTexto já é um campo (foca sozinho);
    * leiLeitura/leiRecitar são <div>s e precisam de tabIndex para aceitar
@@ -11049,6 +11049,8 @@ function leiIniciar() {
    * registro com o nome do botão, em vez de morrer no console */
   const liga = (id, nome, fn) => leiBotao(id, nome, fn);
 
+  /* (19.186.0) a faixa das leis alteradas virou selo (19.183.0): a escolha "ver todas" que ela guardava não serve mais */
+  try { localStorage.removeItem("eac_lei_faixa_alvo_expandida"); } catch (e) {}
   liga("btnLeiModoLer", "ler", () => leiTrocarModo("ler"));
   /* (19.172.0) ler só o que cai / só onde erro */
   liga("btnLeiVerTudo", "ler a lei inteira", () => leiVerDefinir(""));
