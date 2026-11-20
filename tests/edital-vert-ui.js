@@ -188,8 +188,9 @@ function testes() {
   /* ---- VU11: o CSS de impressao (estatico) ---- */
   {
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
-    ok(/@media print\s*\{[^}]*body\.eac-imprimindo > \*:not\(#edVertImpressao\)\{display:none!important\}/.test(html), "VU11a em impressao tudo some, menos #edVertImpressao");
-    ok(/#edVertImpressao\{display:none\}/.test(html) && /body\.eac-imprimindo #edVertImpressao\{display:block\}/.test(html), "VU11b a area de impressao e' escondida na tela e so' aparece imprimindo");
+    /* (19.180.0) a mesma regra serve à folha do mapa (#mmImpressao): o seletor pode ter outras exceções */
+    ok(/@media print\s*\{[^}]*body\.eac-imprimindo > \*:not\(#edVertImpressao\)(?::not\(#\w+\))*\{display:none!important\}/.test(html), "VU11a em impressao tudo some, menos #edVertImpressao");
+    ok(/#edVertImpressao\{display:none\}/.test(html) && /body\.eac-imprimindo #edVertImpressao(?:,[^{]*)?\{display:block\}/.test(html), "VU11b a area de impressao e' escondida na tela e so' aparece imprimindo");
     ok(/\.ev-folha \*\{-webkit-print-color-adjust:exact;print-color-adjust:exact\}|\.ev-folha,\.ev-folha \*\{-webkit-print-color-adjust:exact;print-color-adjust:exact\}/.test(html), "VU11c as cores (faixa preta, zebra) saem na impressao");
     ok(/\.ev-faixa\{[^}]*background:#000;color:#fff[^}]*break-after:avoid/.test(html) && /\.ev-lin\{break-inside:avoid\}/.test(html), "VU11d a faixa e' preta com letra branca, nao fica sozinha no fim da pagina e a linha nao e' cortada");
     ok(/html\.tem-modal\{overflow:visible!important\}/.test(html), "VU11e o travamento de rolagem do modal nao corta a folha em uma pagina so'");

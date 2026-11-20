@@ -240,6 +240,7 @@ async function testes() {
     ok(idMapa.length >= 1 && api.rvTopicosComMapa(api.rvDoEdital(e.id)).map((x) => x.topico).join() === "Tema um", "MS3 o '🗺 mapa' no item do bloco; a véspera lista o tópico uma vez só: " + idMapa.join());
     const vesp = api.$("rvCorpo").querySelectorAll("details").find((d) => d.id === "rvVesperaMapas");
     ok(vesp && /os mapas dos tópicos \(1\)/.test(vesp.textContent) && /🗺 Tema um/.test(vesp.textContent), "MS4 na véspera, os mapas dos tópicos do plano");
+    ok(api.$("rvCorpo").querySelectorAll("button").some((b) => b.id === "btnRvVespImprimir" && /imprimir todos \(1\)/.test(b.textContent)), "MS4b e o '🖨 imprimir todos' deles");
     api.$("rvCorpo").querySelectorAll("button").find((b) => b.id === idMapa[0]).onclick();
     ok(!api.$("dlgRv360").open && api.matMapaAtual() && api.mmUltimoAtual().arvore.ramos === 2, "MS5 tocar fecha a revisão e abre o resumo JÁ no mapa");
     api.matMapaAlternar(false);
@@ -673,6 +674,76 @@ async function testes() {
     ["mm_f_corrigir", "mm_f_corrigir_tip", "mmq_selo_corrigir", "mmq_aval_tit", "mmq_aval_nada", "mmq_ver_incorreto", "mmq_ver_impreciso", "mmq_ver_correto", "mmq_correcao", "mmq_fonte", "mmq_sem_galho", "mmq_corrigir", "mmq_corrigido",
       "mmq_discordo", "mmq_aceitar", "mmq_aceitar_todos", "mmq_reabrir", "mmq_res_corrigido", "mmq_res_aceito", "mmq_res_discordo", "mmq_nota_corrigido", "mmq_nota_aceito", "mmq_corrigir_toast"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MV18 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+  }
+
+  /* ---------------- MP: (19.180.0) imprimir o mapa (ou salvar em PDF) ---------------- */
+  {
+    const { api, janela } = rodar();
+    api.matIniciar();
+    const TXT = ["Os conectivos ligam termos e orações.", "",
+      "## Ramo — Conjunções Coordenativas", "",
+      "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, ==!contudo==.", "  - **Exceção:** ==~\"e\" com valor adversativo==", "",
+      "## Ramo — Conjunções Subordinadas", "", "Texto corrido do ramo, sem negrito, que é bem mais comprido do que o limite de noventa caracteres para caber.", "",
+      "* **Causais:** porque, visto que."].join(NL);
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    api.matMapaAlternar(true);
+    const no = (label) => { let achou = null; const ir = (x) => { if (x.label === label) achou = x; x.filhos.forEach(ir); }; ir(api.mmUltimoAtual().arvore.raiz); return achou; };
+    api.mmCurMarcar(no("Causais"), "errado", "visto que é causal, mas falta o 'como'");
+    api.mmMarcarResultado(no("Aditivas"), "n");
+    /* recolher um ramo na tela não tira nada do papel */
+    api.mmAlternar(api.mmChave(), no("Conjunções Coordenativas").id);
+    let durante = null; const ouv = {};
+    const imp = () => api.$("mmImpressao");
+    janela.print = () => {
+      const area = imp();
+      durante = { classe: janela.document.body.classList.contains("eac-imprimindo"), folhas: area.querySelectorAll(".mmp-folha").length,
+        texto: area.textContent, nos: area.querySelectorAll("li").length, compacto: area.querySelectorAll(".mmp-compacto").length,
+        cores: area.querySelectorAll("li").filter((x) => /mmp-cor-/.test(x.className)).map((x) => x.className.match(/mmp-cor-\d/)[0]) };
+    };
+    janela.addEventListener = (tipo, fn) => { ouv[tipo] = fn; };
+    janela.removeEventListener = (tipo) => { delete ouv[tipo]; };
+    const bImp = api.$("matMapa").querySelectorAll("button").find((b) => b.id === "btnMmImprimir");
+    ok(bImp && /imprimir \/ PDF/.test(bImp.textContent), "MP1 o botão '🖨 imprimir / PDF' na barra do mapa");
+    bImp.onclick();
+    ok(durante && durante.classe && durante.folhas === 1 && durante.nos === 8, "MP2 na hora de imprimir: a classe do CSS ligada e a folha com TODOS os galhos (o recolhido também): " + JSON.stringify(durante && [durante.folhas, durante.nos]));
+    ok(/🗺 Conectivos/.test(durante.texto) && /Português · mapa do resumo · 8 galhos/.test(durante.texto) && /impresso em \d\d\/\d\d\/\d{4}/.test(durante.texto), "MP3 o cabeçalho: tópico, disciplina, qual mapa, quantos galhos e a data");
+    ok(/Texto corrido do ramo, sem negrito, que é bem mais comprido do que o limite de noventa caracteres para caber\./.test(durante.texto) && !/… —/.test(durante.texto)
+      && /mas, porém, contudo\./.test(durante.texto) && /❗/.test(durante.texto) && /⚠/.test(durante.texto) && /Sinais: ❗ /.test(durante.texto) && !/==/.test(durante.texto),
+      "MP4 o detalhe, as marcas como sinais e a legenda só com os sinais usados");
+    ok(/✗ errado/.test(durante.texto) && /🔁 não lembrei/.test(durante.texto) && /📝 Texto corrido/.test(durante.texto), "MP5 no papel também: ✗ errado, 🔁 não lembrei e a nota discreta");
+    ok(durante.cores.join() === "mmp-cor-0,mmp-cor-1", "MP6 cada ramo com a sua cor: " + durante.cores.join());
+    ok(typeof ouv.afterprint === "function", "MP7 a limpeza espera o 'afterprint'");
+    ouv.afterprint();
+    ok(!janela.document.body.classList.contains("eac-imprimindo") && imp().children.length === 0 && !ouv.afterprint, "MP8 depois, a classe sai e a área esvazia");
+    /* só palavras-chave: sem detalhe nem nota, em duas colunas; com filtro, só o filtrado */
+    api.mmCompactoAlternar();
+    api.mmImprimirAtual(); ouv.afterprint && ouv.afterprint();
+    ok(durante.compacto === 1 && !/mas, porém/.test(durante.texto) && !/📝/.test(durante.texto) && /só palavras-chave/.test(durante.texto), "MP9 'só palavras-chave' sai sem detalhe e sem notas (em colunas)");
+    api.mmCompactoAlternar();
+    api.mmFiltroDefinir2("grifos");
+    api.mmImprimirAtual(); ouv.afterprint && ouv.afterprint();
+    ok(/Adversativas/.test(durante.texto) && !/Aditivas/.test(durante.texto) && !/Causais/.test(durante.texto) && /filtro: 🖍 só grifados/.test(durante.texto), "MP10 com o filtro, só o filtrado (e o cabeçalho diz qual): " + durante.texto.slice(0, 160));
+    api.mmFiltroDefinir2("grifos");
+    /* vários (a véspera): uma folha por tópico; o resumo sem mapa fica de fora */
+    const ch2 = api.matChave("Português", "Crase");
+    api.matGravar(ch2, ["## Ramo — Regra", "- **Antes de feminino:** a + a", "- **Proibida:** antes de verbo", "## Ramo — Casos", "- **Facultativa:** possessivo"].join(NL), { disciplina: "Português", topico: "Crase" });
+    const ch3 = api.matChave("Português", "Curto");
+    api.matGravar(ch3, "Uma linha.", { disciplina: "Português", topico: "Curto" });
+    const nF = api.mmImprimirVarios([{ disciplina: "Português", topico: "Conectivos", chave: ch }, { disciplina: "Português", topico: "Crase", chave: ch2 }, { disciplina: "Português", topico: "Curto", chave: ch3 }]);
+    ok(nF === 2 && durante.folhas === 2 && /🗺 Crase/.test(durante.texto) && /✗ errado/.test(durante.texto), "MP11 imprimir vários: uma folha por tópico (com a curadoria de cada um); sem mapa, fica de fora");
+    ouv.afterprint && ouv.afterprint();
+    /* o mapa da IA, quando é ele que está à vista */
+    api.mmIaGravar(ch, ["- **Conjunções Coordenativas**", "  - **Adversativas** — mas, porém", "- **Conjunções Subordinadas**", "  - **Finais** — a fim de que"].join(NL));
+    api.mmFonteDefinir("ia");
+    api.mmImprimirAtual(); ouv.afterprint && ouv.afterprint();
+    ok(/mapa da IA/.test(durante.texto) && /não está no resumo/.test(durante.texto), "MP12 o mapa da IA sai como mapa da IA, com o aviso do que não está no resumo");
+    api.mmFonteDefinir("texto");
+    ["mm_imprimir", "mm_imprimir_tip", "mmp_fonte_texto", "mmp_fonte_ia", "mmp_galhos", "mmp_compacto", "mmp_filtro", "mmp_impresso", "mmp_nao_lembrei", "mmp_legenda", "rv_vespera_imprimir", "rv_vespera_imprimir_tip"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MP13 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
     api.matMapaAlternar(false);
   }

@@ -489,7 +489,7 @@ async function main() {
                     ["backup: a falha explicada, a nova tentativa sozinha, o alarme só quando insiste e o diagnóstico que diz por que parou", bavT],
                     ["lei: o mapa conta a história — ✎ na árvore e só o que mudou, como veio × como ficou, linha do tempo e devolver o que a limpeza tirou", lmhT],
                     ["lei: as decisões antigas gravadas como (lei nova) vão para a lei certa pelo conteúdo, e as duvidosas ficam", ldaT],
-                    ["reta final: só grifos, caderno de erros e chutes, lei só o que cai, a marca fora do item de lista, a Revisão 360°, a fuga rápida e o mapa do resumo (com o tentar lembrar, o mapa da IA conferido, os atalhos 🗺, a curadoria de qualidade e a avaliação que vira correção)", rrtT],
+                    ["reta final: só grifos, caderno de erros e chutes, lei só o que cai, a marca fora do item de lista, a Revisão 360°, a fuga rápida e o mapa do resumo (com o tentar lembrar, o mapa da IA conferido, os atalhos 🗺, a curadoria de qualidade, a avaliação que vira correção e a impressão)", rrtT],
                     ["edital verticalizado (motor): disciplinas por questões ou peso, numeração 1/1.1, ramos, 2ª fase, progresso nas caixas e fatia igual à do plano", vtT],
                     ["edital verticalizado (tela): faixas e colunas do modelo, opções que mexem na folha e ficam guardadas, caixinhas do progresso, imprimir só a folha e o CSS de impressão", vuT],
                     ["texto errado não vira edital: o prompt colado gera zero disciplinas, nomes de exemplo e texto cru são avisados, e o Novo edital tem semáforo, chips do que foi entendido e 'antes de criar'", wgT],

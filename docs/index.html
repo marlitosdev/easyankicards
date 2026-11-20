@@ -7598,10 +7598,36 @@ dialog.lix-dlg #lixLista{flex:1 1 auto;min-height:0;max-height:none;overflow:aut
 .ev-pulado td{color:#999}
 .ev-rodape{font-size:9.5px;color:#888;text-align:right;margin-top:6px}
 #edVertImpressao{display:none}
+/* (19.180.0) a folha do mapa: papel branco, a cor de cada ramo e os avisos (a impressão não usa o tema escuro) */
+#mmImpressao{display:none}
+.mmp-folha{color:#111;background:#fff;font-size:11pt;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.mmp-folha+.mmp-folha{break-before:page}
+.mmp-tit{font-size:16pt;margin:0 0 2pt}
+.mmp-sub{font-size:9pt;color:#555;margin:0 0 8pt}
+.mmp-arv,.mmp-arv ul{list-style:none;margin:0;padding-left:12pt}
+.mmp-arv{padding-left:0}
+.mmp-compacto .mmp-arv{columns:2;column-gap:16pt}
+.mmp-arv>li{break-inside:avoid;border-left:4pt solid #999;padding:2pt 0 4pt 6pt;margin:0 0 6pt}
+.mmp-arv ul>li{border-left:1px solid #ccc;padding-left:6pt;margin:1pt 0;break-inside:avoid}
+.mmp-arv>li.mmp-cor-0{border-left-color:var(--azul)}
+.mmp-arv>li.mmp-cor-1{border-left-color:var(--roxo)}
+.mmp-arv>li.mmp-cor-2{border-left-color:var(--ciano)}
+.mmp-arv>li.mmp-cor-3{border-left-color:var(--ok)}
+.mmp-arv>li.mmp-cor-4{border-left-color:var(--atencao)}
+.mmp-arv>li.mmp-cor-5{border-left-color:var(--acao)}
+.mmp-rot{font-weight:700}
+.mmp-arv>li>.mmp-rot{font-size:12pt}
+.mmp-det{color:#333}
+.mmp-nota>.mmp-rot{font-weight:400;font-style:italic;color:#555;font-size:9.5pt}
+.mmp-frase>.mmp-rot{font-weight:400}
+.mmp-sinais{white-space:nowrap}
+.mmp-selo{font-size:8pt;border:1px solid #888;border-radius:var(--r-pilula);padding:0 3pt;margin-left:3pt;white-space:nowrap}
+.mmp-aviso{border-color:var(--erro);color:var(--erro);font-weight:700}
+.mmp-leg{font-size:8.5pt;color:#555;margin-top:8pt}
 @page{margin:10mm}
 @media print{
-  body.eac-imprimindo > *:not(#edVertImpressao){display:none!important}
-  body.eac-imprimindo #edVertImpressao{display:block}
+  body.eac-imprimindo > *:not(#edVertImpressao):not(#mmImpressao){display:none!important}
+  body.eac-imprimindo #edVertImpressao,body.eac-imprimindo #mmImpressao{display:block}
   html.tem-modal{overflow:visible!important}
   body.eac-imprimindo{background:#fff!important;height:auto!important;overflow:visible!important}
 }
@@ -13627,6 +13653,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   </div>
 </dialog>
 <div id="edVertImpressao" aria-hidden="true"></div>
+<!-- (19.180.0) a folha do mapa para imprimir (mapa-imprimir.js) -->
+<div id="mmImpressao" aria-hidden="true"></div>
 
 <!-- DOMÍNIO DOS ASSUNTOS: o quanto EU confio no que estudei (estudo, questões, cartões e autoavaliação), por disciplina, tópico e ramo -->
 <dialog id="dlgDominio" class="ui-modal dom-dlg">
@@ -14319,6 +14347,7 @@ window.__sqlPromise = initSqlJs({
 <script src="mapa-mental.js"></script>
 <script src="mapa-ia.js"></script>
 <script src="mapa-curadoria.js"></script>
+<script src="mapa-imprimir.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

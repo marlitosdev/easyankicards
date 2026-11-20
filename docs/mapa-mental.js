@@ -479,6 +479,13 @@ function matMapaPintar() {
     b.onclick = () => mmFiltroDefinir(f);
     vista.append(b);
   });
+  /* (19.180.0) imprimir (ou salvar em PDF) o mapa como está à vista, inteiro */
+  if (typeof mmImprimirAtual === "function" && arv.nos) {
+    const bp = document.createElement("button"); bp.type = "button"; bp.className = "btn-min"; bp.id = "btnMmImprimir";
+    bp.textContent = t("mm_imprimir"); bp.title = t("mm_imprimir_tip");
+    bp.onclick = () => mmImprimirAtual();
+    vista.append(bp);
+  }
   /* (19.178.0) a curadoria e o registro de qualidade, na mesma linha da vista */
   if (typeof mmCurBarra === "function") mmCurBarra(arv, vista);
   box.append(barra, vista);

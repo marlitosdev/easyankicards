@@ -526,6 +526,13 @@ function rvPintar() {
       bm.textContent = "🗺 " + x.topico; bm.title = x.disciplina + " › " + x.topico;
       lst.append(bm);
     });
+    /* (19.180.0) todos no papel (ou num PDF), um por página */
+    if (typeof mmImprimirVarios === "function") {
+      const bi = document.createElement("button"); bi.type = "button"; bi.className = "btn-min"; bi.id = "btnRvVespImprimir";
+      bi.textContent = t("rv_vespera_imprimir", { n: comMapa.length }); bi.title = t("rv_vespera_imprimir_tip");
+      bi.onclick = () => mmImprimirVarios(comMapa.map((x) => ({ disciplina: x.disciplina, topico: x.topico, chave: rvChaveMat(x) })));
+      lst.append(bi);
+    }
     dm.append(lst);
     vs.append(dm);
   }
