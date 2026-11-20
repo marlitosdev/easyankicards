@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.181.0";
+const VERSAO = "19.182.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4823,6 +4823,11 @@ function diagResumo(L) {
     if (typeof abasLinhaDiagnostico === "function") {
       const la = abasLinhaDiagnostico();
       if (la.tipo === "ok") ok(la.txt); else av(la.txt);
+    }
+    /* (19.182.0) tópicos que citam lei da biblioteca sem estar ligados a ela */
+    if (typeof lvLinhaDiagnostico === "function") {
+      const lv = lvLinhaDiagnostico();
+      if (lv.tipo === "ok") ok(lv.txt); else if (lv.tipo === "aviso") av(lv.txt); else L.push("ℹ " + lv.txt);
     }
     if (typeof edBloqueiosDeProgresso !== "undefined" && edBloqueiosDeProgresso.length)
       av("Trava do progresso: " + edBloqueiosDeProgresso.length + " gravação(ões) recusada(s) nesta sessão — " + edBloqueiosDeProgresso.map((b) => b.edital + " (" + b.de + " marcações mantidas; origem: " + (b.origem || "?") + ")").join("; "));

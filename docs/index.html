@@ -962,6 +962,12 @@ dialog.mmq-dlg{width:min(760px,96vw);max-width:min(760px,96vw)}
 .est-mm-aviso-tit{color:var(--atencao);font-weight:var(--peso-f)}
 .est-mm-aviso-lin{margin-top:var(--esp-1)}
 .est-mm-aviso .btn-min{margin-top:var(--esp-2)}
+/* (19.182.0) o vínculo lei ↔ tópico: a faixa da lei seca vazia e o "sem vínculo" das Leis do edital */
+.lv-faixa{border:1px solid var(--ok);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3);margin:var(--esp-2) 0;font-size:var(--fs-3);display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center}
+.led-sem-vinculo{color:var(--atencao)}
+.led-foco-sem{border-left:3px solid var(--atencao)}
+.led-cit-semv .led-cit-ic{color:var(--atencao)}
+#btnLedCitLigarTodas{margin:var(--esp-1) 0 var(--esp-2)}
 .ger-mm-aviso{font-size:var(--fs-1);color:var(--atencao);border:1px solid var(--atencao);border-radius:var(--r-pilula);padding:0 var(--esp-1);white-space:nowrap}
 .rv-fora{margin-top:var(--esp-3)}
 .rv-fora>summary{cursor:pointer}
@@ -11353,6 +11359,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <h3 id="leiTitulo"></h3>
       <p class="nota" id="leiSub"></p>
       <p class="nota ger-np-erro" id="leiAvisoNome" role="status" hidden></p>
+      <!-- (19.182.0) sem lei ligada, mas a biblioteca tem a que o tópico cita: ligar e ler (lei-vinculo.js) -->
+      <p class="lv-faixa" id="leiSugVinculo" role="status" hidden></p>
     </div>
     <span class="lei-apoio" id="leiApoio">
       <button class="lei-redondo" id="btnLeiAjuda"
@@ -14354,6 +14362,7 @@ window.__sqlPromise = initSqlJs({
 <script src="mapa-ia.js"></script>
 <script src="mapa-curadoria.js"></script>
 <script src="mapa-imprimir.js"></script>
+<script src="lei-vinculo.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda

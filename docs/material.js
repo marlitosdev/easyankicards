@@ -4496,10 +4496,17 @@ function matPintarFicha() {
     [nQ ? botao(t("mat_ficha_responder"), "btn-min mat-slot slot-questoes", abrirQ, t("ed_qst_ver", { n: nQ, tp: ramo ? ramo.nome : x.topico }))
       : botao(t("mat_ficha_criar_questoes"), "btn-min", abrirQ, t(ramo ? "ram_qst_criar_tip" : "ed_qst_novo", { n: 0, r: ramo ? ramo.nome : "", tp: x.topico }))]);
   /* § lei seca e ⚖ julgados — do tópico (no ramo, a linha diz isso) */
+  /* (19.182.0) sem lei ligada: a lei da biblioteca que o tópico cita pelo número aparece aqui, com "ligar e abrir"; e o
+   * "Carregar" passa pela porta única (as Leis do edital, quando se sabe o edital do tópico) */
+  let sugL = [];
+  try { sugL = !inf.temL && typeof lvSugestoesDoTopico === "function" ? lvSugestoesDoTopico(x.disciplina, x.topico, ramos) : []; } catch (e) { sugL = []; }
+  const abrirLeiPorta = () => (typeof lvAbrirLeiDoTopico === "function" ? lvAbrirLeiDoTopico(x.disciplina, x.topico, { editalId: o.editalId, origem: "ficha" }) : leiAbrir(x.disciplina, x.topico));
   item("lei", t("mat_slot_lei"), inf.temL,
-    doTopico(inf.temL ? t("mat_ficha_lei_tem") : t("mat_ficha_falta")),
-    [inf.temL ? botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-lei", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_ver_ajuda", { tp: x.topico }))
-      : botao(t("mat_ficha_carregar"), "btn-min", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_criar_ajuda", { tp: x.topico }))]);
+    doTopico(inf.temL ? t("mat_ficha_lei_tem") : sugL.length ? t("lv_ficha_tem_na_bib", { l: sugL[0].lei.nome }) : t("mat_ficha_falta")),
+    inf.temL ? [botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-lei", () => leiAbrir(x.disciplina, x.topico), t("mat_lei_ver_ajuda", { tp: x.topico }))]
+      : sugL.length ? [botao(t("lv_ficha_ligar"), "btn-min btn-min-ok", () => lvLigarEAbrir(x.disciplina, x.topico, sugL[0].lei.id, "ficha"), t("lv_ficha_ligar_tip", { l: sugL[0].lei.nome, tp: x.topico })),
+        botao(t("lv_ficha_outra"), "btn-min", abrirLeiPorta, t("lv_ficha_outra_tip"))]
+      : [botao(t("mat_ficha_carregar"), "btn-min", abrirLeiPorta, t("mat_lei_criar_ajuda", { tp: x.topico }))]);
   /* Q3 — no ramo: os julgados LIGADOS a ele; abrir mostra só eles e guardar já liga ao ramo */
   const nJR = ramo && typeof jurContarPorRamo === "function" ? (jurContarPorRamo(x.chave)[ramo.id] || 0) : 0;
   const nJ = ramo ? nJR : inf.nJul;
@@ -4688,7 +4695,7 @@ function matRender() {
           if (!temR && typeof riaAbrirDoTopico === "function") outras.push({ rot: t("mat_add_resumo_ia"), dica: t("ria_btn_ficha_tip"),
             faz: () => riaAbrirDoTopico(x.disciplina, x.topico, x.chave) });
           if (!temL) outras.push({ rot: t("mat_lei_criar"), dica: t("mat_lei_criar_ajuda", { tp: x.topico }),
-            faz: () => leiAbrir(x.disciplina, x.topico) });
+            faz: () => (typeof lvAbrirLeiDoTopico === "function" ? lvAbrirLeiDoTopico(x.disciplina, x.topico, { origem: "material" }) : leiAbrir(x.disciplina, x.topico)) });
           if (!nJul) outras.push({ rot: t("mat_juris_criar"), dica: t("mat_juris_criar_ajuda", { tp: x.topico }),
             faz: () => jurAbrir(x.disciplina, x.topico, "incluir") });
 

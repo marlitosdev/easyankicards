@@ -444,6 +444,29 @@ function leiAbrir(disciplina, topico, id, opc) {
       + (l ? l.nome + " · " + leiArtigos(l.texto).length + " artigos"
            : "nenhuma lei ligada ainda"));
   } catch (e) {}
+  /* (19.182.0) sem lei, mas a biblioteca tem a lei que o tópico cita pelo número: a faixa "ligar e ler" e o AVISO no registro */
+  leiSugVinculoPintar(disciplina, topico, l);
+}
+function leiSugVinculoPintar(disciplina, topico, l) {
+  const el = $("leiSugVinculo");
+  if (!el) return [];
+  el.innerHTML = "";
+  let sug = [];
+  try { sug = !l && topico && typeof lvSugestoesDoTopico === "function" ? lvSugestoesDoTopico(disciplina, topico) : []; } catch (e) { sug = []; }
+  el.hidden = !sug.length;
+  if (!sug.length) return sug;
+  const tx = document.createElement("span");
+  tx.textContent = t(sug.length > 1 ? "lv_faixa_n" : "lv_faixa", { l: sug[0].lei.nome, n: sug.length, r: sug[0].rotulo }) + " ";
+  el.append(tx);
+  sug.slice(0, 3).forEach((o, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-min btn-min-ok"; b.id = "btnLeiSugLigar_" + i;
+    b.textContent = t("lv_ligar_ler", { l: o.lei.nome });
+    b.onclick = () => lvLigarEAbrir(disciplina, topico, o.lei.id, "lei seca vazia");
+    el.append(b);
+  });
+  try { reg("LEI", "lei seca aberta sem lei, mas a biblioteca tem lei sem vínculo que o tópico cita", topico + " · " + sug.map((o) => o.lei.nome).join(", ")); } catch (e) {}
+  return sug;
 }
 
 /* =====================================================================
@@ -6831,6 +6854,19 @@ function leiBibCartao({ l, usos }) {
     bc.textContent = t("lei_bib_continuar", { a: m.prox.numCru });
     bc.onclick = () => { $("dlgLeiBib").close(); leiContinuarLei(l.id, m.prox); };
     acoes.append(bc);
+  }
+  /* (19.182.0) sem vínculo, mas tópicos dos editais em andamento a citam pelo número: ligar a eles num toque */
+  if (!usos.length && typeof lvTopicosQueCitam === "function") {
+    let alvo = [];
+    try { alvo = lvTopicosQueCitam(l.id); } catch (e) { alvo = []; }
+    if (alvo.length) {
+      const bl = document.createElement("button");
+      bl.type = "button"; bl.className = "btn-min btn-min-ok"; bl.id = "btnLeiBibLigarCitam_" + l.id;
+      bl.textContent = t("lv_bib_ligar", { n: alvo.length });
+      bl.title = t("lv_bib_ligar_tip", { t: alvo.map((x) => x.nome + " (" + x.edital + ")").join("; ") });
+      bl.onclick = () => { lvLigarVarios(alvo, "biblioteca"); leiBibPintar(); };
+      acoes.append(bl);
+    }
   }
   /* (v19.12.0) em que pastas está (e pôr/tirar) */
   if (typeof pasBotaoItem === "function") acoes.append(pasBotaoItem("lei", l.id, l.nome, () => leiBibPintar()));

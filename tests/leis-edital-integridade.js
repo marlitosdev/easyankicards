@@ -90,7 +90,8 @@ async function testes() {
     ok(C[0].st === "falta" && C[C.length - 1].st === "biblioteca", "I7e as que faltam vêm primeiro");
     api.ledAbrir(e.id);
     const cit = api.$("ledCit");
-    ok(cit && cit.open !== true && /Leis citadas no edital · 5 \(2 na biblioteca · 3 falta\(m\)\)/.test(cit.textContent) && /citada pelo nome/.test(cit.textContent), "I7f a tela mostra a lista, recolhida, com a contagem: " + (cit && cit.textContent.slice(0, 120)));
+    /* (19.182.0) recolhida, a não ser que falte vínculo de lei já guardada com tópico que a cita: aí ela abre, com o "ligar todas" */
+    ok(cit && (cit.open === true) === /vínculo\(s\) faltando/.test(cit.textContent) && /Leis citadas no edital · 5 \(2 na biblioteca · 3 falta\(m\)\)/.test(cit.textContent) && /citada pelo nome/.test(cit.textContent), "I7f a tela mostra a lista com a contagem (aberta só se falta vínculo): " + (cit && cit.textContent.slice(0, 120)));
   }
   /* I8: o artigo citado que não está na lei (item 5) e as leis citadas só no material (item 4) */
   {

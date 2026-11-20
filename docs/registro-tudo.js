@@ -36,7 +36,7 @@
 const RT_NIVEIS = ["erro", "aviso", "info", "detalhe"];
 
 const RT_ERRO = /^(erro|falha)\b|\bexception\b|is not a function|is not defined|Uncaught/i;
-const RT_AVISO = /recusad|ignorad|cancelad|dispensad|sem chave|nao foi possivel|não foi possível|vazio|invalid|conflito|duplicad/i;
+const RT_AVISO = /recusad|ignorad|cancelad|dispensad|sem chave|nao foi possivel|não foi possível|vazio|invalid|conflito|duplicad|sem v[íi]nculo/i;
 const RT_DETALHE = /^(modo|diagnostico|plano-log)$|aberta?$|aberto$|em tela cheia|em janela|tamanho da caixa|painel aberto/i;
 
 function rtNivel(tag, msg, extra) {

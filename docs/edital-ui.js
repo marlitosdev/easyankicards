@@ -3035,7 +3035,9 @@ function regRamosPintar(i, refazerMinutos) {
 function edAbrirPasso(i, passo) {
   if (!i) return "";
   const alvo = {
-    lei: () => (typeof leiAbrir === "function" ? leiAbrir(i.disciplina, i.nome) : null),
+    /* (19.182.0) pela porta única: sem lei ligada, as Leis do edital com o tópico em destaque */
+    lei: () => (typeof lvAbrirLeiDoTopico === "function" ? lvAbrirLeiDoTopico(i.disciplina, i.nome, { editalId: i.edital, origem: "trilha" })
+      : typeof leiAbrir === "function" ? leiAbrir(i.disciplina, i.nome) : null),
     questoes: () => (typeof qsUiResponderDireto === "function" ? qsUiResponderDireto(i.disciplina, i.nome) : null),
     cartoes: () => (typeof estcEstudarTopico === "function" ? estcEstudarTopico(i.disciplina, i.nome) : null),
     juris: () => (typeof jurAbrir === "function" ? jurAbrir(i.disciplina, i.nome) : null),
