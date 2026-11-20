@@ -920,6 +920,8 @@ function leiPintar() {
   leiPintarAnexos();
   leiJanelaAplicar();
   leiCheiaAplicar();
+  /* (19.184.0) a consulta ao lado acompanha a lei aberta (repinta só quando algo dela muda) */
+  if (typeof leiConsAplicar === "function") leiConsAplicar();
   if (leiModo !== "editar") leiTrocarModo(leiModo);
   else leiPintarEdicaoLivre();
 }
@@ -1537,6 +1539,8 @@ function leiCheiaAplicar() {
   leiFontePintar();
   leiColunaPintar();
   leiFilaAplicar();
+  /* (19.184.0) na tela cheia só fica a lei: a consulta ao lado se recolhe (e volta ao sair) */
+  if (typeof leiConsAplicar === "function") leiConsAplicar();
   /* procedência e marcador já se escondem sozinhos quando não há o que
    * mostrar; na tela cheia somem de qualquer forma */
   if (leiCheia) {
@@ -1704,8 +1708,7 @@ function leiTrocarModo(modo) {
 
   /* O FOCO PRECISA ESTAR DENTRO DO PAINEL CERTO.
    *
-   * Na janela "lado a lado" (leiJurLadoALado, material.js) o diálogo abre
-   * com .show() em vez de .showModal() — não é modal de verdade, então o
+   * Quando o diálogo abre com .show() em vez de .showModal() (_abrirNaoModalUmaVez, app.js) — não é modal de verdade, então o
    * navegador nunca move o foco para dentro dele sozinho. Sem foco em
    * lugar nenhum do painel, Page Down e as setas rolam o documento por
    * trás em vez do texto da lei. leiTexto já é um campo (foca sozinho);
@@ -2893,6 +2896,8 @@ let leiCitaTrechoAberto = false;
 function leiCitacaoPreviewAbrir(c, origemNum, opc) {
   if (!$("dlgLeiCitaPreview")) return;
   const o = opc || {};
+  /* (19.184.0) com a consulta ao lado aberta, a citação do leitor (e a do painel) abre NELE, sem tapar a lei */
+  if (typeof leiConsReceberCitacao === "function" && leiConsReceberCitacao(c, origemNum, o)) return;
   if (!o._nav) leiCitaPilha = [];
   leiCitaAtual = { c, origemNum: origemNum || "", opc: o };
   leiCitaTrechoAberto = false;
@@ -11068,10 +11073,11 @@ function leiIniciar() {
   /* mexer na letra ou na janela pode deslocar o botão: o pop-over acompanha */
   if ($("leiGavExibir")) $("leiGavExibir").onclick = () => leiGavetaPosicionar();
   /* o botão flutuante do marcador acompanha a rolagem da leitura */
-  if ($("leiLeitura")) $("leiLeitura").onscroll = () => { leiFlutAgendar(); leiLocAgendar(); };
+  if ($("leiLeitura")) $("leiLeitura").onscroll = () => { leiFlutAgendar(); leiLocAgendar(); if (typeof leiConsAgendar === "function") leiConsAgendar(); };
   liga("btnLeiLoc", "localizador (exibição)", () => leiLocDefinir(!leiLocLigado()));
   leiLocPintarBotao();
   liga("btnLeiFilaMais", "menu das leis do tópico", () => leiGaveta("leiFila"));
+  if (typeof leiConsIniciar === "function") leiConsIniciar();
   liga("btnLeiCheia", "tela cheia", () => leiCheiaTrocar());
   liga("btnLeiLog", "registro", () => leiLogAbrir());
   liga("btnLeiFechar", "fechar", () => leiFechar());

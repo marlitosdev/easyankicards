@@ -4022,48 +4022,6 @@ function matMenuLinha(chave, outras) {
   return cx;
 }
 
-/* LEI SECA + JURISPRUDÊNCIA LADO A LADO.
- *
- * As duas já abrem escopadas ao mesmo tópico — leiAbrir e jurAbrir
- * recebem disciplina+topico — então não há nada para sincronizar entre
- * elas: abrir as duas pro mesmo tópico já É a sincronização. O que
- * faltava era caber as duas na tela ao mesmo tempo, sem uma empilhar
- * por cima da outra (showModal() empilha; ver o comentário em jurAbrir
- * sobre por que isso é bom para a gaveta abrir de dentro de uma
- * questão — aqui é o caso em que NÃO se quer esse empilhamento).
- *
- * SÓ EM TELA LARGA: dois painéis não cabem lado a lado num celular, e
- * o botão que chama isto nem aparece abaixo de 900px (mesmo corte que
- * ".jur-par" já usa). Abaixo do corte, cai no comportamento normal —
- * um diálogo de cada vez, como sempre foi. */
-function leiJurLadoALado(disciplina, topico) {
-  const larga = (typeof window !== "undefined" && window.innerWidth) || 0;
-  if (larga < 900) {
-    if (typeof leiAbrir === "function") leiAbrir(disciplina, topico);
-    return;
-  }
-  if (typeof _abrirNaoModalUmaVez !== "undefined") {
-    _abrirNaoModalUmaVez.add("dlgLeiSeca");
-    _abrirNaoModalUmaVez.add("dlgJuris");
-  }
-  if (typeof leiAbrir === "function") leiAbrir(disciplina, topico);
-  if (typeof jurAbrir === "function") jurAbrir(disciplina, topico, "ler");
-  document.body.classList.add("split-lj");
-  const a = $("dlgLeiSeca");
-  const b = $("dlgJuris");
-  /* SAI DO MODO LADO A LADO quando os dois tiverem fechado — não quando
-   * o primeiro fechar, porque fechar só a lei (ou só a jurisprudência) e
-   * continuar com a outra aberta em meia tela é uso legítimo. */
-  const saiuDoSplit = () => {
-    if ((a && a.open) || (b && b.open)) return;
-    document.body.classList.remove("split-lj");
-    if (a) a.removeEventListener("close", saiuDoSplit);
-    if (b) b.removeEventListener("close", saiuDoSplit);
-  };
-  if (a) a.addEventListener("close", saiuDoSplit);
-  if (b) b.addEventListener("close", saiuDoSplit);
-  reg("MATERIAL", "lei e jurisprudencia lado a lado", disciplina + " · " + topico);
-}
 
 /* A FAIXA DO LIXO: quantos tópicos têm, no campo de cartões, texto que não é cartão — com a lista, "limpar" por tópico e
  * "limpar todos". Uma faixa só, no topo da lista, em vez de um aviso em cada linha. */
@@ -4517,7 +4475,8 @@ function matPintarFicha() {
     ? [botao(t("mat_ficha_abrir"), "btn-min mat-slot slot-juris", () => jurAbrir(x.disciplina, x.topico, "ler", opcJ), t("mat_juris_ver_ajuda", { n: nJ, tp: ramo ? ramo.nome : x.topico }))]
     : [botao(t("mat_ficha_guardar"), "btn-min", () => jurAbrir(x.disciplina, x.topico, "incluir", opcJ), t("mat_juris_criar_ajuda", { tp: ramo ? ramo.nome : x.topico }))];
   if (!ramo && inf.nJul && inf.temL) {
-    const bs = botao(t("mat_split_btn"), "btn-min btn-lj-split", () => leiJurLadoALado(x.disciplina, x.topico), t("mat_split_ajuda", { tp: x.topico }));
+    /* (19.184.0) a lei com os julgados ao lado (a consulta ao lado do leitor); só em tela larga */
+    const bs = botao(t("lcons_atalho"), "btn-min btn-lei-cons", () => leiConsAbrirTopico(x.disciplina, x.topico, "julgados"), t("lcons_atalho_tip", { tp: x.topico }));
     jur.push(bs);
   }
   item("juris", t("mat_aba_juris"), nJ > 0,
@@ -4686,10 +4645,10 @@ function matRender() {
                 try { matCartoesAbrir(); matCartoesVer(); } catch (e) {}
               } });
           }
-          /* LADO A LADO só quando há os DOIS materiais pra combinar; a classe btn-lj-split o esconde em tela estreita */
+          /* (19.184.0) a lei com os julgados ao lado — só quando há os DOIS; a classe btn-lei-cons o esconde em tela estreita */
           if (nJul && temL) {
-            outras.push({ rot: t("mat_split_btn"), dica: t("mat_split_ajuda", { tp: x.topico }), cls: "btn-lj-split",
-              faz: () => leiJurLadoALado(x.disciplina, x.topico) });
+            outras.push({ rot: t("lcons_atalho"), dica: t("lcons_atalho_tip", { tp: x.topico }), cls: "btn-lei-cons",
+              faz: () => leiConsAbrirTopico(x.disciplina, x.topico, "julgados") });
           }
           /* acrescentar o que FALTA — ação de menu: se propõe, não se destaca */
           if (!temR) outras.push({ rot: t("mat_add_resumo"), dica: t("mat_add_resumo_ajuda", { tp: x.topico }),

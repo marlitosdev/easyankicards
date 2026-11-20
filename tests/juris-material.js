@@ -774,24 +774,23 @@ async function testes() {
   }
 
   /* ==============================================================
-   * J13: LEI + JURISPRUDÊNCIA LADO A LADO
+   * J13: A LEI COM OS JULGADOS AO LADO (19.184.0)
    *
-   * O botão só existe quando os DOIS materiais do tópico existem — sem
-   * lei ou sem julgado não há o que separar em duas metades. E só faz
-   * sentido em tela larga: dois painéis não cabem num celular.
+   * O atalho só existe quando os DOIS materiais do tópico existem. Era o
+   * "lado a lado" de duas janelas; agora abre a lei com a consulta ao lado
+   * (lei-consulta.js) já nos julgados — uma janela só.
    * ============================================================== */
   {
-    const { api, janela, doc } = rodar();
+    const { api, janela } = rodar();
     const disc = "Direito Tributário", topico = "Imunidades";
+    const doAtalho = () => api.$("matLista").querySelectorAll("button")
+      .filter((b) => (b.className || "").indexOf("btn-lei-cons") >= 0);
 
-    /* só julgado, ainda sem lei: o botão não pode aparecer */
+    /* só julgado, ainda sem lei: o atalho não pode aparecer */
     guardar(api, { tese: "tese qualquer" }, disc, topico);
     janela.innerWidth = 1200;
     api.matRender();
-    const semLei = api.$("matLista").querySelectorAll("button")
-      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0);
-    ok(semLei.length === 0,
-       "J13a o botão lado a lado apareceu sem lei nenhuma guardada");
+    ok(doAtalho().length === 0, "J13a o atalho apareceu sem lei nenhuma guardada");
 
     /* agora com lei também */
     api.leiAbrir(disc, topico);
@@ -799,46 +798,24 @@ async function testes() {
     api.leiGravar();
     api.$("dlgLeiSeca").close();
     api.matRender();
-    const btns = api.$("matLista").querySelectorAll("button")
-      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0);
-    ok(btns.length === 1,
-       "J13b o botão lado a lado não apareceu com lei E julgado guardados: "
-       + btns.length);
+    ok(doAtalho().length === 1, "J13b o atalho não apareceu com lei E julgado guardados: " + doAtalho().length);
 
-    /* ---- J13c: em tela estreita, cai no comportamento normal ---- */
+    /* em tela estreita: abre só a lei, sem painel */
     janela.innerWidth = 375;
-    api.leiJurLadoALado(disc, topico);
-    ok(api.$("dlgLeiSeca").open === true,
-       "J13c a lei não abriu em tela estreita");
-    ok(api.$("dlgJuris").open !== true,
-       "J13d em tela estreita a jurisprudência abriu junto — devia abrir "
-       + "só a lei, uma de cada vez, como sempre foi no celular");
-    ok(!doc.body.classList.contains("split-lj"),
-       "J13e o modo lado a lado ligou numa tela que não cabe os dois");
+    api.leiConsAbrirTopico(disc, topico, "julgados");
+    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open !== true && api.$("leiConsulta").hidden === true,
+       "J13c em tela estreita abre só a lei, sem o painel (não cabe)");
     api.$("dlgLeiSeca").close();
 
-    /* ---- J13f: em tela larga, os dois abrem juntos, pro MESMO tópico ---- */
+    /* o botão real, clicado de verdade, em tela larga: a lei com os julgados ao lado, numa janela só */
     janela.innerWidth = 1200;
-    api.leiJurLadoALado(disc, topico);
-    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open === true,
-       "J13f em tela larga os dois painéis deviam abrir juntos: lei="
-       + api.$("dlgLeiSeca").open + " juris=" + api.$("dlgJuris").open);
-    ok(doc.body.classList.contains("split-lj"),
-       "J13g a classe que liga o layout lado a lado não foi para o body");
-    const jt = api.jurTopicoAtualAtual();
-    ok(!!jt && jt.disciplina === disc && jt.nome === topico,
-       "J13h a jurisprudência abriu para outro tópico, não o mesmo da lei: "
-       + JSON.stringify(jt));
-
-    /* botão real, clicado de verdade — não só a função por trás dele */
-    api.$("dlgLeiSeca").close(); api.$("dlgJuris").close();
     api.matRender();
-    const btn = api.$("matLista").querySelectorAll("button")
-      .filter((b) => (b.className || "").indexOf("btn-lj-split") >= 0)[0];
-    ok(!!btn, "J13i-pre o botão precisa existir para o clique valer algo");
+    const btn = doAtalho()[0];
+    ok(!!btn, "J13d-pre o atalho precisa existir para o clique valer algo");
     if (btn) btn.onclick();
-    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open === true,
-       "J13i o clique no botão real não abriu os dois painéis");
+    ok(api.$("dlgLeiSeca").open === true && api.$("dlgJuris").open !== true && api.$("leiConsulta").hidden === false && api.leiConsLer().modo === "julgados"
+       && /tese qualquer/.test(api.$("leiConsCorpo").textContent || ""),
+       "J13d o atalho abre a lei com os julgados do tópico ao lado: " + (api.$("leiConsCorpo").textContent || "").slice(0, 80));
   }
 
   /* =================================================================

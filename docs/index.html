@@ -3125,6 +3125,42 @@ dialog.ep-dlg[open]{width:min(760px,96vw);max-height:94vh}
 #dlgLeiSeca.lei-j-media[open]{width:min(880px,96vw);max-width:96vw;max-height:92vh}
 #dlgLeiSeca.lei-j-larga[open]{width:min(1200px,97vw);max-width:97vw;max-height:95vh}
 #dlgLeiSeca.lei-j-maxima[open]{width:98vw;max-width:98vw;max-height:98vh}
+/* (19.184.0) A CONSULTA AO LADO: a janela da lei se alarga e o painel ocupa a faixa da direita, de cima a baixo.
+   Abaixo de 900 px não existe (o botão some): dois painéis não cabem num celular. */
+#dlgLeiSeca{--lei-cons-l:min(40vw,560px)}
+.lei-cons{display:none}
+#btnLeiConsulta{display:none}
+@media (min-width:900px){
+  #btnLeiConsulta:not([hidden]){display:inline-flex}
+  #dlgLeiSeca.lei-com-cons[open]{width:min(1560px,98vw);max-width:98vw;max-height:96vh;overflow:hidden;
+    padding-right:calc(var(--lei-cons-l) + var(--esp-5))}
+  #dlgLeiSeca .lei-cons:not([hidden]){display:flex;flex-direction:column;gap:var(--esp-2);position:absolute;
+    top:var(--esp-3);right:var(--esp-3);bottom:var(--esp-3);width:var(--lei-cons-l);box-sizing:border-box;
+    padding:var(--esp-2) var(--esp-3);border-left:1px solid var(--borda);background:var(--panel)}
+}
+.lei-cons-cab{display:flex;align-items:center;gap:var(--esp-2)}
+.lei-cons-cab select{flex:1 1 auto;min-width:0}
+.lei-cons-x{flex:0 0 auto}
+.lei-cons-corpo{flex:1 1 auto;min-height:0;overflow:auto;font-size:var(--fs-3)}
+.lei-cons-sec{margin:var(--esp-3) 0 var(--esp-1);font-size:var(--fs-1);font-weight:var(--peso-f);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--sutil)}
+.lei-cons-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3);margin:0 0 var(--esp-2)}
+.lei-cons-destaque{border-color:var(--acao);border-left-width:4px}
+.lei-cons-item-tit{font-weight:var(--peso-f);margin:0 0 var(--esp-1)}
+.lei-cons-item-txt{white-space:pre-wrap;line-height:1.5}
+.lei-cons-cit{all:unset;cursor:pointer;color:var(--info);border-bottom:1px dotted var(--info)}
+.lei-cons-cit-aqui{color:var(--acao);border-bottom-style:solid}
+.lei-cons-pe,.lei-cons-nav,.lei-cons-outra-topo{display:flex;flex-wrap:wrap;gap:var(--esp-2);align-items:center;margin:var(--esp-2) 0}
+.lei-cons-outra-sel{flex:1 1 auto;min-width:0}
+.lei-cons-ir{width:9em}
+.lei-cons-art{padding:var(--esp-2) 0;border-bottom:1px solid var(--borda)}
+.lei-cons-art.lei-cons-destaque{border:1px solid var(--acao);border-radius:var(--r-m);padding:var(--esp-2) var(--esp-3)}
+.lei-cons-art-rot{font-weight:var(--peso-f);color:var(--info);margin:0 0 var(--esp-1)}
+.lei-cons-art-txt{white-space:pre-wrap;line-height:1.5}
+.lei-cons-res{line-height:1.55}
+/* o atalho da ficha e do menu do tópico: só em tela larga, como o painel */
+.btn-lei-cons{display:none}
+@media (min-width:900px){.btn-lei-cons{display:inline-flex}}
 
 /* LER MAIOR — a lei ocupa a janela, o resto sai da frente.
  * Só o que é elástico cresce: o painel de leitura. Tudo o mais já está
@@ -5170,30 +5206,8 @@ dialog.plog-cheia[open]{max-width:100vw;width:100vw;height:100dvh;max-height:100
 @supports not (container-type:inline-size){
   @media (min-width:900px){ .jur-par{grid-template-columns:1fr 1fr} }
 }
-/* LEI SECA + JURISPRUDÊNCIA LADO A LADO (leiJurLadoALado, em material.js).
- * Os dois <dialog> são abertos com show() em vez de showModal() só nesta
- * chamada (ver _abrirNaoModalUmaVez em app.js) — sem isso eles empilhariam
- * na top layer com backdrop, um por cima do outro. Sem showModal(), cada
- * um volta a ser um elemento de bloco comum, e aqui é só posicionar cada
- * metade da tela. Mesmo corte de 900px que .jur-par já usa acima. */
-/* SEM showModal(), O FUNDO CONTINUA VIVO.
- * Os dois diálogos lado a lado abrem com show() (comentário acima), não
- * showModal() — então o navegador nunca trava sozinho o scroll da
- * página por trás, nem move o foco para dentro deles. Sem isto, Page
- * Down e as setas rolavam a página atrás da lei em vez do texto dela.
- * leiTrocarModo (lei-ui.js) cuida do foco; esta regra é a rede de
- * segurança do scroll — mesmo que o foco escape, o fundo não rola. */
-body.split-lj{overflow:hidden}
-.btn-lj-split{display:none}
-@media (min-width:900px){
-  .btn-lj-split{display:inline-flex}
-  body.split-lj dialog#dlgLeiSeca[open],
-  body.split-lj dialog#dlgJuris[open]{position:fixed;top:0;bottom:0;margin:0;
-    height:100dvh;max-height:100dvh;width:50vw;max-width:50vw;
-    border-radius:0;resize:none}
-  body.split-lj dialog#dlgLeiSeca[open]{left:0}
-  body.split-lj dialog#dlgJuris[open]{left:50vw}
-}
+/* (19.184.0) o "lei e julgados lado a lado" (duas janelas presas às metades da tela) saiu: virou a consulta ao lado,
+   um painel do próprio leitor de lei (lei-consulta.js) */
 .jur-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
   gap:9px 10px;margin:10px 0}
 .jur-campos input{width:100%;box-sizing:border-box;padding:7px 8px;
@@ -11479,6 +11493,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <!-- (19.183.0) O FIM DA LINHA: "Aa" (letra, janela, localizador), "gravar" (só enquanto a lei é texto livre — depois
        os grifos se gravam sozinhos) e "estudei" (o antigo "Registrar estudo" do rodapé, que saiu) -->
   <span class="lei-barra-fim">
+    <!-- (19.184.0) a consulta ao lado: julgados, resumo, outra lei ou questões, à direita da lei (lei-consulta.js) -->
+    <button class="btn-min" id="btnLeiConsulta" data-i18n="lcons_btn" data-i18n-title="lcons_btn_tip" aria-pressed="false" hidden></button>
     <button class="btn-min lei-aa" id="btnLeiExibir" data-i18n="lei_gav_exibir" data-i18n-title="lei_gav_exibir_tip"></button>
     <button class="btn-min btn-min-ok" id="btnLeiSalvar" data-i18n="lei_salvar" hidden
       title="Grava a lei na biblioteca. O resumo e os cartões do tópico não são tocados."></button>
@@ -11587,6 +11603,20 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </div>
   </div>
   <div class="lei-anexos" id="leiAnexos" hidden></div>
+  <!-- (19.184.0) A CONSULTA AO LADO: um painel DO leitor (não outra janela), à direita, só em tela larga. Você escolhe o
+       conteúdo; os julgados e as questões acompanham o artigo da tela; com ele aberto, a citação abre aqui. -->
+  <aside class="lei-cons" id="leiConsulta" hidden>
+    <div class="lei-cons-cab">
+      <select id="leiConsSel" data-i18n-title="lcons_sel_tip">
+        <option value="julgados" data-i18n="lcons_m_julgados"></option>
+        <option value="resumo" data-i18n="lcons_m_resumo"></option>
+        <option value="outra" data-i18n="lcons_m_outra"></option>
+        <option value="questoes" data-i18n="lcons_m_questoes"></option>
+      </select>
+      <button type="button" class="btn-min lei-cons-x" id="btnLeiConsFechar" data-i18n-title="lcons_fechar" aria-label="✖">✖</button>
+    </div>
+    <div class="lei-cons-corpo" id="leiConsCorpo"></div>
+  </aside>
 </dialog>
 
 <dialog id="dlgLeiProc" class="ui-modal">
@@ -14372,6 +14402,7 @@ window.__sqlPromise = initSqlJs({
 <script src="mapa-curadoria.js"></script>
 <script src="mapa-imprimir.js"></script>
 <script src="lei-vinculo.js"></script>
+<script src="lei-consulta.js"></script>
 <script src="modos.js"></script>
 <script>
 /* Separados de propósito: se a tela do edital falhar, a barra de modos ainda
