@@ -748,6 +748,58 @@ async function testes() {
     api.matMapaAlternar(false);
   }
 
+  /* ---------------- MK: (19.181.0) o aviso nos cartões de galhos com problema ---------------- */
+  {
+    const { api } = rodar();
+    api.matIniciar();
+    const TXT = ["## Ramo — Conjunções Coordenativas", "",
+      "* **Regra:** classificam-se pelo sentido.", "* **Aditivas:** e, nem, não só… mas também.", "* **Adversativas:** mas, porém, contudo.", "",
+      "## Ramo — Conjunções Subordinadas", "", "* **Regra:** iniciam oração dependente.", "* **Causais:** porque, visto que.", "* **Na medida em que:** causa (= uma vez que)."].join(NL);
+    const ch = api.matChave("Português", "Conectivos");
+    api.matGravar(ch, TXT, { disciplina: "Português", topico: "Conectivos" });
+    api.matAbrirEditor({ disciplina: "Português", nome: "Conectivos" }, "ler");
+    api.matMapaAlternar(true);
+    const no = (label, pai) => { let achou = null; const ir = (x, p) => { if (x.label === label && (!pai || (p && p.label === pai))) achou = x; x.filhos.forEach((f) => ir(f, x)); }; ir(api.mmUltimoAtual().arvore.raiz, null); return achou; };
+    const nota = (front, back, topico) => ({ disciplina: "Português", topico: topico || "Conectivos", chave: api.matChave("Português", topico || "Conectivos"), card: { kind: "basic", front, back } });
+    ok(!api.mmProblemasDoTopico(ch).length && !api.mmCartaoProblemas(nota("O que exprimem as adversativas?", "oposição")).length, "MK1 sem curadoria, nenhum aviso (e nada a calcular)");
+    api.mmCurMarcar(no("Adversativas"), "errado", "contudo não é adversativa?");
+    api.mmCurMarcar(no("Regra", "Conjunções Subordinadas"), "duvida", "");
+    const P = api.mmProblemasDoTopico(ch);
+    ok(P.length === 2 && P.some((x) => x.label === "Adversativas" && x.tipo === "errado" && /contudo/.test(x.nota)), "MK2 os galhos com problema do tópico: " + JSON.stringify(P.map((x) => [x.label, x.tipo])));
+    ok(api.mmCartaoProblemas(nota("Conjunções Coordenativas › Adversativas — o que é / o que diz?", "mas, porém, contudo.")).length === 1, "MK3 o cartão feito pelo próprio mapa liga direto");
+    ok(api.mmCartaoProblemas(nota("Qual o valor das conjunções adversativas?", "Oposição: mas, porém, contudo.")).length === 1, "MK4 o nome do galho e o ramo de cima no texto do cartão: liga");
+    ok(!api.mmCartaoProblemas(nota("Qual o valor das conjunções aditivas?", "Soma: e, nem.")).length, "MK5 cartão de outro galho: sem aviso");
+    ok(!api.mmCartaoProblemas(nota("Qual a regra das coordenativas?", "Classificam-se pelo sentido.")).length && api.mmCartaoProblemas(nota("Regra das subordinadas: o que iniciam?", "Oração dependente.")).length === 1,
+      "MK6 nome genérico ('Regra'): só liga com o ramo de cima certo");
+    ok(!api.mmCartaoProblemas(nota("Qual o valor das adversativas?", "Oposição.", "Crase")).length, "MK7 cartão de outro tópico: sem aviso");
+    /* a avaliação que manda corrigir também avisa; resolvida, o aviso some */
+    api.mmQualPedidoAtual();
+    api.mmQualGuardarAval("Outros problemas:" + NL + "- Na medida em que — INCORRETO — indica causa, mas 'à medida que' é proporção — Bechara");
+    const nCausa = nota("O que indica 'na medida em que'?", "Causa (= uma vez que).");
+    const pc = api.mmCartaoProblemas(nCausa);
+    ok(pc.length === 1 && pc[0].tipo === "corrigir" && /Bechara/.test(pc[0].nota), "MK8 o ponto que a avaliação mandou corrigir também avisa: " + JSON.stringify(pc));
+    /* na revisão: antes de virar, só 'confira'; virado, o galho e a nota */
+    api.estcAbrirLista([nota("Qual o valor das conjunções adversativas?", "Oposição: mas, porém, contudo.")], { rotulo: "teste" });
+    const av = () => api.$("estCartao").querySelectorAll(".est-mm-aviso")[0];
+    ok(av() && /Confira a resposta/.test(av().textContent) && !/Adversativas/.test(av().textContent), "MK9 antes de virar: o aviso sem entregar a resposta");
+    api.estcVirar();
+    ok(av() && /✗ errado: «Adversativas»/.test(av().textContent) && /contudo não é adversativa/.test(av().textContent) && av().querySelectorAll("button").some((b) => b.id === "btnEstMmMapa"),
+      "MK10 virado: o galho, a nota e o '🗺 ver no mapa': " + (av() && av().textContent));
+    av().querySelectorAll("button").find((b) => b.id === "btnEstMmMapa").onclick();
+    ok(!api.$("dlgGerEstudo").open && api.matMapaAtual() && api.mmCuradoriaAtual(), "MK11 'ver no mapa' fecha a revisão e abre o mapa na curadoria");
+    api.mmCurAlternar(false);
+    /* resolvido, o aviso some */
+    api.mmCurMarcar(no("Adversativas"), "ok", "conferido");
+    ok(!api.mmCartaoProblemas(nota("Qual o valor das conjunções adversativas?", "Oposição.")).length, "MK12 o galho conferido: o aviso do cartão some");
+    const pts = api.mmQualAvalPontos(api.mmUltimoAtual().arvore);
+    api.mmQualResolver(pts[0], "corrigido");
+    ok(!api.mmCartaoProblemas(nCausa).length, "MK13 o ponto da avaliação resolvido: o aviso some também");
+    ["mmc_aviso", "mmc_aviso_virado", "mmc_tipo_errado", "mmc_tipo_duvida", "mmc_tipo_corrigir", "mmc_do_mapa_ia", "mmc_ver_mapa", "mmc_selo"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "MK14 falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+    api.matMapaAlternar(false);
+  }
+
   falhas.quantas = n;
   return falhas;
 }

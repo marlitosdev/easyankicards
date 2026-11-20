@@ -1286,6 +1286,15 @@ function gerPintarLista() {
     const onde = gerEl("div", "cq-onde");
     const tp = n.card.kind === "cloze" ? "cloze" : (n.card.kind === "mc" ? "mc" : "basic");
     onde.append(gerEl("span", "ger-tipo ger-tipo-" + tp, t("ger_tipo_" + tp)), ceSelo(ceNivel(n.card)));
+    /* (19.181.0) o aviso do mapa: este cartão toca num galho marcado como errado/duvidoso ou a corrigir */
+    try {
+      const pr = typeof mmCartaoProblemas === "function" ? mmCartaoProblemas(n) : [];
+      if (pr.length) {
+        const s = gerEl("span", "ger-mm-aviso", t("mmc_selo"));
+        s.title = pr.map((x) => t("mmc_tipo_" + x.tipo) + " «" + x.label + "»" + (x.nota ? " — " + x.nota : "")).join("\n");
+        onde.append(s);
+      }
+    } catch (e) {}
     /* dentro de UM tópico o "onde" é sempre o mesmo: só aparece quando a lista mistura pastas */
     if (!(gerPasta && gerPasta.chave)) onde.append(gerEl("span", "ger-onde-lin", [n.disciplina, n.topico].filter(Boolean).join(" · ")));
     corpo.append(onde);

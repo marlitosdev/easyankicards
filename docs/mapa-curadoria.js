@@ -329,10 +329,10 @@ function mmQualLerAval(texto) {
   return out;
 }
 /* os pontos da avaliação ligados aos galhos do mapa à vista */
-function mmQualAvalPontos(arv) {
-  const av = mmQualAval();
+function mmQualAvalPontos(arv, chMapa) {
+  const av = mmQualAval(chMapa);
   if (!av || !arv) return [];
-  const ped = mmCurLer()[mmChaveResumo() + "#ped"];
+  const ped = mmCurLer()[(chMapa || mmChaveResumo()) + "#ped"];
   const pontos = ped && Array.isArray(ped.pontos) ? ped.pontos : mmQualItens(arv).map((it) => it.no.caminho);
   const porCam = {}, porNome = {};
   const nrm = (s) => (typeof mmIaNorm === "function" ? mmIaNorm(s) : String(s || "").toLowerCase().trim());
@@ -481,6 +481,133 @@ function mmQualPintarAval(arv) {
     box.append(d);
   });
   return pts;
+}
+/* =====================================================================
+ * (19.181.0) O AVISO NOS CARTÕES
+ *
+ * O cartão nasce do resumo; se o galho dele foi marcado como errado (ou duvidoso) na curadoria, ou a avaliação o
+ * apontou e ainda não foi resolvido, revisar o cartão é decorar o erro. Por isso o cartão do mesmo tópico que toca num
+ * desses galhos ganha um aviso — na revisão (antes de virar, só "confira a resposta"; virado, o galho, a nota e o
+ * caminho para o mapa) e na lista da biblioteca. Nada muda no cartão: o aviso some quando o galho é resolvido.
+ * A ligação é pelo texto: o cartão feito pelo próprio mapa ("Pai › Galho — o que é?") liga direto; nos outros, o nome
+ * do galho tem de estar no cartão — e, se o nome for de uma palavra só ou genérico ("Regra", "Exceções"), também o
+ * ramo de cima.
+ * ===================================================================== */
+const MMC_GENERICOS = new Set(["conceito", "conceitos", "regra", "regras", "regra geral", "excecao", "excecoes", "pegadinha", "pegadinhas",
+  "pegadinhas comuns", "exemplo", "exemplos", "observacao", "observacoes", "como costuma cair em prova", "definicao", "caracteristicas", "resumo"]);
+function mmcNorm(s) { return typeof mmIaNorm === "function" ? mmIaNorm(s) : String(s || "").toLowerCase(); }
+function mmcPalavras(s) { return mmcNorm(s).split(" ").filter((w) => w.length >= 3 && !(typeof MMIA_VAZIAS !== "undefined" && MMIA_VAZIAS.has(w))); }
+/* a árvore de uma chave de mapa ("chave" = do resumo; "chave|ia" = da IA), sem abrir nada */
+function mmArvoreDaChave(k) {
+  const ia = /\|ia$/.test(k);
+  const ch = ia ? k.slice(0, -3) : k;
+  const r = typeof matObter === "function" ? matObter(ch) : null;
+  if (!r) return null;
+  const texto = String(r.texto || "");
+  if (ia) {
+    const g = typeof mmIaGuardado === "function" ? mmIaGuardado(ch) : null;
+    return g && typeof mmIaMontar === "function" ? mmIaMontar(g.texto, texto, r.topico || "") : null;
+  }
+  let ramos = [];
+  try { if (typeof matIndiceRamos === "function") ramos = matIndiceRamos().get(matChaveNormal(ch)) || []; } catch (e) { ramos = []; }
+  return mmMontar(texto, { titulo: r.topico || "", ramos });
+}
+function mmcHash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h; }
+const mmcCache = new Map();
+/* OS GALHOS COM PROBLEMA de um tópico (dos dois mapas): [{ caminho, label, tipo: "errado"|"duvida"|"corrigir", nota, ia }] */
+function mmProblemasDoTopico(chave) {
+  if (!chave) return [];
+  let raw = "";
+  try { raw = localStorage.getItem(MM_CUR_CH) || ""; } catch (e) { raw = ""; }
+  /* atalho: nada de curadoria deste tópico, nada a fazer (a lista de cartões chama isto para cada cartão) */
+  if (!raw || raw.indexOf(JSON.stringify(chave).slice(1, -1)) < 0) return [];
+  const r = typeof matObter === "function" ? matObter(chave) : null;
+  const k = mmcHash(raw) + "|" + (r ? String(r.texto || "").length : 0) + "|" + (r && r.mapaIA ? r.mapaIA.em : "");
+  const c = mmcCache.get(chave);
+  if (c && c.k === k) return c.lista;
+  const out = [];
+  [chave, chave + "|ia"].forEach((km) => {
+    const cur = mmCurDoMapa(km);
+    Object.keys(cur).forEach((cam) => {
+      const x = cur[cam];
+      if (x && (x.v === "errado" || x.v === "duvida")) out.push({ caminho: cam, label: x.label || cam.split(" › ").pop(), tipo: x.v, nota: x.nota || "", ia: km !== chave });
+    });
+    if (mmQualAval(km)) {
+      let arv = null;
+      try { arv = mmArvoreDaChave(km); } catch (e) { arv = null; }
+      if (arv) mmQualAvalPontos(arv, km).forEach((p) => {
+        if (!p.no || p.v === "correto" || p.res || out.some((o) => o.caminho === p.no.caminho)) return;
+        out.push({ caminho: p.no.caminho, label: p.no.label, tipo: "corrigir", nota: [p.correcao, p.fonte].filter(Boolean).join(" — "), ia: km !== chave });
+      });
+    }
+  });
+  mmcCache.set(chave, { k, lista: out });
+  return out;
+}
+/* o cartão fala deste galho? */
+function mmCartaoCasa(txt, p) {
+  const segs = String(p.caminho || "").split(" › ");
+  const lab = mmcNorm(String(p.label || "").replace(/…$/, ""));
+  const pai = segs.length > 1 ? mmcNorm(segs[segs.length - 2]) : "";
+  if (!lab) return false;
+  /* o cartão feito pelo mapa: "Pai › Galho — o que é / o que diz?" */
+  if (pai && txt.indexOf(" " + pai + " " + lab + " ") >= 0) return true;
+  const generico0 = MMC_GENERICOS.has(lab);
+  /* a locução inteira ("na medida em que", "posto que") dentro do cartão já é específica */
+  if (!generico0 && lab.indexOf(" ") > 0 && txt.indexOf(" " + lab + " ") >= 0) return true;
+  const palL = mmcPalavras(lab);
+  if (!palL.length) return false;
+  const tem = (w) => txt.indexOf(" " + w + " ") >= 0 || (w.length >= 6 && txt.indexOf(" " + w.slice(0, w.length - 2)) >= 0);
+  if (!palL.every(tem)) return false;
+  const generico = MMC_GENERICOS.has(lab);
+  if (palL.length >= 2 && !generico) return true;
+  /* uma palavra só, ou nome genérico: o ramo de cima também tem de aparecer */
+  const palP = mmcPalavras(pai);
+  if (!palP.length) return !generico && lab.length >= 8;
+  return palP.filter(tem).length / palP.length >= 0.5;
+}
+/* os problemas que tocam num cartão da biblioteca (nota = { disciplina, topico, chave, card }) */
+function mmCartaoProblemas(nota) {
+  if (!nota || !nota.card) return [];
+  let ch = "";
+  try { if (typeof matChaveViva === "function" && nota.disciplina && nota.topico) ch = matChaveViva(nota.disciplina, nota.topico) || ""; } catch (e) { ch = ""; }
+  ch = ch || nota.chave || "";
+  const probs = mmProblemasDoTopico(ch);
+  if (!probs.length) return [];
+  const c = nota.card;
+  const txt = " " + mmcNorm([c.titulo, c.front, c.back, c.more].concat(c.options || []).filter(Boolean).join(" ")
+    .replace(/\{\{c\d+::([\s\S]*?)\}\}/g, (m, x) => x.split("::")[0])) + " ";
+  return probs.filter((p) => mmCartaoCasa(txt, p)).map((p) => Object.assign({ chave: ch }, p));
+}
+/* o aviso na revisão: antes de virar, só "confira" (sem entregar a resposta); virado, o galho, a nota e o mapa */
+function mmCartaoAvisoEl(probs, virado, nota) {
+  const d = document.createElement("div");
+  d.className = "est-mm-aviso";
+  const tit = document.createElement("div");
+  tit.className = "est-mm-aviso-tit";
+  tit.textContent = t(virado ? "mmc_aviso_virado" : "mmc_aviso", { n: probs.length });
+  d.append(tit);
+  if (virado) {
+    probs.slice(0, 3).forEach((p) => {
+      const l = document.createElement("div");
+      l.className = "est-mm-aviso-lin";
+      l.textContent = t("mmc_tipo_" + p.tipo) + " «" + p.label + "»" + (p.ia ? " " + t("mmc_do_mapa_ia") : "") + (p.nota ? " — " + p.nota : "");
+      d.append(l);
+    });
+    if (typeof mmAbrirNoMapa === "function" && nota && nota.disciplina && nota.topico) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-min"; b.id = "btnEstMmMapa";
+      b.textContent = t("mmc_ver_mapa");
+      b.onclick = () => {
+        try { if (typeof estcFechar === "function") estcFechar(); } catch (e) {}
+        mmAbrirNoMapa(nota.disciplina, nota.topico, undefined, "cartão com aviso");
+        /* o mapa já filtrado no que importa: o que está errado ou a corrigir */
+        try { if (typeof mmCurAlternar === "function" && !mmCuradoria) mmCurAlternar(true); } catch (e) {}
+      };
+      d.append(b);
+    }
+  }
+  return d;
 }
 (function mmQualLigar() {
   try {

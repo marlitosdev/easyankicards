@@ -152,6 +152,8 @@ function estcPintar() {
   cx.append(gerEl("div", "est-cab", (c.titulo || "").trim() || u.nota.topico || u.nota.disciplina || ""));
   const reg = estcRegs[u.id];
   if (reg && (reg.l || 0) >= ESTC_LEECH_LIMIAR) cx.append(gerEl("div", "est-leech", t("est_leech", { n: reg.l })));
+  /* (19.181.0) o cartão toca num galho do mapa do resumo marcado como errado/duvidoso ou que a avaliação mandou corrigir */
+  try { const pr = typeof mmCartaoProblemas === "function" ? mmCartaoProblemas(u.nota) : []; if (pr.length) cx.append(mmCartaoAvisoEl(pr, estcRev, u.nota)); } catch (e) {}
   const frente = gerEl("div", "est-frente");
   if (c.kind === "mc") {
     frente.append(gerEl("div", "est-txt", estcTxt(c.front)));
