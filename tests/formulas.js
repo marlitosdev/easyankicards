@@ -6,7 +6,8 @@
  *  F2 "$$ … $$" sozinha na linha vira um bloco centralizado; \text{…} vira texto;
  *  F3 fração, expoente, índice, raiz, barra e combinação viram HTML (não código);
  *  F4 nada do resto muda: "R$ 100,00", marcas "==…==", itálico e negrito continuam;
- *  F5 o pedido de resumo à IA pede símbolos em vez de LaTeX.
+ *  F5 o pedido de resumo à IA pede símbolos em vez de LaTeX;
+ *  D  (19.195.0) a janela de conversão destaca só a troca, com o mesmo recorte nos dois lados, e cifrão de planilha não é fórmula.
  * ===================================================================== */
 const { rodar } = require("./fumaca.js");
 
@@ -134,6 +135,56 @@ async function testes() {
     await pr;
     ok(api.$("matTexto").value === R`Lógica: $p \wedge q$ e a seta →.`, "S9 'manter como está' mantém a fórmula");
     dlg.showModal = showAntes;
+  }
+  /* ---- (19.195.0) D: a janela destaca SÓ o que muda, com o mesmo recorte nos dois lados; cifrão de planilha fica ---- */
+  {
+    const rec = (antes) => { const c = api.matTexConverterLinha(antes); return { c, partes: api.matTexRecortes(antes, c.trocas) }; };
+    const lado = (partes, q) => partes.map((p) => (p.corte ? "…" : p.txt != null ? p.txt : q === "antes" ? p.de : p.para)).join("");
+    const curta = R`Se $\neg p$ e $p \wedge q$, então.`;
+    const r1 = rec(curta);
+    ok(r1.c.trocas.length === 2 && r1.c.trocas[0].i === 3 && r1.c.trocas[0].de === R`$\neg p$` && r1.c.trocas[0].para === "¬p" && r1.c.trocas[1].para === "p ∧ q",
+       "D1 cada troca guarda onde está, o código e o símbolo: " + JSON.stringify(r1.c.trocas));
+    ok(lado(r1.partes, "antes") === curta && lado(r1.partes, "depois") === r1.c.nova && !r1.partes.some((p) => p.corte),
+       "D2 linha curta vai inteira; os pedaços remontam o antes e o depois: " + JSON.stringify(r1.partes));
+    const enche = "palavra ".repeat(40);
+    const longa = enche + R`no meio $p \leftrightarrow q$ aqui ` + enche + "fim.";
+    const r2 = rec(longa);
+    const an = lado(r2.partes, "antes"), dp = lado(r2.partes, "depois");
+    ok(r2.partes[0].corte && r2.partes[r2.partes.length - 1].corte && an.length < 140 && an.indexOf(R`$p \leftrightarrow q$`) > 0 && /p ↔ q/.test(dp),
+       "D3 linha longa: só um recorte em volta da troca, com '…' nas pontas: " + an);
+    ok(an.replace(R`$p \leftrightarrow q$`, "#") === dp.replace("p ↔ q", "#") && /^…palavra /.test(an) && / palavra…$/.test(an),
+       "D4 o recorte é o MESMO nos dois lados e não parte palavra: " + an + " | " + dp);
+    const duas = R`$\neg p$ ` + enche + R`$q \vee r$`;
+    const r3 = rec(duas);
+    ok(r3.partes.filter((p) => p.corte).length === 1 && r3.partes.filter((p) => p.de).length === 2,
+       "D5 trocas distantes: dois recortes com um '…' entre eles: " + JSON.stringify(r3.partes));
+    /* (b) o texto da captura: "\$B2 … B\$2 … \\(B\\)2" virava "\B2" */
+    const plan = R`- **Exceções:** O comportamento das referências relativas e absolutas é idêntico em ambos: o caractere cifrão (**\$**) antes da coluna ou da linha fixa a coordenada contra deslocamentos ao copiar e colar (ex.: \$B2 fixa a coluna B; B\$2 fixa a linha 2; \\(B\\)2 fixa a célula inteira). Na função **PROCV**`;
+    const tp = api.matTexConverterTexto(plan);
+    ok(tp.itens.length === 0 && tp.texto === plan && api.matTexConverterLinha(plan).nova === plan, "D6 cifrão e \\\\( de planilha não são fórmula: nada a oferecer, nada muda: " + tp.texto);
+    ok(!/class="mt"/.test(H(plan)) && H(plan).indexOf(R`\\(B\\)2`) > 0, "D7 nem a leitura desenha fórmula ali");
+    const ref = "Fixe com $B$2, o intervalo $A$1:$B$10 e =SOMA($A1:A$5); custa R$ 3.";
+    ok(api.matTexConverterTexto(ref).itens.length === 0 && !/class="mt"/.test(H(ref)), "D8 referências de planilha ($B$2, $A$1:$B$10) ficam como estão");
+    ok(api.matTexConverterLinha(R`a \(p \rightarrow q\) b`).nova === "a p → q b", "D9 \\( \\) de verdade continua convertendo");
+    /* a janela: recorte com o destaque, igual nos dois lados */
+    api.$("matTexto").value = plan + "\n" + longa;
+    const dlg = api.$("dlgMatConserto");
+    const pr = api.matFormulasOferecer("botao");
+    const itens = Array.from(api.$("cnsLista").children);
+    const it0 = itens[0];
+    const a1 = it0 && it0.children[1], d1 = it0 && it0.children[2];
+    const marca = (el) => Array.from((el && el.children) || []).filter((x) => x.className === "cns-troca").map((x) => x.textContent);
+    ok(itens.length === 1 && /linha 2/.test(it0.children[0].textContent) && /cns-recorte/.test(it0.className),
+       "D10 a janela lista só a linha com fórmula (a da planilha não aparece): " + itens.map((x) => x.textContent).join(" || "));
+    ok(a1 && d1 && a1.className === "cns-antes" && d1.className === "cns-depois" && marca(a1).join() === R`$p \leftrightarrow q$` && marca(d1).join() === "p ↔ q",
+       "D11 em destaque, o código no vermelho e o símbolo no verde: " + marca(a1) + " → " + marca(d1));
+    ok(a1 && a1.textContent.replace(R`$p \leftrightarrow q$`, "#") === d1.textContent.replace("p ↔ q", "#") && a1.textContent.length < 140,
+       "D12 os dois lados com o mesmo recorte: " + (a1 && a1.textContent) + " | " + (d1 && d1.textContent));
+    ok(/só o que muda/.test(api.t("mtx_ajuda")), "D13 a ajuda diz que o destaque é o que muda");
+    api.$("btnCnsNao").onclick();
+    await pr;
+    ok(api.$("matTexto").value === plan + "\n" + longa, "D14 'manter como está' não mexe em nada");
+    if (dlg.open) dlg.close();
   }
   /* ---- (19.171.0) Q: nas questões, o código que não é texto ---- */
   {

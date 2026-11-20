@@ -3886,6 +3886,12 @@ html:has(dialog:modal){overflow:hidden;overscroll-behavior:none}
   font-size:11.5px;white-space:pre-wrap;word-break:break-word;padding:2px 0}
 .cns-antes{color:var(--erro);text-decoration:line-through;text-decoration-color:rgba(224,108,108,.45)}
 .cns-depois{color:#5fbf8f}
+/* (19.195.0) fórmulas: o resto da linha fica quieto; a troca leva a cor (código riscado → símbolo) */
+.cns-recorte .cns-antes,.cns-recorte .cns-depois{color:var(--sutil);text-decoration:none}
+mark.cns-troca{border-radius:var(--r-p);padding:0 var(--esp-1);font-weight:var(--peso-f)}
+.cns-antes mark.cns-troca{color:var(--erro);text-decoration:line-through;
+  background:color-mix(in srgb,var(--erro) 16%,transparent)}
+.cns-depois mark.cns-troca{color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,transparent)}
 .duv-quest{border-left:3px solid #7c6cf5;background:rgba(124,108,245,.09);
   padding:5px 9px;margin-top:5px;border-radius:0 6px 6px 0;font-size:12px}
 mark.mat-piscando{outline:3px solid #f5a524;outline-offset:2px;
@@ -8870,7 +8876,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.194.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.195.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>

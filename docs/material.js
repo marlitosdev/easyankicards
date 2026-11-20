@@ -719,20 +719,23 @@ function matTexSoSimbolo(tex) {
   const m = /^\s*\\([A-Za-z]+)\s*$/.exec(String(tex || ""));
   return !!(m && Object.prototype.hasOwnProperty.call(MAT_TEX_SIMB, m[1]) && !MAT_TEX_NAO_SIMB.test(m[1]));
 }
-/* uma linha: { nova, conv, mant, simb } — conv = fórmulas convertidas (simb delas eram símbolo solto), mant = as que
- * ficam em LaTeX. modo "simbolos": converte só os símbolos soltos e deixa o resto como está. */
+/* uma linha: { nova, conv, mant, simb, trocas } — conv = fórmulas convertidas (simb delas eram símbolo solto), mant = as
+ * que ficam em LaTeX. modo "simbolos": converte só os símbolos soltos e deixa o resto como está.
+ * (19.195.0) trocas = [{ i, de, para }]: onde cada fórmula começa na linha ORIGINAL, o código e o que entra no lugar. */
 function matTexConverterLinha(l, modo) {
   let conv = 0, mant = 0, simb = 0;
+  const trocas = [];
   const so = modo === "simbolos";
   const bloco = String(l).match(/^(\s*)\$\$([\s\S]+?)\$\$\s*$/) || String(l).match(/^(\s*)\\\[([\s\S]+?)\\\]\s*$/);
   if (bloco) {
     const ehSimb = matTexSoSimbolo(bloco[2]);
-    if (so && !ehSimb) return { nova: l, conv: 0, mant: 0, simb: 0 };
+    if (so && !ehSimb) return { nova: l, conv: 0, mant: 0, simb: 0, trocas };
     const x = matTexParaTexto(bloco[2].trim());
-    if (x == null) return { nova: l, conv: 0, mant: 1, simb: 0 };
-    return { nova: bloco[1] + x, conv: 1, mant: 0, simb: ehSimb ? 1 : 0 };
+    if (x == null) return { nova: l, conv: 0, mant: 1, simb: 0, trocas };
+    trocas.push({ i: bloco[1].length, de: String(l).slice(bloco[1].length), para: x });
+    return { nova: bloco[1] + x, conv: 1, mant: 0, simb: ehSimb ? 1 : 0, trocas };
   }
-  const nova = String(l).replace(MAT_TEX_INLINE, (m0, a, b, c) => {
+  const nova = String(l).replace(MAT_TEX_INLINE, (m0, a, b, c, off) => {
     if (c && !matTexTemCara(c)) return m0;
     const tex = (a || b || c).trim();
     const ehSimb = matTexSoSimbolo(tex);
@@ -741,9 +744,10 @@ function matTexConverterLinha(l, modo) {
     if (x == null) { mant++; return m0; }
     conv++;
     if (ehSimb) simb++;
+    trocas.push({ i: off, de: m0, para: x });
     return x;
   });
-  return { nova, conv, mant, simb };
+  return { nova, conv, mant, simb, trocas };
 }
 /* o texto inteiro: { texto, itens:[{linha, antes, depois, conv, simb}], mant, simb } */
 function matTexConverterTexto(txt, modo) {
@@ -754,11 +758,67 @@ function matTexConverterTexto(txt, modo) {
     if (l.indexOf("$") < 0 && l.indexOf("\\(") < 0 && l.indexOf("\\[") < 0) return l;
     const r = matTexConverterLinha(l, modo);
     mant += r.mant;
-    if (r.conv && r.nova !== l) { itens.push({ linha: k, antes: l, depois: r.nova, conv: r.conv, simb: r.simb }); simb += r.simb; }
+    if (r.conv && r.nova !== l) { itens.push({ linha: k, antes: l, depois: r.nova, conv: r.conv, simb: r.simb, trocas: r.trocas }); simb += r.simb; }
     return r.nova;
   });
   return { texto: out.join("\n"), itens, mant, simb };
 }
+/* (19.195.0) O QUE MUDA, E SÓ O QUE MUDA. A janela mostrava a linha inteira antes e depois, cada uma cortada aos 300
+ * caracteres — numa linha longa não dava para achar a troca, e os dois lados eram cortados em pontos diferentes (o
+ * vermelho parava em "**PR", o verde em "**PROCV**"). Agora o recorte é UM, calculado sobre a linha original: pedaços
+ * de texto que não mudam, as trocas { de, para } e os cortes ("…"). O vermelho desenha "de", o verde desenha "para";
+ * o contexto é o mesmo nos dois. Linha curta vai inteira; a longa leva ~ctx caracteres em volta de cada troca, sem
+ * partir palavra. Devolve [{ txt } | { de, para } | { corte: true }]. */
+function matTexRecortes(linha, trocas, ctx) {
+  const L = String(linha || "");
+  const ts = (trocas || []).filter((x) => x && x.de).slice().sort((a, b) => a.i - b.i);
+  if (!ts.length) return L ? [{ txt: L }] : [];
+  ctx = ctx || 40;
+  const inteira = L.length <= ctx * 4;
+  const jan = [];
+  ts.forEach((x) => {
+    const fimT = x.i + x.de.length;
+    let ini = 0, fim = L.length;
+    if (!inteira) {
+      ini = Math.max(0, x.i - ctx);
+      if (ini > 0) { const sp = L.indexOf(" ", ini); if (sp >= 0 && sp < x.i) ini = sp + 1; }
+      fim = Math.min(L.length, fimT + ctx);
+      if (fim < L.length) { const sp = L.lastIndexOf(" ", fim); if (sp > fimT) fim = sp; }
+    }
+    const ult = jan[jan.length - 1];
+    if (ult && ini <= ult[1]) ult[1] = Math.max(ult[1], fim);
+    else jan.push([ini, fim]);
+  });
+  const partes = [];
+  jan.forEach(([ini, fim]) => {
+    if (ini > 0) partes.push({ corte: true });
+    let p = ini;
+    ts.filter((x) => x.i >= ini && x.i < fim).forEach((x) => {
+      if (x.i > p) partes.push({ txt: L.slice(p, x.i) });
+      partes.push({ de: x.de, para: x.para });
+      p = x.i + x.de.length;
+    });
+    if (fim > p) partes.push({ txt: L.slice(p, fim) });
+  });
+  if (jan[jan.length - 1][1] < L.length) partes.push({ corte: true });
+  return partes;
+}
+/* um lado do recorte ("antes" | "depois"), com a troca em <mark class="cns-troca"> */
+function matTexLadoRecorte(partes, lado) {
+  const el = document.createElement("div");
+  el.className = "cns-" + lado;
+  (partes || []).forEach((p, k) => {
+    /* nas pontas o "…" encosta no texto; entre dois recortes ele se separa dos dois ("disjunção, … com") */
+    if (p.corte) { el.append(document.createTextNode(k === 0 || k === partes.length - 1 ? "…" : " … ")); return; }
+    if (p.txt != null) { el.append(document.createTextNode(p.txt)); return; }
+    const m = document.createElement("mark");
+    m.className = "cns-troca";
+    m.textContent = lado === "antes" ? p.de : p.para;
+    el.append(m);
+  });
+  return el;
+}
+
 /* os símbolos que um texto escreve em código, sem repetir: "→, ×" (para dizer o que foi trocado) */
 function matTexSimbolosDe(itens) {
   const vistos = [];
@@ -773,7 +833,7 @@ function matTexSimbolosDe(itens) {
 /* (19.67.0) DESENHAR AS FÓRMULAS DENTRO DE UM ELEMENTO JÁ MONTADO (o cartão na tela de estudo): percorre os textos e
  * troca cada "$…$", "$$…$$", "\(…\)" e "\[…\]" pelo desenho. Só mexe em nó de texto — links, lacunas e botões ficam.
  * Devolve quantas fórmulas desenhou. */
-const MAT_TEX_NO = /\$\$([^$]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
+const MAT_TEX_NO = /\$\$([^$]+?)\$\$|(?<!\\)\\\[([\s\S]+?)(?<!\\)\\\]|(?<!\\)\\\(([\s\S]+?)(?<!\\)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
 function matTexDesenharEm(raiz) {
   if (!raiz || !raiz.childNodes || typeof document === "undefined") return 0;
   let n = 0;
@@ -818,7 +878,9 @@ function matTexBloco(s) {
   return m ? '<div class="mt-bloco">' + matTexParaHtml((m[1] || m[2]).trim()) + "</div>" : "";
 }
 /* fórmulas dentro da frase: "$$…$$", "\(…\)" e "$…$" — este só quando tem cara de fórmula (não "R$ 100,00") */
-const MAT_TEX_INLINE = /\$\$([^$\n]+?)\$\$|\\\(([^\n]+?)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
+/* (19.195.0) "\\(B\\)2" não é fórmula: é a barra escapada do markdown seguida de parêntese (texto de planilha, "$B$2"
+ * que passou por um conversor). Sem o "(?<!\\)" o "\(B\\)" do meio casava e a conversão comia a barra: virava "\B2". */
+const MAT_TEX_INLINE = /\$\$([^$\n]+?)\$\$|(?<!\\)\\\(([^\n]+?)(?<!\\)\\\)|(?<![\w$\\])\$(?!\s)([^$\n]{1,300}?)(?<![\s\\])\$(?![\w$])/g;
 function matTexTemCara(x) {
   return /[\\^_=]/.test(x) || /^[A-Za-z]{1,3}$/.test(x.trim()) || /^[A-Za-z0-9+\-*/().,\s]{1,15}$/.test(x) && /[A-Za-z]/.test(x) && !/\s\w{4,}\s/.test(" " + x + " ");
 }
@@ -2804,12 +2866,12 @@ async function matFormulasOferecer(origem) {
   box.innerHTML = "";
   plano.itens.forEach((p) => {
     const li = document.createElement("div");
-    li.className = "cns-item";
+    /* (19.195.0) só a troca em destaque, com o MESMO recorte nos dois lados (ver matTexRecortes) */
+    li.className = "cns-item cns-recorte";
     const onde = document.createElement("div");
     onde.className = "cns-onde"; onde.textContent = t("cns_linha", { n: p.linha + 1 });
-    const a1 = document.createElement("div"); a1.className = "cns-antes"; a1.textContent = p.antes.slice(0, 300);
-    const d1 = document.createElement("div"); d1.className = "cns-depois"; d1.textContent = p.depois.slice(0, 300);
-    li.append(onde, a1, d1);
+    const partes = matTexRecortes(p.antes, p.trocas);
+    li.append(onde, matTexLadoRecorte(partes, "antes"), matTexLadoRecorte(partes, "depois"));
     box.append(li);
   });
   const dlg = $("dlgMatConserto");
