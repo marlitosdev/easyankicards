@@ -8564,6 +8564,21 @@ button.ed-st-item:hover{border-color:var(--acao);color:var(--info)}
 .ednovo-virada-bts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .ed-prev-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 8px;padding:8px 10px;border:1px dashed #8a8;border-radius:8px}
 .ed-prev-aviso-txt{flex:1 1 240px;min-width:0}
+/* (19.190.0) A AGENDA MAIS ENXUTA: os pré-editais num chip, o "⚙ editais" no cabeçalho e uma linha só de controles */
+.ed-prev-lote{margin:var(--esp-1) 0 var(--esp-2)}
+.ed-prev-lote>summary{display:inline-block;cursor:pointer;font-size:var(--fs-2);font-weight:var(--peso-f);padding:5px 11px;
+  border-radius:var(--r-pilula);border:1px dashed var(--borda);background:var(--campo);color:var(--sutil)}
+.ed-prev-lote[open]>summary{color:var(--texto)}
+.ed-agenda-horas-bt{cursor:pointer;border:1px solid var(--borda);border-radius:var(--r-pilula);padding:3px 10px;background:transparent;font:inherit}
+.ed-agenda-horas-bt:hover{color:var(--acao);border-color:var(--acao)}
+.hub-linha-ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0}
+.hub-linha-ctrl>.hub-avisos{display:contents}
+.hub-linha-ctrl>.ed-disc-caixa{margin:0}
+.hub-linha-ctrl>.ed-disc-caixa.aberta{flex-basis:100%;order:98}
+.hub-linha-ctrl>.hub-ajustes{margin:0;border-radius:var(--r-pilula);padding:0 var(--esp-3);max-width:100%}
+.hub-linha-ctrl>.hub-ajustes>summary{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hub-linha-ctrl>.hub-ajustes[open]{flex-basis:100%;order:99;border-radius:var(--r-m);padding:var(--esp-1) var(--esp-3)}
+.hub-linha-ctrl>.hub-ajustes[open]>summary{max-width:none;white-space:normal}
 .edsel-mais{position:relative}
 /* o "⋯" (da linha e do topo): o mesmo desenho do menu da janela da disciplina */
 .ed-mais-bt{font-size:18px;line-height:1;padding:2px 12px;min-width:40px}

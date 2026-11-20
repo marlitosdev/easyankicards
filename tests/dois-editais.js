@@ -381,8 +381,9 @@ async function testes() {
       if (so === a) {
         const horas = (function acha(el) { for (const f of Array.from(el.children || [])) { if (/(^| )ed-agenda-horas( |$)/.test(f.className || "")) return f; const r = acha(f); if (r) return r; } return null; })(api.$("edAgendaTopo"));
         const temDias = (function acha(el) { for (const f of Array.from(el.children || [])) { if ((f.textContent || "") === api.t("hub_cfg_dias") || (f.tagName === "INPUT" && f.max === "7")) return true; if (acha(f)) return true; } return false; })(api.$("edAgendaTopo"));
-        ok(horas && /1 oculto\(s\) no filtro/.test(horas.textContent) && /1 edital\(is\) em vista/.test(horas.textContent) && !temDias,
-           "D7h (19.137.0) com um edital oculto, o topo diz 'em vista (1 oculto no filtro)' e não tem mais 'dias/semana': " + (horas && horas.textContent));
+        /* (19.190.0) "⚙ 1 de 2 editais · N h/semana" (um botão que abre os ajustes); o "oculto no filtro" foi para o balão */
+        ok(horas && /⚙ 1 de 2 editais · \d+ h\/semana/.test(horas.textContent) && /1 oculto\(s\) no filtro/.test(horas.title || "") && typeof horas.onclick === "function" && !temDias,
+           "D7h com um edital oculto, o topo diz '⚙ 1 de 2 editais' (o oculto no balão) e não tem mais 'dias/semana': " + (horas && horas.textContent));
       }
       const selos = achar(api.$("edAgendaTopo"), []);
       vistos.push(selos.length);

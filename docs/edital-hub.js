@@ -223,10 +223,30 @@ function hubPintarAgenda() {
   cab.append(tit, hubControlesAgenda());
   cx.append(cab);
   /* (19.172.0) a 15 dias ou menos da prova: a Revisão 360° (montar, ou o andamento dela) */
-  try { const rv = typeof rvAvisoEl === "function" ? rvAvisoEl() : null; if (rv) cx.append(rv); } catch (e) {}
+  let temRv = false;
+  try { const rv = typeof rvAvisoEl === "function" ? rvAvisoEl() : null; if (rv) { cx.append(rv); temRv = true; } } catch (e) {}
+  /* (19.190.0) com a Reta final no ar, ou com dois pré-editais ou mais, eles viram UM chip ("📅 2 pré-editais esperando a
+   * virada ▾") que abre a lista: cada aviso ocupava uma faixa inteira antes da agenda */
+  const prevs = todosAtivos.filter(edEhPrevisto);
+  let alvoPrev = cx;
+  if (prevs.length && (temRv || prevs.length >= 2)) {
+    const lote = document.createElement("details");
+    lote.className = "ed-prev-lote";
+    lote.id = "edPrevLote";
+    let ab = false;
+    try { ab = localStorage.getItem("eac_ag_prev_aberto") === "1"; } catch (e) {}
+    lote.open = ab;
+    lote.ontoggle = () => { try { localStorage.setItem("eac_ag_prev_aberto", lote.open ? "1" : "0"); } catch (e) {} };
+    const sm = document.createElement("summary");
+    sm.textContent = t("ed_prev_lote", { n: prevs.length });
+    sm.title = t("ed_prev_lote_tip");
+    lote.append(sm);
+    cx.append(lote);
+    alvoPrev = lote;
+  }
   /* (19.99.0) PRÉ-EDITAL NA AGENDA: o previsto diz que é previsto e oferece a virada — o caminho do "saiu o edital" ficava
    * só no topo do Plano, com o previsto aberto */
-  todosAtivos.filter(edEhPrevisto).slice(0, 3).forEach((e) => {
+  prevs.slice(0, 5).forEach((e) => {
     const av = document.createElement("div");
     av.className = "ed-prev-aviso";
     av.id = "edPrevAviso_" + e.id;
@@ -243,13 +263,12 @@ function hubPintarAgenda() {
     bt.textContent = t("ed_prev_bt"); bt.title = t("ed_prev_bt_tip");
     bt.onclick = () => hubViradaDe(e.id);
     av.append(tx, bt);
-    cx.append(av);
+    alvoPrev.append(av);
   });
   /* (19.94.0) "quais editais entram nesta agenda" é um ajuste, não uma navegação: os chips ✓ ISS / ✓ SEFAZ moravam no
    * alto da agenda, ao lado de outros três jeitos de escolher edital. Foram para "⚙ Ajustes da agenda"; o seletor do
    * topo da aba é o que escolhe o edital que se olha. */
   const filtroEd = hubFiltroEdital(todosAtivos);
-  const edFora = todosAtivos.length - ativos.length;
   hubRitmoAvisar = null;
 
   /* (19.47.0) O RITMO DE VERDADE. O plano contava as horas do edital (25h/semana) e o diário mostrava ~10h30: a lista
@@ -367,7 +386,14 @@ function hubPintarAgenda() {
     if (i.disciplina && disciplinas.indexOf(i.disciplina) < 0) disciplinas.push(i.disciplina);
   });
   const filtroDisc = hubFiltroDisciplina(disciplinas);
-  if (filtroDisc) cx.append(filtroDisc);
+  /* (19.190.0) UMA LINHA DE CONTROLES: "disciplinas (7 de 7)", os chips de aviso (ritmo, abaixo do peso, vínculos…) e
+   * "⚙ ajustes", lado a lado; o que abre (a busca das disciplinas, a gaveta dos ajustes) ocupa a linha de baixo inteira.
+   * Antes eram três faixas empilhadas antes da agenda. */
+  const linhaCtrl = document.createElement("div");
+  linhaCtrl.className = "hub-linha-ctrl";
+  linhaCtrl.id = "hubLinhaCtrl";
+  if (filtroDisc) linhaCtrl.append(filtroDisc);
+  cx.append(linhaCtrl);
   const tudoOculto = hubDiscTudoOculto(disciplinas);
   const escolhidas = hubDiscEscolhidas(disciplinas);
   const daFiltragem = linhas.filter((i) => escolhidas.indexOf(i.disciplina) >= 0);
@@ -381,11 +407,11 @@ function hubPintarAgenda() {
     vz.textContent = t("hub_ag_disc_vazio", { n: disciplinas.length });
     cx.append(vz);
   }
-  if (tirados || escondidas || fundidos || edFora) {
+  /* (19.190.0) "N edital(is) fora desta agenda" saiu daqui: é o "⚙ 2 de 5 editais" do cabeçalho */
+  if (tirados || escondidas || fundidos) {
     const av = document.createElement("div");
     av.className = "ed-caixa-sub ed-ag-aviso";
     av.textContent = [
-      edFora ? t("hub_ag_ed_fora", { n: edFora }) : "",
       tirados ? t("hub_ag_tirados", { n: tirados }) : "",
       escondidas ? t("hub_ag_escondidas", { n: escondidas }) : "",
       fundidos ? t("hub_ag_fundidos", { n: fundidos }) : "",
@@ -567,21 +593,20 @@ function hubPintarAgenda() {
       };
       fx.append(b);
     });
-    cx.append(fx);
+    linhaCtrl.append(fx);
     avisos.forEach((a) => { a.p.hidden = aberto !== a.id; cx.append(a.p); });
   }
   /* os ajustes da agenda: fechados, com uma linha de resumo; o modo por disciplina mostra primeiro as que têm modo próprio */
-  cx.append(hubAjustesGaveta(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }), modosVistos, modoSugerido, diasProx,
+  linhaCtrl.append(hubAjustesGaveta(hubModoControles(modosVistos, modoSugerido, diasProx, { semIA: !!(hubRitmoAvisar || minUsado) }), modosVistos, modoSugerido, diasProx,
     filtroEd ? { el: filtroEd, vis: ativos.length, total: todosAtivos.length } : null));
 
-  const sub = document.createElement("div");
-  sub.className = "ed-caixa-sub";
-  sub.textContent = t(ativos.length === 1 ? "hub_agenda_sub1" : "hub_agenda_sub", {
+  /* (19.190.0) a linha "25 tópicos · 23h53 · de 2 editais ativos. Ordenados por…" saiu: os tópicos entram no medidor e
+   * a frase inteira vai para o balão dele */
+  const subTxt = t(ativos.length === 1 ? "hub_agenda_sub1" : "hub_agenda_sub", {
     n: linhas.length,
     c: ativos.length,
     h: horasTexto(linhas.reduce((a, i) => a + edMinSemana(i), 0)),
   });
-  cx.append(sub);
 
   /* MEDIDOR DA SEMANA: o que você já pôs contra o que a agenda pede.
    * Sem isto, "63h45 desta semana" é uma cobrança sem resposta — não dá
@@ -634,9 +659,10 @@ function hubPintarAgenda() {
     f: horasTexto(feitoMin), p: horasTexto(planejadoMin), pct,
     falta: horasTexto(Math.max(0, planejadoMin - feitoMin)),
   }) + (dispMin ? " · " + t("hub_medidor_disp", { h: horasTexto(dispMin) }) : "")
-    + (reservaDiscMin ? " · " + t("hub_medidor_disc", { h: horasTexto(reservaDiscMin) }) : "");
+    + (reservaDiscMin ? " · " + t("hub_medidor_disc", { h: horasTexto(reservaDiscMin) }) : "")
+    + " · " + t("hub_med_topicos", { n: linhas.length });
   med.append(barra, rot);
-  med.title = t("hub_medidor_ajuda");
+  med.title = subTxt + "\n" + t("hub_medidor_ajuda");
   cx.append(med);
   /* os dias da semana ficam logo abaixo do medidor; são preenchidos depois de agendar(), que é quem diz o que cai em cada dia */
   const celsSemana = document.createElement("div");
@@ -1757,6 +1783,7 @@ function hubFiltroDisciplina(todas) {
   caixa.append(cabeca);
 
   if (!hubDiscAberto) return caixa;
+  caixa.classList.add("aberta");
 
   const cx = document.createElement("div");
   cx.className = "ed-agenda-filtro ed-ag-disc";
@@ -2009,7 +2036,11 @@ function hubControlesAgenda() {
    * Não era: eram perguntas diferentes com a mesma cara. Agora ele
    * segue o filtro (com um edital em vista, bate com o painel) e diz
    * de quantos editais está falando quando é mais de um. */
-  const lh = document.createElement("div");
+  /* (19.190.0) com mais de um edital em andamento, é um BOTÃO "⚙ 2 de 5 editais · 49 h/semana": abre os ajustes da
+   * agenda (onde se escolhe quais editais entram). Juntou o "em vista (3 oculto(s) no filtro)" e a faixa solta
+   * "3 edital(is) fora desta agenda (⚙ Ajustes)", que diziam a mesma coisa em dois lugares. */
+  const lh = document.createElement("button");
+  lh.type = "button";
   lh.className = "ed-agenda-cfg-item ed-agenda-horas";
   const usados = hubEditaisNaVista();
   const totalH = usados.reduce(
@@ -2018,11 +2049,17 @@ function hubControlesAgenda() {
    * quantos estão ocultos no filtro, e o título dá os nomes com as horas de cada um. */
   const ativosN = editais.filter((e) => edSituacao(e).grupo !== "encerrado").length;
   const ocultosN = Math.max(0, ativosN - usados.length);
-  lh.textContent = ocultosN
-    ? t("hub_cfg_horas_filtro", { h: totalH, n: usados.length, o: ocultosN })
-    : usados.length > 1
-      ? t("hub_cfg_horas_n", { h: totalH, n: usados.length })
-      : t("hub_cfg_horas", { h: totalH });
+  lh.textContent = ativosN > 1
+    ? t("hub_cfg_horas_eds", { h: totalH, n: usados.length, t: ativosN })
+    : t("hub_cfg_horas", { h: totalH });
+  if (ativosN > 1) lh.classList.add("ed-agenda-horas-bt");
+  lh.onclick = () => {
+    if (ativosN < 2) return;
+    try { localStorage.setItem("eac_ag_ajustes_aberto", "1"); } catch (e) {}
+    hubPintarAgenda();
+    const g = document.getElementById("hubAjustes");
+    try { if (g && g.scrollIntoView) g.scrollIntoView({ block: "nearest" }); } catch (e) {}
+  };
   /* (19.79.0) COM O RITMO REAL OU UMA META PRÓPRIA EM USO, o topo diz o número que a agenda está usando — "54 h/semana"
    * continuava ali depois de "planejar com 13h19/semana", e a agenda já era de 13h19 */
   let usadoMin = 0, usadoMeta = false;
@@ -2036,11 +2073,13 @@ function hubControlesAgenda() {
     lh.textContent = t("hub_cfg_horas_usando", { r: horasTexto(usadoMin), q: t(usadoMeta ? "hub_cfg_q_meta" : "hub_cfg_q_ritmo"), h: totalH });
     lh.classList.add("ed-agenda-horas-usando");
     lh.title = t("hub_cfg_horas_usando_ajuda", { r: horasTexto(usadoMin), h: totalH });
-  } else lh.title = usados.length > 1
-    ? t("hub_cfg_horas_n_ajuda", {
-        lista: usados.map((e) => (e.nome || "?") + " "
-          + ((lerEdital(e.texto || "").cfg || {}).horas || 0) + "h").join(" + ") })
-    : t("hub_cfg_horas_ajuda");
+  } else lh.title = (ocultosN ? t("hub_cfg_horas_filtro", { h: totalH, n: usados.length, o: ocultosN }) + "\n" : "")
+    + (usados.length > 1
+      ? t("hub_cfg_horas_n_ajuda", {
+          lista: usados.map((e) => (e.nome || "?") + " "
+            + ((lerEdital(e.texto || "").cfg || {}).horas || 0) + "h").join(" + ") })
+      : t("hub_cfg_horas_ajuda"))
+    + (ativosN > 1 ? "\n" + t("hub_cfg_horas_eds_tip") : "");
 
   /* O RAIO-X, ao lado dos numeros que ele explica. Discreto de
    * proposito: nao e uma acao de estudo, e a resposta a "por que isto
