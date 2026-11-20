@@ -7844,10 +7844,11 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-ajuda[aria-expanded="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
 .dom-ajuda:focus-visible{outline:2px solid var(--acao)}
 #dlgDominio .cov-cab{justify-content:flex-start}
-.dom-fixo{position:sticky;top:0;z-index:2;background:var(--panel);padding:2px 0 4px;margin-bottom:6px;border-bottom:1px solid var(--borda)}
-.dom-fixo .cov-manchete{padding:6px 10px;margin-bottom:6px;font-size:13px}
-.dom-fixo .dom-dist{height:22px;margin:4px 0}
-.dom-fixo .cov-legenda{margin:2px 0 2px}
+/* (19.193.0) o topo numa linha: a manchete e a barra do peso por nível lado a lado (a legenda das cores são os filtros) */
+.dom-fixo{position:sticky;top:0;z-index:2;background:var(--panel);display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2) var(--esp-3);
+  padding:var(--esp-1) 0;margin-bottom:var(--esp-2);border-bottom:1px solid var(--borda)}
+.dom-fixo .cov-manchete{flex:0 1 auto;margin:0;padding:var(--esp-1) var(--esp-2);font-size:var(--fs-2)}
+.dom-fixo .dom-dist{flex:1 1 240px;height:22px;margin:0}
 .dom-manchete-info{background:rgba(79,179,232,.12);border-color:#4fb3e8}
 .dom-ganho{font-size:13px;margin:0 0 8px;padding:6px 10px;border-radius:8px;border:1px dashed var(--ok,#2e9e5b);background:rgba(46,158,91,.08)}
 .dom-item{flex-wrap:wrap}
@@ -7896,9 +7897,6 @@ dialog.dom-dlg[open]{display:flex;flex-direction:column;width:min(1000px,96vw);h
 .dom-chip-fragil{border-style:dashed;border-color:#2e9e5b;color:#39b56b;font-weight:700}
 .dom-sem-estudo{margin:10px 0}
 .dom-sem-estudo > summary{cursor:pointer;font-size:13px;color:var(--sutil);padding:6px 0}
-#dlgDominio .cov-disc-cab{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:10px;row-gap:2px}
-#dlgDominio .cov-disc-cab .cov-peso{grid-column:2;grid-row:1;justify-self:end}
-#dlgDominio .cov-disc-cab .cov-n,#dlgDominio .cov-disc-cab .dom-evo-disc{grid-column:1 / -1}
 /* tela larga: janela maior; mapa (esquerda) e fila (direita) rolam cada um por si, o topo fica por cima dos dois */
 /* a regra geral de dialog limita a 640px: sem isto a janela do Domínio nunca passava disso (a "fresta" das capturas) */
 dialog.dom-dlg[open]{max-width:96vw}
@@ -7907,16 +7905,110 @@ dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
 #dlgDominio.dom-cheia[open]{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;
   margin:0;border:0;border-radius:0;box-sizing:border-box}
 .dom-cheia-bt{margin-right:6px;white-space:nowrap}
-#domCorpo.dom-duas{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:18px;overflow:hidden}
+/* (19.193.0) tela larga: à esquerda o mapa (em cima) e a fila (embaixo); à direita o detalhe do escolhido; cada um rola por si */
+#domCorpo.dom-duas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);grid-template-rows:auto auto minmax(0,1fr);column-gap:var(--esp-4);row-gap:var(--esp-2);overflow:hidden}
 #domCorpo.dom-duas .dom-fixo{grid-column:1 / -1;grid-row:1;position:static}
-#domCorpo.dom-duas .dom-painel-disc{grid-column:1;grid-row:2;overflow-y:auto;min-height:0;padding-right:6px}
-#domCorpo.dom-duas .dom-painel-prior{grid-column:2;grid-row:2;overflow-y:auto;min-height:0;padding:0 6px 0 14px;border-left:1px solid var(--borda)}
+#domCorpo.dom-duas .dom-painel-disc{grid-column:1;grid-row:2;overflow-y:auto;min-height:0;max-height:32vh;padding-right:var(--esp-1)}
+#domCorpo.dom-duas .dom-painel-prior{grid-column:1;grid-row:3;overflow-y:auto;min-height:0;padding:var(--esp-2) var(--esp-1) 0 0;border-top:1px solid var(--borda)}
+#domCorpo.dom-duas .dom-painel-det{grid-column:2;grid-row:2 / 4;overflow-y:auto;min-height:0;padding:0 var(--esp-1) 0 var(--esp-4);border-left:1px solid var(--borda)}
 #domCorpo.dom-duas .dom-painel-prior .cov-bloco{margin-top:0}
 .dom-auto{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .dom-minha{font-size:11px;color:var(--sutil)}
 .dom-auto-b{all:unset;box-sizing:border-box;cursor:pointer;font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--borda)}
 .dom-auto-b.ativa{background:var(--acao);border-color:var(--acao);color:#fff;font-weight:700}
 .dom-auto-b:focus-visible{outline:2px solid var(--acao)}
+/* ---- (19.193.0) DOMÍNIO MESTRE-DETALHE: a fila em linhas, o mapa em uma linha por disciplina, o detalhe à parte ---- */
+.dom-busca{flex:1 1 200px;min-width:0;max-width:360px;box-sizing:border-box;font:inherit;font-size:var(--fs-3);padding:var(--esp-1) var(--esp-2);
+  border-radius:var(--r-p);border:1px solid var(--borda);background:var(--campo);color:var(--texto)}
+.dom-busca:focus-visible{outline:2px solid var(--acao);outline-offset:1px}
+.dom-filtro .dom-leg-i{width:.75em;height:.75em;margin-right:var(--esp-1);vertical-align:-1px}
+.dom-dist .dom-seg{cursor:pointer}
+.dom-apagado{opacity:.28}
+/* a fila: uma linha por item */
+.dom-barra-abas{display:flex;flex-wrap:wrap;align-items:center;gap:0 var(--esp-4)}
+.dom-barra-abas .cov-barra{flex:1 1 420px;margin:var(--esp-1) 0}
+.dom-barra-abas .dom-abas{flex:1 1 280px;margin:var(--esp-1) 0}
+.dom-lista-cab{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-3)}
+.dom-lista-cab h4{margin:0}
+.dom-lista-cab .dom-agrupar{margin:0 0 0 auto}
+.dom-lista-sub{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-3);margin-top:var(--esp-1)}
+.dom-lista-sub .dom-ordem-painel{margin:0;font-size:var(--fs-1)}
+.dom-lista-sub .dom-ganho{margin:0;padding:2px var(--esp-2);font-size:var(--fs-1)}
+.dom-lista{display:flex;flex-direction:column;gap:var(--esp-1);margin-top:var(--esp-2)}
+.dom-linha{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-2);padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);
+  border-style:solid;border-width:1px 1px 1px 4px;border-top-color:var(--borda);border-right-color:var(--borda);border-bottom-color:var(--borda);
+  background:var(--panel);cursor:pointer}
+.dom-linha:hover{background:color-mix(in srgb,var(--texto) 5%,var(--panel))}
+.dom-linha:focus-visible{outline:2px solid var(--acao);outline-offset:1px}
+.dom-linha-sel{background:color-mix(in srgb,var(--acao) 10%,var(--panel));border-top-color:var(--acao);border-right-color:var(--acao);border-bottom-color:var(--acao)}
+.dom-linha-pos{min-width:1.6em;text-align:right;font-size:var(--fs-2);font-weight:var(--peso-f);color:var(--sutil);font-variant-numeric:tabular-nums}
+.dom-linha-fora .dom-linha-pos{font-weight:var(--peso-n)}
+.dom-linha-txt{flex:1 1 140px;min-width:0;display:flex;flex-direction:column}
+.dom-linha-nome{font-size:var(--fs-3);font-weight:var(--peso-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dom-linha-pq{font-size:var(--fs-1);color:var(--sutil);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dom-linha-peso{font-size:var(--fs-2);color:var(--sutil);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dom-linha .dom-acao-1{white-space:nowrap;max-width:13em;overflow:hidden;text-overflow:ellipsis}
+.dom-mais{min-width:2.2em;font-weight:var(--peso-f)}
+.dom-linha-menu{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:var(--esp-1);padding:var(--esp-1) 0 0 calc(1.6em + var(--esp-2));cursor:default}
+.dom-linha-menu .cov-acoes{flex-wrap:wrap}
+.dom-mais-linhas{margin:var(--esp-2) 0 0}
+.dom-lista-pe{font-size:var(--fs-1);margin-top:var(--esp-2)}
+/* o mapa: uma linha por disciplina (o nome e o peso · a barra · o verde e a mudança) */
+.dom-mapa-leg{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-3);margin-left:auto;font-size:var(--fs-1);color:var(--sutil)}
+.dom-leg-item{display:inline-flex;align-items:center;gap:var(--esp-1);white-space:nowrap}
+.dom-leg-amostra{position:relative;display:inline-flex;align-items:center;justify-content:center;width:22px;height:14px;border-radius:var(--r-p);overflow:hidden}
+#dlgDominio .dom-mapa{gap:var(--esp-1)}
+#dlgDominio .dom-disc{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr) auto;align-items:center;column-gap:var(--esp-3);row-gap:var(--esp-1);padding:var(--esp-1) var(--esp-2)}
+#dlgDominio .dom-disc .cov-disc-cab{display:flex;align-items:center;flex-wrap:nowrap;gap:var(--esp-1) var(--esp-2);margin:0;min-width:0}
+#dlgDominio .dom-disc .cov-disc-cab:focus-visible{outline:2px solid var(--acao);outline-offset:2px}
+#dlgDominio .dom-disc .cov-nome{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--fs-3)}
+#dlgDominio .dom-disc .cov-det{grid-column:1 / -1;margin-top:var(--esp-1)}
+.dom-disc-seta{flex:0 0 auto;width:1em;color:var(--sutil);font-size:var(--fs-1)}
+.dom-disc-fim{display:inline-flex;align-items:center;gap:var(--esp-2);white-space:nowrap;font-size:var(--fs-2)}
+.dom-disc-verde{color:var(--ok);font-weight:var(--peso-m);font-variant-numeric:tabular-nums}
+.dom-tira{height:20px}
+.dom-tira .cov-seg{position:relative;display:flex;align-items:center;justify-content:center;min-width:3px;cursor:pointer}
+.dom-tira .cov-seg:focus-visible{outline:2px solid var(--texto);outline-offset:-2px}
+.dom-seg-sel{box-shadow:inset 0 0 0 2px var(--texto)}
+.dom-seg-n{font-size:var(--fs-1);font-weight:var(--peso-f);line-height:1;pointer-events:none}
+.dom-seg-incerto{background-image:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--panel) 45%,transparent) 4px 7px)}
+.dom-seg-venc::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--texto);opacity:.75}
+.dom-seg-sub{position:absolute;left:0;right:0;bottom:0;height:4px;display:flex}
+.dom-seg-sub i{display:block;height:100%;flex:0 0 auto}
+.dom-leg-amostra .dom-seg-sub i{flex:1 1 0}
+.dom-seg-balao{position:fixed;z-index:1000;width:300px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:var(--esp-2) var(--esp-3);
+  border-radius:var(--r-m);border:1px solid var(--borda);background:var(--panel);color:var(--texto);box-shadow:var(--sombra-2);font-size:var(--fs-2);pointer-events:none}
+.dom-balao-tit{font-weight:var(--peso-f);margin-bottom:2px}
+.dom-balao-l{margin-top:2px}
+.dom-balao-pe{color:var(--sutil);margin-top:var(--esp-1);font-size:var(--fs-1)}
+.dom-tops{gap:2px}
+.dom-tl{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-2);padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);
+  border-style:solid;border-width:0 0 0 4px;background:color-mix(in srgb,var(--texto) 5%,transparent);cursor:pointer;font-size:var(--fs-2)}
+.dom-tl:hover{background:color-mix(in srgb,var(--texto) 10%,transparent)}
+.dom-tl:focus-visible{outline:2px solid var(--acao);outline-offset:1px}
+.dom-tl-sel{box-shadow:inset 0 0 0 2px var(--acao)}
+.dom-tl-nome{flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
+.dom-tl-ramos{font-size:var(--fs-1);color:var(--sutil);white-space:nowrap}
+.dom-tl-n{font-size:var(--fs-1);font-weight:var(--peso-f);white-space:nowrap}
+/* o detalhe */
+.dom-det{padding:var(--esp-2) var(--esp-3)}
+.dom-det .dom-item{background:transparent;padding:0;border:0}
+.dom-det-onde{font-size:var(--fs-1);color:var(--sutil);margin-bottom:var(--esp-1)}
+.dom-det-ramos{margin-top:var(--esp-3)}
+.dom-det-ramos > summary{cursor:pointer;font-size:var(--fs-2);color:var(--sutil)}
+.dom-ramo-atual{box-shadow:0 0 0 2px var(--acao)}
+.dom-det-nav{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:var(--esp-2);padding:var(--esp-1) 0;margin-bottom:var(--esp-2);background:var(--panel)}
+.dom-det-voltar{margin-right:auto}
+.dom-det-ant,.dom-det-prox{min-width:2.4em;font-weight:var(--peso-f)}
+.dom-det-pos{font-size:var(--fs-2);color:var(--sutil);font-variant-numeric:tabular-nums}
+.dom-det-vazio{margin:var(--esp-4) 0}
+@media (max-width:560px){
+  #dlgDominio .dom-disc{grid-template-columns:minmax(0,1fr) auto}
+  #dlgDominio .dom-disc .cov-disc-cab{grid-column:1;grid-row:1}
+  #dlgDominio .dom-disc .dom-disc-fim{grid-column:2;grid-row:1}
+  #dlgDominio .dom-disc .dom-tira{grid-column:1 / -1;grid-row:2}
+  .dom-mapa-leg{margin-left:0}
+}
 @media (max-width:760px){
   dialog.dom-dlg[open]{width:100vw;max-width:none;height:100vh;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:0;
     padding:calc(8px + env(safe-area-inset-top,0px)) 12px calc(10px + env(safe-area-inset-bottom,0px))}
@@ -8770,7 +8862,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.192.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.193.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
@@ -13849,17 +13941,29 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="cov-cab">
     <h3 data-i18n="dom_titulo"></h3>
     <!-- (v18.86.0) a explicação mora no "?": aberta na primeira vez, depois recolhida (ganha a altura da tela) -->
-    <button type="button" class="dom-ajuda" id="btnDomAjuda" aria-expanded="false" aria-controls="domSub" data-i18n-title="dom_ajuda_tip">?</button>
+    <button type="button" class="dom-ajuda" id="btnDomAjuda" aria-expanded="false" aria-controls="domSub" data-i18n-title="dom_ajuda_tip">ⓘ</button>
     <button type="button" class="btn-min mat-cheia-bt dom-cheia-bt" id="btnDomCheia" aria-pressed="false" data-i18n="dom_cheia"></button>
     <button type="button" class="qs-x" id="btnDomX" aria-label="Fechar">✕</button>
   </div>
   <p class="nota" id="domSub" data-i18n="dom_sub" hidden></p>
+  <!-- (19.193.0) os cortes do semáforo moram no ⓘ, junto da explicação: o topo fica mais curto -->
+  <details class="dom-ajustes" id="domAjustesCx" hidden>
+    <summary id="domAjustesSum" data-i18n="dom_ajustes"></summary>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_acerto"></span> <span class="dom-aj-par"><input type="number" id="domAcRisco" min="1" max="99"> / <input type="number" id="domAcSeguro" min="1" max="99"></span></div>
+    <div class="dom-aj-l"><span data-i18n="dom_aj_ret"></span> <span class="dom-aj-par"><input type="number" id="domRtRisco" min="1" max="99"> / <input type="number" id="domRtSeguro" min="1" max="99"></span></div>
+    <button type="button" class="btn-min" id="btnDomPadrao" data-i18n="dom_aj_padrao"></button>
+    <p class="nota" data-i18n="dom_aj_nota"></p>
+  </details>
+  <!-- (19.193.0) o edital, a busca e as abas numa linha só (na tela estreita, quebram) -->
+  <div class="dom-barra-abas">
   <div class="cov-barra">
     <select id="domEdital"></select>
     <select id="domFase" hidden>
       <option value="1" data-i18n="cov_fase1"></option>
       <option value="2" data-i18n="cov_fase2"></option>
     </select>
+    <!-- (19.193.0) a busca: em todos os tópicos e ramos do edital (atalho: /) -->
+    <input type="search" id="domBusca" class="dom-busca" autocomplete="off" spellcheck="false">
   </div>
   <!-- (v18.86.0) TRÊS VISÕES: o que fazer agora · o mapa das disciplinas · a evolução -->
   <div class="ger-modos dom-abas" role="tablist" id="domAbas">
@@ -13867,14 +13971,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="ger-modo" role="tab" id="btnDomAbaDisc" aria-selected="false" data-i18n="dom_aba_disc" data-i18n-title="dom_aba_disc_tip"></button>
     <button type="button" class="ger-modo" role="tab" id="btnDomAbaEvo" aria-selected="false" data-i18n="dom_aba_evo" data-i18n-title="dom_aba_evo_tip"></button>
   </div>
+  </div>
   <div class="dom-filtros" id="domFiltros"></div>
-  <details class="dom-ajustes">
-    <summary id="domAjustesSum" data-i18n="dom_ajustes"></summary>
-    <div class="dom-aj-l"><span data-i18n="dom_aj_acerto"></span> <span class="dom-aj-par"><input type="number" id="domAcRisco" min="1" max="99"> / <input type="number" id="domAcSeguro" min="1" max="99"></span></div>
-    <div class="dom-aj-l"><span data-i18n="dom_aj_ret"></span> <span class="dom-aj-par"><input type="number" id="domRtRisco" min="1" max="99"> / <input type="number" id="domRtSeguro" min="1" max="99"></span></div>
-    <button type="button" class="btn-min" id="btnDomPadrao" data-i18n="dom_aj_padrao"></button>
-    <p class="nota" data-i18n="dom_aj_nota"></p>
-  </details>
   <div class="cov-corpo" id="domCorpo"></div>
 </dialog>
 

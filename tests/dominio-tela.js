@@ -8,6 +8,9 @@
  *  4. Prioridades: a fila vem primeiro, com o PORQUÊ à vista e o ganho dos 5 primeiros; respeita o filtro;
  *  5. Disciplinas: as sem nada estudado ficam recolhidas no fim (abertas se for o pedido ou se não houver outras);
  *  6. os cortes em vigor no título dos ajustes; os pares de campos não se partem.
+ *  (19.193.0) MESTRE-DETALHE: a fila em linhas compactas (só a ação principal e o ⋯), o cartão inteiro no DETALHE; o
+ *  mapa em uma linha por disciplina, com marcas além da cor (posição na fila, listras, risco, ramos) e balão; os filtros
+ *  acendem no mapa sem esconder; a busca em todos os tópicos; o teclado (↑↓, Enter, Esc, ←→ na barra).
  * ===================================================================== */
 const fs = require("fs");
 const path = require("path");
@@ -33,8 +36,9 @@ async function testes() {
     const { a, ed } = montar();
     a.domAbrir(ed.id);
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
-    ok(["dom-fixo", "dom-ajuda", "dom-aj-par", "dom-manchete-info", "dom-ganho", "dom-item-porque", "dom-sem-estudo"].every((c) => html.indexOf("." + c) >= 0), "D0 as classes novas têm CSS");
-    ok(a.$("dlgDominio").open === true && pain(a, "prior").hidden === false && pain(a, "disc").hidden === true && pain(a, "evo").hidden === true
+    ok(["dom-fixo", "dom-ajuda", "dom-aj-par", "dom-manchete-info", "dom-ganho", "dom-item-porque", "dom-sem-estudo", "dom-linha", "dom-linha-sel", "dom-linha-menu", "dom-tl", "dom-busca",
+      "dom-det", "dom-det-nav", "dom-seg-balao", "dom-seg-incerto", "dom-seg-venc", "dom-seg-sub", "dom-seg-n", "dom-mapa-leg", "dom-apagado", "dom-disc-fim"].every((c) => html.indexOf("." + c) >= 0), "D0 as classes novas têm CSS");
+    ok(a.$("dlgDominio").open === true && pain(a, "prior").hidden === false && pain(a, "disc").hidden === true && pain(a, "evo").hidden === true && pain(a, "det").hidden === true
       && a.$("btnDomAbaPrior").getAttribute("aria-selected") === "true", "D1 abre em Prioridades (só aquela visão à mostra)");
     const fixo = achar(a.$("domCorpo"), (e) => cls(e, "dom-fixo"))[0];
     ok(fixo && achar(fixo, (e) => cls(e, "dom-dist")).length === 1 && achar(fixo, (e) => cls(e, "cov-manchete")).length === 1 && !achar(pain(a, "prior"), (e) => cls(e, "dom-dist")).length,
@@ -46,7 +50,9 @@ async function testes() {
     a.domAbrir(ed.id);
     ok(a.$("domSub").hidden === true, "D2b depois, a explicação fica recolhida no '?'");
     a.$("btnDomAjuda").onclick();
-    ok(a.$("domSub").hidden === false && a.$("btnDomAjuda").getAttribute("aria-expanded") === "true", "D2c o '?' mostra a explicação");
+    ok(a.$("domSub").hidden === false && a.$("btnDomAjuda").getAttribute("aria-expanded") === "true" && a.$("domAjustesCx").hidden === false, "D2c o 'ⓘ' mostra a explicação e os cortes do semáforo");
+    a.$("btnDomAjuda").onclick();
+    ok(a.$("domAjustesCx").hidden === true, "D2d fechado o 'ⓘ', os cortes saem do topo junto");
     a.difDefinir("Licitações", "Lei 14.133", "alta", "declarada");
     a.domPintar();
     const man2 = achar(a.$("domCorpo"), (e) => cls(e, "cov-manchete"))[0];
@@ -60,23 +66,38 @@ async function testes() {
     a.domAbrir(ed.id);
     const m = a.domDoEdital(ed);
     const p = pain(a, "prior");
-    const itens = achar(p, (e) => cls(e, "dom-item"));
+    const linhas = achar(p, (e) => cls(e, "dom-linha"));
     const filaG = a.domFilaAgrupada(m.reforcar);
-    ok(itens.length === Math.min(15, filaG.length) && filaG.length < m.reforcar.length && itens.every((l) => achar(l, (e) => cls(e, "dom-item-porque")).length === 1),
-      "D4 a fila inteira, cada item com o PORQUÊ à vista");
+    ok(linhas.length === Math.min(a.DOM_LINHAS, filaG.length) && filaG.length < m.reforcar.length
+      && linhas.every((l) => achar(l, (e) => cls(e, "dom-linha-pq")).length === 1 && achar(l, (e) => cls(e, "dom-acao-1")).length === 1 && achar(l, (e) => cls(e, "dom-mais")).length === 1),
+      "D4 a fila em linhas compactas: cada uma com o porquê curto, a ação principal e o ⋯");
+    ok(!achar(p, (e) => cls(e, "dom-item")).length, "D4e o cartão inteiro de cada item não fica mais na fila (mora no detalhe)");
     const tot = m.resumo.total;
     const g = filaG.slice(0, 5).reduce((x, f) => x + f.pesoPct, 0) / tot * 100;
     const ganho = achar(p, (e) => cls(e, "dom-ganho"))[0];
     const fmt = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
     ok(ganho && ganho.textContent.indexOf("+" + fmt(g) + "%") >= 0, "D4a o ganho dos 5 primeiros: +" + fmt(g) + "% — " + (ganho && ganho.textContent));
-    const verm = achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"))[1];
+    const verm = achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro")).find((b) => /^vermelho/.test(b.textContent));
     verm.onclick();
     const p2 = pain(a, "prior");
-    const it2 = achar(p2, (e) => cls(e, "dom-item"));
+    const it2 = achar(p2, (e) => cls(e, "dom-linha"));
     ok(it2.length >= 1 && it2.every((l) => cls(l, "dom-b-vermelho")) && !achar(p2, (e) => cls(e, "dom-ganho")).length && p2.hidden === false,
       "D4b o filtro vale para a fila (só os vermelhos; sem a frase do ganho)");
-    achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"))[3].onclick();   /* azul: ninguém */
-    ok(achar(pain(a, "prior"), (e) => cls(e, "dom-item")).length === 0 && pain(a, "prior").textContent.indexOf(a.t("dom_reforcar_vazio")) >= 0, "D4c filtro sem ninguém: diz que não há o que reforçar");
+    ok(!achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro")).some((b) => /^não medido/.test(b.textContent)), "D4f o filtro sem ninguém (azul) nem aparece");
+    a.domFiltroDefinir("azul");
+    ok(achar(pain(a, "prior"), (e) => cls(e, "dom-linha")).length === 0 && pain(a, "prior").textContent.indexOf(a.t("dom_reforcar_vazio")) >= 0, "D4c filtro sem ninguém: diz que não há o que reforçar");
+    a.domFiltroDefinir("todos");
+    /* tocar numa linha: o detalhe no lugar da lista (tela estreita); "← Voltar" volta */
+    const l0 = achar(pain(a, "prior"), (e) => cls(e, "dom-linha"))[0];
+    const nome0 = achar(l0, (e) => cls(e, "dom-linha-nome"))[0].textContent;
+    l0.onclick();
+    const itD = achar(pain(a, "det"), (e) => cls(e, "dom-item"))[0];
+    ok(a.domDetAtual() === true && pain(a, "det").hidden === false && pain(a, "prior").hidden === true && itD && achar(itD, (e) => cls(e, "cov-item-nome"))[0].textContent === nome0
+      && achar(itD, (e) => cls(e, "dom-item-porque")).length === 1 && achar(pain(a, "det"), (e) => cls(e, "dom-auto")).length >= 1,
+      "D4g tocar na linha abre o DETALHE no lugar da lista: o cartão inteiro (porquê, sinais, ações) e a minha avaliação: " + nome0);
+    achar(pain(a, "det"), (e) => e.id === "btnDomDetVoltar")[0].onclick();
+    ok(a.domDetAtual() === false && pain(a, "det").hidden === true && pain(a, "prior").hidden === false && cls(achar(pain(a, "prior"), (e) => cls(e, "dom-linha"))[0], "dom-linha-sel"),
+      "D4h '← Voltar' volta à lista, com a linha escolhida marcada");
   }
 
   /* ---- 4d: com um ramo PULADO o total do peso fica abaixo de 100 — o ganho é sobre o que conta ---- */
@@ -134,19 +155,27 @@ async function testes() {
     const corpo = a.$("domCorpo");
     const pDisc = pain(a, "disc"), pPrior = pain(a, "prior");
     const ordem = Array.from(corpo.children).map((e) => (/dom-painel-(\w+)/.exec(e.className || "") || [])[1]).filter(Boolean);
-    ok(cls(corpo, "dom-duas") && cls(a.$("dlgDominio"), "dom-largo") && pDisc.hidden === false && pPrior.hidden === false && pain(a, "evo").hidden === true && ordem.join() === "disc,prior,evo",
-      "L1 tela larga: mapa (esquerda) e fila (direita) visíveis ao mesmo tempo, a evolução escondida: " + ordem.join());
+    ok(cls(corpo, "dom-duas") && cls(a.$("dlgDominio"), "dom-largo") && pDisc.hidden === false && pPrior.hidden === false && pain(a, "det").hidden === false && pain(a, "evo").hidden === true && ordem.join() === "disc,prior,det,evo",
+      "L1 tela larga: mapa e fila (esquerda) e o detalhe (direita) visíveis ao mesmo tempo, a evolução escondida: " + ordem.join());
+    const linL = achar(pPrior, (e) => cls(e, "dom-linha"));
+    const nomeDet = () => (achar(achar(pain(a, "det"), (e) => cls(e, "dom-item"))[0], (e) => cls(e, "cov-item-nome"))[0] || {}).textContent;
+    const nomeLin = (l) => achar(l, (e) => cls(e, "dom-linha-nome"))[0].textContent;
+    ok(linL.length >= 2 && cls(linL[0], "dom-linha-sel") && nomeDet() === nomeLin(linL[0]) && !achar(pain(a, "det"), (e) => e.id === "btnDomDetVoltar").length,
+      "L1b na tela larga o detalhe nunca fica vazio: o primeiro da fila, já escolhido (sem o '← Voltar')");
+    a.domTecla({ key: "ArrowDown", target: {}, preventDefault() {} });
+    const linL2 = achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    ok(cls(linL2[1], "dom-linha-sel") && nomeDet() === nomeLin(linL2[1]), "L1c ↓ passa ao segundo e o detalhe acompanha: " + nomeDet());
     ok(a.$("btnDomAbaDisc").hidden === true && a.$("btnDomAbaPrior").textContent === a.t("dom_aba_painel") && a.$("btnDomAbaPrior").getAttribute("aria-selected") === "true",
       "L1a as abas viram duas: 'Mapa e prioridades' e 'Evolução'");
     a.$("btnDomAbaEvo").onclick();
-    ok(!cls(a.$("domCorpo"), "dom-duas") && pain(a, "evo").hidden === false && pain(a, "disc").hidden === true && pain(a, "prior").hidden === true, "L2 na Evolução, uma coluna só");
+    ok(!cls(a.$("domCorpo"), "dom-duas") && pain(a, "evo").hidden === false && pain(a, "disc").hidden === true && pain(a, "prior").hidden === true && pain(a, "det").hidden === true, "L2 na Evolução, uma coluna só");
     a.$("btnDomAbaPrior").onclick();
     ok(cls(a.$("domCorpo"), "dom-duas") && pain(a, "disc").hidden === false, "L2a volta ao lado a lado");
     a.domAbaDefinir("disc");
     ok(pain(a, "prior").hidden === false, "L2b lembrado 'disciplinas' (do celular): na tela larga, as duas colunas do mesmo jeito");
     a.domLargoForcar(false);
     a.domPintar();
-    ok(!cls(a.$("domCorpo"), "dom-duas") && a.$("btnDomAbaDisc").hidden === false && pain(a, "prior").hidden === true && pain(a, "disc").hidden === false, "L3 de volta à tela estreita: três abas, uma visão por vez");
+    ok(!cls(a.$("domCorpo"), "dom-duas") && a.$("btnDomAbaDisc").hidden === false && pain(a, "prior").hidden === true && pain(a, "disc").hidden === false && pain(a, "det").hidden === true, "L3 de volta à tela estreita: três abas, uma visão por vez (o detalhe só quando se abre um item)");
     const sum = achar(pain(a, "disc"), (e) => e.tagName === "SUMMARY")[0];
     ok(sum && /Direito Financeiro \d/.test(sum.textContent), "L4 o grupo das não iniciadas diz as maiores pelo nome e peso: " + (sum && sum.textContent));
   }
@@ -181,11 +210,14 @@ async function testes() {
     a.matGravar(chLei, "Resumo da lei.", { disciplina: "Licitações", topico: "Lei 14.133" });
     a.domAgruparDefinir(false);   /* estes casos olham um ramo por item (o modo "um por um") */
     a.domAbrir(ed.id);
-    const p = pain(a, "prior");
-    const itens = achar(p, (e) => cls(e, "dom-item"));
-    const doRamo = (nome) => itens.find((l) => achar(l, (e) => cls(e, "cov-item-nome"))[0].textContent.indexOf("› " + nome) >= 0);
-    const it = doRamo("Modalidades");
-    ok(it && cls(it, "dom-b-vermelho"), "Q0 o ramo herda o acerto baixo do tópico (2,25 de 6): vermelho");
+    const linhas = () => achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    const linhaDe = (nome) => linhas().find((l) => achar(l, (e) => cls(e, "dom-linha-nome"))[0].textContent.indexOf("› " + nome) >= 0);
+    const detItem = () => achar(pain(a, "det"), (e) => cls(e, "dom-item"))[0];
+    const lm = linhaDe("Modalidades");
+    ok(lm && cls(lm, "dom-b-vermelho"), "Q0 o ramo herda o acerto baixo do tópico (2,25 de 6): vermelho");
+    lm.onclick();
+    const it = detItem();
+    ok(it && cls(it, "dom-b-vermelho") && /› Modalidades$/.test(achar(it, (e) => cls(e, "cov-item-nome"))[0].textContent), "Q0a a linha abre o detalhe do ramo");
     const chips = achar(it, (e) => cls(e, "dom-chip")).map((e) => e.textContent);
     ok(chips.some((c) => c === a.t("dom_ac_chutes", { n: 1, p: 33 })), "Q1 os sinais dizem o chute e o acerto sem ele (2 de 6 = 33%): " + chips.join(" | "));
     const rchips = achar(it, (e) => cls(e, "dom-ramo-chip"));
@@ -193,26 +225,30 @@ async function testes() {
       "Q2 os ramos do tópico aparecem coloridos, o do item marcado");
     const mat = achar(it, (e) => cls(e, "dom-mat")).map((e) => e.textContent);
     ok(mat.indexOf("📄 " + a.t("dom_mat_resumo")) >= 0 && mat.indexOf("❓ 6") >= 0, "Q3 o material do tópico: resumo e 6 questões: " + mat.join(" | "));
-    const ac1 = achar(it, (e) => cls(e, "dom-acao-1"))[0];
-    ok(ac1 && ac1.textContent === a.t("dom_ac1_erradas", { n: 4 }), "Q4 vermelho com erradas: a ação principal é refazer as 4 (3 erradas + 1 no chute): " + (ac1 && ac1.textContent));
+    const ac1 = achar(lm, (e) => cls(e, "dom-acao-1"))[0];
+    ok(ac1 && ac1.textContent === a.t("dom_ac1_erradas", { n: 4 }) && achar(it, (e) => cls(e, "dom-acao-1"))[0].textContent === ac1.textContent,
+      "Q4 vermelho com erradas: a ação principal (na linha e no detalhe) é refazer as 4 (3 erradas + 1 no chute): " + (ac1 && ac1.textContent));
     ac1.onclick();
     ok(a.$("dlgDominio").open === false && a.$("dlgQsResponder").open === true && a.qsSessaoAtual().fila.length === 4, "Q4a refazer abre uma rodada só com as 4");
     a.$("dlgQsResponder").close();
     /* o ramo pela cor do chip: abre a ficha no ramo */
     a.domAbrir(ed.id);
-    const itensB = achar(pain(a, "prior"), (e) => cls(e, "dom-item"));
-    const itFase = itensB.find((l) => /› Fase preparatória/.test(l.textContent));
-    const itMod = itensB.find((l) => /› Modalidades/.test(l.textContent));
-    ok(itFase && !achar(itFase, (e) => cls(e, "dom-ramo-chip")).length && achar(itMod, (e) => cls(e, "dom-ramo-chip")).length === 2,
-      "Q2a outro ramo do MESMO tópico na fila: a lista de ramos aparece só no primeiro (sem repetir)");
-    achar(itMod, (e) => cls(e, "dom-ramo-chip")).find((b) => /Fase preparatória/.test(b.textContent)).onclick();
+    linhaDe("Fase preparatória").onclick();
+    const itFase = detItem();
+    ok(itFase && achar(itFase, (e) => cls(e, "dom-ramo-chip")).length === 2 && achar(itFase, (e) => cls(e, "dom-ramo-chip")).some((b) => cls(b, "atual") && /Fase preparatória/.test(b.textContent)),
+      "Q2a o detalhe de outro ramo do MESMO tópico: os ramos do tópico, com ele marcado");
+    const rdet = achar(pain(a, "det"), (e) => cls(e, "dom-det-ramos"))[0];
+    ok(rdet && rdet.open === true && achar(rdet, (e) => cls(e, "dom-ramo-atual")).some((x) => /Fase preparatória/.test(x.textContent)), "Q2b aberto por um ramo, a lista dos ramos vem aberta, com ele em destaque");
+    achar(itFase, (e) => cls(e, "dom-ramo-chip")).find((b) => /Fase preparatória/.test(b.textContent)).onclick();
     ok(a.$("dlgDominio").open === false && a.$("dlgMatFicha").open === true && a.matFichaEscopoAtual() === "fase_preparatoria", "Q5 tocar num ramo abre a ficha já nesse ramo");
     a.$("dlgMatFicha").close();
     /* não estudado e sem nada: preparar o material */
     a.domAbrir(ed.id);
-    const conv = achar(pain(a, "prior"), (e) => cls(e, "dom-item")).find((l) => /› Convênios/.test(l.textContent));
+    const lconv = linhaDe("Convênios");
+    lconv.onclick();
+    const conv = detItem();
     ok(conv && achar(conv, (e) => cls(e, "dom-mat-falta")).some((e) => e.textContent === a.t("dom_mat_nada")) && achar(conv, (e) => cls(e, "dom-acao-1"))[0].textContent === a.t("dom_ac1_preparar")
-      && !achar(conv, (e) => cls(e, "dom-ramo-chip")).length,
+      && achar(lconv, (e) => cls(e, "dom-acao-1"))[0].textContent === a.t("dom_ac1_preparar") && !achar(conv, (e) => cls(e, "dom-ramo-chip")).length,
       "Q6 não estudado e sem material: 'nada preparado' e a ação 'Preparar o material' (sem ramos, sem linha de ramos)");
     achar(conv, (e) => cls(e, "dom-acao-1"))[0].onclick();
     ok(a.$("dlgMatFicha").open === true, "Q6a preparar abre a ficha do tópico");
@@ -241,8 +277,15 @@ async function testes() {
     const discLic = () => achar(pain(a, "disc"), (e) => cls(e, "cov-disc")).find((e) => /Licitações/.test(e.textContent));
     const segsLic = () => achar(achar(discLic(), (e) => cls(e, "cov-tira"))[0], (e) => cls(e, "cov-seg"));
     ok(segsLic().length === 2 && /dom-n-cinza/.test(segsLic()[0].className) && /dom-n-vermelho/.test(segsLic()[1].className), "B1 na ordem do edital: Lei 14.133 (não estudado), depois Convênios (vermelho)");
-    ok(segsLic()[1].title.indexOf(a.t("dom_seg_tip", { t: "Convênios", p: "2.0", n: a.t("dom_n_vermelho") }).replace("2.0", "").split("%")[1]) >= 0 && /^Convênios · peso/.test(segsLic()[1].title) && /Porque:/.test(segsLic()[1].title),
-      "B2 o pedaço diz o tópico, o peso, o nível e o motivo: " + segsLic()[1].title);
+    const rot = segsLic()[1].getAttribute("aria-label") || "";
+    ok(/^Licitações › Convênios · vermelho · vale [\d,]+% da prova/.test(rot) && /Porque:/.test(rot),
+      "B2 o pedaço diz (a quem não vê a cor) o tópico, o nível, o peso e o motivo: " + rot);
+    segsLic()[1].onmouseenter();
+    const bal = a.domSegBalaoAtual();
+    ok(bal && /Licitações › Convênios/.test(bal.textContent) && /Porque:/.test(bal.textContent) && achar(a.$("dlgDominio"), (e) => e === bal).length === 1,
+      "B2a passar o mouse (ou focar) mostra o balão do pedaço, dentro da janela");
+    segsLic()[1].onmouseleave();
+    ok(!a.domSegBalaoAtual(), "B2b e ele some ao sair");
     const bCor = achar(pain(a, "disc"), (e) => cls(e, "dom-ordem-b")).find((b) => b.textContent === a.t("dom_ordem_cor"));
     bCor.onclick();
     ok(/dom-n-vermelho/.test(segsLic()[0].className) && /dom-n-cinza/.test(segsLic()[1].className) && a.$("btnDomAbaDisc").getAttribute("aria-selected") !== null,
@@ -257,8 +300,10 @@ async function testes() {
     a.segurarAdiados();
     segConv.onclick({ stopPropagation() {} });
     const det = achar(discLic(), (e) => cls(e, "cov-det"))[0];
-    const alvo = achar(det, (e) => cls(e, "dom-top")).find((e) => /Convênios/.test(e.textContent));
-    ok(pain(a, "disc").hidden === false && det.hidden === false && alvo && cls(alvo, "dom-piscando"), "B4 tocar no pedaço abre o mapa, a disciplina e faz o tópico piscar");
+    const alvo = achar(pain(a, "det"), (e) => cls(e, "dom-top"))[0];
+    ok(pain(a, "det").hidden === false && a.domDetAtual() === true && det.hidden === false && alvo && /Convênios/.test(alvo.textContent) && cls(alvo, "dom-piscando")
+      && cls(segsLic().find((x) => /dom-n-vermelho/.test(x.className)), "dom-seg-sel"),
+      "B4 tocar no pedaço abre o DETALHE do tópico (piscando), a disciplina aberta no mapa e o pedaço marcado");
     /* fora da janela: o selo da linha da agenda */
     a.soltarAdiados();
     a.$("dlgDominio").close();
@@ -267,8 +312,8 @@ async function testes() {
     ok(a.domSeloDaLinha({ disciplina: "Licitações", nome: "Lei 14.133", edital: ed.id }) === null, "B5a tópico não estudado: sem selo (é o normal, a linha já diz)");
     a.segurarAdiados();
     selo.onclick({ stopPropagation() {} });
-    const alvo2 = achar(pain(a, "disc"), (e) => cls(e, "dom-top")).find((e) => /Convênios/.test(e.textContent));
-    ok(a.$("dlgDominio").open === true && alvo2 && cls(alvo2, "dom-piscando"), "B5b tocar no selo abre o Domínio já no tópico");
+    const alvo2 = achar(pain(a, "det"), (e) => cls(e, "dom-top"))[0];
+    ok(a.$("dlgDominio").open === true && alvo2 && /Convênios/.test(alvo2.textContent) && cls(alvo2, "dom-piscando") && pain(a, "det").hidden === false, "B5b tocar no selo abre o Domínio já no detalhe do tópico");
     a.soltarAdiados();
     a.$("dlgDominio").close();
     /* o termômetro do edital */
@@ -314,11 +359,15 @@ async function testes() {
     ok(gl.nivel === "vermelho" && gl.pior.ramoNome === "Fase preparatória", "G3 a cor e o motivo vêm do ramo mais fraco");
     ok(g.every((x, i) => i === 0 || g[i - 1].urgencia >= x.urgencia) && g[0] === gl, "G4 a fila reordena pela urgência do grupo: o tópico inteiro passa à frente");
     a.domAbrir(ed.id);
-    const itens = () => achar(pain(a, "prior"), (e) => cls(e, "dom-item"));
-    const it = itens().find((l) => /Lei 14\.133/.test(l.textContent));
-    ok(it && achar(it, (e) => cls(e, "cov-item-nome"))[0].textContent === "Licitações › Lei 14.133" && achar(it, (e) => cls(e, "cov-item-n"))[0].textContent === a.t("dom_urg_grupo", { p: gl.pesoPct.toFixed(1), f: Math.round((gl.urgencia / gl.pesoPct) * 10) / 10, n: 2 })
+    const itens = () => achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    const lin = itens().find((l) => /Lei 14\.133/.test(l.textContent));
+    ok(lin && achar(lin, (e) => cls(e, "dom-linha-nome"))[0].textContent === "Licitações › Lei 14.133" && achar(lin, (e) => cls(e, "dom-linha-pq"))[0].textContent.indexOf(a.t("dom_grupo_pior", { r: "Fase preparatória" })) >= 0,
+      "G5 a linha do grupo: o tópico e o ramo mais fraco no porquê");
+    lin.onclick();
+    const it = achar(pain(a, "det"), (e) => cls(e, "dom-item"))[0];
+    ok(it && achar(it, (e) => cls(e, "cov-item-n"))[0].textContent === a.t("dom_urg_grupo", { p: gl.pesoPct.toFixed(1), f: Math.round((gl.urgencia / gl.pesoPct) * 10) / 10, n: 2 })
       && achar(it, (e) => cls(e, "dom-item-porque"))[0].textContent.indexOf(a.t("dom_grupo_pior", { r: "Fase preparatória" })) === 0,
-      "G5 o item do grupo: o tópico, o peso com os ramos na fila e o ramo mais fraco no porquê");
+      "G5a o detalhe do grupo: o peso com os ramos na fila e o ramo mais fraco no porquê");
     const chips = achar(it, (e) => cls(e, "dom-ramo-chip"));
     ok(chips.length === 2 && chips.every((b) => cls(b, "na-fila")) && chips.some((b) => cls(b, "atual") && /Fase/.test(b.textContent)), "G6 os ramos da fila marcados, o mais fraco em destaque");
     const bts = achar(pain(a, "prior"), (e) => cls(e, "dom-agrupar-b"));
@@ -329,6 +378,107 @@ async function testes() {
     ok(itens().filter((l) => /Lei 14\.133/.test(l.textContent)).length === 2, "G8a lembrado ao reabrir");
     achar(pain(a, "prior"), (e) => cls(e, "dom-agrupar-b"))[0].onclick();
     ok(itens().filter((l) => /Lei 14\.133/.test(l.textContent)).length === 1, "G8b de volta ao agrupado");
+  }
+  /* ---- 14 (19.193.0): o mapa em linhas, as marcas além da cor, os filtros que acendem, a busca e o teclado ---- */
+  {
+    const { a, ed } = montar();
+    const chRec = a.matChave("Direito Financeiro", "Receita Pública");
+    for (let i = 0; i < 6; i++) a.qsTodas().push({ id: "r" + i, tipo: "ce", enunciado: "Q" + i, gabarito: "C", comentario: "", disciplina: "Direito Financeiro", topico: "Receita Pública", chave: chRec, tentativas: [{ acertou: true, chute: false, q: "2026-11-1" + i }] });
+    a.difDefinir("Licitações", "Convênios", "alta", "declarada");
+    a.domAbrir(ed.id);
+    const rec = a.domDoEdital(ed).disciplinas.find((d) => d.nome === "Direito Financeiro").topicos[0];
+    ok(rec.nivel === "verde", "M0 preparo: Receita Pública verde (6 de 6): " + rec.nivel);
+    const discs = () => achar(pain(a, "disc"), (e) => cls(e, "dom-disc"));
+    const d0 = discs()[0];
+    const kids = Array.from(d0.children).map((e) => String(e.className).split(" ")[0]);
+    ok(kids.join() === "cov-disc-cab,cov-tira,dom-disc-fim,cov-det" && /✓ \d+%/.test(achar(d0, (e) => cls(e, "dom-disc-verde"))[0].textContent),
+      "M1 uma linha por disciplina: o nome e o peso, a barra e o verde no fim (os tópicos recolhidos embaixo): " + kids.join());
+    ok(!achar(pain(a, "disc"), (e) => cls(e, "dom-ramo")).length && achar(pain(a, "disc"), (e) => cls(e, "dom-tl")).length === 3, "M1a no mapa, uma linha curta por tópico; os ramos moram no detalhe");
+    const segDe = (nome) => { const c = a.domCtxAtual(); const tp = Object.values(c.topPorChave).find((x) => x.nome === nome); return c.segs[tp.chave]; };
+    const sRec = segDe("Receita Pública"), sConv = segDe("Convênios");
+    ok(cls(sRec, "dom-seg-incerto") && !cls(sConv, "dom-seg-incerto"), "M2 o verde com amostra pequena (6 questões) vem listrado: medida incerta");
+    const nConv = a.domCtxAtual().posFila[a.matChave("Licitações", "Convênios")];
+    ok(nConv >= 1 && nConv <= 5 && achar(sConv, (e) => cls(e, "dom-seg-n"))[0].textContent === String(nConv) && !achar(sRec, (e) => cls(e, "dom-seg-n")).length,
+      "M2a o pedaço traz a posição na fila (os 5 primeiros); o verde, fora da fila, não: " + nConv);
+    ok(/Receita Pública/.test(sRec.getAttribute("aria-label")) && /vale [\d,]+% da prova/.test(sRec.getAttribute("aria-label")), "M2b o pedaço diz o que é a quem não vê a cor");
+    a.difDefinir("Licitações", a.domChaveAuto("Lei 14.133", "modalidades"), "alta", "declarada");
+    a.domPintar();
+    const sub = achar(segDe("Lei 14.133"), (e) => cls(e, "dom-seg-sub"))[0];
+    ok(sub && sub.children.length === 2 && cls(sub.children[0], "dom-n-vermelho") && cls(sub.children[1], "dom-n-cinza"), "M2c ramos de cores diferentes: a faixa fina embaixo mostra a cor de cada um");
+    ok(achar(pain(a, "disc"), (e) => cls(e, "dom-mapa-leg")).length === 1 && achar(pain(a, "disc"), (e) => cls(e, "dom-leg-amostra")).length === 4, "M2d a legenda 'como ler a barra' com as quatro marcas");
+    /* os filtros acendem */
+    const nDisc = discs().length;
+    a.domFiltroDefinir("vermelho");
+    ok(discs().length === nDisc && cls(segDe("Receita Pública"), "dom-apagado") && !cls(segDe("Convênios"), "dom-apagado") && !cls(segDe("Lei 14.133"), "dom-apagado"),
+      "M3 filtro vermelho: o mapa continua inteiro; só o que tem vermelho fica aceso");
+    const filtros = achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"));
+    const fv = filtros.find((b) => /^vermelho/.test(b.textContent));
+    ok(fv && cls(fv, "ativa") && achar(fv, (e) => cls(e, "dom-n-vermelho")).length === 1 && !filtros.some((b) => /^amarelo/.test(b.textContent)), "M3a os chips têm a cor (são a legenda); os vazios (amarelo) não aparecem");
+    fv.onclick();
+    ok(a.domFiltroAtual() === "todos", "M3b tocar de novo no filtro ativo apaga o filtro");
+    achar(achar(a.$("domCorpo"), (e) => cls(e, "dom-dist"))[0], (e) => cls(e, "dom-n-verde"))[0].onclick();
+    ok(a.domFiltroAtual() === "verde" && achar(pain(a, "prior"), (e) => cls(e, "dom-linha")).some((l) => /Receita Pública/.test(l.textContent) && cls(l, "dom-linha-fora")),
+      "M3c tocar numa cor da barra do topo filtra por ela; o verde (fora da fila) aparece na lista");
+    a.domFiltroDefinir("todos");
+    /* a busca */
+    a.domBuscaDefinir("receita");
+    const lin = achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    ok(lin.length === 1 && /Direito Financeiro › Receita Pública/.test(lin[0].textContent) && pain(a, "prior").textContent.indexOf(a.t("dom_busca_tit", { n: 1 })) >= 0 && a.$("domBusca").value === "receita",
+      "M4 a busca acha também o que está fora da fila (o verde)");
+    ok(cls(segDe("Convênios"), "dom-apagado") && !cls(segDe("Receita Pública"), "dom-apagado") && achar(discs().find((d) => /Direito Financeiro/.test(d.textContent)), (e) => cls(e, "cov-det"))[0].hidden === false,
+      "M4a no mapa, a busca acende o tópico e abre a disciplina dele");
+    a.domBuscaDefinir("licitacoes modal");
+    const lin2 = achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    ok(lin2.length === 1 && /Lei 14\.133/.test(lin2[0].textContent), "M4b sem acento e por pedaços (até pelo nome do ramo)");
+    a.domBuscaDefinir("");
+    /* o teclado */
+    const ev = (key, target) => ({ key, target: target || {}, preventDefault() { this.p = true; } });
+    const linhas = () => achar(pain(a, "prior"), (e) => cls(e, "dom-linha"));
+    a.domSelecionar(null);
+    const e1 = ev("ArrowDown");
+    a.domTecla(e1);
+    ok(e1.p && a.domSelAtual() && a.domSelAtual().chave === a.domCtxAtual().linhas[0].chave && cls(linhas()[0], "dom-linha-sel") && a.domDetAtual() === false,
+      "T1 ↓ escolhe a primeira linha (na tela estreita o detalhe não abre sozinho)");
+    a.domTecla(ev("ArrowDown"));
+    ok(cls(linhas()[1], "dom-linha-sel") && !cls(linhas()[0], "dom-linha-sel"), "T1a ↓ de novo: a segunda");
+    a.domTecla(ev("Enter", linhas()[1]));
+    ok(a.domDetAtual() === true && pain(a, "det").hidden === false && pain(a, "prior").hidden === true, "T2 Enter abre o detalhe no lugar da lista");
+    a.domTecla(ev("ArrowUp"));
+    ok(a.domSelAtual().chave === a.domCtxAtual().linhas[0].chave && pain(a, "det").hidden === false, "T2a com o detalhe aberto, ↑ passa ao vizinho sem fechar");
+    ok(/1 de \d+/.test(achar(pain(a, "det"), (e) => cls(e, "dom-det-pos"))[0].textContent) && achar(pain(a, "det"), (e) => cls(e, "dom-det-ant"))[0].disabled === true, "T2b o detalhe diz a posição e tem ‹ ›");
+    const dlg = a.$("dlgDominio");
+    const ec = { preventDefault() { this.p = true; } };
+    ((dlg._ouv && dlg._ouv.cancel) || []).forEach((f) => f(ec));
+    ok(ec.p && a.domDetAtual() === false && pain(a, "prior").hidden === false && dlg.open === true, "T3 Esc volta do detalhe à lista (sem fechar a janela)");
+    const ec2 = { preventDefault() { this.p = true; } };
+    ((dlg._ouv && dlg._ouv.cancel) || []).forEach((f) => f(ec2));
+    ok(!ec2.p, "T3a na lista, o Esc segue o normal (fecha a janela)");
+    const e5 = ev("/");
+    a.domTecla(e5);
+    ok(e5.p, "T4 '/' vai à busca");
+    /* o ⋯ */
+    const l0 = linhas()[0], l1 = linhas()[1];
+    const m0 = achar(l0, (e) => cls(e, "dom-linha-menu"))[0], m1 = achar(l1, (e) => cls(e, "dom-linha-menu"))[0];
+    achar(l0, (e) => cls(e, "dom-mais"))[0].onclick({ stopPropagation() {} });
+    const bts = achar(m0, (e) => e.tag === "button").map((b) => b.textContent);
+    ok(m0.hidden === false && bts.some((x) => /Abrir/.test(x)) && bts.some((x) => /Questões/.test(x)) && bts.some((x) => /Criar|Estudar/.test(x)), "T5 o ⋯ mostra as outras ações: " + bts.join(" | "));
+    achar(l1, (e) => cls(e, "dom-mais"))[0].onclick({ stopPropagation() {} });
+    ok(m0.hidden === true && m1.hidden === false, "T5a um ⋯ aberto por vez");
+    /* ←→ e Enter na barra */
+    const tira0 = a.domCtxAtual().tiras[0];
+    const e6 = ev("ArrowRight", tira0.segs[0].el);
+    a.domTecla(e6);
+    ok(e6.p && tira0.segs[1].el.tabIndex === 0 && tira0.segs[0].el.tabIndex === -1, "T6 →: o próximo pedaço da barra fica com o foco (um só por barra na ordem do Tab)");
+    const tp1 = tira0.segs[1].tp;
+    a.domTecla(ev("Enter", tira0.segs[1].el));
+    ok(a.domDetAtual() === true && a.domSelAtual().chave === tp1.chave && /›/.test(achar(pain(a, "det"), (e) => cls(e, "cov-item-nome"))[0].textContent), "T6a Enter no pedaço abre o detalhe do tópico: " + tp1.nome);
+    /* Esc na busca: limpa a busca, e o cancel do mesmo Esc não fecha a janela */
+    a.domBuscaDefinir("receita");
+    const eb = { key: "Escape", target: a.$("domBusca"), preventDefault() { this.p = true; } };
+    a.domTecla(eb);
+    const ec3 = { preventDefault() { this.p = true; } };
+    ((dlg._ouv && dlg._ouv.cancel) || []).forEach((f) => f(ec3));
+    ok(eb.p && ec3.p && a.$("domBusca").value === "" && achar(pain(a, "prior"), (e) => cls(e, "dom-linha")).length >= 2, "M4c Esc na busca limpa a busca (e não fecha a janela)");
   }
   return falhas;
 }

@@ -2,8 +2,8 @@
  * A TELA: "Domínio" (aberta pela biblioteca de cartões e pelo cabeçalho do edital)
  *
  * Manchete + BARRA DE DISTRIBUIÇÃO do peso da prova por nível; uma faixa por disciplina (ordem do peso) dividida em
- * segmentos por tópico; ao abrir, cada tópico e ramo mostra o nível, o MOTIVO e os quatro sinais. O ramo com acerto
- * herdado do tópico leva contorno tracejado. Embaixo, "o que reforçar primeiro".
+ * segmentos por tópico; tocar num tópico abre o DETALHE dele (o nível, o MOTIVO, os quatro sinais e os ramos). O ramo
+ * com acerto herdado do tópico leva contorno tracejado. Ao lado, "o que reforçar primeiro" (19.193.0: mestre-detalhe).
  * (A regra do nível e os números estão em dominio-assunto.js; aqui só se desenha.)
  * ===================================================================== */
 let domEditalId = "", domDiscAberta = "", domFiltro = "todos";
@@ -18,26 +18,32 @@ const DOM_CH_ORDEM = "eac_dom_ordem";
 const DOM_ORDEM_COR = ["vermelho", "amarelo", "azul", "verde", "cinza", "pulado"];
 function domOrdemLer() { try { return localStorage.getItem(DOM_CH_ORDEM) === "cor" ? "cor" : "edital"; } catch (e) { return "edital"; } }
 function domOrdemDefinir(o) { try { localStorage.setItem(DOM_CH_ORDEM, o === "cor" ? "cor" : "edital"); } catch (e) {} domPintar(); }
-let domAlvo = "", domAlvoEl = null;
-/* abre a disciplina no mapa, rola até o tópico e o faz piscar */
+/* (19.193.0) IR A UM TÓPICO (o pedaço da barra, a linha do mapa, o selo da agenda, o próximo passo): ele vira o
+ * escolhido e o DETALHE dele aparece (na tela estreita, no lugar da lista; o "← Voltar" leva de volta), piscando; a
+ * disciplina fica aberta no mapa */
 function domIrAoTopico(disciplina, chave) {
   domDiscAberta = disciplina || "";
-  domAlvo = chave || "";
-  if (!domDuas()) domAbaDefinir("disc", true);
+  if (!domDuas() && domAba === "evo") domAbaDefinir("disc", true);
+  if (chave) { domSel = { chave, ramoId: "" }; domSelAuto = false; }
+  domDetAberto = !!(chave && !domDuas());
+  if (domDetAberto) { try { domRolagemLista = $("domCorpo").scrollTop || 0; } catch (e) {} }
   domPintar();
-  const el = domAlvoEl;
-  domAlvo = ""; domAlvoEl = null;
+  const el = domCtx && domCtx.detEl;
   if (el) {
-    /* o TÍTULO do tópico no alto: com muitos ramos, centralizar deixava só o meio da lista à vista */
-    try { if (el.scrollIntoView) el.scrollIntoView({ block: "start" }); } catch (e) {}
+    try { if (domDuas()) domCtx.pDet.scrollTop = 0; else $("domCorpo").scrollTop = 0; } catch (e) {}
     el.classList.add("dom-piscando");
     setTimeout(() => { try { el.classList.remove("dom-piscando"); } catch (e) {} }, 2600);
+    /* na tela larga, o tópico também fica à vista no mapa */
+    const tl = domCtx.tls[chave];
+    if (tl && domDuas()) { try { if (tl.scrollIntoView) tl.scrollIntoView({ block: "nearest" }); } catch (e) {} }
   }
   return el;
 }
 function domAbaLer() { try { const v = localStorage.getItem(DOM_CH_ABA); return DOM_ABAS.indexOf(v) >= 0 ? v : "prior"; } catch (e) { return "prior"; } }
 function domAbaDefinir(a, calado) {
   domAba = DOM_ABAS.indexOf(a) >= 0 ? a : "prior";
+  /* trocar de aba fecha o detalhe (na tela estreita ele ocupa o lugar da lista) */
+  domDetAberto = false;
   try { localStorage.setItem(DOM_CH_ABA, domAba); } catch (e) {}
   if (!calado) domPintar();
   return domAba;
@@ -82,7 +88,8 @@ function domPintarAbas() {
   /* os filtros valem para as prioridades e o mapa; na evolução não há o que filtrar */
   if ($("domFiltros")) $("domFiltros").hidden = domAba === "evo";
 }
-const DOM_FILTROS = ["todos", "vermelho", "vencida", "azul", "cinza"];
+/* (19.193.0) todas as cores (os chips são também a legenda) e a revisão vencida; os vazios não aparecem */
+const DOM_FILTROS = ["todos", "vermelho", "vencida", "amarelo", "azul", "verde", "cinza"];
 
 /* a folha passa pelo filtro escolhido? */
 function domCasa(x) {
@@ -257,10 +264,12 @@ function domOrdenarPeloPainel(fila, rank) {
 /* UM ITEM DA FILA: o que é, o porquê, os sinais (com os chutes), os ramos do tópico coloridos, o material e as ações
  * (a principal, conforme a cor, primeiro) */
 function domItemFila(f, tp, semRamos) {
-  const l = gerEl("div", "cov-item dom-item dom-b-" + f.nivel);
-  l.append(gerEl("span", "dom-nivel dom-n-" + f.nivel, t("dom_n_" + f.nivel)),
+  const nv = domNv(f.nivel);
+  const l = gerEl("div", "cov-item dom-item dom-b-" + nv);
+  l.append(gerEl("span", "dom-nivel dom-n-" + nv, domNivelTxt(f.nivel)),
     gerEl("span", "cov-item-nome", f.disciplina + " › " + f.topico + (f.ramoNome ? " › " + f.ramoNome : "")),
-    gerEl("span", "cov-item-n", f.tipo === "grupo" ? t("dom_urg_grupo", { p: f.pesoPct.toFixed(1), f: f.pesoPct ? Math.round((f.urgencia / f.pesoPct) * 10) / 10 : 0, n: f.ramosFila.length }) : t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
+    /* fora da fila (verde, pulado: aberto pelo mapa ou pela busca) não há a conta da urgência, só o peso */
+    gerEl("span", "cov-item-n", f.foraDaFila ? t("cov_vale", { p: pctProva(f.pesoPct || 0) }) : f.tipo === "grupo" ? t("dom_urg_grupo", { p: f.pesoPct.toFixed(1), f: f.pesoPct ? Math.round((f.urgencia / f.pesoPct) * 10) / 10 : 0, n: f.ramosFila.length }) : t("dom_urg", { p: f.pesoPct.toFixed(1), f: DOM.fatores[f.nivel] })));
   /* o PORQUÊ à vista (antes, só no balão do mouse), antes dos botões: primeiro o motivo, depois o que fazer */
   const pq = domPorque(f.motivos);
   const pqTxt = f.tipo === "grupo" && f.ramosFila.length > 1 ? t("dom_grupo_pior", { r: f.pior.ramoNome }) + (pq ? " · " + pq : "") : pq;
@@ -325,9 +334,162 @@ function domLinhaAcoes(pai, disciplina, topico, cartoes, ramo) {
   pai.append(ac);
 }
 
+/* =====================================================================
+ * (19.193.0) A NAVEGAÇÃO MESTRE-DETALHE
+ *
+ * A fila e o mapa traziam TUDO de cada item à vista (os sinais, os ramos, o material e cinco botões), e decidir o
+ * próximo assunto pedia rolar por cartões enormes. Agora:
+ *  - a FILA é uma lista compacta: uma linha por item (a posição, a cor na borda, o nome, o porquê curto e o peso), só a
+ *    ação principal à vista e o resto no "⋯"; tocar na linha abre o DETALHE (tudo o que o cartão tinha, a minha
+ *    avaliação e os ramos);
+ *  - o MAPA é a visão geral: uma linha por disciplina (o nome e o peso · a barra dos tópicos · o verde e a mudança).
+ *    O pedaço diz mais do que a cor: o NÚMERO da posição na fila (os 5 primeiros), LISTRAS para medida incerta, um RISCO
+ *    no alto para revisão vencida e uma FAIXA FINA embaixo com as cores dos ramos; o balão diz o tópico, o motivo e os
+ *    ramos; tocar (ou Enter) abre o detalhe; ←→ andam na barra, ↑↓ trocam de disciplina. Os ramos moram no detalhe;
+ *  - tela larga: o mapa em cima e a fila embaixo, à esquerda; o detalhe à direita. Tela estreita: lista → detalhe, com
+ *    "← Voltar" (e o Esc), e ‹ › para passar ao vizinho da fila;
+ *  - a BUSCA procura em todos os tópicos e ramos (não só nos da fila); os FILTROS acendem no mapa o que casa e apagam o
+ *    resto, sem esconder nada (na fila, recortam); teclado: ↑↓ andam na fila, Enter abre, Esc volta, "/" vai à busca.
+ * ===================================================================== */
+const DOM_LINHAS = 20;
+const DOM_TOPO_N = 5;   /* quantos da fila levam o número no pedaço do mapa */
+let domSel = null, domSelAuto = false, domDetAberto = false, domBusca = "", domLimite = DOM_LINHAS;
+let domCtx = null, domMenu = null, domRolagemLista = 0, domEscTratado = 0, domBuscaT = null, domBalaoEl = null;
+
+function domNorm(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/ +/g, " ").trim(); }
+function domSelK(s) { return s && s.chave ? s.chave + "|" + (s.ramoId || "") : ""; }
+function domNv(n) { return n === "pulado" || !n ? "cinza" : n; }
+function domNivelTxt(n) { return n === "pulado" ? "—" : t("dom_n_" + n); }
+/* o tópico passa pelo filtro (com ramos: algum ramo passa) */
+function domCasaTopico(tp) { return tp.ramos && tp.ramos.length ? tp.ramos.some(domCasa) : domCasa(tp); }
+/* o tópico casa com a busca? cada palavra tem de aparecer no nome da disciplina, do tópico ou de um ramo */
+function domBuscaCasa(d, tp) {
+  const q = domNorm(domBusca);
+  if (!q) return true;
+  const alvo = domNorm([d && d.nome, tp && tp.nome].concat(((tp && tp.ramos) || []).map((r) => r.ramoNome)).join(" "));
+  return q.split(" ").every((p) => alvo.indexOf(p) >= 0);
+}
+/* um item "de fila" montado do próprio tópico: o que está fora da fila (verde, pulado) também aparece na busca e no detalhe */
+function domItemDoTopico(d, tp) {
+  const pior = tp.ramos && tp.ramos.length ? (tp.ramos.filter((r) => r.nivel === tp.nivel)[0] || tp.ramos[0]) : null;
+  return { tipo: "topico", disciplina: d.nome, topico: tp.nome, chave: tp.chave, cartoes: tp.cartoes, nivel: tp.nivel,
+    motivos: tp.motivos || (pior && pior.motivos) || [], sinais: tp.sinais || (pior && pior.sinais) || null, pesoPct: tp.pesoPct || 0, urgencia: 0, foraDaFila: true };
+}
+/* o primeiro descendente com a classe (o DOM de teste não tem querySelector) */
+function domAchar(el, c) {
+  if (!el) return null;
+  const filhos = Array.from(el.children || []);
+  for (let i = 0; i < filhos.length; i++) {
+    if ((" " + String(filhos[i].className || "") + " ").indexOf(" " + c + " ") >= 0) return filhos[i];
+    const x = domAchar(filhos[i], c);
+    if (x) return x;
+  }
+  return null;
+}
+/* o que o pedaço do tópico mostra além da cor */
+function domMarcasDoTopico(tp) {
+  const folhas = tp.ramos && tp.ramos.length ? tp.ramos.filter((r) => !r.pulado) : [tp];
+  const venc = folhas.some((x) => (x.motivos || []).some((mm) => mm.cod === "revisao_vencida"));
+  const incerto = tp.nivel === "azul" || (tp.nivel === "verde" && folhas.some((x) => !!domFragil(x)));
+  const cores = tp.ramos && tp.ramos.length > 1 ? tp.ramos.map((r) => domNv(r.nivel)) : [];
+  return { venc, incerto, mistos: cores.length > 1 && cores.some((x) => x !== cores[0]) };
+}
+/* o texto do balão do pedaço (uma linha por item) */
+function domSegLinhas(d, tp, n, pq) {
+  const out = [d.nome + " › " + tp.nome];
+  out.push(domNivelTxt(tp.nivel) + " · " + t("cov_vale", { p: pctProva(tp.pesoPct || 0) }) + (n ? " · " + t("dom_tl_n", { n }) : ""));
+  if (pq) out.push(pq);
+  if (tp.ramos && tp.ramos.length) {
+    const cont = {}, ordem = [];
+    tp.ramos.forEach((r) => { const k = r.nivel === "pulado" ? t("dom_n_pulado") : t("dom_n_" + r.nivel); if (!cont[k]) { cont[k] = 0; ordem.push(k); } cont[k]++; });
+    out.push(t("dom_seg_ramos", { r: ordem.map((k) => cont[k] + " " + k).join(", ") }));
+  }
+  out.push(t("dom_seg_abrir"));
+  return out;
+}
+/* o balão do pedaço: ao passar o mouse ou focar (o title do navegador não aparece no toque nem no teclado) */
+function domSegBalao(seg, linhas) {
+  domSegBalaoFechar();
+  const dlg = $("dlgDominio");
+  if (!dlg || !seg) return null;
+  const b = document.createElement("div");
+  b.className = "dom-seg-balao";
+  b.setAttribute("role", "tooltip");
+  (linhas || []).forEach((l, i) => b.append(gerEl("div", i === 0 ? "dom-balao-tit" : (i === linhas.length - 1 ? "dom-balao-pe" : "dom-balao-l"), l)));
+  /* dentro do diálogo: ele mora na camada de cima do navegador, e o balão tem de entrar junto */
+  dlg.append(b);
+  domBalaoEl = b;
+  try {
+    const r = seg.getBoundingClientRect ? seg.getBoundingClientRect() : null;
+    if (r) {
+      const jan = (typeof window !== "undefined" && window.innerWidth) || 360;
+      const alto = (typeof window !== "undefined" && window.innerHeight) || 800;
+      const larg = Math.min(300, jan - 16), h = b.offsetHeight || 96;
+      b.style.left = Math.max(8, Math.min(r.left + r.width / 2 - larg / 2, jan - larg - 8)) + "px";
+      b.style.top = (r.bottom + 8 + h > alto ? Math.max(8, r.top - 8 - h) : r.bottom + 8) + "px";
+    }
+  } catch (e) {}
+  return b;
+}
+function domSegBalaoFechar() {
+  try { if (domBalaoEl && domBalaoEl.parentNode) domBalaoEl.parentNode.removeChild(domBalaoEl); } catch (e) {}
+  domBalaoEl = null;
+}
+/* a amostra da legenda "como ler a barra" */
+function domLegAmostra(cor, cls, txt, chave) {
+  const it = gerEl("span", "dom-leg-item");
+  it.title = t(chave + "_tip");
+  const a = gerEl("span", "dom-leg-amostra dom-n-" + cor + (cls ? " " + cls : ""), txt || "");
+  if (cls === "dom-seg-mistos") { const sub = gerEl("span", "dom-seg-sub"); sub.append(gerEl("i", "dom-n-vermelho"), gerEl("i", "dom-n-cinza"), gerEl("i", "dom-n-verde")); a.append(sub); }
+  it.append(a, document.createTextNode(" " + t(chave)));
+  return it;
+}
+
+/* UMA LINHA DA FILA (compacta): a posição, a cor (na borda), o nome, o nível com o porquê curto e o peso; a ação
+ * principal e o "⋯" com as outras. Tocar na linha abre o detalhe. */
+function domLinhaFila(f, i, tp) {
+  const nv = domNv(f.nivel);
+  const sel = { chave: f.chave, ramoId: f.tipo === "ramo" ? f.ramoId : "" };
+  const l = gerEl("div", "dom-linha dom-b-" + nv + (f.foraDaFila ? " dom-linha-fora" : ""));
+  l.tabIndex = 0;
+  l.setAttribute("aria-current", "false");
+  const txt = gerEl("span", "dom-linha-txt");
+  txt.append(gerEl("span", "dom-linha-nome", f.disciplina + " › " + f.topico + (f.ramoNome ? " › " + f.ramoNome : "")));
+  const pq = domPorque(f.motivos);
+  const pqTxt = f.tipo === "grupo" && f.ramosFila.length > 1 ? t("dom_grupo_pior", { r: f.pior.ramoNome }) + (pq ? " · " + pq : "") : pq;
+  txt.append(gerEl("span", "dom-linha-pq", domNivelTxt(f.nivel) + (pqTxt ? " · " + pqTxt : "")));
+  const peso = gerEl("span", "dom-linha-peso", pctProva(f.pesoPct || 0) + "%");
+  peso.title = t("cov_vale", { p: pctProva(f.pesoPct || 0) });
+  const mat = domMaterialDe(f.disciplina, f.topico, f.chave);
+  const ramosFicha = ((tp && tp.ramos) || []).map((r) => ({ id: r.ramoId, nome: r.ramoNome }));
+  const ac1 = domAcaoPrincipal(f, mat, ramosFicha);
+  const p = gerEl("button", "btn-min dom-acao-1 dom-acao-" + ac1.cod, ac1.txt); p.type = "button"; p.title = ac1.tip;
+  p.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ac1.fazer(); };
+  const mais = gerEl("button", "btn-min dom-mais", "⋯"); mais.type = "button";
+  mais.title = t("dom_mais_tip"); mais.setAttribute("aria-label", t("dom_mais_tip")); mais.setAttribute("aria-expanded", "false");
+  const menu = gerEl("div", "dom-linha-menu"); menu.hidden = true;
+  domLinhaAcoes(menu, f.disciplina, f.topico, f.cartoes, f.tipo === "ramo" ? { id: f.ramoId, nome: f.ramoNome } : null);
+  menu.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+  mais.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domMenuTrocar(menu, mais); };
+  l.append(gerEl("span", "dom-linha-pos", i >= 0 ? String(i + 1) : "·"), txt, peso, p, mais, menu);
+  l.onclick = () => domSelecionar(sel, true);
+  return { el: l, sel, k: domSelK(sel), chave: f.chave };
+}
+/* o "⋯": um aberto por vez */
+function domMenuTrocar(menu, bt) {
+  const abrir = !!menu.hidden;
+  if (domMenu && domMenu.menu !== menu) { domMenu.menu.hidden = true; domMenu.bt.setAttribute("aria-expanded", "false"); }
+  menu.hidden = !abrir;
+  bt.setAttribute("aria-expanded", abrir ? "true" : "false");
+  domMenu = abrir ? { menu, bt } : null;
+  return abrir;
+}
+
 function domPintar() {
   const cx = $("domCorpo");
   cx.innerHTML = "";
+  domCtx = null; domMenu = null;
+  domSegBalaoFechar();
   const ed = (editais || []).find((e) => String(e.id) === String(domEditalId));
   if (!ed) { cx.append(gerEl("p", "nota", t("cov_sem_edital"))); return; }
   const temF2 = covTemFase2(ed);
@@ -340,7 +502,7 @@ function domPintar() {
   domPintarAbas();
   const dist = m.resumo.distribuicao, tot = m.resumo.total || 1;
   const pct = (k) => (dist[k] / tot) * 100;
-  /* ---- o topo preso: manchete curta + barra do peso por nível + legenda ---- */
+  /* ---- o topo: a manchete e a barra do peso por nível NUMA LINHA; a legenda das cores são os próprios filtros ---- */
   const fixo = gerEl("div", "dom-fixo");
   const vencidas = m.folhas.filter((x) => (x.motivos || []).some((mm) => mm.cod === "revisao_vencida")).length;
   /* VERMELHO SÓ PARA O QUE ESTÁ RUIM: muito ainda não estudado é o começo natural de um edital, não um erro */
@@ -348,54 +510,57 @@ function domPintar() {
   const man = gerEl("div", "cov-manchete dom-manchete" + tom);
   man.append(gerEl("b", "", t("dom_manchete", { s: Math.round(pct("cinza")), v: Math.round(pct("vermelho")) })));
   if (vencidas) man.append(document.createTextNode(" " + t("dom_manchete_venc", { n: vencidas })));
-  fixo.append(man);
-  /* a barra de distribuição: o peso da prova por nível */
+  /* a barra de distribuição: o peso da prova por nível; tocar numa cor acende só ela (o mesmo que o filtro) */
   const barra = gerEl("div", "dom-dist");
+  const corFiltro = ["verde", "amarelo", "azul", "vermelho", "cinza"].indexOf(domFiltro) >= 0;
   ["verde", "amarelo", "azul", "vermelho", "cinza"].forEach((k) => {
     const p = pct(k);
     if (p <= 0) return;
-    const seg = gerEl("div", "dom-seg dom-n-" + k, p >= 7 ? Math.round(p) + "%" : "");
+    const seg = gerEl("div", "dom-seg dom-n-" + k + (corFiltro && domFiltro !== k ? " dom-apagado" : ""), p >= 7 ? Math.round(p) + "%" : "");
     seg.style.width = p.toFixed(2) + "%";
-    seg.title = t("dom_n_" + k) + ": " + p.toFixed(1) + "% " + t("dom_do_peso");
+    seg.title = t("dom_n_" + k) + ": " + p.toFixed(1) + "% " + t("dom_do_peso") + " — " + t(domFiltro === k ? "dom_dist_tip_off" : "dom_dist_tip");
+    seg.onclick = () => domFiltroDefinir(domFiltro === k ? "todos" : k);
     barra.append(seg);
   });
-  fixo.append(barra);
-  const leg = gerEl("div", "cov-legenda");
-  ["verde", "amarelo", "azul", "vermelho", "cinza"].forEach((k) => {
-    const it = gerEl("span", "cov-leg"); it.title = t("dom_ajuda_" + k);
-    it.append(gerEl("i", "dom-leg-i dom-n-" + k), document.createTextNode(" " + t("dom_n_" + k) + " " + Math.round(pct(k)) + "%"));
-    leg.append(it);
-  });
-  fixo.append(leg);
+  fixo.append(man, barra);
   cx.append(fixo);
   const duas = domDuas();
-  const painel = (aba) => { const p = gerEl("div", "dom-painel dom-painel-" + aba); p.hidden = duas ? aba === "evo" : domAba !== aba; cx.append(p); return p; };
-  /* lado a lado, o mapa vem primeiro (coluna da esquerda) */
-  const pDisc = duas ? painel("disc") : null;
-  const pPrior = painel("prior");
-  const pDisc2 = pDisc || painel("disc");
-  const pEvo = painel("evo");
+  const painel = (aba) => { const p = gerEl("div", "dom-painel dom-painel-" + aba); cx.append(p); return p; };
+  const pDisc = painel("disc"), pPrior = painel("prior"), pDet = painel("det"), pEvo = painel("evo");
+  const c = domCtx = { m, ed, fase, fixo, pDisc, pPrior, pDet, pEvo, linhas: [], segs: {}, tls: {}, tiras: [],
+    topPorChave: Object.create(null), discDoTop: Object.create(null), filaTudo: [], posFila: Object.create(null), nFila: 0, detEl: null };
+  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { c.topPorChave[tp.chave] = tp; c.discDoTop[tp.chave] = d; }));
+  if (domSel && !c.topPorChave[domSel.chave]) { domSel = null; domSelAuto = false; domDetAberto = false; }
   /* ---- evolução (calculada sempre: a diferença de cada disciplina aparece no mapa) ---- */
   const dlt = domEvolucaoPintar(pEvo, m, ed.id, fase);
   pEvo.append(gerEl("p", "nota cov-base", t(m.base === "questoes" ? "dom_base_questoes" : (m.base === "fase2" ? "cov_base_fase2" : (m.base === "plano" ? "dom_base_plano" : "dom_base_estimado")))));
-  /* ---- prioridades: o que reforçar primeiro (com o filtro escolhido), o porquê à vista e o ganho dos primeiros ---- */
+  /* ---- a fila: o que reforçar primeiro (com o filtro escolhido) ---- */
   const agrupar = domAgruparLer();
-  const filaFolhas = m.reforcar.filter(domCasa);
   const rankP = domRankPainel(ed, fase);
+  const filaFolhas = m.reforcar.filter(domCasa);
   const fila = domOrdenarPeloPainel(agrupar ? domFilaAgrupada(filaFolhas) : filaFolhas, rankP);
-  const s = gerEl("div", "cov-bloco");
-  s.append(gerEl("h4", "", t("dom_reforcar")));
-  /* (19.191.0) com a ordem do Painel em uso, a nota diz isso e leva ao Painel; senão, a de antes (só peso × cor) */
-  const notaOrdem = gerEl("p", "nota dom-ordem-painel", t(rankP ? "dom_reforcar_painel_igual" : "dom_reforcar_painel"));
-  notaOrdem.id = "domOrdemPainel";
-  if (rankP && typeof peAbrir === "function") {
-    const bp = gerEl("button", "btn-min dom-ir-painel", t("dom_ir_painel"));
-    bp.type = "button"; bp.id = "btnDomIrPainel";
-    bp.onclick = () => { try { domFechar(); } catch (e) {} peAbrir(); };
-    notaOrdem.append(document.createTextNode(" "), bp);
+  /* a fila inteira (sem o filtro): a posição de cada TÓPICO nela vai para o número no mapa e para o detalhe */
+  c.filaTudo = domFiltro === "todos" ? fila : domOrdenarPeloPainel(agrupar ? domFilaAgrupada(m.reforcar) : m.reforcar, rankP);
+  c.filaTudo.forEach((f) => { if (!c.posFila[f.chave]) c.posFila[f.chave] = ++c.nFila; });
+  /* com busca ou filtro, a lista mostra TODOS os tópicos que casam: os da fila primeiro, na ordem dela; os outros
+   * (verdes, por exemplo) depois, pelo peso */
+  let lista = fila;
+  if (domBusca || domFiltro !== "todos") {
+    if (domBusca) lista = fila.filter((f) => domBuscaCasa(c.discDoTop[f.chave], c.topPorChave[f.chave]));
+    const ja = Object.create(null);
+    lista.forEach((f) => { ja[f.chave] = 1; });
+    const outros = [];
+    m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { if (!ja[tp.chave] && tp.nivel !== "pulado" && domCasaTopico(tp) && domBuscaCasa(d, tp)) outros.push(domItemDoTopico(d, tp)); }));
+    lista = lista.concat(outros.sort((a, b) => b.pesoPct - a.pesoPct));
   }
-  s.append(notaOrdem);
-  if (filaFolhas.some((f) => f.tipo === "ramo")) {
+  const posItem = new Map();
+  fila.forEach((f, i) => posItem.set(f, i));
+  /* o cabeçalho da fila em DUAS linhas curtas (a fila é o que decide a próxima sessão: o espaço é dela): o título com
+   * "agrupar por tópico | um por um"; a ordem em uso (com o Painel) e o ganho dos 5 primeiros — o texto inteiro no balão */
+  const s = gerEl("div", "cov-bloco dom-lista-bloco");
+  const cabL = gerEl("div", "dom-lista-cab");
+  cabL.append(gerEl("h4", "", domBusca ? t("dom_busca_tit", { n: lista.length }) : t("dom_reforcar")));
+  if (!domBusca && filaFolhas.some((f) => f.tipo === "ramo")) {
     const lg = gerEl("div", "dom-ordem dom-agrupar");
     lg.append(gerEl("span", "dom-item-rot", t("dom_agrupar_rot")));
     [[true, "dom_agrupar_sim"], [false, "dom_agrupar_nao"]].forEach(([v, k]) => {
@@ -404,24 +569,58 @@ function domPintar() {
       b.onclick = () => domAgruparDefinir(v);
       lg.append(b);
     });
-    s.append(lg);
+    cabL.append(lg);
   }
-  if (fila.length && domFiltro === "todos") {
-    const topo = fila.slice(0, 5);
-    const ganho = (topo.reduce((x, f) => x + (f.pesoPct || 0), 0) / tot) * 100;
-    const fmt = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
-    s.append(gerEl("p", "dom-ganho", t("dom_ganho", { n: topo.length, g: fmt(ganho), a: fmt(pct("verde")), b: fmt(Math.min(100, pct("verde") + ganho)) })));
+  s.append(cabL);
+  if (!domBusca) {
+    const sub = gerEl("div", "dom-lista-sub");
+    /* (19.191.0) com a ordem do Painel em uso, a nota diz isso e leva ao Painel; senão, a de antes (só peso × cor) */
+    const notaOrdem = gerEl("p", "nota dom-ordem-painel", t(rankP ? "dom_ordem_painel_curta" : "dom_ordem_peso_curta"));
+    notaOrdem.id = "domOrdemPainel";
+    notaOrdem.title = t(rankP ? "dom_reforcar_painel_igual" : "dom_reforcar_painel");
+    if (rankP && typeof peAbrir === "function") {
+      const bp = gerEl("button", "btn-min dom-ir-painel", t("dom_ir_painel"));
+      bp.type = "button"; bp.id = "btnDomIrPainel";
+      bp.onclick = () => { try { domFechar(); } catch (e) {} peAbrir(); };
+      notaOrdem.append(document.createTextNode(" "), bp);
+    }
+    sub.append(notaOrdem);
+    if (fila.length && domFiltro === "todos") {
+      const topo = fila.slice(0, 5);
+      const ganho = (topo.reduce((x, f) => x + (f.pesoPct || 0), 0) / tot) * 100;
+      const fmt = (v) => (Math.round(v * 10) / 10).toFixed(1).replace(".", ",");
+      const par = { n: topo.length, g: fmt(ganho), a: fmt(pct("verde")), b: fmt(Math.min(100, pct("verde") + ganho)) };
+      const gp = gerEl("p", "dom-ganho", t("dom_ganho_curto", par));
+      gp.title = t("dom_ganho", par);
+      sub.append(gp);
+    }
+    s.append(sub);
   }
-  if (!fila.length) s.append(gerEl("p", "nota", t("dom_reforcar_vazio")));
-  const topPorChave = {};
-  m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { topPorChave[tp.chave] = tp; }));
-  const jaComRamos = {};
-  fila.slice(0, 15).forEach((f) => { s.append(domItemFila(f, topPorChave[f.chave], !!jaComRamos[f.chave])); jaComRamos[f.chave] = 1; });
-  s.append(gerEl("p", "nota", t("dom_reforcar_sub")));
+  if (!lista.length) s.append(gerEl("p", "nota", t(domBusca ? "dom_busca_vazio" : "dom_reforcar_vazio")));
+  const ul = gerEl("div", "dom-lista");
+  lista.slice(0, domLimite).forEach((f) => {
+    const ln = domLinhaFila(f, posItem.has(f) ? posItem.get(f) : -1, c.topPorChave[f.chave]);
+    c.linhas.push(ln);
+    ul.append(ln.el);
+  });
+  s.append(ul);
+  if (lista.length > domLimite) {
+    const mais = gerEl("button", "btn-min dom-mais-linhas", t("dom_mais_linhas", { n: Math.min(DOM_LINHAS, lista.length - domLimite), t: lista.length }));
+    mais.type = "button";
+    mais.onclick = () => { domLimite += DOM_LINHAS; domPintar(); };
+    s.append(mais);
+  }
+  if (!domBusca) s.append(gerEl("p", "nota dom-lista-pe", t("dom_reforcar_sub")));
   pPrior.append(s);
-  /* ---- disciplinas: as que já têm estudo primeiro; as ainda sem nada estudado recolhidas no fim ---- */
+  /* na tela larga o detalhe nunca fica vazio: sem escolha da pessoa, o primeiro da lista (e ele acompanha o filtro) */
+  if (duas && (!domSel || domSelAuto)) {
+    if (c.linhas.length) { domSel = c.linhas[0].sel; domSelAuto = true; }
+    else if (domSelAuto) domSel = null;
+  }
+  /* ---- o mapa: uma linha por disciplina — as que já têm estudo primeiro; as sem nada estudado recolhidas no fim ---- */
   const ordem = m.disciplinas.slice().sort((a, b) => (b.pesoPct - a.pesoPct) || (a.nome < b.nome ? -1 : 1));
   const ordemCor = domOrdemLer() === "cor";
+  const filtrando = domFiltro !== "todos" || !!domBusca;
   const linOrd = gerEl("div", "dom-ordem");
   linOrd.append(gerEl("span", "dom-item-rot", t("dom_ordem_rot")));
   [["edital", "dom_ordem_edital"], ["cor", "dom_ordem_cor"]].forEach(([v, k]) => {
@@ -430,95 +629,367 @@ function domPintar() {
     b.onclick = () => domOrdemDefinir(v);
     linOrd.append(b);
   });
-  pDisc2.append(linOrd);
-  const lista = gerEl("div", "cov-lista");
+  /* como ler a barra: o que ela diz além da cor */
+  const leg = gerEl("span", "dom-mapa-leg");
+  leg.append(gerEl("span", "dom-leg-item", t("dom_leg_largura")),
+    domLegAmostra("cinza", "", "1", "dom_leg_fila"),
+    domLegAmostra("azul", "dom-seg-incerto", "", "dom_leg_incerto"),
+    domLegAmostra("amarelo", "dom-seg-venc", "", "dom_leg_venc"),
+    domLegAmostra("vermelho", "dom-seg-mistos", "", "dom_leg_ramos"));
+  linOrd.append(leg);
+  pDisc.append(linOrd);
+  const listaD = gerEl("div", "cov-lista dom-mapa");
   const semEstudo = gerEl("details", "dom-sem-estudo");
-  const semLista = gerEl("div", "cov-lista");
+  const semLista = gerEl("div", "cov-lista dom-mapa");
   let nSem = 0, pesoSem = 0, abrirSem = false;
   const semNomes = [];
   ordem.forEach((d) => {
-    const casaTopo = (tp) => (tp.ramos.length ? tp.ramos.some(domCasa) : domCasa(tp));
-    if (domFiltro !== "todos" && !d.topicos.some(casaTopo)) return;
-    const abertaAqui = domDiscAberta === d.nome || domFiltro !== "todos";
-    const linha = gerEl("div", "cov-disc" + (abertaAqui ? " cov-aberta" : ""));
+    const casaT = (tp) => domCasaTopico(tp) && domBuscaCasa(d, tp);
+    const casaD = d.topicos.some(casaT);
+    const abertaAqui = domDiscAberta === d.nome || (!!domBusca && casaD);
+    const linha = gerEl("div", "cov-disc dom-disc" + (abertaAqui ? " cov-aberta" : ""));
     const cab = gerEl("div", "cov-disc-cab");
+    cab.tabIndex = 0;
+    cab.setAttribute("role", "button");
+    cab.setAttribute("aria-expanded", abertaAqui ? "true" : "false");
     const dd = d.distribuicao, ds = Object.keys(dd).reduce((x, k) => x + dd[k], 0) || 1;
-    cab.append(gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", t("cov_vale", { p: pctProva(d.pesoPct) })),
-      gerEl("span", "cov-n" + (dd.vermelho ? " cov-n-alerta" : ""), t("dom_disc_n", { v: Math.round((dd.verde / ds) * 100), r: Math.round((dd.vermelho / ds) * 100), c: Math.round((dd.cinza / ds) * 100) })));
-    const dd2 = dlt && dlt.disciplinas[d.nome];
-    if (dd2 && dd2.verde !== 0) cab.append(gerEl("span", "dom-evo-disc" + (dd2.verde > 0 ? " dom-evo-sobe" : " dom-evo-desce"), t("dom_evo_disc", { v: (dd2.verde > 0 ? "+" : "") + String(dd2.verde).replace(".", ",") })));
+    const seta = gerEl("span", "dom-disc-seta", abertaAqui ? "▾" : "▸");
+    cab.append(seta, gerEl("b", "cov-nome", d.nome), gerEl("span", "cov-peso", pctProva(d.pesoPct) + "%"));
+    cab.title = t("cov_vale", { p: pctProva(d.pesoPct) }) + " · " + t("dom_disc_n", { v: Math.round((dd.verde / ds) * 100), r: Math.round((dd.vermelho / ds) * 100), c: Math.round((dd.cinza / ds) * 100) }) + " — " + t("dom_disc_tip");
     linha.append(cab);
-    const tira = gerEl("div", "cov-tira");
+    /* a barra dos tópicos: largura = peso; cor = nível; e as marcas (número, listras, risco, ramos) */
+    const tira = gerEl("div", "cov-tira dom-tira");
     const somaTop = d.topicos.reduce((x, tp) => x + tp.pesoPct, 0) || 1;
     const segs = ordemCor ? d.topicos.slice().sort((x, y) => (DOM_ORDEM_COR.indexOf(x.nivel) - DOM_ORDEM_COR.indexOf(y.nivel)) || (y.pesoPct - x.pesoPct)) : d.topicos;
+    const daTira = { d, segs: [] };
     segs.forEach((tp) => {
-      const seg = gerEl("div", "cov-seg dom-n-" + (tp.nivel === "pulado" ? "cinza" : tp.nivel));
+      const mc = domMarcasDoTopico(tp);
+      const n = c.posFila[tp.chave] || 0;
+      const seg = gerEl("div", "cov-seg dom-n-" + domNv(tp.nivel) + (mc.incerto ? " dom-seg-incerto" : "") + (mc.venc ? " dom-seg-venc" : "") + (filtrando && !casaT(tp) ? " dom-apagado" : ""));
       seg.style.width = ((tp.pesoPct / somaTop) * 100).toFixed(2) + "%";
+      if (n && n <= DOM_TOPO_N) seg.append(gerEl("span", "dom-seg-n", String(n)));
+      if (mc.mistos) {
+        const sub = gerEl("span", "dom-seg-sub");
+        const somaR = tp.ramos.reduce((x, r) => x + (r.pesoPct || 0), 0) || 1;
+        tp.ramos.forEach((r) => { const ri = gerEl("i", "dom-n-" + domNv(r.nivel)); ri.style.width = (((r.pesoPct || 0) / somaR) * 100).toFixed(2) + "%"; sub.append(ri); });
+        seg.append(sub);
+      }
       /* o pior ramo explica a cor do tópico com ramos */
       const pior = tp.ramos.length ? tp.ramos.filter((r) => r.nivel === tp.nivel)[0] : null;
-      const pq = domPorque(tp.motivos || (pior && pior.motivos) || []);
-      seg.title = t("dom_seg_tip", { t: tp.nome, p: (tp.pesoPct || 0).toFixed(1), n: tp.nivel === "pulado" ? "—" : t("dom_n_" + tp.nivel) }) + (pq ? " · " + pq : "");
+      const linhasB = domSegLinhas(d, tp, n, domPorque(tp.motivos || (pior && pior.motivos) || []));
+      seg.tabIndex = -1;
+      seg.setAttribute("role", "button");
+      seg.setAttribute("aria-label", linhasB.slice(0, -1).join(" · "));
       seg.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domIrAoTopico(d.nome, tp.chave); };
+      seg.onmouseenter = () => domSegBalao(seg, linhasB);
+      seg.onmouseleave = () => domSegBalaoFechar();
+      seg.onfocus = () => domSegBalao(seg, linhasB);
+      seg.onblur = () => domSegBalaoFechar();
+      c.segs[tp.chave] = seg;
+      daTira.segs.push({ el: seg, tp });
       tira.append(seg);
     });
+    if (daTira.segs.length) daTira.segs[0].el.tabIndex = 0;
+    c.tiras.push(daTira);
     linha.append(tira);
-    const det = gerEl("div", "cov-det"); det.hidden = !abertaAqui;
+    /* no fim da linha: quanto dela está verde e a mudança */
+    const fim = gerEl("span", "dom-disc-fim");
+    const verde = Math.round((dd.verde / ds) * 100);
+    const vv = gerEl("span", "dom-disc-verde", "✓ " + verde + "%");
+    vv.title = t("dom_disc_verde_tip", { v: verde });
+    fim.append(vv);
+    const dd2 = dlt && dlt.disciplinas[d.nome];
+    if (dd2 && dd2.verde !== 0) {
+      const ev = gerEl("span", "dom-evo-disc" + (dd2.verde > 0 ? " dom-evo-sobe" : " dom-evo-desce"), (dd2.verde > 0 ? "▲" : "▼") + String(Math.abs(dd2.verde)).replace(".", ","));
+      ev.title = t("dom_evo_disc", { v: (dd2.verde > 0 ? "+" : "") + String(dd2.verde).replace(".", ",") }) + " " + t("dom_evo_disc_mud");
+      fim.append(ev);
+    }
+    linha.append(fim);
+    /* os tópicos, aberta a disciplina: uma linha curta cada (os ramos e os sinais estão no detalhe) */
+    const det = gerEl("div", "cov-det dom-tops"); det.hidden = !abertaAqui;
     d.topicos.forEach((tp) => {
-      if (domFiltro !== "todos" && !casaTopo(tp)) return;
-      const tl = gerEl("div", "dom-top dom-b-" + tp.nivel);
-      if (tp.chave && tl.dataset) tl.dataset.chave = tp.chave;
-      if (domAlvo && tp.chave === domAlvo) domAlvoEl = tl;
-      const topo = gerEl("div", "dom-top-cab");
-      topo.append(gerEl("span", "dom-nivel dom-n-" + tp.nivel, tp.nivel === "pulado" ? "—" : t("dom_n_" + tp.nivel)), gerEl("span", "cov-top-nome", tp.nome));
-      if (tp.fase2 && m.fase === 1) topo.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
-      domLinhaAcoes(topo, d.nome, tp.nome, tp.cartoes);
-      tl.append(topo);
-      domAutoWidget(tl, d.nome, tp.nome, false);
-      if (!tp.ramos.length && tp.sinais) {
-        const pq = domPorque(tp.motivos); if (pq) tl.append(gerEl("div", "dom-porque", pq));
-        const ch = gerEl("div", "dom-chips"); domChips(ch, tp); tl.append(ch);
-      }
-      tp.ramos.forEach((rm) => {
-        if (domFiltro !== "todos" && !domCasa(rm)) return;
-        const rl = gerEl("div", "dom-ramo dom-b-" + rm.nivel + (rm.pulado ? " hor-ramo-pulado" : ""));
-        const rc = gerEl("div", "dom-top-cab");
-        rc.append(gerEl("span", "dom-nivel dom-n-" + rm.nivel, rm.nivel === "pulado" ? "—" : t("dom_n_" + rm.nivel)), gerEl("span", "cov-top-nome", "↳ " + rm.ramoNome));
-        rl.append(rc);
-        if (!rm.pulado) {
-          const pq = domPorque(rm.motivos); if (pq) rl.append(gerEl("div", "dom-porque", pq));
-          const ch = gerEl("div", "dom-chips"); domChips(ch, rm); rl.append(ch);
-          domAutoWidget(rl, d.nome, domChaveAuto(tp.nome, rm.ramoId), true);
-          const bt = gerEl("div", "cov-acoes"); domBotaoRegistrar(bt, d.nome, tp.nome, rm.ramoId); if (bt.children.length) rl.append(bt);
-        }
-        tl.append(rl);
-      });
-      det.append(tl);
+      const r = gerEl("div", "dom-tl dom-b-" + domNv(tp.nivel) + (filtrando && !casaT(tp) ? " dom-apagado" : ""));
+      r.tabIndex = 0;
+      if (tp.chave && r.dataset) r.dataset.chave = tp.chave;
+      r.append(gerEl("span", "dom-nivel dom-n-" + domNv(tp.nivel), domNivelTxt(tp.nivel)), gerEl("span", "dom-tl-nome", tp.nome));
+      const n = c.posFila[tp.chave] || 0;
+      if (n && n <= DOM_TOPO_N) r.append(gerEl("span", "dom-tl-n", t("dom_tl_n", { n })));
+      if (tp.ramos.length) r.append(gerEl("span", "dom-tl-ramos", t("dom_tl_ramos", { n: tp.ramos.length })));
+      if (tp.fase2 && m.fase === 1) r.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
+      const pior = tp.ramos.length ? tp.ramos.filter((x) => x.nivel === tp.nivel)[0] : null;
+      r.title = domPorque(tp.motivos || (pior && pior.motivos) || []) || tp.nome;
+      r.onclick = () => domIrAoTopico(d.nome, tp.chave);
+      c.tls[tp.chave] = r;
+      det.append(r);
     });
-    cab.onclick = () => { det.hidden = !det.hidden; domDiscAberta = det.hidden ? "" : d.nome; linha.className = "cov-disc" + (det.hidden ? "" : " cov-aberta"); };
+    cab.onclick = () => {
+      det.hidden = !det.hidden;
+      domDiscAberta = det.hidden ? "" : d.nome;
+      linha.classList.toggle("cov-aberta", !det.hidden);
+      seta.textContent = det.hidden ? "▸" : "▾";
+      cab.setAttribute("aria-expanded", det.hidden ? "false" : "true");
+    };
     linha.append(det);
-    /* "nada estudado" = todo o peso dela está em não estudado (com filtro ativo não se agrupa: o filtro já recorta) */
-    const nada = domFiltro === "todos" && dd.cinza >= ds - 1e-9;
+    /* "nada estudado" = todo o peso dela está em não estudado (com filtro ou busca não se agrupa: eles já recortam) */
+    const nada = domFiltro === "todos" && !domBusca && dd.cinza >= ds - 1e-9;
     if (nada) { semLista.append(linha); nSem++; pesoSem += d.pesoPct; semNomes.push({ nome: d.nome, p: d.pesoPct }); if (domDiscAberta === d.nome) abrirSem = true; }
-    else lista.append(linha);
+    else listaD.append(linha);
   });
-  pDisc2.append(lista);
+  pDisc.append(listaD);
   if (nSem) {
-    semEstudo.open = abrirSem || !lista.children.length;
+    semEstudo.open = abrirSem || !listaD.children.length;
     /* as maiores entre as não iniciadas, pelo nome, no próprio título do grupo */
     const maiores = semNomes.slice(0, 3).map((x) => x.nome + " " + x.p.toFixed(1).replace(".", ",") + "%").join(", ") + (semNomes.length > 3 ? "…" : "");
     semEstudo.append(gerEl("summary", "", t("dom_sem_estudo", { n: nSem, p: pesoSem.toFixed(1).replace(".", ",") }) + (maiores ? " — " + maiores : "")), semLista);
-    pDisc2.append(semEstudo);
+    pDisc.append(semEstudo);
   }
+  domPintarDetalhe();
+  domMarcarSel();
+  domVisibilidade();
 }
 
-/* os filtros: chips com a contagem de folhas (tópicos sem ramo ou ramos) de cada situação */
+/* o DETALHE do item escolhido: onde ele está na fila, o cartão inteiro (porquê, sinais, ramos, material e as ações), a
+ * minha avaliação do tópico e, recolhidos, os ramos um a um (o motivo, os sinais, a avaliação e o registro de cada) */
+function domPintarDetalhe() {
+  const c = domCtx;
+  if (!c) return null;
+  const p = c.pDet;
+  p.innerHTML = "";
+  c.detEl = null;
+  if (!domDuas()) {
+    const nav = gerEl("div", "dom-det-nav");
+    const bv = gerEl("button", "btn-min dom-det-voltar", t("dom_det_voltar")); bv.type = "button"; bv.id = "btnDomDetVoltar";
+    bv.onclick = () => domDetFechar();
+    nav.append(bv);
+    const i = domLinhaIdx();
+    if (i >= 0 && c.linhas.length > 1) {
+      const ant = gerEl("button", "btn-min dom-det-ant", "‹"); ant.type = "button"; ant.title = t("dom_det_ant"); ant.setAttribute("aria-label", t("dom_det_ant"));
+      ant.disabled = i === 0; ant.onclick = () => domMover(-1);
+      const prox = gerEl("button", "btn-min dom-det-prox", "›"); prox.type = "button"; prox.title = t("dom_det_prox"); prox.setAttribute("aria-label", t("dom_det_prox"));
+      prox.disabled = i === c.linhas.length - 1; prox.onclick = () => domMover(1);
+      nav.append(ant, gerEl("span", "dom-det-pos", t("dom_det_pos", { i: i + 1, n: c.linhas.length })), prox);
+    }
+    p.append(nav);
+  }
+  const tp = domSel && c.topPorChave[domSel.chave];
+  if (!tp) { p.append(gerEl("p", "nota dom-det-vazio", t("dom_det_vazio"))); return null; }
+  const d = c.discDoTop[domSel.chave];
+  /* o item da fila desse tópico (ou do ramo escolhido); no modo "um por um", os ramos dele agrupados; fora da fila, um
+   * item montado do próprio tópico */
+  const ft = c.filaTudo;
+  let f = null;
+  if (domSel.ramoId) f = ft.find((x) => x.chave === domSel.chave && x.tipo === "ramo" && x.ramoId === domSel.ramoId) || null;
+  if (!f) f = ft.find((x) => x.chave === domSel.chave && x.tipo !== "ramo") || null;
+  if (!f) { const rs = ft.filter((x) => x.chave === domSel.chave); if (rs.length) f = rs.length > 1 ? domFilaAgrupada(rs)[0] : rs[0]; }
+  if (!f) f = domItemDoTopico(d, tp);
+  const box = gerEl("div", "dom-top dom-det dom-b-" + domNv(tp.nivel));
+  if (tp.chave && box.dataset) box.dataset.chave = tp.chave;
+  const n = c.posFila[tp.chave] || 0;
+  box.append(gerEl("div", "dom-det-onde", n ? t("dom_det_na_fila", { n, t: c.nFila }) : t("dom_det_fora")));
+  box.append(domItemFila(f, tp, false));
+  if (tp.fase2 && c.m.fase === 1) box.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
+  domAutoWidget(box, d.nome, tp.nome, false);
+  if (tp.ramos.length) {
+    const rs = gerEl("details", "dom-det-ramos");
+    rs.open = !!domSel.ramoId;
+    rs.append(gerEl("summary", "", t("dom_det_ramos", { n: tp.ramos.length })));
+    tp.ramos.forEach((rm) => {
+      const rl = gerEl("div", "dom-ramo dom-b-" + rm.nivel + (rm.pulado ? " hor-ramo-pulado" : "") + (domSel.ramoId === rm.ramoId ? " dom-ramo-atual" : "") + (domFiltro !== "todos" && !domCasa(rm) ? " dom-apagado" : ""));
+      const rc = gerEl("div", "dom-top-cab");
+      rc.append(gerEl("span", "dom-nivel dom-n-" + domNv(rm.nivel), domNivelTxt(rm.nivel)), gerEl("span", "cov-top-nome", "↳ " + rm.ramoNome));
+      rl.append(rc);
+      if (!rm.pulado) {
+        const pq = domPorque(rm.motivos); if (pq) rl.append(gerEl("div", "dom-porque", pq));
+        const ch = gerEl("div", "dom-chips"); domChips(ch, rm); rl.append(ch);
+        domAutoWidget(rl, d.nome, domChaveAuto(tp.nome, rm.ramoId), true);
+        const bt = gerEl("div", "cov-acoes"); domBotaoRegistrar(bt, d.nome, tp.nome, rm.ramoId); if (bt.children.length) rl.append(bt);
+      }
+      rs.append(rl);
+    });
+    box.append(rs);
+  }
+  p.append(box);
+  c.detEl = box;
+  return box;
+}
+/* a linha da fila que corresponde ao escolhido (a exata; senão, a primeira do mesmo tópico) */
+function domLinhaIdx() {
+  const c = domCtx;
+  if (!c || !domSel) return -1;
+  const k = domSelK(domSel);
+  let i = c.linhas.findIndex((x) => x.k === k);
+  if (i < 0) i = c.linhas.findIndex((x) => x.chave === domSel.chave);
+  return i;
+}
+/* o destaque do escolhido na fila, na barra e na lista do mapa (sem repintar a tela) */
+function domMarcarSel() {
+  const c = domCtx;
+  if (!c) return;
+  const i = domLinhaIdx();
+  c.linhas.forEach((x, j) => { x.el.classList.toggle("dom-linha-sel", j === i); x.el.setAttribute("aria-current", j === i ? "true" : "false"); });
+  Object.keys(c.segs).forEach((ch) => c.segs[ch].classList.toggle("dom-seg-sel", !!domSel && ch === domSel.chave));
+  Object.keys(c.tls).forEach((ch) => c.tls[ch].classList.toggle("dom-tl-sel", !!domSel && ch === domSel.chave));
+}
+/* que painel aparece: tela larga, mapa + fila + detalhe; estreita, a aba escolhida OU o detalhe (no lugar dela) */
+function domVisibilidade() {
+  const c = domCtx;
+  if (!c) return false;
+  const duas = domDuas(), evo = domAba === "evo";
+  const so = !duas && !evo && domDetAberto && !!domSel;
+  c.pEvo.hidden = !evo;
+  c.pDisc.hidden = evo || so || (!duas && domAba !== "disc");
+  c.pPrior.hidden = evo || so || (!duas && domAba !== "prior");
+  c.pDet.hidden = evo || !(duas || so);
+  c.fixo.hidden = so;
+  if ($("domFiltros")) $("domFiltros").hidden = evo || so;
+  return so;
+}
+/* escolher um item: o detalhe passa a ser o dele (na tela estreita, "abrir" mostra o detalhe no lugar da lista) */
+function domSelecionar(sel, abrir) {
+  const antes = domDetAberto;
+  domSel = sel && sel.chave ? { chave: sel.chave, ramoId: sel.ramoId || "" } : null;
+  domSelAuto = false;
+  if (abrir !== undefined && !domDuas()) domDetAberto = !!(abrir && domSel);
+  const c = domCtx;
+  if (!c) return domSel;
+  if (domMenu) { domMenu.menu.hidden = true; domMenu.bt.setAttribute("aria-expanded", "false"); domMenu = null; }
+  if (!antes && domDetAberto) { try { domRolagemLista = $("domCorpo").scrollTop || 0; } catch (e) {} }
+  domMarcarSel();
+  domPintarDetalhe();
+  const so = domVisibilidade();
+  try { if (so) $("domCorpo").scrollTop = 0; else if (c.pDet) c.pDet.scrollTop = 0; } catch (e) {}
+  return domSel;
+}
+/* "← Voltar" (e o Esc): da tela do detalhe de volta à lista, onde estava */
+function domDetFechar() {
+  domDetAberto = false;
+  domVisibilidade();
+  try { $("domCorpo").scrollTop = domRolagemLista || 0; } catch (e) {}
+  const c = domCtx, i = domLinhaIdx();
+  const el = c && (domAba === "disc" ? (domSel && c.tls[domSel.chave]) : (i >= 0 ? c.linhas[i].el : null));
+  try { if (el && el.focus) el.focus(); } catch (e) {}
+  return true;
+}
+/* ↑↓: o vizinho na fila (com o detalhe aberto, ele passa a ser o do vizinho) */
+function domMover(passo) {
+  const c = domCtx;
+  if (!c || !c.linhas.length) return null;
+  let i = domLinhaIdx();
+  i = i < 0 ? (passo > 0 ? 0 : c.linhas.length - 1) : Math.max(0, Math.min(c.linhas.length - 1, i + passo));
+  const alvo = c.linhas[i];
+  domSelecionar(alvo.sel, domDetAberto ? true : undefined);
+  if (!domDetAberto) { try { alvo.el.focus(); if (alvo.el.scrollIntoView) alvo.el.scrollIntoView({ block: "nearest" }); } catch (e) {} }
+  return alvo;
+}
+/* o foco na ação principal do detalhe (Enter numa linha da tela larga: o segundo Enter já faz) */
+function domFocarAcao() {
+  const b = domAchar(domCtx && domCtx.detEl, "dom-acao-1");
+  try { if (b && b.focus) b.focus(); } catch (e) {}
+  return b;
+}
+/* um pedaço da barra recebe o foco (um só por barra fica na ordem do Tab) */
+function domFocarSeg(tira, el) {
+  tira.segs.forEach((x) => { x.el.tabIndex = x.el === el ? 0 : -1; });
+  try { if (el.focus) el.focus(); } catch (e) {}
+  return el;
+}
+function domTeclaSeg(alvo, k, parar) {
+  const c = domCtx;
+  const ti = c.tiras.findIndex((x) => x.segs.some((s) => s.el === alvo));
+  if (ti < 0) return false;
+  const tr = c.tiras[ti], si = tr.segs.findIndex((s) => s.el === alvo);
+  let prox = null, trProx = tr;
+  if (k === "ArrowRight") prox = tr.segs[Math.min(tr.segs.length - 1, si + 1)];
+  else if (k === "ArrowLeft") prox = tr.segs[Math.max(0, si - 1)];
+  else if (k === "Home") prox = tr.segs[0];
+  else if (k === "End") prox = tr.segs[tr.segs.length - 1];
+  else if (k === "ArrowDown" || k === "ArrowUp") {
+    trProx = c.tiras[ti + (k === "ArrowDown" ? 1 : -1)];
+    if (trProx && trProx.segs.length) prox = trProx.segs[Math.min(trProx.segs.length - 1, Math.round((si * (trProx.segs.length - 1)) / Math.max(1, tr.segs.length - 1)))];
+    else { parar(); return true; }
+  } else if (k === "Enter" || k === " ") { parar(); alvo.onclick({ stopPropagation() {} }); domFocarAcao(); return true; }
+  if (!prox) return false;
+  parar();
+  domFocarSeg(trProx, prox.el);
+  return true;
+}
+/* o teclado do Domínio */
+function domTecla(ev) {
+  const dlg = $("dlgDominio");
+  if (!ev || !dlg || !dlg.open) return false;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+  const alvo = ev.target || {};
+  const tag = String(alvo.tagName || "").toUpperCase();
+  const k = ev.key;
+  const parar = () => { if (ev.preventDefault) ev.preventDefault(); };
+  if (alvo.id === "domBusca") {
+    if (k === "Escape" && (domBusca || alvo.value)) { parar(); domEscTratado = Date.now(); domBuscaDefinir(""); return true; }
+    if ((k === "ArrowDown" || k === "Enter") && domCtx && domCtx.linhas.length) {
+      parar();
+      const l0 = domCtx.linhas[0];
+      domSelecionar(l0.sel, k === "Enter" ? true : undefined);
+      try { if (!domDetAberto && l0.el.focus) l0.el.focus(); } catch (e) {}
+      return true;
+    }
+    return false;
+  }
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return false;
+  if (k === "/") { parar(); try { $("domBusca").focus(); } catch (e) {} return true; }
+  if (domAba === "evo" || !domCtx) return false;
+  const cl = " " + String(alvo.className || "") + " ";
+  if (cl.indexOf(" cov-seg ") >= 0) return domTeclaSeg(alvo, k, parar);
+  if (k === "ArrowDown" || k === "ArrowUp") {
+    if (!domDuas() && domAba !== "prior" && !domDetAberto) return false;
+    parar();
+    domMover(k === "ArrowDown" ? 1 : -1);
+    return true;
+  }
+  if ((k === "Enter" || k === " ") && tag !== "BUTTON" && tag !== "A" && tag !== "SUMMARY") {
+    if (cl.indexOf(" dom-linha ") >= 0 || cl.indexOf(" dom-tl ") >= 0 || cl.indexOf(" cov-disc-cab ") >= 0) {
+      parar();
+      if (typeof alvo.onclick === "function") alvo.onclick({ stopPropagation() {} });
+      if (cl.indexOf(" cov-disc-cab ") < 0) domFocarAcao();
+      return true;
+    }
+  }
+  return false;
+}
+/* o filtro (os chips e as cores da barra do topo): tocar no ativo apaga, volta a "todos" */
+function domFiltroDefinir(f) {
+  domFiltro = DOM_FILTROS.indexOf(f) >= 0 ? f : "todos";
+  domLimite = DOM_LINHAS;
+  domPintar();
+  return domFiltro;
+}
+/* a busca: em todos os tópicos e ramos */
+function domBuscaDefinir(v) {
+  const novo = String(v || "");
+  domBusca = novo.trim() ? novo : "";
+  const inp = $("domBusca");
+  if (inp && inp.value !== novo) inp.value = novo;
+  domLimite = DOM_LINHAS;
+  if (domAba === "evo") domAbaDefinir("prior", true);
+  domDetAberto = false;
+  domPintar();
+  return domBusca;
+}
+
+/* os filtros: chips com a cor (são também a legenda) e a contagem de folhas (tópicos sem ramo ou ramos) de cada situação;
+ * os vazios somem (menos "todos" e o ativo) */
 function domPintarFiltros(m) {
   const cx = $("domFiltros");
   cx.innerHTML = "";
+  const tot = m.resumo.total || 1, dist = m.resumo.distribuicao || {};
   DOM_FILTROS.forEach((f) => {
     const n = f === "todos" ? m.folhas.length : m.folhas.filter((x) => (f === "vencida" ? (x.motivos || []).some((mm) => mm.cod === "revisao_vencida") : x.nivel === f)).length;
-    const b = gerEl("button", "dom-filtro" + (domFiltro === f ? " ativa" : ""), t("dom_f_" + f) + " (" + n + ")"); b.type = "button";
-    b.onclick = () => { domFiltro = f; domPintar(); };
+    if (!n && f !== "todos" && domFiltro !== f) return;
+    const cor = f !== "todos" && f !== "vencida";
+    const b = gerEl("button", "dom-filtro" + (domFiltro === f ? " ativa" : "")); b.type = "button";
+    if (cor) b.append(gerEl("i", "dom-leg-i dom-n-" + f));
+    b.append(document.createTextNode((f === "vencida" ? "⏰ " : "") + t("dom_f_" + f) + " (" + n + ")"));
+    b.setAttribute("aria-pressed", domFiltro === f ? "true" : "false");
+    b.title = cor ? t("dom_ajuda_" + f) + " — " + Math.round(((dist[f] || 0) / tot) * 100) + "% " + t("dom_do_peso") : t(f === "todos" ? "dom_f_todos_tip" : "dom_f_vencida_tip");
+    b.onclick = () => domFiltroDefinir(domFiltro === f ? "todos" : f);
     cx.append(b);
   });
 }
@@ -537,6 +1008,8 @@ function domAjudaTrocar(sim) {
   const p = $("domSub");
   if (!p) return false;
   p.hidden = sim === undefined ? !p.hidden : !sim;
+  /* (19.193.0) os cortes do semáforo moram junto da explicação, no ⓘ (o topo fica mais curto) */
+  if ($("domAjustesCx")) $("domAjustesCx").hidden = p.hidden;
   if ($("btnDomAjuda")) $("btnDomAjuda").setAttribute("aria-expanded", p.hidden ? "false" : "true");
   return !p.hidden;
 }
@@ -678,15 +1151,16 @@ function domTermoPintar(edId) {
 
 /* (19.103.0) fechar o Domínio para abrir outra coisa deixa a volta armada: ao fechar o que foi aberto, ele volta igual */
 function domFechar() {
-  const rolagens = ["dom-painel-disc", "dom-painel-prior"].map((c) => {
+  const rolagens = ["dom-painel-disc", "dom-painel-prior", "dom-painel-det", "cov-corpo"].map((c) => {
     let el = null;
-    try { el = document.querySelector("#domCorpo ." + c); } catch (e) { el = null; }
+    try { el = c === "cov-corpo" ? $("domCorpo") : document.querySelector("#domCorpo ." + c); } catch (e) { el = null; }
     return { c, y: el ? el.scrollTop : 0 };
   });
-  const estado = { ed: domEditalId, disc: domDiscAberta, filtro: domFiltro, aba: domAba, fase: ($("domFase") || {}).value || "1" };
+  const estado = { ed: domEditalId, disc: domDiscAberta, filtro: domFiltro, aba: domAba, fase: ($("domFase") || {}).value || "1",
+    sel: domSel, auto: domSelAuto, det: domDetAberto, busca: domBusca };
   painelArmar("dlgDominio", t("dom_titulo"), () => {
     domAbrir(estado.ed, estado.disc, { manter: estado });
-    rolagens.forEach((r) => { try { const el = document.querySelector("#domCorpo ." + r.c); if (el) el.scrollTop = r.y; } catch (e) {} });
+    rolagens.forEach((r) => { try { const el = r.c === "cov-corpo" ? $("domCorpo") : document.querySelector("#domCorpo ." + r.c); if (el) el.scrollTop = r.y; } catch (e) {} });
   });
 }
 
@@ -695,6 +1169,17 @@ function domAbrir(editalId, disciplina, opc) {
   if (!manter && typeof voltarLimpar === "function") voltarLimpar("dlgDominio");
   domDiscAberta = disciplina || "";
   domFiltro = manter ? (manter.filtro || "todos") : "todos";
+  /* (19.193.0) o escolhido, o detalhe aberto e a busca: de novo do zero, ou como estavam (na volta de outra tela) */
+  domSel = manter ? (manter.sel || null) : null;
+  domSelAuto = manter ? !!manter.auto : false;
+  domDetAberto = manter ? !!manter.det : false;
+  domBusca = manter ? (manter.busca || "") : "";
+  domLimite = DOM_LINHAS;
+  if ($("domBusca")) {
+    $("domBusca").value = domBusca;
+    $("domBusca").placeholder = t("dom_busca_ph");
+    $("domBusca").setAttribute("aria-label", t("dom_busca_ph"));
+  }
   /* aberto numa disciplina: vai direto ao mapa; senão, a visão lembrada */
   domAba = manter ? (manter.aba || domAbaLer()) : (disciplina ? "disc" : domAbaLer());
   let visto = false;
@@ -708,7 +1193,7 @@ function domAbrir(editalId, disciplina, opc) {
   sel.value = domEditalId;
   $("domFase").value = manter ? (manter.fase || "1") : "1";
   domPintar();
-  dicasDosBotoes({ btnGerDominio: "dom_tip_abrir", btnEdDominio: "dom_tip_abrir", btnDomX: "cov_tip_x", domEdital: "cov_tip_edital", domFase: "cov_tip_fase", btnDomCheia: "dom_cheia_tip" });
+  dicasDosBotoes({ btnGerDominio: "dom_tip_abrir", btnEdDominio: "dom_tip_abrir", btnDomX: "cov_tip_x", domEdital: "cov_tip_edital", domFase: "cov_tip_fase", btnDomCheia: "dom_cheia_tip", domBusca: "dom_busca_tip" });
   abrirModal("dlgDominio");
   /* aberto pelo toque da pessoa (o navegador só concede a tela cheia dentro de um gesto) */
   domCheiaTrocar(domCheiaPreferida(), false);
@@ -718,7 +1203,18 @@ if (typeof document !== "undefined" && $("dlgDominio")) {
   $("btnGerDominio").onclick = () => domAbrir();
   $("btnEdDominio").onclick = () => domAbrir(editalAtual);
   $("btnDomX").onclick = () => $("dlgDominio").close();
-  $("domEdital").onchange = () => { domEditalId = $("domEdital").value; $("domFase").value = "1"; domPintar(); };
+  $("domEdital").onchange = () => { domEditalId = $("domEdital").value; $("domFase").value = "1"; domSel = null; domSelAuto = false; domDetAberto = false; domLimite = DOM_LINHAS; domPintar(); };
+  /* (19.193.0) a busca (com uma pausa curta: não refaz a tela a cada letra), o teclado e o Esc do detalhe */
+  if ($("domBusca")) $("domBusca").oninput = () => { try { clearTimeout(domBuscaT); } catch (e) {} domBuscaT = setTimeout(() => domBuscaDefinir($("domBusca").value), 150); };
+  if ($("dlgDominio").addEventListener) {
+    $("dlgDominio").addEventListener("keydown", (ev) => { try { domTecla(ev); } catch (e) {} });
+    $("dlgDominio").addEventListener("cancel", (ev) => {
+      /* o Esc que limpou a busca não fecha a janela; com o detalhe aberto (tela estreita), ele volta à lista */
+      if (domEscTratado && Date.now() - domEscTratado < 400) { domEscTratado = 0; if (ev && ev.preventDefault) ev.preventDefault(); return; }
+      if (domDetAberto && domSel && !domDuas() && domAba !== "evo") { if (ev && ev.preventDefault) ev.preventDefault(); domDetFechar(); }
+    });
+    $("dlgDominio").addEventListener("close", () => domSegBalaoFechar());
+  }
   $("domFase").onchange = domPintar;
   ["domAcRisco", "domAcSeguro", "domRtRisco", "domRtSeguro"].forEach((id) => { $(id).onchange = domSalvarCortes; });
   $("btnDomPadrao").onclick = () => { try { localStorage.removeItem(DOM_CH_LIM); } catch (e) {} domPintar(); };

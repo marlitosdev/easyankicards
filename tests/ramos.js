@@ -2770,18 +2770,23 @@ async function testes() {
       const somaW = seg.reduce((x, e) => x + parseFloat(e.style.width), 0);
       ok(Math.abs(somaW - 100) < 0.05, "R69e os segmentos somam 100% da barra: " + somaW.toFixed(2));
       const discs = achar(cx(), (e) => cls(e, "cov-disc"));
-      const pesos = discs.map((d) => Number(((/vale ([\d,]+)% da prova/.exec(d.textContent) || [])[1] || "").replace(",", ".")));
+      /* (19.193.0) o peso na linha da disciplina, curto ("44%"); o "vale X% da prova" no balão */
+      const pesos = discs.map((d) => Number(((/([\d,]+)%/.exec(achar(d, (e) => cls(e, "cov-peso"))[0].textContent) || [])[1] || "").replace(",", ".")));
       ok(discs.length === 2 && pesos.every((x, i) => !i || pesos[i - 1] >= x), "R69f as disciplinas vem na ordem do peso: " + pesos.join(","));
       const det = achar(discs[0], (e) => cls(e, "cov-det"))[0];
       ok(det.hidden === true, "R69g os topicos comecam recolhidos");
       achar(discs[0], (e) => cls(e, "cov-disc-cab"))[0].onclick();
-      ok(det.hidden === false && a.domDiscAbertaAtual() === discs[0].textContent.split("vale ")[0].trim(), "R69h clicar na disciplina abre os topicos");
-      const ramoLin = achar(det, (e) => cls(e, "dom-ramo")).find((e) => /Modalidades/.test(e.textContent));
+      ok(det.hidden === false && a.domDiscAbertaAtual() === achar(discs[0], (e) => cls(e, "cov-nome"))[0].textContent, "R69h clicar na disciplina abre os topicos");
+      /* (19.193.0) os ramos moram no DETALHE do tópico: tocar no tópico do mapa abre */
+      achar(det, (e) => cls(e, "dom-tl")).find((e) => /Lei 14\.133/.test(e.textContent)).onclick();
+      const detP = () => achar(cx(), (e) => cls(e, "dom-painel-det"))[0];
+      const ramoLin = achar(detP(), (e) => cls(e, "dom-ramo")).find((e) => /Modalidades/.test(e.textContent));
       ok(ramoLin && /dom-b-vermelho/.test(ramoLin.className) && /Porque:.*cartões lembrados em/.test(ramoLin.textContent), "R69i o ramo com retencao ruim (33%) fica VERMELHO e diz o motivo: " + (ramoLin && ramoLin.textContent.slice(0, 120)));
       const chips = achar(ramoLin, (e) => cls(e, "dom-chip")).map((e) => e.textContent);
       ok(chips.length >= 3 && chips.some((c) => /nunca estudado/.test(c)) && chips.some((c) => /cartões: 33% lembrados/.test(c)), "R69j cada folha mostra os sinais em chips (estudo, acerto, cartoes): " + chips.join(" | "));
       const reforcar = achar(cx(), (e) => cls(e, "cov-bloco")).pop();
-      ok(reforcar && /O que reforçar primeiro/.test(reforcar.textContent) && /peso [\d.]+% × [\d.]+/.test(reforcar.textContent), "R69k (v18.89: ramos agrupados, o fator e' a media deles) a lista 'o que reforcar primeiro' mostra a conta (peso x fator do nivel)");
+      achar(reforcar, (e) => cls(e, "dom-linha"))[0].onclick();
+      ok(reforcar && /O que reforçar primeiro/.test(reforcar.textContent) && /peso [\d.]+% × [\d.]+/.test(achar(detP(), (e) => cls(e, "cov-item-n"))[0].textContent), "R69k (v18.89: ramos agrupados, o fator e' a media deles) o detalhe do item de 'o que reforcar primeiro' mostra a conta (peso x fator do nivel)");
       const botoes = achar(reforcar, (e) => e.tag === "button").map((b) => b.textContent);
       ok(botoes.some((b) => /Abrir/.test(b)) && botoes.some((b) => /Estudar|Criar/.test(b)), "R69l cada item de 'reforcar' leva a biblioteca e ao estudo/criacao");
       a.$("btnDomX").onclick();
@@ -2821,19 +2826,27 @@ async function testes() {
       a.$("btnGerDominio").onclick();
       const cx = () => a.$("domCorpo");
       const filtros = () => achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"));
-      ok(filtros().length === 5 && /todos \(\d+\)/.test(filtros()[0].textContent) && filtros()[0].className.indexOf("ativa") >= 0, "R70h cinco filtros com a contagem, 'todos' ativo: " + filtros().map((f) => f.textContent).join(" | "));
-      const nVerm = Number(/\((\d+)\)/.exec(filtros()[1].textContent)[1]);
+      /* (19.193.0) os chips das situações sem ninguém não aparecem; cada chip leva a cor */
+      ok(filtros().length >= 3 && /todos \(\d+\)/.test(filtros()[0].textContent) && filtros()[0].className.indexOf("ativa") >= 0, "R70h os filtros com a contagem, 'todos' ativo: " + filtros().map((f) => f.textContent).join(" | "));
+      const fVerm = filtros().find((f) => /^vermelho/.test(f.textContent));
+      const nVerm = Number(/\((\d+)\)/.exec(fVerm.textContent)[1]);
       ok(nVerm === 1, "R70i o filtro vermelho conta 1 folha (o ramo marcado inseguro): " + nVerm);
-      filtros()[1].onclick();
-      const ramosVis = achar(cx(), (e) => cls(e, "dom-ramo"));
-      ok(ramosVis.length === 1 && /Modalidades/.test(ramosVis[0].textContent) && achar(cx(), (e) => cls(e, "cov-disc")).length === 1, "R70j com o filtro vermelho so' o ramo vermelho e a sua disciplina aparecem (e ja abertos)");
-      ok(achar(cx(), (e) => cls(e, "cov-det")).every((d) => d.hidden === false), "R70k com filtro ativo as disciplinas que sobram vem abertas");
+      fVerm.onclick();
+      const linV = achar(cx(), (e) => cls(e, "dom-linha"));
+      const segs = achar(cx(), (e) => cls(e, "cov-seg"));
+      ok(linV.length === 1 && /Lei 14\.133/.test(linV[0].textContent) && achar(cx(), (e) => cls(e, "cov-disc")).length === 2 && segs.filter((x) => !cls(x, "dom-apagado")).length === 1,
+        "R70j com o filtro vermelho a fila traz só o tópico do ramo vermelho; o mapa fica inteiro, só ele aceso");
+      linV[0].onclick();
+      const detP = () => achar(cx(), (e) => cls(e, "dom-painel-det"))[0];
+      const rv = achar(detP(), (e) => cls(e, "dom-ramo"));
+      ok(rv.length >= 2 && rv.filter((x) => !cls(x, "dom-apagado")).length === 1 && /Modalidades/.test(rv.find((x) => !cls(x, "dom-apagado")).textContent), "R70k no detalhe, o ramo que não casa com o filtro fica apagado (não some)");
       achar(a.$("domFiltros"), (e) => cls(e, "dom-filtro"))[0].onclick();
-      ok(achar(cx(), (e) => cls(e, "cov-disc")).length === 2, "R70l 'todos' traz tudo de volta");
-      /* autoavaliacao pela tela */
+      ok(achar(cx(), (e) => cls(e, "cov-disc")).length === 2 && !achar(cx(), (e) => cls(e, "cov-seg")).some((x) => cls(x, "dom-apagado")), "R70l 'todos' acende tudo de volta");
+      /* autoavaliacao pela tela (no detalhe do tópico) */
       const disc = achar(cx(), (e) => cls(e, "cov-disc"))[0];
       achar(disc, (e) => cls(e, "cov-disc-cab"))[0].onclick();
-      const rl = achar(cx(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
+      achar(disc, (e) => cls(e, "dom-tl")).find((e) => /Lei 14\.133/.test(e.textContent)).onclick();
+      const rl = achar(detP(), (e) => cls(e, "dom-ramo")).find((e) => /Contratos/.test(e.textContent));
       const bMed = achar(rl, (e) => cls(e, "dom-auto-b")).find((e) => e.textContent === "difícil");
       bMed.onclick();
       ok(a.difDe("Licitações", a.domChaveAuto("Lei 14.133", "contratos")).nivel === "alta", "R70m o botao 'inseguro' do ramo grava a avaliacao dele");
@@ -2851,6 +2864,7 @@ async function testes() {
       a.$("btnDomX").onclick(); a.$("dlgGerCartoes").close();
       a.edAbrir(ed.id); a.$("editalTexto").value = ed.texto;
       a.$("btnEdDominio").onclick();
+      a.domIrAoTopico("Licitações", a.matChave("Licitações", "Lei 14.133"));
       const tl2 = achar(a.$("domCorpo"), (e) => cls(e, "dom-top")).find((e) => /Lei 14.133/.test(e.textContent));
       ok(botoes(tl2).some((b) => /Registrar/.test(b)), "R70r com o edital aberto o topico oferece 'Registrar' (estudo ou revisao)");
       /* cortes pela tela */

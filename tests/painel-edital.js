@@ -244,8 +244,8 @@ async function testes() {
     ok(api.domOrdenarPeloPainel(fake, null) === fake, "PE16b sem a fila do Painel (outro edital, outra fase), fica a ordem de antes");
     api.domAbrir(edA.id);
     const nota = api.$("domOrdemPainel");
-    ok(nota && /mesma ordem da fila “O que estudar agora”/.test(nota.textContent) && api.$("btnDomIrPainel"), "PE16c o Domínio diz que segue a fila do Painel e leva até ele: " + (nota && nota.textContent));
-    const prim = todos(api.$("domCorpo")).filter((e) => cls(e, "dom-item"))[0];
+    ok(nota && /Painel/.test(nota.textContent) && /mesma ordem da fila “O que estudar agora”/.test(nota.title) && api.$("btnDomIrPainel"), "PE16c o Domínio diz (curto; o resto no balão) que segue a fila do Painel e leva até ele: " + (nota && nota.textContent));
+    const prim = todos(api.$("domCorpo")).filter((e) => cls(e, "dom-linha"))[0];
     ok(prim && prim.textContent.indexOf(df.fila[0].tp.nome) >= 0, "PE16d o 1º do Domínio é o 1º da fila do Painel: " + df.fila[0].tp.nome);
     api.$("btnDomIrPainel").onclick();
     ok(api.$("dlgPainel").open === true && api.$("dlgDominio").open !== true, "PE16e 'abrir o Painel' troca o Domínio pelo Painel");
