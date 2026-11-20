@@ -226,6 +226,34 @@ function domFilaAgrupada(fila) {
   });
   return out.sort((a, b) => (b.urgencia - a.urgencia) || (b.pesoPct - a.pesoPct));
 }
+/* (19.191.0) UMA RESPOSTA SÓ PARA "O QUE ESTUDO AGORA?". O "o que reforçar primeiro" do Domínio ordenava só por
+ * peso × cor, e a fila "O que estudar agora" do Painel do edital junta também o risco de corte e o tempo: duas listas
+ * diferentes para a mesma pergunta. Agora, com o mesmo edital (o aberto) e a mesma fase, o Domínio segue a ORDEM da fila
+ * do Painel (a mesma conta, no mesmo período escolhido lá) e continua desenhando os itens dele (os ramos, os sinais, as
+ * ações). Fora disso (outro edital, outra fase), fica a ordem por peso × cor, como antes, e a nota diz qual vale.
+ * Devolve Map chave do tópico → posição na fila do Painel, ou null quando não se aplica. */
+function domRankPainel(ed, fase) {
+  try {
+    if (!ed || typeof peDados !== "function" || typeof peFonte !== "function") return null;
+    if (typeof editalAtual === "undefined" || String(editalAtual) !== String(ed.id)) return null;
+    const fonte = peFonte();
+    if (!fonte || !fonte.plano) return null;
+    const faseP = fonte.plano.fase && fonte.plano.fase.n === 2 ? 2 : 1;
+    if (faseP !== (fase || 1)) return null;
+    const per = typeof pePeriodo !== "undefined" ? pePeriodo : "14";
+    const dd = peDados(fonte, { periodo: per });
+    const rank = new Map();
+    (dd.fila || []).forEach((x, i) => { if (x && x.tp && !rank.has(x.tp.chave)) rank.set(x.tp.chave, i); });
+    return rank.size ? rank : null;
+  } catch (e) { return null; }
+}
+/* a fila do Domínio na ordem do Painel: os tópicos que a fila do Painel tem, na posição dela; os outros depois, na ordem
+ * de antes (a ordenação é estável) */
+function domOrdenarPeloPainel(fila, rank) {
+  if (!rank) return fila;
+  return (fila || []).map((f, i) => ({ f, i, r: rank.has(f.chave) ? rank.get(f.chave) : Infinity }))
+    .sort((a, b) => (a.r - b.r) || (a.i - b.i)).map((x) => x.f);
+}
 /* UM ITEM DA FILA: o que é, o porquê, os sinais (com os chutes), os ramos do tópico coloridos, o material e as ações
  * (a principal, conforme a cor, primeiro) */
 function domItemFila(f, tp, semRamos) {
@@ -353,11 +381,20 @@ function domPintar() {
   /* ---- prioridades: o que reforçar primeiro (com o filtro escolhido), o porquê à vista e o ganho dos primeiros ---- */
   const agrupar = domAgruparLer();
   const filaFolhas = m.reforcar.filter(domCasa);
-  const fila = agrupar ? domFilaAgrupada(filaFolhas) : filaFolhas;
+  const rankP = domRankPainel(ed, fase);
+  const fila = domOrdenarPeloPainel(agrupar ? domFilaAgrupada(filaFolhas) : filaFolhas, rankP);
   const s = gerEl("div", "cov-bloco");
   s.append(gerEl("h4", "", t("dom_reforcar")));
-  /* (19.105.0) a ordem daqui é só peso × cor; a que junta o corte e o tempo é a do painel do edital */
-  s.append(gerEl("p", "nota", t("dom_reforcar_painel")));
+  /* (19.191.0) com a ordem do Painel em uso, a nota diz isso e leva ao Painel; senão, a de antes (só peso × cor) */
+  const notaOrdem = gerEl("p", "nota dom-ordem-painel", t(rankP ? "dom_reforcar_painel_igual" : "dom_reforcar_painel"));
+  notaOrdem.id = "domOrdemPainel";
+  if (rankP && typeof peAbrir === "function") {
+    const bp = gerEl("button", "btn-min dom-ir-painel", t("dom_ir_painel"));
+    bp.type = "button"; bp.id = "btnDomIrPainel";
+    bp.onclick = () => { try { domFechar(); } catch (e) {} peAbrir(); };
+    notaOrdem.append(document.createTextNode(" "), bp);
+  }
+  s.append(notaOrdem);
   if (filaFolhas.some((f) => f.tipo === "ramo")) {
     const lg = gerEl("div", "dom-ordem dom-agrupar");
     lg.append(gerEl("span", "dom-item-rot", t("dom_agrupar_rot")));

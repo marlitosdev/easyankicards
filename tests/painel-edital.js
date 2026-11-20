@@ -153,11 +153,12 @@ async function testes() {
   const contaOk = df.fila.every((x) => { const p = x.tp.partes; return Math.abs((p.base * p.acMult + p.corte) * p.tempoMult - x.tp.urgencia) < 1e-9; })
     && df.disciplinas.every((d) => Math.abs(d.urgencia - d.topicos.reduce((a, tp) => a + tp.urgencia, 0)) < 1e-9);
   ok(contaOk, "PE9c a conta do item fecha, e 'mais urgente' da disciplina é a soma dos tópicos dela");
-  ok(/^Conta: \(?peso × cor [\d,]+.* = [\d,]+ pontos/.test(api.$("peFi_0").title || ""), "PE9d a conta por extenso no balão: " + api.$("peFi_0").title);
+  /* (19.191.0) o "vale X% da prova" saiu dos selos e abre o balão, antes da conta */
+  ok(/^vale [\d,]+% da prova · Conta: \(?peso × cor [\d,]+.* = [\d,]+ pontos/.test(api.$("peFi_0").title || ""), "PE9d quanto vale e a conta por extenso no balão: " + api.$("peFi_0").title);
   /* com o corte e o tempo, os parênteses dizem a ordem: (peso × cor + corte) × tempo */
   const comTudo = df.fila.find((x) => x.tp.partes.corte > 0 && x.tp.partes.tempoMult !== 1);
   ok(comTudo && /^Conta: \(peso × cor [\d,]+ \+ corte [\d,]+\) × tempo 1,25 = [\d,]+ pontos$/.test(api.peFilaConta(comTudo.tp)), "PE9f os parênteses na conta: " + (comTudo && api.peFilaConta(comTudo.tp)));
-  ok(itensFila().every((e) => motDe(e).some((m) => /^vale [\d,]+% da prova$/.test(m))), "PE9e todo item diz quanto vale");
+  ok(itensFila().every((e) => /^vale [\d,]+% da prova · /.test(e.title || "") && !motDe(e).some((m) => /^vale [\d,]+% da prova$/.test(m))), "PE9e todo item diz quanto vale — no balão, não como mais um selo");
 
   /* ---- PE10 o corte: o bloco abaixo do mínimo põe o que falta estudar dele na frente ---- */
   const fCrase = filaDe(df, "Crase"), fObr = filaDe(df, "Obrigação");
@@ -231,6 +232,25 @@ async function testes() {
   df = api.peUltimoTeste();
   ok(filaDe(df, "P2").tp.partes.corte === 0 && !df.urgencias.some((u) => u.tipo === "corte"), "PE15e o bloco passou do mínimo: o empurrão some");
   api.$("dlgPainel").close();
+
+  /* (19.191.0) PE16: UMA RESPOSTA SÓ — o "o que reforçar primeiro" do Domínio segue a ordem da fila do Painel */
+  {
+    const edA = api.edAberto();
+    const rank = api.domRankPainel(edA, 1);
+    ok(rank && rank.get(df.fila[0].tp.chave) === 0 && rank.size >= 1, "PE16 a posição de cada tópico na fila do Painel (o 1º é o 1º)");
+    const fake = [{ chave: "x" }, { chave: df.fila[1].tp.chave }, { chave: df.fila[0].tp.chave }];
+    const ord = api.domOrdenarPeloPainel(fake, rank).map((f) => f.chave);
+    ok(ord[0] === df.fila[0].tp.chave && ord[1] === df.fila[1].tp.chave && ord[2] === "x", "PE16a a ordem do Painel; o que ele não tem vai para o fim");
+    ok(api.domOrdenarPeloPainel(fake, null) === fake, "PE16b sem a fila do Painel (outro edital, outra fase), fica a ordem de antes");
+    api.domAbrir(edA.id);
+    const nota = api.$("domOrdemPainel");
+    ok(nota && /mesma ordem da fila “O que estudar agora”/.test(nota.textContent) && api.$("btnDomIrPainel"), "PE16c o Domínio diz que segue a fila do Painel e leva até ele: " + (nota && nota.textContent));
+    const prim = todos(api.$("domCorpo")).filter((e) => cls(e, "dom-item"))[0];
+    ok(prim && prim.textContent.indexOf(df.fila[0].tp.nome) >= 0, "PE16d o 1º do Domínio é o 1º da fila do Painel: " + df.fila[0].tp.nome);
+    api.$("btnDomIrPainel").onclick();
+    ok(api.$("dlgPainel").open === true && api.$("dlgDominio").open !== true, "PE16e 'abrir o Painel' troca o Domínio pelo Painel");
+    api.$("dlgPainel").close();
+  }
   return Object.assign(falhas, { quantas: n });
 }
 

@@ -378,7 +378,7 @@ function peMotivos(tp, d) {
   const p = tp.partes || {};
   if (p.corte > 0) out.push({ cls: "corte", txt: t("pe_mot_corte", { b: d.bloco.nome, p: Math.round(d.bloco.pct || 0), m: d.bloco.minPct }) });
   if (p.acMult > 1) out.push({ cls: "corte", txt: t("pe_mot_acerto_corte", { b: d.bloco.nome, p: d.bloco.acerto, m: d.bloco.minPct }) });
-  out.push({ cls: "vale", txt: t("pe_mot_vale", { p: pctProva(tp.pesoPct) }) });
+  /* (19.191.0) "vale X% da prova" saiu dos selos: vai no balão do item (peFilaItem), com a conta */
   if (p.tempoMult > 1) out.push({ cls: "tempo", txt: d.totalMin ? t("pe_mot_pouco_tempo", { t: Math.round(d.tempoPct), v: pctProva(d.vale) }) : t("pe_mot_zero_tempo") });
   if (p.tempoMult < 1) out.push({ cls: "muito", txt: t("pe_mot_muito_tempo", { t: Math.round(d.tempoPct), v: pctProva(d.vale) }) });
   return out;
@@ -421,7 +421,7 @@ function peFilaItem(x, i) {
   const tp = x.tp, d = x.d;
   const it = gerEl("div", "pe-fila-it");
   it.id = "peFi_" + i;
-  it.title = peFilaConta(tp) + (tp.ramo ? " · " + t("pe_ramo_pior", { r: tp.ramo.nome }) : "");
+  it.title = t("pe_mot_vale", { p: pctProva(tp.pesoPct) }) + " · " + peFilaConta(tp) + (tp.ramo ? " · " + t("pe_ramo_pior", { r: tp.ramo.nome }) : "");
   it.append(gerEl("span", "pe-fila-n", String(i + 1)), gerEl("i", "pe-dot dom-n-" + tp.nivel));
   const txt = gerEl("div", "pe-fila-txt");
   const nome = gerEl("div", "pe-fila-nome");
