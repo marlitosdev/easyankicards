@@ -27,6 +27,9 @@ const CM_DEFEITOS = [
   { id: "instrucao", re: /(responda|use exatamente|n[ãa]o escreva|formato:|uma linha por|separe com)/i },
   { id: "markdown", re: /(\*\*|^#{1,6}\s|\n#{1,6}\s|^\s*---\s*$)/ },
   { id: "emoji", re: /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u },
+  /* (19.196.0) HTML cru em QUALQUER campo (<span>, <div>, &nbsp;, <strong style=…>). <b>/<i>/<u>/<br> não contam: são o
+   * formato do Anki e a tela já desenha formatado (fmtNos, parser.js) */
+  { id: "html", re: null },
   { id: "longo", re: null },
   { id: "sem_verso", re: null },
   { id: "cloze_repetida", re: null },
@@ -48,6 +51,11 @@ function cmDefeitosDoCartao(c) {
       /* cartão sem verso só faz sentido em lacuna; fora dela, é meio
        * cartão — pergunta sem resposta para conferir */
       if (!v.trim() && !/\{\{c\d+::/.test(f)) achados.push({ id: "sem_verso" });
+      return;
+    }
+    if (d.id === "html") {
+      const campos = [f, v, String(c.more || "")].concat(Array.isArray(c.options) ? c.options : []);
+      if (typeof fmtTemHtmlCru === "function" && campos.some(fmtTemHtmlCru)) achados.push({ id: "html" });
       return;
     }
     if (d.id === "cloze_repetida") {

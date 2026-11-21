@@ -542,6 +542,92 @@ function temMarkdown(raw) { return new RegExp(MD_NEGRITO).test(raw); }
 function corrigirMarkdown(raw) { return raw.replace(reNegrito(), "<b>$1</b>"); }
 
 /* ===================================================================
+ * (19.196.0) A FORMATAÇÃO DO CARTÃO NA TELA E O HTML CRU
+ * O formato do cartão é o do Anki: negrito é <b>texto</b> (é o que o
+ * corrigirMarkdown acima produz a partir do "**" da IA) e quebra de linha
+ * dentro de um campo é <br>. O Anki desenha isso; a tela de estudo e a
+ * prévia desenhavam tudo como texto, e o relato real foi uma frente com
+ * "o <b>motivo</b> e a <b>motivação</b>" à vista, com as tags.
+ * Na tela, só estas tags viram formatação (sem atributo nenhum); qualquer
+ * outra coisa com cara de tag continua texto, escapada — o cartão nunca
+ * injeta HTML de verdade.
+ * HTML CRU é o que sobra de colar do navegador ou de um .apkg: <span>,
+ * <div>, <font>, <strong style=…>, &nbsp;. Esse sai pelo
+ * fmtLimparCampo, um campo de cada vez, sem tocar no que é do Anki.
+ * =================================================================== */
+const FMT_TAGS = { b: "b", strong: "b", i: "i", em: "i", u: "u", sub: "sub", sup: "sup" };
+/* tags que só embrulham (o conteúdo fica): a lista é FECHADA de propósito, para "x<y e y>z" nunca virar tag */
+const FMT_EMBRULHO = "span|font|a|small|big|mark|code|tt|center|o:p|abbr|cite|q|s|strike|del|ins|ul|ol|blockquote|section|article|label";
+const FMT_BLOCO = "div|p|li|h[1-6]|pre|tr|table|tbody|td|th";
+
+/* as entidades que aparecem em texto colado; &lt; &gt; &amp; ficam no texto guardado (no Anki elas são o "<" de verdade) */
+function fmtEntidadesSoltas(s) {
+  return String(s).replace(/&nbsp;|&#160;/gi, " ").replace(/&quot;/gi, "\"").replace(/&#39;|&apos;/gi, "'");
+}
+/* para DESENHAR: as de sempre viram o caractere (num nó de texto, então "&lt;script&gt;" vira só texto) */
+function fmtEntidades(s) {
+  return fmtEntidadesSoltas(s).replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/&#(\d{1,6});/g, (m, n) => { try { return String.fromCodePoint(+n); } catch (e) { return m; } })
+    .replace(/&amp;/gi, "&");
+}
+
+/* só a parte de HTML: tags de fora, sinônimos e atributos, blocos e entidades soltas */
+function fmtLimparHtml(s) {
+  let x = String(s == null ? "" : s);
+  x = x.replace(/<br\s*\/?>/gi, "<br>");
+  x = x.replace(new RegExp("</(?:" + FMT_BLOCO + ")\\s*>", "gi"), "<br>")
+    .replace(new RegExp("<(?:" + FMT_BLOCO + ")(?:\\s[^<>]*)?>", "gi"), "");
+  x = x.replace(new RegExp("</?(?:" + FMT_EMBRULHO + ")(?:\\s[^<>]*)?>", "gi"), "");
+  x = x.replace(/<(\/?)(b|strong|i|em|u|sub|sup)(?:\s[^<>]*)?>/gi, (m, f, tg) => "<" + f + FMT_TAGS[tg.toLowerCase()] + ">");
+  x = fmtEntidadesSoltas(x);
+  return x.replace(/<(b|i|u|sub|sup)>(\s*)<\/\1>/g, (m, tg, esp) => (esp ? " " : ""));
+}
+function fmtTemHtmlCru(s) { const x = String(s == null ? "" : s); return !!x.trim() && fmtLimparHtml(x) !== x; }
+
+/* um campo inteiro: o HTML cru, o "**" (que o Anki mostra como asteriscos) e os espaços/quebras que sobram nas pontas */
+function fmtLimparCampo(s) {
+  return fmtLimparHtml(String(s == null ? "" : s).replace(reNegrito(), "<b>$1</b>"))
+    .replace(/[ \t]{2,}/g, " ").replace(/^(?:\s|<br>)+|(?:\s|<br>)+$/g, "");
+}
+
+/* o cartão inteiro, campo a campo (frente, resposta, "saiba mais", alternativas, título) */
+function fmtLimparCartao(c) {
+  const novo = Object.assign({}, c);
+  ["front", "back", "more", "titulo"].forEach((k) => { if (typeof c[k] === "string") novo[k] = fmtLimparCampo(c[k]); });
+  if (Array.isArray(c.options)) novo.options = c.options.map(fmtLimparCampo);
+  return novo;
+}
+function fmtCartaoMudou(a, b) {
+  return ["front", "back", "more", "titulo"].some((k) => (a[k] || "") !== (b[k] || ""))
+    || JSON.stringify(a.options || []) !== JSON.stringify(b.options || []);
+}
+
+/* DESENHA um texto com a formatação permitida: monta os elementos um a um (nunca innerHTML).
+ * `aoCloze(alvo, n, dentro)`, se vier, desenha cada {{cN::…}} dentro do elemento em que ele cai
+ * (assim "<b>{{c1::x}}</b>" fica em negrito também). Tag de fechamento sem par some; tag aberta
+ * sem fechamento vale até o fim. <br> vira quebra de linha (o CSS da tela preserva). */
+function fmtNos(pai, texto, aoCloze) {
+  const s = String(texto == null ? "" : texto);
+  const re = /<(\/?)(b|strong|i|em|u|sub|sup)\s*>|<br\s*\/?>|\{\{c(\d+)::([\s\S]*?)\}\}/gi;
+  const pilha = [pai], nomes = [""];
+  const topo = () => pilha[pilha.length - 1];
+  const txt = (x) => { if (x) topo().append(document.createTextNode(fmtEntidades(x))); };
+  let ult = 0, m;
+  while ((m = re.exec(s))) {
+    txt(s.slice(ult, m.index));
+    ult = re.lastIndex;
+    if (m[3]) { if (aoCloze) aoCloze(topo(), +m[3], m[4]); else txt(m[0]); continue; }
+    if (!m[2]) { topo().append(document.createTextNode("\n")); continue; }
+    const tag = FMT_TAGS[m[2].toLowerCase()];
+    if (!m[1]) { const el = document.createElement(tag); topo().append(el); pilha.push(el); nomes.push(tag); continue; }
+    const k = nomes.lastIndexOf(tag);
+    if (k > 0) { pilha.length = k; nomes.length = k; }
+  }
+  txt(s.slice(ult));
+  return pai;
+}
+
+/* ===================================================================
  * SOBRAS DA IA
  * O NotebookLM e cia. deixam no cartão o que era para a conversa: as
  * citações "[1, 2]" da fonte, o "Exato!" de quem confirma a pergunta,

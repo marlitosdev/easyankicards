@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.195.0";
+const VERSAO = "19.196.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -1936,7 +1936,8 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
   const partes = texto.split(/(\{\{c\d+::[\s\S]*?\}\})/g);
   partes.forEach((p) => {
     const m = p.match(/^\{\{c\d+::([\s\S]*?)\}\}$/);
-    if (!m) { pai.append(document.createTextNode(p)); return; }
+    /* (19.196.0) o texto em volta da lacuna com o <b>/<i>/<u> do Anki desenhado (o resto continua texto) */
+    if (!m) { fmtNos(pai, p); return; }
     const inner = m[1].split("::");
     const ans = inner[0].trim(), dica = (inner[1] || "").trim();
     const opcoes = dica.includes("/")
@@ -1966,7 +1967,8 @@ function textoClozeResolvido(pai, texto, cor, mascarar) {
 
     const b = document.createElement("b");
     b.style.color = cor;
-    b.textContent = mascarar ? (dica ? "[" + dica + "]" : "[...]") : ans;
+    if (mascarar) b.textContent = dica ? "[" + dica + "]" : "[...]";
+    else fmtNos(b, ans);
     pai.append(b);
   });
 }
@@ -2080,7 +2082,8 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
   if (c.kind === "mc") {
     c.options.forEach((o, i) => {
       const li = document.createElement("div");
-      li.textContent = letra(i) + ") " + o;
+      li.append(document.createTextNode(letra(i) + ") "));
+      fmtNos(li, o);
       frente.append(document.createElement("br"), li);
     });
   }
@@ -2100,10 +2103,10 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
       if (itens) itens.forEach((i) => blocos.push(["item", i]));
       else blocos.push(["par", l]);
     });
-    if (blocos.length < 2) { el.textContent = txt || ""; return; }
+    if (blocos.length < 2) { fmtNos(el, txt || ""); return; }
     blocos.forEach(([cls, txt2], i) => {
       const d = document.createElement("div");
-      d.textContent = txt2;
+      fmtNos(d, txt2);
       d.style.margin = "0 0 8px";
       if (i) {
         d.style.borderTop = "1px solid " + cor;
@@ -2126,7 +2129,7 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
     "text-align:" + (longa ? al : "center") + ";" +
     "font-weight:" + (longa ? "600" : "700") + ";" +
     "font-size:" + (longa ? "13" : "14") + "px;color:" + p.destaque + ";" + sombra;
-  if (c.kind === "mc") verso.textContent = "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || "");
+  if (c.kind === "mc") fmtNos(verso, "✔ " + letra(c.correct) + ") " + (c.options[c.correct] || ""));
   else if (CLOZE_RE.test(c.front)) verso.textContent = "";
   else emBlocos(verso, c.back, p.texto);
   if (temVerso) {
@@ -2156,9 +2159,10 @@ function renderCartaoEstilizado(div, c, mostrarResposta, opc) {
       const m = linha.match(/^([^—:]{2,60})\s+—\s+([\s\S]+)$/);
       if (m) {
         const b = document.createElement("b");
-        b.textContent = m[1].trim(); b.style.color = p.destaque;
-        it.append(b, document.createTextNode(" — " + m[2].trim()));
-      } else it.textContent = linha;
+        fmtNos(b, m[1].trim()); b.style.color = p.destaque;
+        it.append(b, document.createTextNode(" — "));
+        fmtNos(it, m[2].trim());
+      } else fmtNos(it, linha);
       cont.append(it);
     });
     wrap.append(sm, cont);

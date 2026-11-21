@@ -2934,6 +2934,76 @@ async function testes() {
     ok(a.$("dlgGerEstudo").open === true, "G43h relatar fechou o player sem motivo");
   }
 
+  /* ---- G44: o <b> do cartão aparecia CRU no estudo (19.196.0). O relato real: "Qual é a diferença ... entre o
+   * <b>motivo</b> e a <b>motivação</b> ...?" com as tags à vista. O <b> é o formato do Anki (o próprio "Corrigir
+   * erros" troca o "**" da IA por ele); a tela é que desenhava tudo como texto. Agora: só <b>/<i>/<u>/<sub>/<sup>
+   * (sem atributo) viram formatação, o resto continua texto; e o menu ⋮ tem "corrigir o formato deste cartão",
+   * que limpa o HTML cru (<span>, <div>, &nbsp;, <strong style>) só deste cartão, sem perder o lugar nem a agenda. ---- */
+  {
+    const { a } = montar();
+    const tags = (el, nome, acc) => { acc = acc || []; Array.from(el.children || []).forEach((c) => { if (String(c.tagName || "").toLowerCase() === nome) acc.push(c); tags(c, nome, acc); }); return acc; };
+
+    /* desenho: o permitido vira elemento, o resto continua texto */
+    const d1 = a.fmtNos(a.gerEl("div", ""), "o <b>motivo</b> e a <i>motivação</i> <script>alert(1)</script> &lt;b&gt;x");
+    ok(tags(d1, "b").length === 1 && tags(d1, "b")[0].textContent === "motivo" && tags(d1, "i").length === 1, "G44 <b> e <i> viram negrito e itálico: " + d1.textContent);
+    ok(tags(d1, "script").length === 0 && /<script>alert\(1\)<\/script>/.test(d1.textContent), "G44a qualquer outra tag continua TEXTO (nada de HTML de verdade): " + d1.textContent);
+    ok(/<b>x$/.test(d1.textContent) && tags(d1, "b").length === 1, "G44b &lt;b&gt; aparece como \"<b>\" escrito, não vira negrito");
+    const d2 = a.fmtNos(a.gerEl("div", ""), "<b onclick=\"x\">y</b> e <B>z</b>");
+    ok(tags(d2, "b").length === 1 && tags(d2, "b")[0].textContent === "z" && /onclick/.test(d2.textContent), "G44c tag com atributo não vira formatação (maiúscula sim): " + d2.textContent);
+
+    /* limpeza: o que é do Anki fica, o cru sai */
+    ok(a.fmtLimparCampo("<span style=\"color:red\">a</span>&nbsp;<strong>b</strong><div>c</div>") === "a <b>b</b>c", "G44d span, &nbsp;, strong e div: " + a.fmtLimparCampo("<span style=\"color:red\">a</span>&nbsp;<strong>b</strong><div>c</div>"));
+    ok(a.fmtLimparCampo("o <b>motivo</b><br>linha 2") === "o <b>motivo</b><br>linha 2" && !a.fmtTemHtmlCru("o <b>motivo</b><br>linha 2"), "G44e <b> e <br> não são HTML cru — são o formato do cartão");
+    ok(a.fmtLimparCampo("a **negrito** b") === "a <b>negrito</b> b", "G44f o \"**\" da IA vira <b>, como no Corrigir erros");
+    ok(a.fmtLimparCampo("se x<y e y>z") === "se x<y e y>z" && !a.fmtTemHtmlCru("se x<y e y>z"), "G44g \"x<y e y>z\" não é tag e não é mexido");
+    ok(a.fmtTemHtmlCru("a&nbsp;b") && a.fmtTemHtmlCru("<span>a</span>") && a.fmtTemHtmlCru("<strong>a</strong>"), "G44h &nbsp;, <span> e <strong> contam como HTML cru");
+
+    /* a checagem de qualidade (a mesma do "melhorar") aponta o HTML cru, em qualquer campo — e não o <b> */
+    const temHtml = (c) => a.cmDefeitosDoCartao(c).some((x) => x.id === "html");
+    ok(temHtml({ front: "P?", back: "<span>R</span>", more: "" }) && temHtml({ front: "P?", back: "R", more: "Nota&nbsp;x" }), "G44i a checagem aponta HTML cru na resposta e no saiba mais");
+    ok(!temHtml({ front: "o <b>motivo</b>?", back: "R", more: "" }), "G44j <b> não é apontado como defeito");
+
+    /* o player: desenha formatado e corrige só este cartão */
+    const ch = a.matChave("Adm", "Atos administrativos");
+    a.matGravarCartoes(ch, [
+      "Primeiro cartão? :: Resposta um. :: t",
+      "@ Direito Administrativo > Atos administrativos > Requisitos de validade",
+      "Qual a diferença entre o <b>motivo</b> e a <span style=\"color:red\">motivação</span>&nbsp;nos atos? :: O motivo é o fato; a motivação, a <strong>exteriorização</strong>. :: t",
+      "+ Exemplo — Atos punitivos exigem motivação&nbsp;(art. 50).",
+      "Terceiro cartão? :: Resposta três. :: t"].join("\n"), { disciplina: "Adm", topico: "Atos administrativos" });
+    a.estcModoForcar("sequencia");
+    a.gerAbrirNoTopico("Adm", "Atos administrativos", { estudar: true });
+    a.estcIr(1);
+    let st = a.estcAtual();
+    ok(st.i === 1 && /motivo/.test(st.un[1].nota.card.front), "G44k premissa: o cartão com HTML é o 2º da lista");
+    const cx = a.$("estCartao");
+    ok(tags(cx, "b").some((b) => b.textContent === "motivo") && !/<b>/.test(cx.textContent), "G44l no estudo o <b> aparece em negrito, sem as tags: " + cx.textContent.slice(0, 120));
+    ok(/<span style/.test(cx.textContent), "G44m premissa: o <span> continua à vista (é HTML cru, não formatação)");
+
+    /* a agenda do cartão: um registro que tem de acompanhar a correção */
+    const idsAntes = a.estcIdsDoCard(st.un[1].nota.card);
+    const reg = { s: "review", st: 0, iv: 9, ez: 2.5, due: Date.now() + 86400000, n: 4, l: 1, h: [] };
+    a.lojaGravar(a.ESTC_CH_REGS, JSON.stringify({ [idsAntes[0]]: reg }));
+    a.estcVirar();
+    a.estcMenuMontar();
+    const itFmt = Array.from(a.$("estMenu").children).find((b) => b.textContent === a.t("est_m_formato"));
+    ok(!!itFmt, "G44n o menu ⋮ do estudo oferece corrigir o formato deste cartão");
+    itFmt.onclick();
+    st = a.estcAtual();
+    const card = st.un[st.i].nota.card;
+    ok(a.$("dlgGerEstudo").open === true && st.i === 1 && st.rev === true, "G44o o estudo continua aberto, no mesmo cartão e do mesmo lado (i=" + st.i + ", rev=" + st.rev + ")");
+    ok(card.front === "Qual a diferença entre o <b>motivo</b> e a motivação nos atos?", "G44p a frente ficou limpa, com o <b> mantido: " + card.front);
+    ok(card.back === "O motivo é o fato; a motivação, a <b>exteriorização</b>." && card.more === "Exemplo — Atos punitivos exigem motivação (art. 50).", "G44q resposta e saiba mais também: " + card.back + " | " + card.more);
+    const gravado = String((a.matResumosAtual()[ch] || {}).cartoes || "");
+    ok(!/span|&nbsp;|strong/.test(gravado) && /Primeiro cartão\? :: Resposta um\./.test(gravado) && /Terceiro cartão\? :: Resposta três\./.test(gravado) && /^@ Direito Administrativo/m.test(gravado),
+      "G44r gravou só este cartão (os vizinhos e o título ficaram): " + gravado);
+    const regs = JSON.parse(a.lojaLer(a.ESTC_CH_REGS) || "{}");
+    const idNovo = a.estcIdsDoCard(card)[0];
+    ok(idNovo !== idsAntes[0] && regs[idNovo] && regs[idNovo].iv === 9 && !regs[idsAntes[0]], "G44s a agenda do cartão foi junto (o id nasce do texto)");
+    ok(tags(a.$("estCartao"), "b").some((b) => b.textContent === "exteriorização") && !/span|&nbsp;/.test(a.$("estCartao").textContent), "G44t a tela repintou na hora, já limpa");
+    ok(a.estcCorrigirFormato() === false && a.estcAtual().i === 1, "G44u de novo: nada a corrigir, nada muda");
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

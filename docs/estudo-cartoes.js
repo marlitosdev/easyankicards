@@ -96,20 +96,21 @@ function estcUnidades(lista) {
 /* A frente (ou a frente já respondida) de um cartão de lacuna: só a lacuna `cn` fica escondida; as outras já vêm
  * preenchidas, como no Anki. Escondida mostra a dica ("[A ou B?]"); revelada mostra a resposta em destaque. */
 function estcClozeNos(pai, texto, cn, rev) {
-  const t0 = estcTxt(texto);
-  const re = /\{\{c(\d+)::([\s\S]*?)\}\}/g;
-  let ult = 0, m;
-  while ((m = re.exec(t0))) {
-    if (m.index > ult) pai.append(document.createTextNode(t0.slice(ult, m.index)));
-    const partes = m[2].split("::");
+  /* (19.196.0) pelo fmtNos: o <b>/<i>/<u> do Anki vira formatação, e a lacuna cai dentro do negrito em que estiver */
+  fmtNos(pai, texto, (alvo, n, dentro) => {
+    const partes = String(dentro).split("::");
     const resp = (partes[0] || "").trim();
     const dica = (partes[1] || "").trim();
-    if (+m[1] === cn) pai.append(gerEl("span", "est-cl" + (rev ? " est-cl-r" : ""), rev ? resp : "[" + (dica || "…") + "]"));
-    else pai.append(document.createTextNode(resp));
-    ult = m.index + m[0].length;
-  }
-  if (ult < t0.length) pai.append(document.createTextNode(t0.slice(ult)));
+    if (n === cn) {
+      const sp = gerEl("span", "est-cl" + (rev ? " est-cl-r" : ""));
+      if (rev) fmtNos(sp, resp); else sp.textContent = "[" + (dica || "…") + "]";
+      alvo.append(sp);
+    } else fmtNos(alvo, resp);
+  });
 }
+
+/* (19.196.0) um bloco de texto do cartão, com a formatação permitida desenhada (nunca innerHTML) */
+function estcTxtEl(tag, cls, texto) { return fmtNos(gerEl(tag, cls), texto); }
 
 /* "Saiba mais": um conceito por linha, o termo em destaque quando vem no formato "Termo — explicação" */
 function estcSaibaMais(cx, more) {
@@ -117,8 +118,8 @@ function estcSaibaMais(cx, more) {
     if (/^-{2,}$/.test(linha)) { cx.append(gerEl("div", "est-hr")); return; }
     const it = gerEl("div", "est-saiba-l");
     const m = linha.match(/^([^—:]{2,60})\s+—\s+([\s\S]+)$/);
-    if (m) { it.append(gerEl("b", "", m[1].trim()), document.createTextNode(" — " + m[2].trim())); }
-    else it.textContent = linha;
+    if (m) { it.append(estcTxtEl("b", "", m[1].trim()), document.createTextNode(" — ")); fmtNos(it, m[2].trim()); }
+    else fmtNos(it, linha);
     cx.append(it);
   });
 }
@@ -156,14 +157,14 @@ function estcPintar() {
   try { const pr = typeof mmCartaoProblemas === "function" ? mmCartaoProblemas(u.nota) : []; if (pr.length) cx.append(mmCartaoAvisoEl(pr, estcRev, u.nota)); } catch (e) {}
   const frente = gerEl("div", "est-frente");
   if (c.kind === "mc") {
-    frente.append(gerEl("div", "est-txt", estcTxt(c.front)));
+    frente.append(estcTxtEl("div", "est-txt", c.front));
     const ops = gerEl("div", "est-ops");
     (c.options || []).forEach((o, i) => {
       const certa = i === c.correct;
       const cls = "est-op" + (estcRev && certa ? " est-op-ok" : "") + (estcRev && estcEsc === i && !certa ? " est-op-erro" : "");
       const b = gerEl("button", cls);
       b.type = "button";
-      b.append(gerEl("span", "est-op-l", letra(i)), gerEl("span", "est-op-t", estcTxt(o)));
+      b.append(gerEl("span", "est-op-l", letra(i)), estcTxtEl("span", "est-op-t", o));
       b.disabled = estcRev;
       b.onclick = () => estcEscolher(i);
       ops.append(b);
@@ -174,7 +175,7 @@ function estcPintar() {
     estcClozeNos(tx, c.front, u.cn, estcRev);
     frente.append(tx);
   } else {
-    frente.append(gerEl("div", "est-txt", estcTxt(c.front)));
+    frente.append(estcTxtEl("div", "est-txt", c.front));
   }
   cx.append(frente);
   /* (19.67.0) fórmulas em LaTeX ("$p \wedge q$", "$\frac{a}{b}$") desenhadas, como no resumo */
@@ -183,9 +184,9 @@ function estcPintar() {
     const verso = gerEl("div", "est-verso");
     /* no básico o verso É a resposta; na lacuna e na múltipla escolha ele é a justificativa (a resposta já está na frente) */
     if (c.kind !== "mc" && !u.cn && c.back) {
-      verso.append(gerEl("div", "est-hr"), gerEl("div", "est-txt est-resp", estcTxt(c.back)));
+      verso.append(gerEl("div", "est-hr"), estcTxtEl("div", "est-txt est-resp", c.back));
     } else if (c.back) {
-      verso.append(gerEl("div", "est-just", estcTxt(c.back)));
+      verso.append(estcTxtEl("div", "est-just", c.back));
     }
     cx.append(verso);
     if (typeof matTexDesenharEm === "function") matTexDesenharEm(verso);
@@ -484,7 +485,62 @@ function estcMenuMontar() {
     /* pela BANCADA: com o editor, a prévia e as ferramentas de melhorar, com este tópico como alvo */
     item(t("est_m_criar"), () => { estcFechar(); bancAlvoDefinir(u.nota.disciplina, u.nota.topico); });
   }
+  /* (19.196.0) só este cartão, sem sair do estudo: tira o HTML cru (<span>, <div>, &nbsp;, <strong style=…>) e o "**" */
+  item(t("est_m_formato"), estcCorrigirFormato);
   item(t("est_m_relatar"), estcRelatarAbrir);
+}
+
+/* =====================================================================
+ * "CORRIGIR O FORMATO DESTE CARTÃO" (19.196.0)
+ *
+ * Limpa e grava SÓ o cartão da tela (fmtLimparCartao, em parser.js), pelo mesmo caminho do "editar" da
+ * Biblioteca (gerEditar: versão da bancada, desfazer da Biblioteca, registro). O estudo continua no mesmo
+ * cartão e no mesmo lado (frente ou resposta), e a agenda acompanha: o id do cartão nasce do texto, então
+ * o registro dele muda de id junto (estcMigrarAgenda), como na edição.
+ * <b>, <i>, <u> e <br> NÃO são defeito — são o formato do Anki e já aparecem formatados na tela.
+ * ===================================================================== */
+function estcCorrigirFormato() {
+  const u = estcUn[estcI];
+  if (!u || !u.nota || !u.nota.card) return false;
+  const c = u.nota.card;
+  const limpo = fmtLimparCartao(c);
+  if (!fmtCartaoMudou(c, limpo)) { toastMsg(t("est_fmt_nada"), 3500); return false; }
+  const linha = cardToLine(limpo);
+  let cardNovo = null;
+  try { cardNovo = parseText(linha, []).cards[0] || null; } catch (e) {}
+  if (!cardNovo) { uiAlert(t("ger_edit_sem_cartao")); return false; }
+  const idsAntes = estcIdsDoCard(c);
+  const r = gerEditar(u.nota, linha);
+  if (!r.ok) { uiAlert(t(r.motivo === "sem_cartao" ? "ger_edit_sem_cartao" : "ger_edit_nao_achou")); return false; }
+  const idsDepois = estcIdsDoCard(cardNovo);
+  try { estcMigrarAgenda(idsAntes, idsDepois); } catch (e) {}
+  /* a nota recém-dada (para desfazer) era do id antigo */
+  if (estcUltima) { const k = idsAntes.indexOf(estcUltima.id); if (k >= 0 && idsDepois[k]) estcUltima.id = idsDepois[k]; }
+  const cn = u.cn, rev = estcRev;
+  let achou = false;
+  if (!estcDeFora && typeof gerCalcular === "function") {
+    try {
+      gerCalcular();
+      achou = estcRefrescar(new Map([[u.nota, cardNovo]])) && !!estcUn[estcI] && estcUn[estcI].nota.card.front === cardNovo.front;
+    } catch (e) { achou = false; }
+  }
+  if (!achou) {
+    /* lista de fora da Biblioteca (os cartões de um artigo de lei): troca só esta nota na lista do player */
+    const nova = Object.assign({}, u.nota, { card: cardNovo });
+    const lista = [], vistas = new Set();
+    estcUn.forEach((x) => { if (vistas.has(x.nota)) return; vistas.add(x.nota); lista.push({ nota: x.nota === u.nota ? nova : x.nota, pos: x.pos }); });
+    estcUn = estcUnidades(lista);
+    let k = estcUn.findIndex((x) => x.nota === nova && x.cn === cn);
+    if (k < 0) k = estcUn.findIndex((x) => x.nota === nova);
+    estcI = Math.max(0, k);
+  }
+  estcRev = rev;
+  estcPintar();
+  try { if ($("dlgGerCartoes") && $("dlgGerCartoes").open) gerPintar(); } catch (e) {}
+  try { matRender(); } catch (e) {}
+  try { matReg("cartoes", "estudo: formato do cartão corrigido", String(cardNovo.front || "").slice(0, 60)); } catch (e) {}
+  toastMsg(t("est_fmt_feito"), 3500);
+  return true;
 }
 
 /* =====================================================================
