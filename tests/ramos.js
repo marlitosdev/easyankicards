@@ -3785,6 +3785,19 @@ async function testes() {
     ok(a.matFichaEscopoAtual() === "modalidades" && a.$("matFichaTit").textContent === "Lei 14.133" && a.$("matFichaTit").title === "Lei 14.133 › Modalidades"
        && esc().find((b) => b.textContent === "Modalidades").getAttribute("aria-pressed") === "true" && cabE() && /^Modalidades/.test(cabE().textContent),
        "T1b escolher um ramo: o titulo fica so' no topico (o ramo no balao), o botao e o alto da coluna do material mostram o ramo: " + (cabE() && cabE().textContent));
+    /* (19.201.0) a lista manda no material, à vista: as colunas com nome, o alto do material pisca ao trocar de ramo */
+    {
+      const htmlR = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
+      ok(a.$("matFichaEscopo").getAttribute("data-rot") === "Escolha o ramo" && a.$("matFichaEscopo").getAttribute("aria-label") === "Escolha o ramo"
+         && cabE().getAttribute("data-rot") === "Material de" && /(^| )mat-ficha-troca( |$)/.test(cl(cabE())),
+         "T1b5 as duas colunas com nome ('Escolha o ramo' · 'Material de') e o alto do material pisca ao trocar: " + cl(cabE()));
+      a.matFichaEscolher("modalidades");
+      ok(!/mat-ficha-troca/.test(cl(cabE())) && !todosF(cabE(), (e) => /mat-ficha-dica-ramo/.test(cl(e))).length,
+         "T1b6 escolher o mesmo ramo não pisca; no ramo, sem a dica de escolher um ramo");
+      ok(htmlR.includes('.mat-ficha-esc[aria-pressed="true"]::after{content:"";position:absolute') && htmlR.includes(".mat-ficha-escopo::before{content:attr(data-rot)")
+         && htmlR.includes("@media (prefers-reduced-motion:no-preference){.mat-ficha-escolhido.mat-ficha-troca{animation"),
+         "T1b7 o ramo escolhido tem a seta para o material, a lista tem o rótulo, e o piscar respeita o 'menos movimento'");
+    }
     ok(/Resumo do ramo/.test(doSlot("resumo").textContent) && /ainda não tem seção no resumo do tópico/.test(doSlot("resumo").textContent) && /do tópico inteiro/.test(doSlot("lei").textContent) && /(nenhum ligado a este ramo \(o tópico tem [1-9]\d*\)|ainda não tem)/.test(doSlot("juris").textContent) && !/o tópico tem 0/.test(doSlot("juris").textContent) && /deste ramo/.test(doSlot("cartoes").textContent),
        "T1b2 no ramo, a ficha diz o que e' do ramo (cartoes, julgados) e o que e' do topico inteiro (resumo, lei)");
     const rod = () => todosF(a.$("matFichaRodape"), (e) => typeof e.onclick === "function");
@@ -3985,6 +3998,8 @@ async function testes() {
     a.matFichaEscolher("");
     ok(/^Tópico inteiro/.test(todosF(a.$("matFichaLista"), (e) => /mat-ficha-escolhido/.test(cl(e)))[0].textContent) && /4 ramos|\d+ ramos/.test(todosF(a.$("matFichaLista"), (e) => /mat-ficha-escolhido/.test(cl(e)))[0].textContent),
        "T3m3 no tópico inteiro, o alto da coluna diz 'Tópico inteiro' e quantos ramos");
+    ok(todosF(todosF(a.$("matFichaLista"), (e) => /mat-ficha-escolhido/.test(cl(e)))[0], (e) => /mat-ficha-dica-ramo/.test(cl(e))).some((e) => /escolha-o na lista de ramos/.test(e.textContent)),
+       "T3m4 (19.201.0) no tópico inteiro, a dica: para um ramo só, escolha-o na lista");
     ok(/ · 2 seção\(ões\) de ramo/.test(doSlot("resumo").textContent) && !/geral \+/.test(doSlot("resumo").textContent), "T3n no topico inteiro, a ficha diz quantas secoes de ramo o resumo tem: " + doSlot("resumo").textContent);
     btn(doSlot("resumo"), a.t("mat_ficha_ler")).onclick();
     ok(a.matEscopoAtual() === "*" && /Geral do tópico/.test(a.$("matLeitura").innerHTML) && /Cláusulas/.test(a.$("matLeitura").innerHTML), "T3o 'Ler' do topico inteiro mostra tudo");

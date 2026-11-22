@@ -4322,7 +4322,10 @@ function matFichaRamoDica(e) {
   return [e.nivel && e.nivel !== "pulado" ? t("dom_n_" + e.nivel) : "", tem.length ? t("mat_ficha_esc_tem", { l: tem.join(" · ") }) : t("mat_ficha_esc_nada")]
     .filter(Boolean).join(" · ");
 }
+/* (19.201.0) trocou o ramo pela lista: o alto da coluna do material pisca uma vez — o olho vai da lista ao material */
+let matFichaTrocou = false;
 function matFichaEscolher(id) {
+  matFichaTrocou = (id || "") !== matFichaEscopo;
   matFichaEscopo = id || "";
   if (matFichaOpc) matFichaOpc.aposRegistro = "";
   if (matFichaAtual) matFichaRamoLembrar(matFichaAtual.chave, matFichaEscopo);
@@ -4359,6 +4362,11 @@ function matPintarFicha() {
     const rolY = esc.scrollTop || 0, rolX = esc.scrollLeft || 0;
     esc.innerHTML = "";
     esc.hidden = !ramos.length;
+    /* (19.201.0) AS DUAS COLUNAS COM NOME: "Escolha o ramo" em cima da lista (o rótulo vem do CSS, pelo data-rot: os
+     * botões da lista continuam sendo só os ramos) e "Material de" em cima do escolhido — quem chega desatento vê que a
+     * lista manda no que aparece ao lado */
+    esc.setAttribute("data-rot", t("mat_ficha_col_ramos"));
+    esc.setAttribute("aria-label", t("mat_ficha_col_ramos"));
     const est = ramos.length ? matFichaRamosEstado(x, ramos, o.editalId) : {};
     [{ id: "", nome: t("mat_ficha_topico_todo") }].concat(ramos).forEach((r) => {
       const e = est[r.id || ""] || {};
@@ -4392,12 +4400,16 @@ function matPintarFicha() {
   box.innerHTML = "";
   if (ramos.length) {
     const cab = document.createElement("div");
-    cab.className = "mat-ficha-escolhido";
+    cab.className = "mat-ficha-escolhido" + (matFichaTrocou ? " mat-ficha-troca" : "");
+    cab.setAttribute("data-rot", t("mat_ficha_col_mat"));
+    matFichaTrocou = false;
     const nmE = document.createElement("b");
     nmE.textContent = ramo ? ramo.nome : t("mat_ficha_topico_todo");
     cab.append(nmE);
     const info = ramo ? (ramo.peso ? t("mat_ficha_peso", { p: ramo.peso }) : "") : t("mat_ficha_n_ramos", { n: ramos.length });
     if (info) { const sp = document.createElement("span"); sp.className = "nota"; sp.textContent = info; cab.append(sp); }
+    /* no tópico inteiro, o caminho para o ramo dito com todas as letras */
+    if (!ramo) { const dc = document.createElement("span"); dc.className = "mat-ficha-dica-ramo"; dc.textContent = t("mat_ficha_dica_ramo"); cab.append(dc); }
     const feitoR = o.aposRegistro ? ramos.find((r) => r.id === o.aposRegistro) : null;
     if (feitoR && ramo) {
       const av = document.createElement("div");

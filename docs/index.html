@@ -8818,6 +8818,23 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   :where(.mat-ficha-dlg) .btn-min.mat-ficha-esc{width:auto;flex:0 0 auto;max-width:220px;border-color:var(--borda)}
   .mat-ficha-corpo.com-ramos > .mat-ficha-lista{flex:1 1 auto}
 }
+/* (19.201.0) A LISTA MANDA NO MATERIAL, À VISTA: as duas colunas com nome ("Escolha o ramo" · "Material de"), o ramo
+ * escolhido com uma seta apontando para o material e o alto do material na mesma cor de ação; ao trocar, ele pisca. */
+.mat-ficha-corpo.com-ramos > .mat-ficha-escopo::before{content:attr(data-rot);position:sticky;top:0;z-index:1;display:block;padding:0 var(--esp-2) var(--esp-1);background:var(--panel);font-size:var(--fs-1);font-weight:var(--peso-f);letter-spacing:.04em;text-transform:uppercase;color:var(--acao)}
+.mat-ficha-corpo.com-ramos .btn-min.mat-ficha-esc[aria-pressed="true"]{position:relative;overflow:visible}
+.mat-ficha-corpo.com-ramos .btn-min.mat-ficha-esc[aria-pressed="true"]::after{content:"";position:absolute;top:50%;right:calc(-1 * var(--esp-2));margin-top:calc(-1 * var(--esp-2));border:var(--esp-2) solid transparent;border-right:0;border-left-color:var(--acao)}
+.mat-ficha-corpo.com-ramos > .mat-ficha-escopo{padding-right:var(--esp-3)}
+.mat-ficha-escolhido[data-rot]{padding:var(--esp-1) var(--esp-2);border-radius:var(--r-p);border-left:var(--esp-1) solid var(--acao);background:color-mix(in srgb,var(--acao) 12%,transparent)}
+.mat-ficha-escolhido[data-rot]::before{content:attr(data-rot);flex-basis:100%;font-size:var(--fs-1);font-weight:var(--peso-f);letter-spacing:.04em;text-transform:uppercase;color:var(--acao)}
+.mat-ficha-dica-ramo{flex-basis:100%;font-size:var(--fs-2);color:var(--sutil)}
+@keyframes matFichaTroca{from{background:color-mix(in srgb,var(--acao) 40%,transparent)}to{background:color-mix(in srgb,var(--acao) 12%,transparent)}}
+@media (prefers-reduced-motion:no-preference){.mat-ficha-escolhido.mat-ficha-troca{animation:matFichaTroca .7s ease-out}}
+@media (max-width:700px){
+  .mat-ficha-corpo.com-ramos > .mat-ficha-escopo{padding-right:0}
+  .mat-ficha-corpo.com-ramos > .mat-ficha-escopo::before{position:sticky;left:0;top:auto;align-self:stretch;display:flex;align-items:center;flex:none;max-width:6em;padding:0 var(--esp-2) 0 0;line-height:1.2}
+  .mat-ficha-corpo.com-ramos .btn-min.mat-ficha-esc[aria-pressed="true"]::after{top:auto;bottom:calc(-1 * var(--esp-2));right:50%;margin:0 calc(-1 * var(--esp-2)) 0 0;border:var(--esp-2) solid transparent;border-bottom:0;border-top-color:var(--acao)}
+  .mat-ficha-corpo.com-ramos > .mat-ficha-escopo{padding-bottom:var(--esp-3);scroll-padding-left:calc(6em + var(--esp-2))}
+}
 
 /* (19.111.0) A FICHA ENXUTA (fase 2): título e caminho numa linha cada; o domínio numa linha (o texto inteiro no
  * balão); o material em blocos 2×2 com a lei seca na largura toda, embaixo; no alto da coluna, o ramo escolhido. */
@@ -8903,7 +8920,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.200.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.201.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
