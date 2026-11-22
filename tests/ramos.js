@@ -4074,12 +4074,12 @@ async function testes() {
     digita(ped);
     ok(/sem-erro/.test(cl(a.$("resIASem"))) && a.$("btnResIAAplicar").disabled === true, "T4q colar o PEDIDO acende vermelho e nao deixa aplicar");
     digita(["# Resumo geral", "Geral novo.", "", "## Ramo — Modalidades", "Modalidades novo.", "", "## Ramo sugerido — Recursos", "R."].join(NL));
-    ok(/sem-(ok|atencao)/.test(cl(a.$("resIASem"))) && a.$("btnResIAAplicar").disabled === false && /Recursos/.test(a.$("resIASemTxt").textContent) && a.$("resIAModoLin").hidden === false,
+    ok(/sem-(ok|atencao)/.test(cl(a.$("resIASem"))) && a.$("btnResIAAplicar").disabled === false && /Recursos/.test(a.$("resIASemMaisTxt").textContent) && a.$("resIAModoLin").hidden === false,
        "T4r resposta boa: o semaforo diz as partes, o ramo sugerido, e oferece trocar so' as partes ou tudo: " + a.$("resIASemTxt").textContent);
-    ok(a.$("resIAConf").hidden === false && /resumo geral: \d+ → \d+ caracteres/.test(a.$("resIAConf").textContent) && /Modalidades: nova/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAConf").textContent),
+    ok(a.$("resIAConf").hidden === false && /resumo geral.{0,3}alterada/.test(a.$("resIAConf").textContent) && /Modalidades.{0,3}nova/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAAlerta").textContent),
        "T4s a conferencia mostra o que muda (e nao avisa perda: Contratos, com a marca, nao e' tocado): " + a.$("resIAConf").textContent);
     a.$("btnResIAModoTudo").onclick();
-    ok(/1 marca\(s\)/.test(a.$("resIAConf").textContent) && /Contratos: sai/.test(a.$("resIAConf").textContent), "T4t 'trocar o resumo inteiro' avisa que a marca de Contratos se perde e que Contratos sai");
+    ok(/1 marca\(s\)/.test(a.$("resIAAlerta").textContent) && /Contratos.{0,3}⚠ sai do resumo/.test(a.$("resIAConf").textContent), "T4t 'trocar o resumo inteiro' avisa que a marca de Contratos se perde e que Contratos sai");
     a.$("btnResIAModoSec").onclick();
     a.$("btnResIAAplicar").onclick();
     const novo = a.matResumosAtual()[ch].texto;
@@ -4144,6 +4144,113 @@ async function testes() {
     digita("## Ramo sugerido — X\nx.");
     ok(a.$("resIACriarLin").hidden === true, "T4b11 nem o botão de criar");
     a.$("btnResIAFechar").onclick();
+  }
+
+  /* ---- T4R (19.197.0): o caso real do "avaliar e melhorar" — 11 ramos pedidos, a IA devolveu 10 seções, tirou um
+   * ramo de propósito e encolheu quase tudo. A tela dizia só "1644 → 1644" e "2333 → 1159". Agora: estado por parte,
+   * alerta forte, o que encolheu começa desmarcado, escolha parte a parte e relatório copiável ---- */
+  {
+    const { a, ed } = MT();
+    const NL = String.fromCharCode(10);
+    const nomes = ["Normas Gerais", "Órgãos", "Início do Procedimento", "Auto de Infração", "Instrução", "Julgamento", "Nulidades", "Consulta", "Restituição", "Dívida Ativa", "Atos, Prazos e Intimações"];
+    const RS = nomes.map((n) => ({ id: a.edRamoId(n), nome: n }));
+    const corpo = (n, k) => ("Texto de " + n + " palavra" + k + ". ").repeat(k);
+    /* o atual: geral + as 10 primeiras seções (o ramo "Atos" foi criado depois do resumo) */
+    const atual = ["Geral do tópico ==marca==."].concat(nomes.slice(0, 10).map((n) => "## Ramo — " + n + NL + corpo(n, 20))).join(NL + NL);
+    /* a resposta: geral e Normas iguais; Órgãos quase igual; as outras com metade; sem "Atos" */
+    const resposta = ["# Avaliação", "* O ramo «Atos» deve ser acomodado nos existentes.", "", "# Resumo geral", "Geral do tópico ==marca==."]
+      .concat(nomes.slice(0, 10).map((n, i) => "## Ramo — " + n + NL + (i === 0 ? corpo(n, 20) : i === 1 ? corpo(n, 19) : corpo(n, 10)))).join(NL);
+    const resp = a.riaLerResposta(resposta, RS);
+    const d = a.riaDiagnostico(atual, resp, "secoes", RS, RS, {});
+    const est = (n) => (d.partes.find((p) => p.parte === n) || {}).estado;
+    ok(est(a.t("ria_parte_geral")) === "igual" && est("Normas Gerais") === "igual" && est("Órgãos") === "alterada" && est("Restituição") === "encurtada" && est("Atos, Prazos e Intimações") === "falta",
+       "T4R1 cada parte tem um estado: igual / alterada / encurtada / falta: " + d.partes.map((p) => p.parte + "=" + p.estado).join(", "));
+    ok(d.alertas.encurtadas === 8 && d.alertas.maxPerda >= 0.45 && d.alertas.faltam.join() === "Atos, Prazos e Intimações",
+       "T4R2 os alertas contam as 8 encurtadas e o ramo que faltou: " + JSON.stringify(d.alertas));
+    ok(d.partes.filter((p) => p.estado === "encurtada").every((p) => !p.marcada) && d.partes.find((p) => p.parte === "Órgãos").marcada === true && !d.partes.find((p) => p.parte === "Normas Gerais").escolhivel,
+       "T4R3 o padrão seguro: as encurtadas começam DESMARCADAS; a alterada vem marcada; a igual não tem caixa");
+    const esc = a.riaEscolhaResolvida(d);
+    const ap = a.riaAplicarTexto(atual, resp, "secoes", RS, esc);
+    ok(ap.indexOf(corpo("Restituição", 20).trim()) >= 0 && ap.indexOf(corpo("Órgãos", 19).trim() + NL) >= 0 && ap.indexOf(corpo("Órgãos", 20).trim()) < 0,
+       "T4R4 aplicar com a escolha: troca só Órgãos; Restituição (encurtada, desmarcada) fica com o texto inteiro");
+    const esc2 = Object.assign({}, esc, { [a.edRamoId("Restituição")]: true });
+    const ap2 = a.riaAplicarTexto(atual, resp, "secoes", RS, esc2);
+    ok(ap2.indexOf(corpo("Restituição", 20).trim()) < 0 && ap2.indexOf("## Ramo — Restituição" + NL + corpo("Restituição", 10).trim()) >= 0,
+       "T4R5 marcada à mão, a encurtada é trocada (a escolha é da pessoa)");
+    /* "apagar as que não vieram" com uma desmarcada: ela fica com o texto antigo; a que não veio sai */
+    const atual2 = atual + NL + NL + "## Ramo — Velho" + NL + "sai.";
+    const d3 = a.riaDiagnostico(atual2, resp, "tudo", RS, RS, {});
+    const ap3 = a.riaAplicarTexto(atual2, resp, "tudo", RS, a.riaEscolhaResolvida(d3));
+    ok(ap3.indexOf("## Ramo — Velho") < 0 && ap3.indexOf(corpo("Restituição", 20).trim()) >= 0 && d3.partes.some((p) => p.parte === "Velho" && p.estado === "some"),
+       "T4R6 no 'apagar do resumo': a seção que não veio sai (e é dita), a encurtada desmarcada continua inteira");
+    /* um nome fora da lista, com resumo já escrito: começa desmarcado e acende o alerta de ramos */
+    const rFora = a.riaLerResposta("## Ramo — Normas Gerais" + NL + corpo("Normas Gerais", 20) + NL + "## Ramo — Ramo Inventado" + NL + "x.", RS);
+    const dF = a.riaDiagnostico(atual, rFora, "secoes", RS, RS, {});
+    const pF = dF.partes.find((p) => p.parte === "Ramo Inventado");
+    ok(pF && pF.estado === "semramo" && pF.marcada === false, "T4R7 nome fora da lista de ramos: estado próprio, desmarcado: " + JSON.stringify(pF && { e: pF.estado, m: pF.marcada }));
+    /* o pedido: os ramos são fixos e melhorar não é resumir */
+    const pM = a.riaPrompt({ disciplina: "D", topico: "T", prof: "padrao", ramos: RS, atual, objetivo: "melhorar" });
+    ok(pM.indexOf(a.t("ria_p_ramos_fixos")) >= 0 && /MELHORAR NÃO É RESUMIR/.test(pM) && /não a lista de ramos nem conversas anteriores/.test(pM),
+       "T4R8 o pedido de melhorar exige os ramos exatos e proíbe encurtar");
+
+    /* ---- a tela, pelo diálogo ---- */
+    const ch = a.matChave("Licitações", "Caso PAF");
+    a.matGravar(ch, atual, { disciplina: "Licitações", topico: "Caso PAF" });
+    a.riaAbrirDoTopico("Licitações", "Caso PAF", ch, { ramos: RS });
+    a.$("btnResIAObjMelhor").onclick();
+    ok(a.$("resIAObjExp").textContent === a.t("ria_obj_melhor_exp"), "T4R9a 'avaliar e melhorar' mostra a explicação (antes aparecia o nome da chave): " + a.$("resIAObjExp").textContent);
+    ok(a.$("resIAAjustes").open === false && /11 ramo\(s\)/.test(a.$("resIAAjustesRes").textContent),
+       "T4R9 passo 1 enxuto: os ramos ficam dobrados em 'Ajustar o pedido', com o resumo: " + a.$("resIAAjustesRes").textContent);
+    const digita = (v) => { a.$("resIATexto").value = v; ((a.$("resIATexto")._ouv || {}).input || []).forEach((fn) => fn()); };
+    digita(resposta);
+    const semTxt = a.$("resIASemTxt").textContent;
+    ok(/sem-atencao/.test(a.$("resIASem").className) && semTxt.length < 120 && /Atos/.test(a.$("resIASemMaisTxt").textContent) && a.$("resIASemMais").hidden === false,
+       "T4R10 o semáforo é curto; a lista completa (com o ramo que faltou) fica em 'ver detalhes': " + semTxt);
+    const alerta = a.$("resIAAlerta").textContent;
+    ok(a.$("resIAAlerta").hidden === false && /8 parte\(s\) perderam mais de 25%/.test(alerta) && /faltou «Atos, Prazos e Intimações»/.test(alerta),
+       "T4R11 o alerta forte diz o que encolheu e o ramo que faltou: " + alerta);
+    const todosF = (el, pred, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (pred(x)) acc.push(x); todosF(x, pred, acc); }); return acc; };
+    const linhas = () => todosF(a.$("resIAConf"), (e) => /(^| )res-ia-parte( |$)/.test(String(e.className || "")));
+    ok(linhas().length === 12 && /encurtada −50%/.test(a.$("resIAConf").textContent) && /igual — nada muda/.test(a.$("resIAConf").textContent) && /não veio — fica como está/.test(a.$("resIAConf").textContent),
+       "T4R12 uma linha por parte (geral + 10 + o ramo que faltou), com o estado: " + linhas().length);
+    ok(a.$("btnResIAAplicar").disabled === false && a.$("btnResIAAplicar").textContent === a.t("ria_aplicar_n", { n: 1, m: 9 }),
+       "T4R13 o botão diz quanto vai: " + a.$("btnResIAAplicar").textContent);
+    /* a diferença, ao abrir */
+    const dif = todosF(a.$("resIAConf"), (e) => String(e.className || "") === "res-ia-dif")[0];
+    dif._encher();
+    ok(todosF(dif, (e) => String(e.className || "") === "jur-diff").length === 1, "T4R14 'ver o que muda' mostra a diferença palavra a palavra (o destaque das teses)");
+    /* marcar uma encurtada */
+    const linRest = linhas().find((l) => /Restituição/.test(l.textContent));
+    const ck = todosF(linRest, (e) => e.type === "checkbox")[0];
+    ck.checked = true; ck.onchange();
+    ok(a.$("btnResIAAplicar").textContent === a.t("ria_aplicar_n", { n: 2, m: 9 }), "T4R15 marcar a encurtada soma ao que vai");
+    /* o relatório */
+    const rel = a.riaCopiarRelatorio();
+    ok(/relatório do resumo pela IA/.test(rel) && /Caso PAF/.test(rel) && /avaliar e melhorar/.test(rel) && /11\. Atos, Prazos e Intimações/.test(rel) && /\[x\] Restituição — ⚠ encurtada −50%/.test(rel) && /Avaliação da IA/.test(rel),
+       "T4R16 o relatório traz fluxo, ramos pedidos, cada parte com o estado e a avaliação");
+    ok(rel.indexOf("palavra20") < 0 && rel.indexOf("Texto de Restituição") < 0, "T4R17 o relatório não leva o texto do resumo");
+    /* o painel de diagnóstico (seção TELA) traz o mesmo relatório quando a janela está aberta */
+    const diagTxt = a.montarDiagnostico();
+    const iTela = diagTxt.indexOf("--- TELA ---"), iIA = diagTxt.indexOf(a.t("ria_diag_aberto"));
+    ok(iTela >= 0 && iIA > iTela && /Restituição — ⚠ encurtada −50%/.test(diagTxt.slice(iIA)) && diagTxt.indexOf("Texto de Restituição") < 0,
+       "T4R17b o diagnóstico do app mostra o resumo pela IA na seção TELA, sem o texto do resumo");
+    a.$("btnResIAAplicar").onclick();
+    const novo = a.matObter(ch).texto;
+    ok(novo.indexOf("## Ramo — Restituição" + NL + corpo("Restituição", 10).trim()) >= 0 && novo.indexOf(corpo("Instrução", 20).trim()) >= 0 && /Aplicado: sim/.test(a.riaRelatorio()),
+       "T4R18 aplicar troca só as marcadas (Órgãos e Restituição); Instrução continua inteira");
+    a.$("btnResIAFechar").onclick();
+    /* a criação usa a mesma tela: relatório também, sem resumo antes */
+    const ch2 = a.matChave("Licitações", "Caso novo");
+    a.riaAbrirDoTopico("Licitações", "Caso novo", ch2, { ramos: RS.slice(0, 2) });
+    digita("# Resumo geral" + NL + "G." + NL + "## Ramo — Normas Gerais" + NL + "N.");
+    const rel2 = a.riaRelatorio();
+    ok(/criar \(ainda não havia resumo\)/.test(rel2) && /faltou «Órgãos»/.test(a.$("resIAAlerta").textContent) && a.$("btnResIAAplicar").disabled === false,
+       "T4R19 na criação: relatório com o fluxo 'criar' e o mesmo alerta de ramo que faltou");
+    a.$("btnResIAFechar").onclick();
+    /* os resumos de teste não ficam para os testes seguintes */
+    const matsR = a.matResumosAtual();
+    delete matsR[ch]; delete matsR[ch2];
+    void ed;
   }
 
   /* ---- T5: renomear/apagar um ramo leva a seção do resumo junto ---- */

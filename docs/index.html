@@ -4136,7 +4136,7 @@ p.mat-ferr{display:block;font-size:12px}
 .res-ia-novo-tag{font-size:10.5px;font-weight:700;margin-left:6px;padding:0 6px;border-radius:999px;border:1px solid var(--info);color:var(--info)}
 .res-ia-lin{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0;font-size:12.5px}
 .res-ia-lin .mat-busca{flex:1 1 200px;width:auto}
-.res-ia-modo{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.res-ia-modo{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0;font-size:var(--fs-2)}
 .res-ia-conf{margin:6px 0;font-size:12.5px}
 .res-ia-conf-lin{margin:2px 0}
 .res-ia-conf-perda{margin-top:4px;color:var(--atencao);font-weight:600}
@@ -4148,6 +4148,31 @@ p.mat-ferr{display:block;font-size:12px}
 .res-ia-obj-bts .btn-min[aria-pressed="true"]{background:var(--acao);border-color:var(--acao);color:#fff}
 .res-ia-obj-exp{margin:5px 0 0;font-size:12px;line-height:1.4}
 .res-ia-aval{margin:6px 0;padding:8px 10px;border-left:3px solid var(--info);background:rgba(59,130,246,.08);border-radius:0 8px 8px 0;white-space:pre-wrap;font-size:12.5px;max-height:30vh;overflow:auto}
+/* a caixa de colar segue "rows" (6 vazia, 4 com a resposta lida): o mínimo de 260px de toda textarea a deixava enorme */
+#dlgResIA #resIATexto{min-height:0}
+.res-ia-conf>b{display:block;margin-top:var(--esp-2)}
+.res-ia-copiar-lin{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin:var(--esp-2) 0 0}
+.res-ia-colar-lin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:0 0 var(--esp-1)}
+.res-ia-ajustes{margin:var(--esp-1) 0 0;font-size:var(--fs-2)}
+.res-ia-ajustes>summary{cursor:pointer;color:var(--sutil);padding:var(--esp-1) 0}
+.res-ia-mais{margin:0 0 var(--esp-1);font-size:var(--fs-2)}
+.res-ia-mais>summary{cursor:pointer;color:var(--sutil)}
+.res-ia-mais-txt{white-space:pre-wrap;margin-top:var(--esp-1);line-height:1.4}
+.res-ia-alerta{margin:var(--esp-2) 0;padding:var(--esp-2) var(--esp-3);border:2px solid var(--erro);border-radius:var(--r-m);font-size:var(--fs-2);font-weight:var(--peso-m);line-height:1.4;display:flex;flex-direction:column;gap:var(--esp-1);background:color-mix(in srgb,var(--erro) 8%,transparent)}
+.res-ia-acoes{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:var(--esp-2) 0 0}
+.res-ia-aval-dob>summary{cursor:pointer;font-weight:var(--peso-f)}
+.res-ia-parte{padding:var(--esp-1) 0;border-bottom:1px solid var(--borda)}
+.res-ia-parte-lin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-2)}
+.res-ia-parte-nome{font-weight:var(--peso-m);flex:1 1 160px;min-width:0}
+.res-ia-chip{font-size:var(--fs-1);font-weight:var(--peso-f);padding:0 var(--esp-2);border-radius:var(--r-pilula);border:1px solid currentColor;color:var(--sutil);white-space:nowrap}
+.res-ia-est-alterada .res-ia-chip{color:var(--info)}
+.res-ia-est-nova .res-ia-chip,.res-ia-est-acrescenta .res-ia-chip{color:var(--ok)}
+.res-ia-est-encurtada .res-ia-chip,.res-ia-est-semramo .res-ia-chip,.res-ia-est-some .res-ia-chip{color:var(--erro)}
+.res-ia-est-falta .res-ia-chip{color:var(--atencao)}
+.res-ia-est-igual,.res-ia-est-falta{opacity:.8}
+.res-ia-parte-tam{white-space:nowrap}
+.res-ia-dif>summary{cursor:pointer;font-size:var(--fs-2);color:var(--acao)}
+.res-ia-dif .jur-diff{max-height:40vh;overflow:auto;margin-top:var(--esp-1)}
 .res-ia-feito{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px solid var(--ok);border-radius:8px}
 .mat-ficha-item.falta{border-style:dashed;opacity:.85}
 .mat-ficha-ico{font-size:20px;width:26px;text-align:center;flex:none}
@@ -8876,7 +8901,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.196.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.197.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
@@ -9790,6 +9815,14 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
       <textarea id="resIASugPedidoTxt" rows="5" class="ram-colar" readonly hidden aria-label="Pedido de ramos para a IA"></textarea>
       <div class="nota" data-i18n="ria_sugr_ou"></div>
     </div>
+    <!-- (19.197.0) A AÇÃO DO PASSO VEM PRIMEIRO: o botão de copiar ficava depois da lista de ramos (11 linhas com
+         caixa de texto cada), e quem não conhecia a tela não o achava. Os ajustes ficam dobrados, com o resumo deles. -->
+    <div class="res-ia-copiar-lin">
+      <button type="button" class="btn btn-roxo" id="btnResIACopiar" data-i18n="ria_copiar"></button>
+    </div>
+    <p class="nota ednovo-prompt-msg" id="resIACopiadoMsg" role="status"></p>
+    <details class="res-ia-ajustes" id="resIAAjustes">
+    <summary id="resIAAjustesRes"></summary>
     <div id="resIARamos" class="res-ia-ramos"></div>
     <div class="res-ia-lin" id="resIANovoLin">
       <input type="text" id="resIANovo" class="mat-busca" data-i18n-ph="ria_novo_ph">
@@ -9803,33 +9836,46 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
         <option value="detalhado" data-i18n="ria_prof_detalhado"></option>
       </select></label>
     <label class="res-ia-lin" id="resIALeiLin" hidden><input type="checkbox" id="resIALei"> <span id="resIALeiRot"></span></label>
-    <button type="button" class="btn btn-roxo" id="btnResIACopiar" data-i18n="ria_copiar"></button>
-    <p class="nota ednovo-prompt-msg" id="resIACopiadoMsg" role="status"></p>
+    </details>
   </div>
   <div class="ednovo-passo" id="resIAPasso2">
     <div class="ednovo-passo-tit"><span class="ednovo-passo-n">2</span> <span data-i18n="ria_passo2"></span> <span class="ednovo-tag tag-volta" data-i18n="ed_novo_tag2"></span></div>
-    <textarea id="resIATexto" class="ednovo-ta" rows="10" style="width:100%;box-sizing:border-box" data-i18n-ph="ria_ta_ph"></textarea>
+    <div class="res-ia-colar-lin">
+      <button type="button" class="btn-min btn-min-ok" id="btnResIAColar" data-i18n="ria_colar" data-i18n-title="ria_colar_tip"></button>
+      <span class="nota" id="resIAColarMsg" role="status"></span>
+    </div>
+    <textarea id="resIATexto" class="ednovo-ta" rows="6" style="width:100%;box-sizing:border-box" data-i18n-ph="ria_ta_ph"></textarea>
     <div class="ednovo-sem sem-vazio" id="resIASem" role="status" aria-live="polite">
       <span class="ednovo-sem-ico" id="resIASemIco" aria-hidden="true">○</span>
       <span class="ednovo-sem-txt" id="resIASemTxt"></span>
     </div>
+    <details class="res-ia-mais" id="resIASemMais" hidden><summary data-i18n="ria_detalhes"></summary><div class="res-ia-mais-txt" id="resIASemMaisTxt"></div></details>
+    <div class="res-ia-alerta" id="resIAAlerta" role="alert" hidden></div>
     <div class="res-ia-lin" id="resIACriarLin" hidden>
       <button type="button" class="btn-min btn-min-ok" id="btnResIACriarRamos" data-i18n-title="ria_criar_ramos_tip"></button>
     </div>
     <p class="nota" id="resIARamosMsg" role="status"></p>
+    <div class="res-ia-conf" id="resIAConf" hidden></div>
     <div class="res-ia-modo" id="resIAModoLin" role="group" hidden>
+      <span class="nota" data-i18n="ria_modo_rot"></span>
       <button type="button" class="btn-min" id="btnResIAModoSec" aria-pressed="true" data-i18n="ria_modo_secoes"></button>
       <button type="button" class="btn-min" id="btnResIAModoTudo" aria-pressed="false" data-i18n="ria_modo_tudo"></button>
     </div>
-    <div class="res-ia-conf" id="resIAConf" hidden></div>
-  </div>
-  <div class="res-ia-feito" id="resIAFeito" hidden>
-    <span id="resIAFeitoTxt"></span>
-    <button type="button" class="btn-min" id="btnResIADesfazer" data-i18n="ria_desfazer"></button>
-    <button type="button" class="btn-min" id="btnResIAAbrir" data-i18n="ria_abrir"></button>
+    <!-- (19.197.0) A AÇÃO PRINCIPAL MORA NO PASSO, logo abaixo do que foi lido — antes ficava no rodapé, depois da
+         avaliação e da lista de tamanhos. Ao lado, o relatório para o suporte. -->
+    <div class="res-ia-acoes">
+      <button type="button" class="btn btn-verde" id="btnResIAAplicar" data-i18n="ria_aplicar" disabled></button>
+      <button type="button" class="btn-min" id="btnResIARelatorio" data-i18n="ria_rel_btn" data-i18n-title="ria_rel_tip"></button>
+    </div>
+    <p class="nota" id="resIARelMsg" role="status"></p>
+    <textarea id="resIARelTxt" rows="6" class="ram-colar" readonly hidden aria-label="Relatório"></textarea>
+    <div class="res-ia-feito" id="resIAFeito" hidden>
+      <span id="resIAFeitoTxt"></span>
+      <button type="button" class="btn-min" id="btnResIADesfazer" data-i18n="ria_desfazer"></button>
+      <button type="button" class="btn-min" id="btnResIAAbrir" data-i18n="ria_abrir"></button>
+    </div>
   </div>
   <div class="dlg-rodape">
-    <button class="btn btn-verde" id="btnResIAAplicar" data-i18n="ria_aplicar" disabled></button>
     <button class="btn btn-cinza" id="btnResIAFechar" data-i18n="help_close"></button>
   </div>
 </dialog>

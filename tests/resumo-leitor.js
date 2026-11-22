@@ -389,7 +389,7 @@ async function testes() {
     digita(["# Resumo geral", "Mais geral.", "", "## Ramo — A", "Mais A."].join(NL));
     ok(a.$("resIASemTxt").textContent.indexOf("ACRESCENTAR") >= 0 && !/Sem seção/.test(a.$("resIASemTxt").textContent) && /sem-ok/.test(a.$("resIASem").className)
        && a.$("resIAModoLin").hidden === true, "R12a o semáforo diz que vai acrescentar; o ramo B que não veio não é 'falta'; não há 'trocar tudo': " + a.$("resIASemTxt").textContent);
-    ok(/resumo geral: \+ 11 caracteres no fim/.test(a.$("resIAConf").textContent) && /A: \+ 7 caracteres no fim/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAConf").textContent),
+    ok(/resumo geral.{0,3}\+ 11 car\. no fim/.test(a.$("resIAConf").textContent) && /A.{0,3}\+ 7 car\. no fim/.test(a.$("resIAConf").textContent) && !/marca\(s\)/.test(a.$("resIAAlerta").textContent),
        "R12b a conferência mostra o que entra no fim de cada parte e não fala em perder marca: " + a.$("resIAConf").textContent);
     a.$("btnResIAAplicar").onclick();
     const T1 = a.matObter(chI).texto;
@@ -405,8 +405,13 @@ async function testes() {
     ok(a.riaObjetivoAtual() === "melhorar" && ped.includes(a.t("ria_p_obj_melhor")) && ped.includes("A um ==!marca==."), "R13 avaliar e melhorar: o pedido pede a avaliação e manda o texto");
     digita(["# Avaliação", "- O geral está vago.", "- Falta a exceção do ramo A.", "", "# Resumo geral", "Geral melhor.", "", "## Ramo — A", "A melhor ==!marca==."].join(NL));
     const conf = a.$("resIAConf").textContent;
-    ok(conf.indexOf(a.t("ria_conf_aval")) >= 0 && conf.indexOf("Falta a exceção do ramo A.") >= 0 && /resumo geral: \d+ → \d+ caracteres/.test(conf) && a.$("resIAModoLin").hidden === false,
+    ok(conf.indexOf(a.t("ria_conf_aval_dob", { n: 2 })) >= 0 && conf.indexOf("Falta a exceção do ramo A.") >= 0 && /resumo geral.{0,3}alterada/.test(conf) && a.$("resIAModoLin").hidden === false,
        "R13a a avaliação aparece na conferência, antes do que muda; volta a escolha 'só as partes / tudo': " + conf);
+    /* (19.197.0) A perdeu 29% do texto: começa DESMARCADA (o padrão seguro); quem confere marca */
+    const caixas = (el, acc) => { acc = acc || []; Array.from((el && el.children) || []).forEach((x) => { if (x.type === "checkbox") acc.push(x); caixas(x, acc); }); return acc; };
+    const ckA = caixas(a.$("resIAConf")).filter((x) => x.checked === false)[0];
+    ok(!!ckA && /encurtada −29%/.test(conf), "R13a2 a seção que encolheu vem desmarcada, com o estado 'encurtada'");
+    ckA.checked = true; ckA.onchange();
     a.$("btnResIAAplicar").onclick();
     const T2 = a.matObter(chI).texto;
     ok(T2 === ["Geral melhor.", "", "## Ramo — A", "A melhor ==!marca==.", "", "## Ramo — B", "B um."].join(NL) && T2.indexOf("Avaliação") < 0,

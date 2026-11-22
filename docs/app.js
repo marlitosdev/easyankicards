@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.196.0";
+const VERSAO = "19.197.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -5014,6 +5014,8 @@ function montarDiagnostico() {
     L.push("Modo: " + (typeof modoAtual !== "undefined" ? modoAtual : "?"));
     diagEdital(L);
   });
+  /* (19.197.0) o resumo pela IA aberto (ou o último desta sessão): o mesmo relatório do botão 📋 da janela */
+  bloco(L, () => { if (typeof riaDiagLinhas === "function") riaDiagLinhas().forEach((s) => L.push(s)); });
   bloco(L, () => {
     if (textoEmFoco().edital) return;   /* já contado acima */
     r = resumoTexto(raw);

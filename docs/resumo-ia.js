@@ -44,6 +44,8 @@ function riaPrompt(o) {
       L.push("");
       L.push(t("ria_p_ramos"));
       rs.forEach((r) => L.push("- " + r.nome + (r.novo ? t("ria_p_novo") : "") + (String(r.foco || "").trim() ? t("ria_p_cubra", { f: String(r.foco).trim() }) : "")));
+      /* (19.197.0) a IA do caso real tirou um ramo, criou dois e "restaurou a estrutura" de uma conversa anterior */
+      L.push(t("ria_p_ramos_fixos"));
     }
   }
   L.push("");
@@ -109,9 +111,19 @@ function riaLerResposta(texto, ramos, ramoAlvo) {
   };
 }
 
-/* APLICAR: "secoes" troca só o geral (se veio) e as seções que vieram; "tudo" refaz o resumo só com a resposta */
-function riaAplicarTexto(atual, resp, modo, ramos) {
+/* APLICAR: "secoes" troca só o geral (se veio) e as seções que vieram; "tudo" refaz o resumo só com a resposta.
+ * (19.197.0) escolha = { chave: false } deixa aquela parte como está ("" é o geral); sem escolha, vai tudo o que veio */
+function riaAplicarTexto(atual, resp, modo, ramos, escolha) {
   if (!resp || resp.vazio || resp.ehPedido) return String(atual || "");
+  if (escolha) {
+    const quer = (k) => escolha[k] !== false;
+    const scA = matSecoesDeRamo(String(atual || ""), ramos);
+    /* desmarcada no "tudo": fica o texto antigo dela (se havia); nos outros modos ela só não entra */
+    const velho = (k) => { if (!k) return scA.geral.corpo; const x = scA.secoes.find((y) => y.id === k); return x ? x.corpo : ""; };
+    const geral = resp.geral && !quer("") ? (modo === "tudo" ? velho("") : "") : resp.geral;
+    const secoes = resp.secoes.map((x) => quer(x.id) ? x : (modo === "tudo" && velho(x.id) ? Object.assign({}, x, { corpo: velho(x.id) }) : null)).filter(Boolean);
+    resp = Object.assign({}, resp, { geral, secoes });
+  }
   /* COMPLEMENTAR: o que veio entra no FIM da parte correspondente (geral ou o ramo); nada do que existe muda */
   if (modo === "acrescentar") {
     let s = String(atual || "");
@@ -167,6 +179,90 @@ function riaConferir(atual, resp, modo, ramos) {
   return { itens, perdidas };
 }
 
+/* =====================================================================
+ * O DIAGNÓSTICO POR PARTE (19.197.0)
+ *
+ * O caso que o motivou: "avaliar e melhorar" de um tópico com 11 ramos. A IA devolveu 10 seções, deixou um ramo de fora
+ * de propósito e encolheu 8 seções em 30 a 50%. A tela dizia só "1644 → 1644" e "2333 → 1159": o primeiro não dizia que
+ * nada mudou, o segundo não alertava que metade sumiu, e "trocar só as partes que vieram" trocava tudo de uma vez. Agora
+ * cada parte tem um ESTADO e uma caixa própria, e o que perde texto começa DESMARCADO (o padrão seguro).
+ *   igual · alterada · encurtada (perdeu mais de RIA_ENCURTA) · nova (ramo sem seção até agora) · semramo (nome fora
+ *   da lista de ramos) · falta (ramo pedido que não veio) · some (sai, no "apagar as que não vieram") · acrescenta
+ * ===================================================================== */
+const RIA_ENCURTA = 0.25;
+let riaEscolha = {};
+function riaNorm(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+function riaEstadoDaTroca(antes, depois) {
+  if (!String(antes || "").trim()) return "nova";
+  if (riaNorm(antes) === riaNorm(depois)) return "igual";
+  return String(depois || "").length < String(antes).length * (1 - RIA_ENCURTA) ? "encurtada" : "alterada";
+}
+/* pedidos: os ramos que foram no pedido ([{id, nome}]); escolha: { chave: bool } do que a pessoa marcou/desmarcou */
+function riaDiagnostico(atual, resp, modo, ramos, pedidos, escolha) {
+  const sc = matSecoesDeRamo(String(atual || ""), ramos);
+  const partes = [];
+  const temAtual = !!String(atual || "").trim();
+  const poe = (chave, parte, antes, depois, estado, extra) => {
+    const p = Object.assign({ chave, parte, antes: String(antes || ""), depois: String(depois || ""), estado }, extra || {});
+    p.perda = p.antes.length ? Math.max(0, 1 - p.depois.length / p.antes.length) : 0;
+    /* o que se pode marcar: o que muda algo. O padrão seguro: o que encolhe e o nome fora da lista começam desmarcados */
+    p.escolhivel = ["alterada", "encurtada", "nova", "semramo", "acrescenta"].indexOf(estado) >= 0;
+    p.padrao = p.escolhivel && estado !== "encurtada" && !(estado === "semramo" && temAtual && !p.sugerido);
+    p.marcada = p.escolhivel && (escolha && chave in escolha ? !!escolha[chave] : p.padrao);
+    partes.push(p);
+  };
+  if (!resp || resp.vazio || resp.ehPedido || resp.ehRamos) return { partes, alertas: riaAlertas(partes), perdidas: { marcas: 0, dicas: 0 } };
+  if (modo === "acrescentar") {
+    if (resp.geral) poe("", t("ria_parte_geral"), sc.geral.corpo, resp.geral, "acrescenta");
+    resp.secoes.forEach((y) => {
+      const x = sc.secoes.find((z) => z.id === y.id);
+      poe(y.id, y.nome, x ? x.corpo : "", y.corpo, y.semRamo ? "semramo" : "acrescenta", { sugerido: !!y.sugerido });
+    });
+  } else {
+    if (resp.geral) poe("", t("ria_parte_geral"), sc.geral.corpo, resp.geral, riaEstadoDaTroca(sc.geral.corpo, resp.geral));
+    else if (modo === "tudo" && sc.geral.corpo.trim()) poe("", t("ria_parte_geral"), sc.geral.corpo, "", "some");
+    resp.secoes.forEach((y) => {
+      const x = sc.secoes.find((z) => z.id === y.id);
+      const est = y.semRamo && !x ? "semramo" : riaEstadoDaTroca(x ? x.corpo : "", y.corpo);
+      poe(y.id, y.nome, x ? x.corpo : "", y.corpo, est, { sugerido: !!y.sugerido });
+    });
+  }
+  /* os ramos pedidos que não vieram; no "apagar as que não vieram", também as seções antigas que saem */
+  const vieram = new Set(resp.secoes.map((y) => y.id));
+  const ja = new Set();
+  (pedidos || []).forEach((r) => {
+    if (!r || vieram.has(r.id) || ja.has(r.id)) return;
+    ja.add(r.id);
+    const x = sc.secoes.find((z) => z.id === r.id);
+    poe(r.id, r.nome, x ? x.corpo : "", "", modo === "tudo" && x ? "some" : "falta");
+  });
+  if (modo === "tudo") sc.secoes.forEach((x) => { if (!vieram.has(x.id) && !ja.has(x.id)) poe(x.id, x.nome, x.corpo, "", "some"); });
+  /* as marcas e dicas que se perdem: só nas partes que vão mesmo ser trocadas (marcadas) ou que saem */
+  const perdidas = { marcas: 0, dicas: 0 };
+  partes.forEach((p) => {
+    if (!((p.marcada && p.estado !== "acrescenta" && p.estado !== "nova" && p.estado !== "semramo") || p.estado === "some")) return;
+    const c = riaContarMarcas(p.antes); perdidas.marcas += c.marcas; perdidas.dicas += c.dicas;
+  });
+  return { partes, alertas: riaAlertas(partes), perdidas };
+}
+function riaAlertas(partes) {
+  const enc = partes.filter((p) => p.estado === "encurtada");
+  return {
+    encurtadas: enc.length,
+    maxPerda: enc.reduce((m, p) => Math.max(m, p.perda), 0),
+    faltam: partes.filter((p) => p.estado === "falta" || (p.estado === "some" && p.chave)).map((p) => p.parte),
+    semRamo: partes.filter((p) => p.estado === "semramo").map((p) => p.parte),
+    marcadas: partes.filter((p) => p.marcada).length,
+    escolhiveis: partes.filter((p) => p.escolhivel).length,
+  };
+}
+/* o que a pessoa marcou, como { chave: bool } — é o que riaAplicarTexto recebe */
+function riaEscolhaResolvida(diag) {
+  const o = {};
+  (diag.partes || []).forEach((p) => { if (p.escolhivel) o[p.chave] = !!p.marcada; });
+  return o;
+}
+
 /* ---------------- a tela ---------------- */
 function riaAbrir(ctx) {
   const dlg = $("dlgResIA");
@@ -175,12 +271,19 @@ function riaAbrir(ctx) {
   riaNovos = [];
   riaModo = "secoes";
   riaAnterior = null;
+  riaEscolha = {};
+  riaLido = null;
+  riaUltimo = null;
   const ramo = riaRamoAlvo();
   $("resIATit").textContent = ramo ? t("ria_tit_ramo", { r: ramo.nome }) : t("ria_tit_topico", { t: riaCtx.topico });
   $("resIASub").textContent = t(ramo ? "ria_sub_ramo" : "ria_sub_topico");
   $("resIATexto").value = "";
   $("resIACopiadoMsg").textContent = "";
   $("resIAFeito").hidden = true;
+  if ($("resIARelMsg")) $("resIARelMsg").textContent = "";
+  if ($("resIARelTxt")) { $("resIARelTxt").value = ""; $("resIARelTxt").hidden = true; }
+  if ($("resIAColarMsg")) $("resIAColarMsg").textContent = "";
+  if ($("resIAAjustes")) $("resIAAjustes").open = false;
   if ($("resIANovo")) $("resIANovo").value = "";
   const lei = typeof leiTextoDoTopico === "function" ? String(leiTextoDoTopico(riaCtx.chave) || "") : "";
   $("resIALeiLin").hidden = !lei.trim();
@@ -198,6 +301,7 @@ function riaAbrir(ctx) {
   if ($("resIASugMsg")) $("resIASugMsg").textContent = "";
   if ($("resIASugPedidoTxt")) { $("resIASugPedidoTxt").value = ""; $("resIASugPedidoTxt").hidden = true; }
   riaPassos(1);
+  riaPintarAjustesRes();
   riaConferirTela();
   abrirModal("dlgResIA");
   return dlg;
@@ -227,6 +331,7 @@ function riaDepoisDosRamos(r) {
   riaCtx.lista = null;
   riaPintarRamos();
   riaPintarSugRamos();
+  riaPintarAjustesRes();
   riaConferirTela();
   if ($("resIARamosMsg")) $("resIARamosMsg").textContent = t("ria_ramos_criados", { n: riaCtx.ramos.length });
   /* o próximo passo é copiar o pedido do resumo de novo — agora com os ramos: dito na tela, ao lado do botão */
@@ -310,6 +415,7 @@ function riaAcrescentarNovo() {
   riaNovos.push({ nome, foco: "", incluir: true, novo: true });
   $("resIANovo").value = "";
   riaPintarRamos();
+  riaPintarAjustesRes();
 }
 /* as leis do tópico, com a sigla que o app RECONHECE de volta (o apelido ou as
  * iniciais do nome — só se ela levar a esta lei e a nenhuma outra) */
@@ -349,19 +455,38 @@ function riaMontarPedido() {
 function riaCopiar() {
   const txt = riaMontarPedido();
   const msg = $("resIACopiadoMsg");
-  const ok = () => { msg.textContent = t("ria_copiado"); riaPassos(2); };
+  /* copiado: o passo 2 acende e o "ajustar o pedido" se fecha — o próximo gesto é colar */
+  const ok = () => { msg.textContent = t("ria_copiado"); riaPassos(2); if ($("resIAAjustes")) $("resIAAjustes").open = false; };
+  try { reg("MATERIAL", "pedido do resumo pela IA copiado · " + (riaRamoAlvo() ? "ramo" : "tópico") + " · " + riaObjetivo, riaCtx.topico + " · " + txt.length + " caracteres"); } catch (e) {}
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(ok, ok);
   } catch (e) {}
   ok();
   return Promise.resolve();
 }
+/* os ramos que foram no pedido (para saber o que FALTOU na resposta); complementar e ramo único não têm falta */
+function riaPedidos() {
+  if (!riaCtx || riaRamoAlvo() || riaModoDeAplicar() === "acrescentar") return [];
+  return (riaCtx.lista || []).filter((r) => r.incluir !== false).map((r) => ({ id: r.id || matIdDeNome(r.nome), nome: r.nome }))
+    .concat(riaNovos.filter((r) => r.incluir !== false).map((r) => ({ id: matIdDeNome(r.nome), nome: r.nome })));
+}
+function riaDiagAtual(resp) {
+  return riaDiagnostico(riaTextoAtual(), resp, riaModoDeAplicar(), riaCtx.ramos, riaPedidos(), riaEscolha);
+}
+/* o último estado lido (para o relatório): o semáforo, os detalhes e o diagnóstico */
+let riaLido = null;
+let riaUltimo = null;
 /* o semáforo e a conferência, a cada mudança da caixa */
 function riaConferirTela() {
   const ramo = riaRamoAlvo();
   const resp = riaLerResposta($("resIATexto").value, riaCtx.ramos, ramo ? ramo.id : "");
   const sem = $("resIASem"), ico = $("resIASemIco"), txt = $("resIASemTxt");
+  const pode = !resp.vazio && !resp.ehPedido && !resp.ehRamos;
+  const diag = pode ? riaDiagAtual(resp) : riaDiagnostico("", null, "secoes", [], [], {});
+  const al = diag.alertas;
+  /* o semáforo fica CURTO (uma frase); a lista completa vai para "detalhes", dobrada */
   let est = "vazio", msg = t("ria_sem_vazio");
+  const det = [];
   if (resp.ehPedido) { est = "erro"; msg = t("ria_sem_pedido"); }
   else if (resp.ehRamos) { est = "atencao"; msg = t("ria_sem_eh_ramos", { n: resp.ramosLista.length }); }
   else if (resp.vazio) { est = "vazio"; msg = t("ria_sem_vazio"); }
@@ -371,22 +496,22 @@ function riaConferirTela() {
     est = "ok";
     const partes = [];
     if (resp.geral) partes.push(t("ria_parte_geral"));
-    if (resp.secoes.length) partes.push(t("ria_parte_n", { n: resp.secoes.length, l: resp.secoes.map((x) => x.nome).join(", ") }));
+    if (resp.secoes.length) partes.push(t("ria_parte_n2", { n: resp.secoes.length }));
     msg = t(riaModoDeAplicar() === "acrescentar" ? "ria_sem_compl" : "ria_sem_ok", { p: partes.join(" + ") });
-    const pedidos = (riaCtx.lista || []).filter((r) => r.incluir !== false);
-    const faltam = pedidos.filter((r) => !resp.secoes.some((x) => x.id === r.id)).map((r) => r.nome);
-    /* complementar: parte que não veio é parte sem nada a acrescentar (não é falta) */
-    if (faltam.length && riaModoDeAplicar() !== "acrescentar") { msg += " " + t("ria_sem_falta", { l: faltam.join(", ") }); est = "atencao"; }
+    if (resp.secoes.length) det.push(t("ria_sem_lidas", { l: resp.secoes.map((x) => x.nome).join(" · ") }));
+    if (al.faltam.length) det.push(t("ria_sem_falta", { l: al.faltam.join(", ") }));
     const novos = resp.secoes.filter((x) => x.semRamo).map((x) => x.nome + (x.sugerido ? " (" + t("ria_sugerido") + ")" : ""));
-    if (novos.length) msg += " " + t("ria_sem_novos", { l: novos.join(", ") });
+    if (novos.length) det.push(t("ria_sem_novos", { l: novos.join(", ") }));
   }
+  if (pode && (al.encurtadas || al.faltam.length || riaAlertaRamos(diag).length)) { est = "atencao"; msg += " " + t("ria_sem_ver_alertas"); }
   sem.className = "ednovo-sem sem-" + est;
   ico.textContent = est === "ok" ? "✓" : est === "erro" ? "✕" : est === "atencao" ? "!" : "○";
   txt.textContent = msg;
+  if ($("resIASemMais")) { $("resIASemMais").hidden = !det.length; $("resIASemMaisTxt").textContent = det.join("\n"); }
   $("resIATexto").className = "ednovo-ta" + (est === "ok" ? " ta-ok" : est === "erro" ? " ta-erro" : est === "atencao" ? " ta-atencao" : "");
-  const pode = !resp.vazio && !resp.ehPedido && !resp.ehRamos;
-  $("btnResIAAplicar").disabled = !pode;
-  /* trocar tudo só existe no tópico inteiro e quando já há resumo */
+  /* colada a resposta, a caixa encolhe: o que importa agora é o que vem abaixo dela */
+  $("resIATexto").rows = pode ? 4 : 6;
+  /* "apagar as que não vieram" só existe no tópico inteiro e quando já há resumo */
   const temAtual = !!riaTextoAtual().trim();
   $("resIAModoLin").hidden = !pode || !!ramo || !temAtual || riaModoDeAplicar() === "acrescentar";
   /* ramos que a resposta traz e o edital não tem: um clique para criá-los (no editor de ramos, para conferir) */
@@ -397,32 +522,206 @@ function riaConferirTela() {
   }
   $("btnResIAModoSec").setAttribute("aria-pressed", riaModo === "secoes" ? "true" : "false");
   $("btnResIAModoTudo").setAttribute("aria-pressed", riaModo === "tudo" ? "true" : "false");
+  riaPintarAlerta(pode ? diag : null);
+  riaPintarDiag(pode ? diag : null, resp);
+  /* a ação principal diz QUANTO vai: "Aplicar 2 de 10 partes" */
+  const b = $("btnResIAAplicar");
+  b.disabled = !pode || !al.marcadas;
+  b.textContent = !pode ? t("ria_aplicar") : !al.marcadas ? t("ria_aplicar_nada") : al.escolhiveis > 1 ? t("ria_aplicar_n", { n: al.marcadas, m: al.escolhiveis }) : t("ria_aplicar");
+  if (pode) riaPassos(2);
+  riaLido = { est, msg, det, diag: pode ? diag : null, resp };
+  return resp;
+}
+/* os nomes que a resposta trouxe fora da lista de ramos (sem contar os que a IA foi convidada a sugerir) */
+function riaAlertaRamos(diag) {
+  return ((diag && diag.partes) || []).filter((p) => p.estado === "semramo" && !p.sugerido).map((p) => p.parte);
+}
+/* O ALERTA FORTE: o que encolheu demais, a lista de ramos não seguida, as marcas que se perdem */
+function riaPintarAlerta(diag) {
+  const bx = $("resIAAlerta");
+  if (!bx) return;
+  bx.innerHTML = "";
+  const linhas = [];
+  if (diag) {
+    const al = diag.alertas;
+    if (al.encurtadas) linhas.push(t("ria_al_encurta", { n: al.encurtadas, p: Math.round(al.maxPerda * 100) }));
+    const fora = riaAlertaRamos(diag);
+    const ped = [];
+    if (al.faltam.length) ped.push(t("ria_al_faltou", { l: al.faltam.map((x) => "«" + x + "»").join(", ") }));
+    if (fora.length) ped.push(t("ria_al_trouxe", { l: fora.map((x) => "«" + x + "»").join(", ") }));
+    if (ped.length) linhas.push(t("ria_al_ramos", { l: ped.join("; ") }));
+    if (diag.perdidas.marcas || diag.perdidas.dicas) linhas.push(t("ria_conf_marcas", { m: diag.perdidas.marcas, d: diag.perdidas.dicas }));
+  }
+  linhas.forEach((s) => { const d = document.createElement("div"); d.textContent = s; bx.append(d); });
+  bx.hidden = !linhas.length;
+}
+/* a diferença palavra a palavra (o mesmo destaque das teses: o que sai riscado, o que entra sublinhado) */
+function riaDiffEl(antes, depois) {
+  if (typeof jurDiffEl === "function") return jurDiffEl(antes, depois);
+  const d = document.createElement("div"); d.className = "jur-diff"; d.textContent = depois; return d;
+}
+function riaChipDe(p) {
+  const pc = Math.round(p.perda * 100);
+  if (p.estado === "igual") return t("ria_est_igual");
+  if (p.estado === "encurtada") return t("ria_est_encurtada", { p: pc });
+  if (p.estado === "alterada") {
+    const g = p.antes.length ? Math.round((p.depois.length / p.antes.length - 1) * 100) : 0;
+    return t("ria_est_alterada") + (g ? " " + (g > 0 ? "+" : "−") + Math.abs(g) + "%" : "");
+  }
+  if (p.estado === "acrescenta") return t("ria_est_acrescenta", { b: p.depois.length });
+  return t("ria_est_" + p.estado);
+}
+/* UMA LINHA POR PARTE: caixa (o que se troca), nome, estado e tamanhos; "ver o que muda" abre a diferença */
+function riaPintarDiag(diag, resp) {
   const conf = $("resIAConf");
   conf.innerHTML = "";
-  conf.hidden = !pode || !temAtual;
-  if (!conf.hidden) {
-    const c = riaConferir(riaTextoAtual(), resp, riaModoDeAplicar(), riaCtx.ramos);
-    /* a avaliação da IA (avaliar e melhorar) vem antes do que muda: é o porquê da mudança */
-    if (resp.avaliacao) {
-      const at = document.createElement("b"); at.textContent = t("ria_conf_aval"); conf.append(at);
-      const av = document.createElement("div"); av.className = "res-ia-aval"; av.textContent = resp.avaliacao; conf.append(av);
-    }
-    const tit = document.createElement("b"); tit.textContent = t("ria_conf_tit"); conf.append(tit);
-    c.itens.forEach((it) => {
-      const p = document.createElement("div");
-      p.className = "res-ia-conf-lin";
-      p.textContent = it.tipo === "acrescenta" ? t("ria_conf_acresc", { p: it.parte, b: it.depois })
-        : it.tipo === "nova" ? t("ria_conf_nova", { p: it.parte, b: it.depois })
-        : it.tipo === "some" ? t("ria_conf_some", { p: it.parte }) : t("ria_conf_troca", { p: it.parte, a: it.antes, b: it.depois });
-      conf.append(p);
-    });
-    if (c.perdidas.marcas || c.perdidas.dicas) {
-      const w = document.createElement("div"); w.className = "res-ia-conf-perda";
-      w.textContent = t("ria_conf_marcas", { m: c.perdidas.marcas, d: c.perdidas.dicas });
-      conf.append(w);
-    }
+  conf.hidden = !diag || !diag.partes.length;
+  if (conf.hidden) return;
+  /* a avaliação da IA (avaliar e melhorar): dobrada — é o porquê, não o que se aplica */
+  if (resp && resp.avaliacao) {
+    const dv = document.createElement("details"); dv.className = "res-ia-aval-dob";
+    const sm = document.createElement("summary"); sm.textContent = t("ria_conf_aval_dob", { n: resp.avaliacao.split("\n").filter((l) => l.trim()).length });
+    const av = document.createElement("div"); av.className = "res-ia-aval"; av.textContent = resp.avaliacao;
+    dv.append(sm, av); conf.append(dv);
   }
-  return resp;
+  const tit = document.createElement("b"); tit.textContent = t("ria_conf_tit"); conf.append(tit);
+  diag.partes.forEach((p) => {
+    const lin = document.createElement("div");
+    lin.className = "res-ia-parte res-ia-est-" + p.estado;
+    const lb = document.createElement("label"); lb.className = "res-ia-parte-lin";
+    if (p.escolhivel) {
+      const ck = document.createElement("input"); ck.type = "checkbox"; ck.checked = !!p.marcada;
+      ck.onchange = () => { riaEscolha[p.chave] = !!ck.checked; riaConferirTela(); };
+      lb.append(ck);
+    }
+    const nm = document.createElement("span"); nm.className = "res-ia-parte-nome"; nm.textContent = p.parte;
+    const chip = document.createElement("span"); chip.className = "res-ia-chip"; chip.textContent = riaChipDe(p);
+    lb.append(nm, " ", chip);
+    if (p.antes.length || p.depois.length) {
+      const tm = document.createElement("span"); tm.className = "nota res-ia-parte-tam";
+      tm.textContent = t("ria_tam", { a: p.antes.length, b: p.depois.length });
+      lb.append(" ", tm);
+    }
+    lin.append(lb);
+    if (p.estado === "alterada" || p.estado === "encurtada") {
+      const dob = document.createElement("details"); dob.className = "res-ia-dif";
+      const sm = document.createElement("summary"); sm.textContent = t("ria_ver_dif");
+      dob.append(sm);
+      /* a diferença só é calculada quando aberta: dez seções a cada tecla custariam caro */
+      const encher = () => { if (dob._feito) return; dob._feito = true; dob.append(riaDiffEl(p.antes, p.depois)); };
+      dob.addEventListener("toggle", () => { if (dob.open) encher(); });
+      dob._encher = encher;
+      lin.append(dob);
+    }
+    conf.append(lin);
+  });
+}
+/* 📥 colar: o botão ao lado da caixa (no celular, achar "colar" dentro de uma caixa longa é o passo que mais trava) */
+function riaColarDaArea() {
+  const msg = $("resIAColarMsg");
+  const manual = () => { if (msg) msg.textContent = t("ria_colar_manual"); try { $("resIATexto").focus(); } catch (e) {} };
+  try {
+    const p = navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : null;
+    if (!p || typeof p.then !== "function") { manual(); return Promise.resolve(false); }
+    return p.then((txt) => {
+      if (!String(txt || "").trim()) { manual(); return false; }
+      $("resIATexto").value = txt; riaEscolha = {};
+      if (msg) msg.textContent = "";
+      riaConferirTela();
+      return true;
+    }, () => { manual(); return false; });
+  } catch (e) { manual(); return Promise.resolve(false); }
+}
+
+/* =====================================================================
+ * 📋 O RELATÓRIO (19.197.0): "deveria haver um sistema de reportar o que ocorreu na tela para facilitar o diagnóstico".
+ * Um texto para colar numa conversa de suporte: o que foi pedido, o que veio, o que o app entendeu, cada parte com o
+ * estado e o tamanho, os alertas e os eventos recentes do registro sobre este tópico. Leva só NOMES e TAMANHOS — nunca o
+ * texto do resumo nem dado da pessoa. A avaliação da IA entra cortada, porque é ela que explica o que a IA quis fazer.
+ * ===================================================================== */
+function riaRelatorio() {
+  if (!riaCtx) return "";
+  const L = [];
+  const ramo = riaRamoAlvo();
+  const atual = riaTextoAtual();
+  const scA = matSecoesDeRamo(atual, riaCtx.ramos);
+  const lido = riaLido || {};
+  const resp = lido.resp || {};
+  const v = typeof VERSAO !== "undefined" ? VERSAO : "?";
+  const sim = (b) => t(b ? "ria_rel_sim" : "ria_rel_nao");
+  const temAtual = !!atual.trim();
+  const fluxo = !temAtual ? t("ria_rel_fluxo_criar") : t("ria_rel_fluxo_" + (riaObjetivo === "complementar" ? "compl" : riaObjetivo));
+  L.push(t("ria_rel_tit", { v, d: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC" }));
+  L.push(t("ria_rel_fluxo", { f: fluxo, e: ramo ? t("ria_rel_ramo", { r: ramo.nome }) : t("ria_rel_topico") }));
+  L.push(t("ria_rel_topico_l", { t: riaCtx.topico, d: riaCtx.disciplina }));
+  const prof = ($("resIAProf") || {}).value || "padrao";
+  const lei = !$("resIALeiLin").hidden && $("resIALei").checked;
+  L.push(t("ria_rel_pedido", { p: t("ria_prof_" + prof), l: sim(lei), a: sim(temAtual && riaObjetivo !== "novo"), s: sim(!ramo && $("resIASugerir").checked), m: riaModoDeAplicar() === "tudo" ? t("ria_modo_tudo") : t("ria_modo_secoes") }));
+  const ped = ramo ? [{ nome: ramo.nome }] : (riaCtx.lista || []).filter((r) => r.incluir !== false).concat(riaNovos.filter((r) => r.incluir !== false));
+  L.push(t("ria_rel_ramos", { n: ped.length }));
+  ped.forEach((r, i) => L.push("  " + (i + 1) + ". " + r.nome + (r.novo ? " (" + t("ria_novo_tag") + ")" : "")));
+  L.push(t("ria_rel_atual", { n: atual.length, g: scA.geral.corpo.length, k: scA.secoes.length }));
+  scA.secoes.forEach((x) => L.push("  - " + x.nome + ": " + x.corpo.length + (x.semRamo ? " · " + t("ria_rel_semramo") : "")));
+  const txt = String(($("resIATexto") || {}).value || "");
+  L.push(t("ria_rel_resposta", { n: txt.length, l: txt ? txt.split("\n").length : 0, m: sim(/^#{1,6}\s/m.test(txt)), b: sim(/\*\*/.test(txt)) }));
+  L.push(t("ria_rel_leitura", { e: lido.est || "vazio", m: lido.msg || "" }));
+  (lido.det || []).forEach((s) => L.push("  " + s));
+  if (lido.diag && lido.diag.partes.length) {
+    L.push(t("ria_rel_partes"));
+    lido.diag.partes.forEach((p) => L.push("  " + (p.escolhivel ? (p.marcada ? "[x] " : "[ ] ") : "    ") + p.parte + " — " + riaChipDe(p) + " · " + p.antes.length + " → " + p.depois.length));
+    const al = lido.diag.alertas;
+    L.push(t("ria_rel_alertas", { e: al.encurtadas, f: al.faltam.length, s: riaAlertaRamos(lido.diag).length, m: lido.diag.perdidas.marcas, d: lido.diag.perdidas.dicas }));
+  }
+  if (resp.avaliacao) {
+    const av = resp.avaliacao.replace(/\s+/g, " ").trim();
+    L.push(t("ria_rel_aval", { n: resp.avaliacao.length }) + " " + av.slice(0, 600) + (av.length > 600 ? "…" : ""));
+  }
+  L.push(riaUltimo ? t("ria_rel_aplicado", { a: riaUltimo.antes, b: riaUltimo.depois, n: riaUltimo.n }) : t("ria_rel_nao_aplicado"));
+  /* os eventos do registro sobre este tópico (o que veio antes: ramos editados, pedidos copiados, resumos gravados) */
+  let evs = [];
+  try {
+    if (typeof registro !== "undefined" && Array.isArray(registro)) {
+      const top = String(riaCtx.topico || "");
+      evs = registro.filter((e) => e && (String(e.extra || "").indexOf(top) >= 0 || String(e.msg || "").indexOf(top) >= 0)).slice(-12);
+    }
+  } catch (e) { evs = []; }
+  if (evs.length) {
+    L.push(t("ria_rel_eventos"));
+    evs.forEach((e) => L.push("  " + (e.d || "") + " " + (e.h || "") + " · " + (e.v || "") + " · " + e.tipo + " · " + e.msg + (e.extra ? " · " + String(e.extra).slice(0, 160) : "")));
+  }
+  return L.join("\n");
+}
+/* para o painel de diagnóstico (seção TELA): o mesmo relatório, recuado, se o resumo pela IA foi aberto nesta sessão */
+function riaDiagLinhas() {
+  if (!riaCtx) return [];
+  let aberto = false;
+  try { aberto = !!($("dlgResIA") && $("dlgResIA").open); } catch (e) { aberto = false; }
+  const txt = riaRelatorio();
+  if (!txt) return [];
+  return [t(aberto ? "ria_diag_aberto" : "ria_diag_ultimo")].concat(txt.split("\n").slice(1).map((s) => "  " + s));
+}
+function riaCopiarRelatorio() {
+  const txt = riaRelatorio();
+  const msg = $("resIARelMsg"), ver = $("resIARelTxt");
+  if (ver) { ver.value = txt; ver.hidden = true; }
+  const ok = () => { if (msg) msg.textContent = t("ria_rel_copiado"); };
+  const manual = () => { if (msg) msg.textContent = t("ria_rel_manual"); if (ver) ver.hidden = false; };
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : null;
+    if (p && typeof p.then === "function") p.then(ok, manual); else if (p === null) manual(); else ok();
+  } catch (e) { manual(); }
+  try { reg("MATERIAL", "relatório do resumo pela IA copiado", riaCtx.topico + " · " + ((riaLido && riaLido.est) || "vazio")); } catch (e) {}
+  return txt;
+}
+/* o resumo do passo 1 dobrado: "11 ramos · padrão · com a lei" (o detalhe fica em "Ajustar o pedido") */
+function riaPintarAjustesRes() {
+  const el = $("resIAAjustesRes");
+  if (!el || !riaCtx) return;
+  const ramo = riaRamoAlvo();
+  const n = ramo ? 1 : (riaCtx.lista || []).filter((r) => r.incluir !== false).length + riaNovos.filter((r) => r.incluir !== false).length;
+  const prof = ($("resIAProf") || {}).value || "padrao";
+  const lei = !$("resIALeiLin").hidden && $("resIALei").checked;
+  el.textContent = t("ria_ajustes_res", { n, p: t("ria_prof_" + prof) }) + (lei ? " · " + t("ria_ajustes_lei") : "");
 }
 function riaModoDefinir(m) { riaModo = m === "tudo" ? "tudo" : "secoes"; riaConferirTela(); }
 /* O OBJETIVO (com resumo já escrito). O modo de aplicar vem dele: complementar = acrescentar; os outros trocam */
@@ -431,7 +730,8 @@ function riaObjetivoDefinir(o, calado) {
   [["btnResIAObjCompl", "complementar"], ["btnResIAObjMelhor", "melhorar"], ["btnResIAObjNovo", "novo"]].forEach(([id, v]) => {
     if ($(id)) $(id).setAttribute("aria-pressed", riaObjetivo === v ? "true" : "false");
   });
-  if ($("resIAObjExp")) $("resIAObjExp").textContent = t("ria_obj_" + (riaObjetivo === "complementar" ? "compl" : riaObjetivo) + "_exp");
+  /* (19.197.0) as chaves são "compl", "melhor" e "novo": "melhorar" mostrava o NOME da chave na tela */
+  if ($("resIAObjExp")) $("resIAObjExp").textContent = t("ria_obj_" + ({ complementar: "compl", melhorar: "melhor" }[riaObjetivo] || riaObjetivo) + "_exp");
   if (!calado) riaConferirTela();
   return riaObjetivo;
 }
@@ -446,10 +746,15 @@ function riaAplicar() {
   if (resp.vazio || resp.ehPedido || resp.ehRamos) return false;
   const antes = riaTextoAtual();
   const modoAp = riaModoDeAplicar();
-  const novo = riaAplicarTexto(antes, resp, modoAp, riaCtx.ramos);
+  /* só as partes MARCADAS (o padrão deixa de fora as que encolheram demais) */
+  const diag = riaDiagAtual(resp);
+  if (!diag.alertas.marcadas) return false;
+  const novo = riaAplicarTexto(antes, resp, modoAp, riaCtx.ramos, riaEscolhaResolvida(diag));
   riaAnterior = { chave: riaCtx.chave, texto: antes, tinha: !!matObter(riaCtx.chave) };
   matGravar(riaCtx.chave, novo, { disciplina: riaCtx.disciplina, topico: riaCtx.topico });
-  try { reg("MATERIAL", "resumo pela IA" + (ramo ? " (ramo " + ramo.nome + ")" : "") + " · " + (modoAp === "acrescentar" ? "complementar" : riaObjetivo), riaCtx.topico + " · " + antes.length + " → " + novo.length + " caracteres"); } catch (e) {}
+  riaUltimo = { antes: antes.length, depois: novo.length, n: diag.alertas.marcadas };
+  const al = diag.alertas;
+  try { reg("MATERIAL", "resumo pela IA" + (ramo ? " (ramo " + ramo.nome + ")" : "") + " · " + (modoAp === "acrescentar" ? "complementar" : !antes.trim() ? "criar" : riaObjetivo), riaCtx.topico + " · " + antes.length + " → " + novo.length + " caracteres · " + al.marcadas + " de " + al.escolhiveis + " parte(s) · encurtadas " + al.encurtadas + " · faltaram " + al.faltam.length + " · fora da lista " + riaAlertaRamos(diag).length); } catch (e) {}
   $("resIAFeitoTxt").textContent = t("ria_aplicado", { t: ramo ? riaCtx.topico + " › " + ramo.nome : riaCtx.topico });
   $("resIAFeito").hidden = false;
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
@@ -474,7 +779,11 @@ function riaIniciar() {
   $("btnResIACopiar").onclick = riaCopiar;
   $("btnResIANovo").onclick = riaAcrescentarNovo;
   $("resIANovo").onkeydown = (ev) => { if (ev && ev.key === "Enter") { if (ev.preventDefault) ev.preventDefault(); riaAcrescentarNovo(); } };
-  $("resIATexto").addEventListener("input", riaConferirTela);
+  /* resposta nova, escolhas novas: o que estava marcado valia para a resposta anterior */
+  $("resIATexto").addEventListener("input", () => { riaEscolha = {}; riaConferirTela(); });
+  if ($("btnResIAColar")) $("btnResIAColar").onclick = riaColarDaArea;
+  if ($("btnResIARelatorio")) $("btnResIARelatorio").onclick = riaCopiarRelatorio;
+  ["resIAProf", "resIALei", "resIASugerir"].forEach((id) => { if ($(id)) $(id).addEventListener("change", riaPintarAjustesRes); });
   $("btnResIAModoSec").onclick = () => riaModoDefinir("secoes");
   $("btnResIAModoTudo").onclick = () => riaModoDefinir("tudo");
   if ($("btnResIASugCriar")) $("btnResIASugCriar").onclick = () => riaCriarRamos([]);
