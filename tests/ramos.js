@@ -4246,6 +4246,10 @@ async function testes() {
     const rel2 = a.riaRelatorio();
     ok(/criar \(ainda não havia resumo\)/.test(rel2) && /faltou «Órgãos»/.test(a.$("resIAAlerta").textContent) && a.$("btnResIAAplicar").disabled === false,
        "T4R19 na criação: relatório com o fluxo 'criar' e o mesmo alerta de ramo que faltou");
+    /* (19.198.0) as horas do relatório na hora LOCAL, com o fuso, como o painel de diagnóstico (o registro guarda UTC) */
+    const loc = (iso) => { const d = new Date(iso); const p = (n) => String(n).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); };
+    ok(/relatório do resumo pela IA \(\d{4}-\d\d-\d\d \d\d:\d\d \(UTC[+-]\d\d:\d\d\)\)/.test(rel2) && a.riaHoraDoRegistro({ d: "2026-11-21", h: "21:19:14" }) === loc("2026-11-21T21:19:14Z"),
+       "T4R19b o cabeçalho e os eventos do relatório em hora local, com o fuso: " + rel2.split(String.fromCharCode(10))[0]);
     a.$("btnResIAFechar").onclick();
     /* os resumos de teste não ficam para os testes seguintes */
     const matsR = a.matResumosAtual();

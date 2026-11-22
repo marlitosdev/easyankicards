@@ -651,7 +651,8 @@ function riaRelatorio() {
   const sim = (b) => t(b ? "ria_rel_sim" : "ria_rel_nao");
   const temAtual = !!atual.trim();
   const fluxo = !temAtual ? t("ria_rel_fluxo_criar") : t("ria_rel_fluxo_" + (riaObjetivo === "complementar" ? "compl" : riaObjetivo));
-  L.push(t("ria_rel_tit", { v, d: new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC" }));
+  /* (19.198.0) na HORA LOCAL, com o fuso, como o painel de diagnóstico (era UTC: 00:45 para quem via 21:45) */
+  L.push(t("ria_rel_tit", { v, d: riaHoraLocal(new Date()).slice(0, 16) + " (" + riaFuso() + ")" }));
   L.push(t("ria_rel_fluxo", { f: fluxo, e: ramo ? t("ria_rel_ramo", { r: ramo.nome }) : t("ria_rel_topico") }));
   L.push(t("ria_rel_topico_l", { t: riaCtx.topico, d: riaCtx.disciplina }));
   const prof = ($("resIAProf") || {}).value || "padrao";
@@ -687,9 +688,24 @@ function riaRelatorio() {
   } catch (e) { evs = []; }
   if (evs.length) {
     L.push(t("ria_rel_eventos"));
-    evs.forEach((e) => L.push("  " + (e.d || "") + " " + (e.h || "") + " · " + (e.v || "") + " · " + e.tipo + " · " + e.msg + (e.extra ? " · " + String(e.extra).slice(0, 160) : "")));
+    evs.forEach((e) => L.push("  " + riaHoraDoRegistro(e) + " · " + (e.v || "") + " · " + e.tipo + " · " + e.msg + (e.extra ? " · " + String(e.extra).slice(0, 160) : "")));
   }
   return L.join("\n");
+}
+/* (19.198.0) a hora local "AAAA-MM-DD HH:MM:SS" de um instante, e o fuso ("UTC-03:00") */
+function riaHoraLocal(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+function riaFuso() {
+  try { if (typeof diagFuso === "function") return diagFuso(); } catch (e) {}
+  const m = -new Date().getTimezoneOffset(), a = Math.abs(m);
+  return "UTC" + (m >= 0 ? "+" : "-") + String(Math.floor(a / 60)).padStart(2, "0") + ":" + String(a % 60).padStart(2, "0");
+}
+/* o registro guarda dia e hora em UTC (ver reg): aqui volta para a hora de quem lê */
+function riaHoraDoRegistro(e) {
+  const d = new Date(String((e && e.d) || "") + "T" + String((e && e.h) || "") + "Z");
+  return isNaN(d.getTime()) ? ((e && e.d) || "") + " " + ((e && e.h) || "") : riaHoraLocal(d);
 }
 /* para o painel de diagnóstico (seção TELA): o mesmo relatório, recuado, se o resumo pela IA foi aberto nesta sessão */
 function riaDiagLinhas() {
