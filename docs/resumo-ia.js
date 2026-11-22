@@ -44,6 +44,7 @@ function riaPrompt(o) {
       L.push("");
       L.push(t("ria_p_ramos"));
       rs.forEach((r) => L.push("- " + r.nome + (r.novo ? t("ria_p_novo") : "") + (String(r.foco || "").trim() ? t("ria_p_cubra", { f: String(r.foco).trim() }) : "")));
+      if (o.parcial) L.push(t(o.parcial.geral ? "ria_p_parcial_sem_geral" : "ria_p_parcial", { n: o.parcial.n, m: o.parcial.m }));
       /* (19.197.0) a IA do caso real tirou um ramo, criou dois e "restaurou a estrutura" de uma conversa anterior */
       L.push(t("ria_p_ramos_fixos"));
     }
@@ -306,6 +307,7 @@ function riaAbrir(ctx) {
   if ($("resIASugPedidoTxt")) { $("resIASugPedidoTxt").value = ""; $("resIASugPedidoTxt").hidden = true; }
   riaPassos(1);
   riaPintarAjustesRes();
+  riaPintarConselho();
   riaConferirTela();
   abrirModal("dlgResIA");
   return dlg;
@@ -344,8 +346,147 @@ function riaRamosNormais(lista) {
     if (!x) return null;
     const id = x.id || x.ramoId || "";
     const nome = String(x.nome || x.ramoNome || "").trim();
-    return id && nome ? { id, nome } : null;
+    /* a nota fica: é nela que mora o "arts. 11 a 88" que os conselhos leem */
+    return id && nome ? { id, nome, nota: String(x.nota || "").trim() } : null;
   }).filter(Boolean);
+}
+
+/* =====================================================================
+ * OS CONSELHOS DO PEDIDO (19.200.0)
+ *
+ * O caso: 15 ramos de "Licitações (Lei 14.133)" — 5 vindos do índice da lei ("TÍTULO II — DAS LICITAÇÕES", arts. 11 a
+ * 88) e 10 temáticos ("Modalidades de Licitação", arts. 28 a 32...), que ficam DENTRO dos títulos. Pedidos juntos, o
+ * resumo sairia em dobro; e 15 ramos com a lei inteira num pedido só é onde a IA encurta e pula seções (o caso do PAF).
+ *   · ramo LARGO: cobre RIA_LARGO artigos ou mais (lidos do nome e da nota: "arts. 11 a 88");
+ *   · SOBREPOSTO: um ramo cujos artigos caem dentro de um largo;
+ *   · MUITOS: mais de RIA_MUITOS ramos no pedido — pedir por partes (os sem seção, ou de RIA_LOTE em RIA_LOTE).
+ * Tudo só mexe na escolha DESTE pedido (as caixas dos ramos); os ramos do edital não mudam.
+ * ===================================================================== */
+const RIA_LARGO = 40;
+const RIA_MUITOS = 8;
+const RIA_LOTE = 5;
+/* os trechos de artigos que um ramo cita: "arts. 11 a 88", "art. 72", "arts. 1º a 4º" → [{ini, fim}] */
+function riaArtsDoRamo(r) {
+  const s = String((r && r.nome) || "") + " " + String((r && r.nota) || "");
+  const out = [];
+  const re = /\barts?\.?\s*(\d{1,4})\s*[º°o]?(?:\s*(?:a|até|-|–|—)\s*(\d{1,4})\s*[º°o]?)?/gi;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const ini = Number(m[1]), fim = m[2] ? Number(m[2]) : ini;
+    if (ini > 0 && fim >= ini) out.push({ ini, fim });
+  }
+  return out;
+}
+/* um trecho só cobre outro se for MAIOR que ele (dois ramos com o mesmo "art. 72" não são um dentro do outro) */
+const RIA_CONTEM_MIN = 5;
+/* ramos = [{id, nome, nota}] →
+ *   largos: [{id, nome, ini, fim, n}] — cobrem RIA_LARGO artigos ou mais (conselho: dividir);
+ *   contem: [{id, nome, ini, fim, n, dentro: [nomes]}] — o trecho deles abrange o de outros ramos (conselho: não pedir os dois);
+ *   sobrepostos: [ids] — os que estão dentro de algum */
+function riaAnalisarRamos(ramos) {
+  const span = (a) => a.fim - a.ini + 1;
+  const rs = (ramos || []).map((r) => {
+    const arts = riaArtsDoRamo(r);
+    return { r, arts, g: arts.reduce((m, a) => (!m || span(a) > span(m) ? a : m), null) };
+  });
+  const largos = rs.filter((x) => x.g && span(x.g) >= RIA_LARGO).map((x) => ({ id: x.r.id, nome: x.r.nome, ini: x.g.ini, fim: x.g.fim, n: span(x.g) }));
+  const contem = [];
+  const sobrepostos = new Set();
+  rs.forEach((x) => {
+    if (!x.g || span(x.g) < RIA_CONTEM_MIN) return;
+    const dentro = rs.filter((y) => y !== x && y.g && span(y.g) < span(x.g) && y.arts.some((a) => a.ini >= x.g.ini && a.fim <= x.g.fim));
+    if (!dentro.length) return;
+    dentro.forEach((y) => sobrepostos.add(y.r.id));
+    contem.push({ id: x.r.id, nome: x.r.nome, ini: x.g.ini, fim: x.g.fim, n: span(x.g), dentro: dentro.map((y) => y.r.nome) });
+  });
+  /* quem contém e também está dentro de outro (um capítulo dentro do título) não é "o de fora": fica o mais largo */
+  const fora = contem.filter((c) => !sobrepostos.has(c.id));
+  return { largos, contem: fora, sobrepostos: Array.from(sobrepostos).filter((id) => !fora.some((c) => c.id === id)) };
+}
+/* os ramos que já têm seção no resumo atual (para "só os que faltam") */
+function riaIdsComSecao() {
+  if (!riaCtx) return new Set();
+  const sc = matSecoesDeRamo(riaTextoAtual(), riaCtx.ramos);
+  return new Set(sc.secoes.filter((x) => String(x.corpo || "").trim()).map((x) => x.id));
+}
+/* marca SÓ os ramos de `ids` neste pedido (os novos escritos à mão ficam como estão) */
+function riaPedirSo(ids) {
+  if (!riaCtx || !riaCtx.lista) return 0;
+  const quer = new Set(ids);
+  riaCtx.lista.forEach((r) => { r.incluir = quer.has(r.id); });
+  riaPintarRamos();
+  riaPintarAjustesRes();
+  riaPintarConselho();
+  riaConferirTela();
+  return riaCtx.lista.filter((r) => r.incluir).length;
+}
+/* as ações dos conselhos */
+/* sem os que abrangem os outros (ficam os temáticos, menores) · só eles (ficam os abrangentes, sem os de dentro) */
+function riaConselhoSemLargos() {
+  const fora = new Set(riaAnalisarRamos(riaCtx.ramos).contem.map((l) => l.id));
+  return riaPedirSo((riaCtx.lista || []).filter((r) => r.incluir !== false && !fora.has(r.id)).map((r) => r.id));
+}
+function riaConselhoSoLargos() {
+  const dentro = new Set(riaAnalisarRamos(riaCtx.ramos).sobrepostos);
+  return riaPedirSo((riaCtx.lista || []).filter((r) => r.incluir !== false && !dentro.has(r.id)).map((r) => r.id));
+}
+function riaConselhoSemSecao() {
+  const tem = riaIdsComSecao();
+  return riaPedirSo((riaCtx.lista || []).filter((r) => !tem.has(r.id)).map((r) => r.id));
+}
+/* os próximos RIA_LOTE: primeiro os que ainda não têm seção, na ordem do edital */
+function riaConselhoLote() {
+  const tem = riaIdsComSecao();
+  /* entre os que continuam marcados ("ficar com os menores" e depois "os próximos 5" pega os temáticos, não os títulos) */
+  let lista = (riaCtx.lista || []).filter((r) => r.incluir !== false);
+  /* um lote não mistura o abrangente com os de dentro dele (seria o resumo em dobro de novo): ficam os menores */
+  const abr = new Set(riaAnalisarRamos(lista).contem.map((c) => c.id));
+  if (abr.size && lista.some((r) => !abr.has(r.id))) lista = lista.filter((r) => !abr.has(r.id));
+  const falta = lista.filter((r) => !tem.has(r.id));
+  return riaPedirSo((falta.length ? falta : lista).slice(0, RIA_LOTE).map((r) => r.id));
+}
+function riaConselhoTodos() { return riaPedirSo((riaCtx.lista || []).map((r) => r.id)); }
+/* o quadro dos conselhos, no passo 1, logo acima de "Copiar o pedido" */
+function riaPintarConselho() {
+  const bx = $("resIAConselho");
+  if (!bx || !riaCtx) return;
+  bx.innerHTML = "";
+  if (riaRamoAlvo() || !(riaCtx.lista || []).length) { bx.hidden = true; return; }
+  const lista = riaCtx.lista;
+  const inc = lista.filter((r) => r.incluir !== false);
+  const an = riaAnalisarRamos(inc);
+  const linha = (txt) => { const d = document.createElement("div"); d.textContent = txt; bx.append(d); };
+  const bts = document.createElement("div"); bts.className = "res-ia-conselho-bts";
+  const bt = (rot, fn, dica) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn-min"; b.textContent = rot; if (dica) b.title = dica; b.onclick = fn; bts.append(b); };
+  if (an.contem.length) {
+    linha(t("ria_cons_dobro", { n: an.contem.length }));
+    /* o aviso fica numa frase; quem contém quem, dobrado (no celular a lista inteira empurrava o "Copiar" para baixo) */
+    const dob = document.createElement("details"); dob.className = "res-ia-mais";
+    const sm = document.createElement("summary"); sm.textContent = t("ria_cons_ver");
+    const txt = document.createElement("div"); txt.className = "res-ia-mais-txt";
+    txt.textContent = an.contem.map((l) => "· " + t("ria_cons_contem", { r: l.nome, a: l.ini, b: l.fim, l: l.dentro.map((x) => "«" + x + "»").join(", ") })).join("\n");
+    dob.append(sm, txt); bx.append(dob);
+    bt(t("ria_cons_sem_largos", { n: an.contem.length }), riaConselhoSemLargos, t("ria_cons_sem_largos_tip"));
+    bt(t("ria_cons_so_largos", { n: an.contem.length }), riaConselhoSoLargos, t("ria_cons_so_largos_tip"));
+  }
+  /* largo que não repete ninguém (ou além dos que repetem): o conselho é dividir */
+  an.largos.filter((l) => !an.contem.some((c) => c.id === l.id)).slice(0, 3).forEach((l) => linha(t("ria_cons_largo", { r: l.nome, n: l.n, a: l.ini, b: l.fim })));
+  if ((an.largos.length || an.contem.length) && riaEditalId() && typeof ramAbrirEditor === "function") bt(t("ria_cons_editar"), () => riaCriarRamos([]), t("ria_cons_editar_tip"));
+  const tem = riaIdsComSecao();
+  const semSecao = lista.filter((r) => !tem.has(r.id)).length;
+  if (inc.length > RIA_MUITOS) {
+    linha(t("ria_cons_muitos", { n: inc.length }));
+    if (semSecao && semSecao < lista.length && semSecao !== inc.length) bt(t("ria_cons_sem_secao", { n: semSecao }), riaConselhoSemSecao, t("ria_cons_sem_secao_tip"));
+    const semSecaoInc = inc.filter((r) => !tem.has(r.id)).length;
+    bt(t("ria_cons_lote", { n: Math.min(RIA_LOTE, semSecaoInc || inc.length) }), riaConselhoLote, t("ria_cons_lote_tip"));
+  }
+  /* pedido parcial: dizer quantos ficaram de fora e como voltar */
+  if (inc.length < lista.length) {
+    linha(t("ria_cons_parcial", { n: inc.length, m: lista.length }));
+    bt(t("ria_cons_todos", { m: lista.length }), riaConselhoTodos);
+  }
+  if (bts.children.length) bx.append(bts);
+  bx.hidden = !bx.children.length;
 }
 function riaRamosDoTopico(disciplina, topico, dados) {
   let fonte = [];
@@ -370,6 +511,7 @@ function riaDepoisDosRamos(r) {
   riaPintarRamos();
   riaPintarSugRamos();
   riaPintarAjustesRes();
+  riaPintarConselho();
   riaConferirTela();
   if ($("resIARamosMsg")) $("resIARamosMsg").textContent = t("ria_ramos_criados", { n: riaCtx.ramos.length });
   /* o próximo passo é copiar o pedido do resumo de novo — agora com os ramos: dito na tela, ao lado do botão */
@@ -433,8 +575,8 @@ function riaPintarRamos() {
   const bx = $("resIARamos");
   const ramo = riaRamoAlvo();
   if (ramo) { riaCtx.alvoFoco = riaCtx.alvoFoco || { nome: ramo.nome, foco: "" }; ramPedidoPintar(bx, [riaCtx.alvoFoco], { semCaixa: true }); return; }
-  if (!riaCtx.lista) riaCtx.lista = (riaCtx.ramos || []).map((r) => ({ id: r.id, nome: r.nome, foco: "", incluir: true }));
-  ramPedidoPintar(bx, riaCtx.lista.concat(riaNovos));
+  if (!riaCtx.lista) riaCtx.lista = (riaCtx.ramos || []).map((r) => ({ id: r.id, nome: r.nome, nota: r.nota || "", foco: "", incluir: true }));
+  ramPedidoPintar(bx, riaCtx.lista.concat(riaNovos), { aoMudar: () => { riaPintarAjustesRes(); riaPintarConselho(); } });
   /* no edital, o aviso "ainda não tem ramos" (riaPintarSugRamos) já diz isso, com o caminho para criá-los */
   if (!riaCtx.lista.length && !riaNovos.length && !riaEditalId()) {
     const p = document.createElement("p"); p.className = "nota"; p.textContent = t("ria_sem_ramos"); bx.append(p);
@@ -449,6 +591,7 @@ function riaAcrescentarNovo() {
   $("resIANovo").value = "";
   riaPintarRamos();
   riaPintarAjustesRes();
+  riaPintarConselho();
 }
 /* as leis do tópico, com a sigla que o app RECONHECE de volta (o apelido ou as
  * iniciais do nome — só se ela levar a esta lei e a nenhuma outra) */
@@ -483,7 +626,15 @@ function riaMontarPedido() {
     ramo: ramo ? { nome: ramo.nome, foco: (riaCtx.alvoFoco || {}).foco || "" } : null,
     ramos: ramo ? [] : (riaCtx.lista || []).filter((r) => r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco }))
       .concat(riaNovos.filter((r) => r.incluir !== false).map((r) => ({ nome: r.nome, foco: r.foco, novo: true }))),
+    /* (19.200.0) uma PARTE dos ramos (por lotes, ou sem os largos): a IA escreve só estas seções */
+    parcial: ramo ? null : riaParcial(),
   });
+}
+function riaParcial() {
+  const lista = (riaCtx && riaCtx.lista) || [];
+  const n = lista.filter((r) => r.incluir !== false).length;
+  if (!lista.length || n === lista.length) return null;
+  return { n, m: lista.length, geral: !!matSecoesDeRamo(riaTextoAtual(), riaCtx.ramos).geral.corpo.trim() };
 }
 function riaCopiar() {
   const txt = riaMontarPedido();
@@ -694,6 +845,7 @@ function riaRelatorio() {
   const ped = ramo ? [{ nome: ramo.nome }] : (riaCtx.lista || []).filter((r) => r.incluir !== false).concat(riaNovos.filter((r) => r.incluir !== false));
   L.push(t("ria_rel_ramos", { n: ped.length }));
   ped.forEach((r, i) => L.push("  " + (i + 1) + ". " + r.nome + (r.novo ? " (" + t("ria_novo_tag") + ")" : "")));
+  if (!ramo) { const fora = (riaCtx.lista || []).filter((r) => r.incluir === false).length; if (fora) L.push(t("ria_rel_fora", { n: fora })); }
   L.push(t("ria_rel_atual", { n: atual.length, g: scA.geral.corpo.length, k: scA.secoes.length }));
   scA.secoes.forEach((x) => L.push("  - " + x.nome + ": " + x.corpo.length + (x.semRamo ? " · " + t("ria_rel_semramo") : "")));
   const txt = String(($("resIATexto") || {}).value || "");
@@ -806,6 +958,7 @@ function riaAplicar() {
   try { reg("MATERIAL", "resumo pela IA" + (ramo ? " (ramo " + ramo.nome + ")" : "") + " · " + (modoAp === "acrescentar" ? "complementar" : !antes.trim() ? "criar" : riaObjetivo), riaCtx.topico + " · " + antes.length + " → " + novo.length + " caracteres · " + al.marcadas + " de " + al.escolhiveis + " parte(s) · encurtadas " + al.encurtadas + " · faltaram " + al.faltam.length + " · fora da lista " + riaAlertaRamos(diag).length); } catch (e) {}
   $("resIAFeitoTxt").textContent = t("ria_aplicado", { t: ramo ? riaCtx.topico + " › " + ramo.nome : riaCtx.topico });
   $("resIAFeito").hidden = false;
+  try { riaPintarConselho(); } catch (e) {}
   if (typeof matRender === "function") { try { matRender(); } catch (e) {} }
   return true;
 }

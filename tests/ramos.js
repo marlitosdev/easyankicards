@@ -4181,6 +4181,62 @@ async function testes() {
     void NL;
   }
 
+  /* ---- T4C (19.200.0): os conselhos do pedido — o caso real de "Licitações (Lei 14.133)": 5 ramos do índice da lei
+   * (TÍTULO I a V) e 10 temáticos que ficam dentro deles. Juntos, o resumo sairia em dobro; e 15 ramos num pedido só é
+   * onde a IA encurta e pula seções ---- */
+  {
+    const { a } = MT();
+    const NL = String.fromCharCode(10);
+    const R = (nome, nota) => ({ id: a.edRamoId(nome), nome, nota });
+    const RS = [R("TÍTULO I — DISPOSIÇÕES PRELIMINARES", "arts. 1 a 10"), R("TÍTULO II — DAS LICITAÇÕES", "arts. 11 a 88"),
+      R("TÍTULO III — DOS CONTRATOS ADMINISTRATIVOS", "arts. 89 a 154"), R("TÍTULO IV — DAS IRREGULARIDADES", "arts. 155 a 173"),
+      R("TÍTULO V — DISPOSIÇÕES GERAIS", "arts. 174 a 194"), R("Âmbito de Aplicação e Princípios", "Abrangência (arts. 1º a 4º)"),
+      R("Fase Preparatória e Edital", "Objetivos do processo (art. 11)"), R("Modalidades de Licitação", "Pregão e concorrência (arts. 28 a 32)"),
+      R("Contratação Direta", "Instrução processual (art. 72)"), R("Instrumentos Auxiliares", "Credenciamento (arts. 78 a 86)"),
+      R("Formalização e Garantias", "Cláusulas necessárias (art. 92)"), R("Prerrogativas e Equilíbrio", "Cláusulas exorbitantes (art. 104)"),
+      R("Execução e Extinção", "Fiscalização (art. 117)"), R("Nulidades e Sanções", "Infrações (art. 155)"), R("PNCP e Disposições Gerais", "Divulgação no PNCP (art. 174)")];
+    const ar = a.riaArtsDoRamo({ nome: "x", nota: "arts. 1º a 4º e art. 72" });
+    ok(ar.length === 2 && ar[0].ini === 1 && ar[0].fim === 4 && ar[1].ini === 72 && ar[1].fim === 72, "T4C1 os artigos do ramo: 'arts. 1º a 4º' e 'art. 72': " + JSON.stringify(ar));
+    const an = a.riaAnalisarRamos(RS);
+    ok(an.largos.map((l) => l.n).join(",") === "78,66" && an.contem.length === 5 && an.sobrepostos.length === 10,
+       "T4C2 largos (78 e 66 artigos), os 5 TÍTULOs abrangem os 10 temáticos: " + JSON.stringify({ l: an.largos.map((l) => l.nome), c: an.contem.map((c) => c.nome + ">" + c.dentro.length) }));
+    ok(a.riaAnalisarRamos([R("A", "art. 72"), R("B", "art. 72")]).contem.length === 0, "T4C3 dois ramos com o mesmo artigo não são um dentro do outro");
+    /* a tela */
+    const ch = a.matChave("Avulsa", "Licitações caso");
+    a.riaAbrirDoTopico("Avulsa", "Licitações caso", ch, { ramos: RS });
+    const cons = () => a.$("resIAConselho").textContent;
+    ok(a.$("resIAConselho").hidden === false && /5 ramo\(s\) abrangem outros ramos/.test(cons()) && /«TÍTULO II — DAS LICITAÇÕES» \(arts\. 11 a 88\) contém/.test(cons()) && /15 ramos num pedido só/.test(cons()),
+       "T4C4 o quadro avisa o resumo em dobro e os 15 ramos num pedido só: " + cons());
+    ok(a.riaConselhoLote() === 5 && !/- TÍTULO/.test(a.riaMontarPedido()), "T4C4b 'os próximos 5' direto não mistura os TÍTULOs com os ramos de dentro deles");
+    a.riaConselhoTodos();
+    ok(a.riaConselhoSemLargos() === 10, "T4C5 'ficar com os menores' deixa os 10 temáticos");
+    const p1 = a.riaMontarPedido();
+    ok(!/- TÍTULO/.test(p1) && /- Modalidades de Licitação/.test(p1) && p1.indexOf(a.t("ria_p_parcial", { n: 10, m: 15 })) >= 0 && /10 de 15 ramos/.test(cons()) && /10 ramo\(s\)/.test(a.$("resIAAjustesRes").textContent),
+       "T4C6 o pedido vai sem os TÍTULOs, diz que é UMA PARTE (10 de 15), e o resumo do pedido acompanha");
+    ok(a.riaConselhoLote() === 5, "T4C7 'os próximos 5' escolhe entre os que ficaram marcados");
+    const p2 = a.riaMontarPedido();
+    ok(/- Âmbito de Aplicação e Princípios\n- Fase Preparatória e Edital\n- Modalidades de Licitação\n- Contratação Direta\n- Instrumentos Auxiliares\n/.test(p2) && !/- Formalização/.test(p2) && !/- TÍTULO/.test(p2),
+       "T4C8 o lote: os 5 primeiros temáticos, na ordem do edital");
+    /* aplicado o lote, abrir de novo: "só os que não têm seção" e o próximo lote */
+    a.matGravar(ch, ["Geral."].concat(RS.slice(5, 10).map((r) => "## Ramo — " + r.nome + NL + "Texto de " + r.nome + ".")).join(NL + NL), { disciplina: "Avulsa", topico: "Licitações caso" });
+    a.$("btnResIAFechar").onclick();
+    a.riaAbrirDoTopico("Avulsa", "Licitações caso", ch, { ramos: RS });
+    ok(/Só os que não têm seção \(10\)/.test(cons()), "T4C9 com 5 seções escritas, o quadro oferece só os 10 que faltam: " + cons());
+    a.riaConselhoSemLargos();
+    a.riaConselhoLote();
+    const p3 = a.riaMontarPedido();
+    ok(/- Formalização e Garantias\n- Prerrogativas e Equilíbrio\n- Execução e Extinção\n- Nulidades e Sanções\n- PNCP e Disposições Gerais/.test(p3) && p3.indexOf(a.t("ria_p_parcial_sem_geral", { n: 5, m: 15 })) >= 0,
+       "T4C10 o lote seguinte: os 5 temáticos sem seção; o geral já existe, o pedido diz para não repeti-lo");
+    ok(a.riaConselhoTodos() === 15 && !/ESTE PEDIDO É UMA PARTE/.test(a.riaMontarPedido()), "T4C11 'todos de novo' volta ao pedido inteiro");
+    ok(/Ramos fora deste pedido/.test((a.riaConselhoLote(), a.riaRelatorio())), "T4C12 o relatório diz quantos ramos ficaram fora do pedido");
+    a.$("btnResIAFechar").onclick();
+    /* poucos ramos sem sobreposição: sem quadro */
+    a.riaAbrirDoTopico("Avulsa", "Pequeno", a.matChave("Avulsa", "Pequeno"), { ramos: RS.slice(5, 8) });
+    ok(a.$("resIAConselho").hidden === true, "T4C13 3 ramos que não se repetem: nenhum conselho");
+    a.$("btnResIAFechar").onclick();
+    delete a.matResumosAtual()[ch];
+  }
+
   /* ---- T4R (19.197.0): o caso real do "avaliar e melhorar" — 11 ramos pedidos, a IA devolveu 10 seções, tirou um
    * ramo de propósito e encolheu quase tudo. A tela dizia só "1644 → 1644" e "2333 → 1159". Agora: estado por parte,
    * alerta forte, o que encolheu começa desmarcado, escolha parte a parte e relatório copiável ---- */

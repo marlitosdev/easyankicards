@@ -4151,6 +4151,8 @@ p.mat-ferr{display:block;font-size:12px}
 /* a caixa de colar segue "rows" (6 vazia, 4 com a resposta lida): o mínimo de 260px de toda textarea a deixava enorme */
 #dlgResIA #resIATexto{min-height:0}
 .res-ia-conf>b{display:block;margin-top:var(--esp-2)}
+.res-ia-conselho{margin:var(--esp-2) 0 0;padding:var(--esp-2) var(--esp-3);border:1px solid var(--atencao);border-radius:var(--r-m);font-size:var(--fs-2);line-height:1.4;display:flex;flex-direction:column;gap:var(--esp-1);background:color-mix(in srgb,var(--atencao) 8%,transparent)}
+.res-ia-conselho-bts{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin-top:var(--esp-1)}
 .res-ia-copiar-lin{display:flex;flex-wrap:wrap;gap:var(--esp-2);margin:var(--esp-2) 0 0}
 .res-ia-colar-lin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2);margin:0 0 var(--esp-1)}
 .res-ia-ajustes{margin:var(--esp-1) 0 0;font-size:var(--fs-2)}
@@ -8901,7 +8903,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.199.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.200.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
@@ -9817,6 +9819,8 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     </div>
     <!-- (19.197.0) A AÇÃO DO PASSO VEM PRIMEIRO: o botão de copiar ficava depois da lista de ramos (11 linhas com
          caixa de texto cada), e quem não conhecia a tela não o achava. Os ajustes ficam dobrados, com o resumo deles. -->
+    <!-- (19.200.0) OS CONSELHOS DO PEDIDO: ramos largos que repetem os outros, muitos ramos num pedido só -->
+    <div class="res-ia-conselho" id="resIAConselho" role="note" hidden></div>
     <div class="res-ia-copiar-lin">
       <button type="button" class="btn btn-roxo" id="btnResIACopiar" data-i18n="ria_copiar"></button>
     </div>
