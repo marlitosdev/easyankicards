@@ -1208,6 +1208,8 @@ function ramSalvar() {
   const depois = ramCtx.depois; ramCtx = null;
   /* (v18.92.0) o resumo (e a ficha) abertos neste tópico passam a mostrar os ramos na hora */
   try { if (typeof matRamosRecarregar === "function") matRamosRecarregar(ctxS.disciplina, ctxS.topico); } catch (e) {}
+  /* (19.199.0) e o pedido do resumo pela IA aberto no mesmo tópico (quando não foi ele que abriu o editor: aí é o "depois") */
+  try { if (typeof depois !== "function" && typeof riaRamosRecarregar === "function") riaRamosRecarregar(ctxS.disciplina, ctxS.topico); } catch (e) {}
   if (typeof depois === "function") depois(r);
   return r;
 }

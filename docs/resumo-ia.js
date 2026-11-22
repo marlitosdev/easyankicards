@@ -268,6 +268,8 @@ function riaAbrir(ctx) {
   const dlg = $("dlgResIA");
   if (!dlg || !ctx) return null;
   riaCtx = Object.assign({ ramos: [], ramo: "" }, ctx);
+  /* (19.199.0) os ramos lidos AGORA do edital, não os que a tela de origem guardou quando foi pintada */
+  riaCtx.ramos = riaRamosDoTopico(riaCtx.disciplina, riaCtx.topico, ctx.ramos);
   riaNovos = [];
   riaModo = "secoes";
   riaAnterior = null;
@@ -295,6 +297,8 @@ function riaAbrir(ctx) {
   riaObjetivoDefinir(String(atual || "").trim() ? "complementar" : "novo", true);
   $("resIANovoLin").hidden = !!ramo;
   $("resIASugerirLin").hidden = !!ramo;
+  /* sugerir ramos é o padrão só no tópico SEM ramos (aí é dividir); com ramos, a lista deles é que vale */
+  $("resIASugerir").checked = !riaCtx.ramos.length;
   riaPintarRamos();
   riaPintarSugRamos();
   if ($("resIARamosMsg")) $("resIARamosMsg").textContent = "";
@@ -326,9 +330,43 @@ function riaCriarRamos(nomes) {
   return ramAbrirEditor({ editalId, disciplina: riaCtx.disciplina, topico: riaCtx.topico, chave: riaCtx.chave, acrescentar: nomes || [],
     depois: (r) => riaDepoisDosRamos(r) });
 }
+/* =====================================================================
+ * OS RAMOS DO PEDIDO (19.199.0)
+ *
+ * O caso: 15 ramos salvos no editor e, 36 s depois, "+ resumo IA" na linha do tópico no Painel. A linha tinha sido
+ * pintada ANTES de salvar e passou a lista dela — vazia. Uma lista vazia é "veio", então a janela nem olhava o edital:
+ * "Este tópico ainda não tem ramos", "0 ramo(s)", o pedido sem os ramos e pedindo à IA para dividir o tópico.
+ * Agora a fonte é sempre o edital no momento de abrir; a lista de quem abriu só vale para tópico fora dos editais.
+ * Aceita as duas formas que circulam no app ({id, nome} e {ramoId, ramoNome}, a do Domínio).
+ * ===================================================================== */
+function riaRamosNormais(lista) {
+  return (lista || []).map((x) => {
+    if (!x) return null;
+    const id = x.id || x.ramoId || "";
+    const nome = String(x.nome || x.ramoNome || "").trim();
+    return id && nome ? { id, nome } : null;
+  }).filter(Boolean);
+}
+function riaRamosDoTopico(disciplina, topico, dados) {
+  let fonte = [];
+  try { fonte = typeof matRamosDaFonte === "function" ? riaRamosNormais(matRamosDaFonte(disciplina, topico)) : []; } catch (e) { fonte = []; }
+  return fonte.length ? fonte : riaRamosNormais(dados);
+}
+/* os ramos salvos em QUALQUER lugar (o editor aberto daqui, do Material ou do edital): a janela aberta no mesmo tópico
+ * se atualiza sozinha — o pedido passa a sair com eles */
+function riaRamosRecarregar(disciplina, topico) {
+  if (!riaCtx || !$("dlgResIA") || !$("dlgResIA").open) return false;
+  const k = (d, tp) => (typeof matChaveNormal === "function" ? matChaveNormal(matChave(d || "", tp || "")) : String(d) + "›" + String(tp));
+  if (k(riaCtx.disciplina, riaCtx.topico) !== k(disciplina, topico)) return false;
+  riaDepoisDosRamos({ ramos: riaRamosDoTopico(riaCtx.disciplina, riaCtx.topico, riaCtx.ramos) });
+  return true;
+}
 function riaDepoisDosRamos(r) {
-  riaCtx.ramos = ((r && r.ramos) || []).map((x) => ({ id: x.id, nome: x.nome }));
+  const tinha = (riaCtx.ramos || []).length;
+  riaCtx.ramos = riaRamosNormais((r && r.ramos) || []);
   riaCtx.lista = null;
+  /* passou a ter ramos: o pedido sai com eles, sem pedir à IA para dividir */
+  if (!tinha && riaCtx.ramos.length && $("resIASugerir")) $("resIASugerir").checked = false;
   riaPintarRamos();
   riaPintarSugRamos();
   riaPintarAjustesRes();
@@ -380,14 +418,9 @@ function riaRamosNovosDaResposta(resp) {
  * está nele — o mesmo critério da ficha */
 function riaAbrirDoTopico(disciplina, topico, chave, opc) {
   const o = opc || {};
-  let ramos = o.ramos;
-  if (!ramos) {
-    let it = null;
-    try { it = typeof edItemDoPlano === "function" ? edItemDoPlano(disciplina, topico) : null; } catch (e) { it = null; }
-    ramos = (it && it.ramos && it.ramos.length) ? it.ramos : (typeof matRamosDaFonte === "function" ? matRamosDaFonte(disciplina, topico) : []);
-  }
+  /* os ramos vêm do edital, lidos em riaAbrir (riaRamosDoTopico); o.ramos só vale para tópico fora dos editais */
   const ch = chave || (typeof matChaveViva === "function" ? matChaveViva(disciplina, topico) : matChave(disciplina, topico));
-  return riaAbrir({ disciplina, topico, chave: ch, ramos, ramo: o.ramo || "", editalId: o.editalId || "" });
+  return riaAbrir({ disciplina, topico, chave: ch, ramos: o.ramos || [], ramo: o.ramo || "", editalId: o.editalId || "" });
 }
 function riaRamoAlvo() { return riaCtx && riaCtx.ramo ? (riaCtx.ramos || []).find((r) => r.id === riaCtx.ramo) || { id: riaCtx.ramo, nome: riaCtx.ramo } : null; }
 function riaTextoAtual() { const r = matObter(riaCtx.chave); return (r && r.texto) || ""; }

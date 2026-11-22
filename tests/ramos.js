@@ -4135,7 +4135,10 @@ async function testes() {
     a.$("btnResIAFechar").onclick();
     /* com ramos, nada de aviso; e o 'sugerir' volta a ser 'o que falta' */
     a.riaAbrirDoTopico("Licitações", "Lei 14.133", a.matChaveViva("Licitações", "Lei 14.133"), { ramos: [{ id: "modalidades", nome: "Modalidades" }], editalId: ed.id });
-    ok(a.$("resIASugRamos").hidden === true && a.riaMontarPedido().includes(a.t("ria_p_sugerir")), "T4b9 tópico com ramos: sem o aviso, e 'sugerir' é apontar o que falta");
+    ok(a.$("resIASugRamos").hidden === true && a.$("resIASugerir").checked === false && !a.riaMontarPedido().includes(a.t("ria_p_sugerir")),
+       "T4b9 tópico com ramos: sem o aviso, e 'sugerir' vem DESMARCADO (19.199.0: a lista de ramos é que vale)");
+    a.$("resIASugerir").checked = true;
+    ok(a.riaMontarPedido().includes(a.t("ria_p_sugerir")), "T4b9a marcado à mão, 'sugerir' é apontar o que falta (não dividir)");
     a.$("btnResIAFechar").onclick();
     /* fora de qualquer edital: não há onde criar ramos */
     a.riaAbrirDoTopico("Avulsa", "Sem edital", a.matChave("Avulsa", "Sem edital"), { ramos: [] });
@@ -4144,6 +4147,38 @@ async function testes() {
     digita("## Ramo sugerido — X\nx.");
     ok(a.$("resIACriarLin").hidden === true, "T4b11 nem o botão de criar");
     a.$("btnResIAFechar").onclick();
+  }
+
+  /* ---- T4S (19.199.0): o caso real da CRIAÇÃO — 15 ramos salvos e, 36 s depois, "+ resumo IA" numa linha do Painel
+   * pintada antes de salvar. A linha passou a lista dela (vazia); a janela dizia "ainda não tem ramos", "0 ramo(s)", e o
+   * pedido saía sem os ramos e pedindo à IA para dividir. Agora os ramos vêm do edital na hora de abrir ---- */
+  {
+    const { a, ed } = MT();
+    const NL = String.fromCharCode(10);
+    const chC = a.matChaveViva("Licitações", "Convênios");
+    /* 1) a lista vazia de quem abriu não esconde os ramos do edital */
+    const nEd = a.matRamosDaFonte("Licitações", "Lei 14.133").length;
+    a.riaAbrirDoTopico("Licitações", "Lei 14.133", a.matChaveViva("Licitações", "Lei 14.133"), { ramos: [], editalId: ed.id });
+    const ped = a.riaMontarPedido();
+    ok(nEd >= 2 && a.$("resIASugRamos").hidden === true && a.$("resIASugerir").checked === false && new RegExp(nEd + " ramo\\(s\\)").test(a.$("resIAAjustesRes").textContent)
+       && /- Modalidades\n- Fase preparatória\n- Contratos/.test(ped) && !ped.includes(a.t("ria_p_sugerir_sem")),
+       "T4S1 aberto com a lista VAZIA de uma tela velha: os " + nEd + " ramos do edital aparecem e vão no pedido; sem o aviso e sem 'dividir': " + a.$("resIAAjustesRes").textContent);
+    a.$("btnResIAFechar").onclick();
+    /* 2) a forma do Domínio ({ramoId, ramoNome}) também vale, para tópico fora dos editais */
+    a.riaAbrirDoTopico("Avulsa", "Fora", a.matChave("Avulsa", "Fora"), { ramos: [{ ramoId: "um", ramoNome: "Ramo Um" }] });
+    ok(/- Ramo Um/.test(a.riaMontarPedido()), "T4S2 a forma {ramoId, ramoNome} é lida (antes o nome sumia do pedido)");
+    a.$("btnResIAFechar").onclick();
+    /* 3) janela aberta num tópico sem ramos; os ramos salvos pelo editor aberto de FORA: a janela se atualiza sozinha */
+    a.riaAbrirDoTopico("Licitações", "Convênios", chC, { ramos: [] });
+    ok(a.$("resIASugRamos").hidden === false && a.$("resIASugerir").checked === true, "T4S3 sem ramos: o aviso e o 'sugerir' (dividir) continuam");
+    a.ramAbrirEditor({ editalId: ed.id, disciplina: "Licitações", topico: "Convênios", chave: chC, acrescentar: ["Conceito e partes", "Prestação de contas"] });
+    a.$("btnRamSalvar").onclick();
+    const ped2 = a.riaMontarPedido();
+    ok(a.$("dlgResIA").open === true && a.$("resIASugRamos").hidden === true && a.$("resIASugerir").checked === false && /2 ramo\(s\)/.test(a.$("resIAAjustesRes").textContent)
+       && /- Conceito e partes/.test(ped2) && /- Prestação de contas/.test(ped2) && a.$("resIARamosMsg").textContent === a.t("ria_ramos_criados", { n: 2 }),
+       "T4S4 salvos os ramos em outro lugar, a janela aberta passa a usá-los (lista, pedido, sem o aviso): " + a.$("resIAAjustesRes").textContent);
+    a.$("btnResIAFechar").onclick();
+    void NL;
   }
 
   /* ---- T4R (19.197.0): o caso real do "avaliar e melhorar" — 11 ramos pedidos, a IA devolveu 10 seções, tirou um
