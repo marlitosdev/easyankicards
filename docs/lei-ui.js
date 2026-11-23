@@ -2540,8 +2540,13 @@ function leiChavePintura(l, bruto, ranking) {
   delete resto.tocado;
   /* só registra o que o app já mostrou de ajustes (para o log): nada no desenho depende disso */
   delete resto.ajustesVistos;
+  /* (19.202.0) OS IMPORTANTES (★) moram fora do registro da lei (eac_lei_importantes, por lei e edital), mas o desenho
+   * depende deles (a estrela de cada artigo e a classe que o filtro "★ importantes" mostra). Fora da chave, guardar os
+   * da IA repintava com o desenho de antes: o botão contava 139 e o filtro deixava a tela vazia. */
+  let imp = {};
+  try { imp = typeof liDaLei === "function" ? liDaLei(l.id, liEditalAtual()) : {}; } catch (e) { imp = {}; }
   return [LANG, l.id, leiHashTexto(bruto), leiHashTexto(leiJsonEstavel(resto)),
-    leiHashTexto(JSON.stringify(ranking || {}))].join("|");
+    leiHashTexto(JSON.stringify(ranking || {})), leiHashTexto(leiJsonEstavel(imp))].join("|");
 }
 
 function leiCacheLer(id, chave) {

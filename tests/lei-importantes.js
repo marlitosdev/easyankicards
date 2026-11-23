@@ -105,6 +105,31 @@ async function testes() {
     ok(/Arts\. 1 a 15/.test(api.liCopiarPedido()), "I5d copiar o pedido");
   }
 
+  /* I5e (19.202.0): LEI GRANDE, já desenhada e guardada no cache — guardar os da IA com ela aberta tem de repintar com as
+   * estrelas. Antes, a chave do cache não via os importantes: "★ importantes (N)" contava e o filtro mostrava a tela vazia. */
+  {
+    const { api, e } = montar();
+    const lg = api.leiGuardar({ id: "lei_grande", nome: "Lei 14.133/2021 Lei de Licitações", texto: arts(api.LEI_GRANDE + 20), topicos: [] });
+    const chL = api.matChave(DISC, "Licitações");
+    api.matGravar(chL, "Resumo.", { disciplina: DISC, topico: "Licitações", concurso: "TJ" });
+    api.leiLigar(lg.id, chL);
+    api.leiAbrir(DISC, "Licitações", lg.id);
+    await api.leiPinturaPronta();
+    const cx = () => api.$("leiLeitura");
+    ok(cx().querySelectorAll(".lei-art").length === api.LEI_GRANDE + 20 && cx().querySelectorAll(".lei-art-imp").length === 0, "I5e-pre a lei grande desenhada, sem importantes");
+    const k0 = api.leiChavePintura(api.leiDe(lg.id), api.leiDe(lg.id).texto, {});
+    api.liAbrir(lg.id, e.id);
+    api.$("liResp").value = "Arts. 1 a 5 — núcleo" + NL + "Art. 70 — fim";
+    api.$("btnLiConferir").onclick();
+    api.$("btnLiGuardar").onclick();
+    await api.leiPinturaPronta();
+    ok(api.leiChavePintura(api.leiDe(lg.id), api.leiDe(lg.id).texto, {}) !== k0, "I5e a chave do desenho guardado muda quando os importantes mudam");
+    ok(cx().querySelectorAll(".lei-art-imp").length === 6 && /★ importantes \(6\)/.test(api.$("btnLeiVerImp").textContent),
+      "I5f guardar os da IA com a lei grande aberta repinta com as estrelas: " + cx().querySelectorAll(".lei-art-imp").length + " de 6");
+    api.$("btnLeiVerImp").onclick();
+    ok(api.leiVerAtual() === "imp" && cx().querySelectorAll(".lei-art-imp").length === 6, "I5g e o filtro '★ importantes' tem o que mostrar");
+  }
+
   /* I6: o mapa */
   {
     const { api, l, e, TOPC } = montar();
