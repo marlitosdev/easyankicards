@@ -479,7 +479,7 @@ function bkSituacao() {
     if (!est.ligado) return { st: "st-aviso", txt: t("bk_sit_auto_off"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
     if (av) {
       if (!bkaPasta) return { st: "st-alerta", txt: t("bka_pasta_perdida"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
-      if (bkaPermissao && bkaPermissao !== "granted") return { st: "st-alerta", txt: t("bk_sit_permissao"), acao: t("bka_reconectar"), fn: bkaReconectar };
+      if (bkaPermVencida()) return { st: "st-alerta", txt: t("bk_sit_permissao"), acao: t("bka_reconectar"), fn: bkaReconectar };
       if (est.pausado) return { st: "st-alerta", txt: t("bk_sit_pausado") };
       if (est.erro) {
         /* (19.167.0) a causa em português; passageira e no começo, é aviso (o app tenta de novo sozinho) */

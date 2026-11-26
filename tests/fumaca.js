@@ -682,6 +682,11 @@ function rodar(opc) {
     resumirBackup, bkLerArquivo, bkMostrarConferencia,
     matCarregar, matGravar, matTem, matChave, matResumo, matLista, matRender,
     bkaBolhaPintar, bkaBolhaEstado, bkaBolhaTocar, bkaManterDesteAparelho,
+    /* (19.206.0) os prazos do backup NÃO vencem nos testes (aqui o setTimeout dispara na hora e venceria tudo); quem
+     * testa a pasta que não responde liga um prazo de verdade com bkaPrazoDefinir */
+    _bkaSemPrazo: (typeof bkaPrazoDefinir === "function" ? (bkaPrazoDefinir(() => null, () => {}), 1) : 0),
+    bkaPrazoDefinir, bkaComPrazo, bkaTentativas, bkaTentLinha, bkaRelatorio, bkaPermVencida, bkaPorQueNaoGravou, bkaGravarPedido,
+    bkaGravandoAtual: () => bkaGravando, bkaPermissaoAtual: () => bkaPermissao,
     qsUiOpcoesDoSelect, qsUiLimparFiltros, qsUiTirarFiltro,
     resBibAbrir, resBibPintar, resBibDefinir: (o) => { Object.assign(resBib, o); resBibPintar(); }, matGravarCartoes,
     matChaveViva, matChaveNormal,

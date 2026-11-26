@@ -163,6 +163,84 @@ async function testes() {
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "V6 falta " + k + " em " + lg); }));
     api.setLanguage("pt");
   }
+  /* (19.206.0) V9: A PASTA QUE NÃO RESPONDE (o caso real de 26/11: Google Drive travado, "permissão: ?", quatro dias sem
+   * backup e "Salvar agora" sem fazer nada) */
+  {
+    const r = rodar();
+    const { api, janela } = r;
+    const L = api.loja;
+    L.setItem("eac_texto", "A :: B");
+    api.bkaRelogioDefinir(() => agora);
+    api.bkAntesLojaDefinir({ ler: async () => [], gravar: async () => {} });
+    const loja = { h: null, ler: async () => loja.h, gravar: async (h) => { loja.h = h; } };
+    api.bkaPastaLojaDefinir(loja);
+    const P = pasta();
+    janela.showDirectoryPicker = async () => P;
+    api.bkIniciar();
+    await conduzir(api, api.bkaConectar());
+    /* o Drive trava: a pergunta da permissão nunca responde. O prazo vence (nos testes, a pedido) */
+    P.queryPermission = () => new Promise(() => {});
+    api.bkaPrazoDefinir((fn) => { Promise.resolve().then(() => Promise.resolve()).then(fn); return 1; }, () => {});
+    L.setItem("eac_texto", "A :: B" + String.fromCharCode(10) + "C :: D");
+    const res = await api.bkaGravarAgora("periódico");
+    const est = api.bkaEstado();
+    ok(res && res.ok === false && est.erro && est.erro.cod === "sem_resposta" && !!est.erro.proxima && api.bkaPermissaoAtual() === "sem_resposta",
+      "V9 a pasta que não responde vira falha passageira 'sem resposta', com nova tentativa sozinha: " + JSON.stringify(res));
+    ok(!api.bkaGravandoAtual(), "V9a nada fica preso: a próxima gravação pode começar");
+    ok(!api.bkaPermVencida() && !/Reconectar/.test(api.bkaBolhaEstado().rot || ""), "V9b não é 'permissão vencida': o balão não manda reconectar");
+    const ts = api.bkaTentativas();
+    ok(ts.length >= 1 && ts[0].r === "erro" && ts[0].e.some((x) => x.n === "permissão") && /permissão/.test(api.bkaTentLinha(ts[0])), "V9c a tentativa fica no registro, com a etapa onde parou: " + (ts[0] && api.bkaTentLinha(ts[0])));
+    /* "Salvar agora": responde, e diz por quê */
+    api.bkPintarPainel();
+    let alerta = "";
+    const alertaAntes = api.uiAlert;
+    const p = api.bkaGravarPedido();
+    await conduzir(api, p);
+    const rp = await p;
+    ok(rp.ok === false && /não respondeu/.test(api.bkaPorQueNaoGravou(rp)), "V9d 'Salvar agora' sem gravar diz por quê: " + api.bkaPorQueNaoGravou(rp));
+    void alerta; void alertaAntes;
+    /* o painel mostra o registro e o relatório */
+    api.bkPintarPainel();
+    ok(api.$("bkaRegistro") && api.$("btnBkaRelatorio") && /Registro das tentativas \(\d+\)/.test(api.$("bkaRegistro").textContent), "V9e o painel tem o registro das tentativas e 'copiar relatório'");
+    const rel = api.bkaRelatorio();
+    ok(/relatório do backup automático/.test(rel) && /permissão: sem_resposta/.test(rel) && /tentativas \(\d+/.test(rel) && !/C :: D/.test(rel), "V9f o relatório traz o estado e as tentativas, sem os dados: " + rel.split(String.fromCharCode(10)).slice(0, 4).join(" | "));
+    const dg = await api.montarDiagnostico();
+    ok(/últimas tentativas/.test(dg), "V9g o diagnóstico traz as últimas tentativas");
+    /* o Drive volta: grava */
+    api.bkaPrazoDefinir(() => null, () => {});
+    P.queryPermission = async () => "granted";
+    const ok2 = await api.bkaGravarAgora("nova tentativa");
+    ok(ok2.ok === true && !api.bkaEstado().erro && api.bkaTentativas()[0].r === "gravou", "V9h a pasta volta: grava e a falha sai");
+    api.bkaPrazoDefinir(() => null, () => {});
+  }
+  {
+    const { api } = rodar();
+    ["bka_erro_sem_resposta", "bka_salvando", "bka_nao_gravou", "bka_reg_tit", "bka_rel_copiar", "bka_tent_r_erro", "bka_tent_r_gravou"].forEach((k) =>
+      ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "V9i falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
+  {
+    /* V9j: ao abrir, a pasta que não responde não prende a abertura (antes: bkaIniciar esperava para sempre) */
+    const r = rodar();
+    const { api, janela } = r;
+    api.loja.setItem("eac_texto", "A :: B");
+    api.bkaRelogioDefinir(() => agora);
+    api.bkAntesLojaDefinir({ ler: async () => [], gravar: async () => {} });
+    const loja = { h: null, ler: async () => loja.h, gravar: async (h) => { loja.h = h; } };
+    api.bkaPastaLojaDefinir(loja);
+    const P = pasta();
+    janela.showDirectoryPicker = async () => P;
+    api.bkIniciar();
+    await conduzir(api, api.bkaConectar());
+    P.queryPermission = () => new Promise(() => {});
+    api.bkaPrazoDefinir((fn) => { Promise.resolve().then(fn); return 1; }, () => {});
+    let terminou = false;
+    const pi = api.bkaIniciar().then(() => { terminou = true; });
+    await conduzir(api, pi);
+    ok(terminou && api.bkaPermissaoAtual() === "sem_resposta" && api.rtTudo({}).some((x) => /não respondeu ao abrir/.test(x.msg)), "V9j a abertura termina mesmo com a pasta muda, e o registro diz isso");
+    api.bkaPrazoDefinir(() => null, () => {});
+  }
+
   falhas.quantas = n;
   return falhas;
 }

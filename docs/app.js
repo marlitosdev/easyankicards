@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.205.0";
+const VERSAO = "19.206.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -4903,6 +4903,12 @@ function diagBackup(L) {
       if (pend) L.push("mudanças desde o último backup: " + (pend.mudou ? "SIM — ainda sem cópia" : "não (a cópia está em dia)"));
       if (est.erro && typeof bkaErroInfo === "function") { const ie = bkaErroInfo(est.erro); L.push("falha: " + ie.cod + " · " + ie.n + "ª seguida · desde " + diagQuando(new Date(ie.desde).getTime()) + (ie.proxima ? " · nova tentativa às " + new Date(ie.proxima).toTimeString().slice(0, 5) : "")); }
       if (est.travado) L.push("parado por backup mais novo de outro aparelho: " + (est.travado.aparelho || "?"));
+      /* (19.206.0) a gravação em andamento (e há quanto tempo) e as últimas tentativas, etapa por etapa */
+      if (typeof bkaGravando !== "undefined" && bkaGravando) L.push("gravando agora: há " + Math.round((Date.now() - (bkaGravandoDesde || Date.now())) / 1000) + " s");
+      const mp = typeof bkaMotivoParado === "function" ? bkaMotivoParado() : "";
+      if (mp) L.push("parado: " + mp);
+      const ts = typeof bkaTentativas === "function" ? bkaTentativas().slice(0, 6) : [];
+      if (ts.length) { L.push("últimas tentativas (a mais nova primeiro):"); ts.forEach((x) => L.push("  " + bkaTentLinha(x))); }
     }
   } catch (e) {}
   /* (19.167.0) os últimos eventos do backup, para ver falhas e paradas sem depender do filtro do registro */
