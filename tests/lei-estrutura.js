@@ -390,6 +390,37 @@ async function testes() {
     ok(api.leiMapaAbrir() === false, "G17 lei sem texto nao abre o mapa");
   }
 
+  /* (19.205.0) G18: o SUBTÍTULO (e "SUB-TÍTULO") entre o Título e o Capítulo; o nome que continua na linha seguinte;
+   * o fecho da lei (data, assinatura, cargo, autoria) fora do último artigo */
+  {
+    const { api } = rodar();
+    const NL = String.fromCharCode(10);
+    const txt = ["LIVRO II", "DO SISTEMA TRIBUTÁRIO MUNICIPAL", "TÍTULO I", "DOS IMPOSTOS", "", "SUBTÍTULO I", "", "DO IMPOSTO SOBRE SERVIÇOS DE QUALQUER NATUREZA", "",
+      "CAPÍTULO I", "DA INCIDÊNCIA", "Art. 236. O imposto incide sobre serviços.", "",
+      "SUB-TÍTULO II", "", "DO IMPOSTO SOBRE A TRANSMISSÃO INTER VIVOS DE BENS IMÓVEIS E DE", "", "DIREITOS A ELES RELATIVOS", "",
+      "CAPÍTULO I", "DA INCIDÊNCIA", "Art. 321. O imposto incide sobre a transmissão.", "",
+      "Art. 523. Esta Lei entra em vigor na data de sua publicação.",
+      "Palácio Jaime Nejaim, 05 de janeiro de 2009; 188º da Independência; 121º da República.",
+      "JOSÉ DA SILVA", "Prefeito", "O PROJETO QUE ORIGINOU ESTA LEI É DE AUTORIA DO PODER EXECUTIVO"].join(NL);
+    const est = api.leiEstruturaLei(txt);
+    const subs = Object.values(est.nos).filter((d) => d.tipo === "SUBTITULO");
+    ok(subs.length === 2 && subs.every((d) => d.nivel > 3 && d.nivel < 4 && est.nos[d.pai] && est.nos[d.pai].tipo === "TITULO"), "G18 o SUBTÍTULO e o SUB-TÍTULO são divisões, entre o Título e o Capítulo: " + subs.map((d) => d.rotulo).join(" | "));
+    const caps = Object.values(est.nos).filter((d) => d.tipo === "CAPITULO");
+    ok(caps.length === 2 && caps[0].pai !== caps[1].pai && caps.every((c) => est.nos[c.pai] && est.nos[c.pai].tipo === "SUBTITULO"), "G18a cada CAPÍTULO I fica no seu subtítulo (não dois no mesmo Título)");
+    ok(subs.some((d) => /DE BENS IMÓVEIS E DE DIREITOS A ELES RELATIVOS$/.test(d.nome)), "G18b o nome que termina em 'DE' continua na linha seguinte: " + subs.map((d) => d.nome).join(" | "));
+    const a523 = est.artigos.find((a) => a.num === "523");
+    ok(a523 && !/Pal[áa]cio|JOSÉ|Prefeito|AUTORIA/.test(a523.texto), "G18c o fecho (data, assinatura, cargo, autoria) fica fora do último artigo: " + (a523 && a523.texto.slice(-80)));
+    const d = api.leiDiagnosticarLei(txt);
+    ok(!(d.itens || []).some((x) => x.tipo === "titulo_no_artigo"), "G18d nada de 'título dentro do artigo': " + (d.itens || []).map((x) => x.tipo + ":" + x.texto).join(" | "));
+    ok(d.resumo && d.resumo.porTipo && d.resumo.porTipo.SUBTITULO === 2, "G18e o mapa conta os subtítulos");
+    /* a citação de alteração que abre com SUBTÍTULO também é reconhecida como texto citado */
+    ok(api.leiDiagnosticarLei("Art. 1º Disposição.").resumo.artigos === 1, "G18f lei sem subtítulo continua igual");
+    /* o PDF consolidado gruda a palavra no número: "CAPÍTULOV", "SUBTÍTULOII" */
+    const gr = api.leiEstruturaLei(["TÍTULO I", "DOS IMPOSTOS", "SUBTÍTULOII", "DO IPTU", "CAPÍTULOV", "DA BASE DE CÁLCULO", "Art. 1º Texto.", "Livro de ocorrências."].join(NL));
+    const rots = Object.values(gr.nos).map((x) => x.rotulo);
+    ok(rots.indexOf("SUBTÍTULO II — DO IPTU") >= 0 && rots.indexOf("CAPÍTULO V — DA BASE DE CÁLCULO") >= 0 && rots.length === 3, "G18g palavra grudada no número é divisão ('CAPÍTULOV'), e 'Livro de…' continua texto: " + rots.join(" | "));
+  }
+
   return Object.assign(falhas, { quantas: n });
 }
 

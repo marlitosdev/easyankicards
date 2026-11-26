@@ -198,7 +198,7 @@ function leiRelatorioVinculos(opc) {
     return k ? resumos[k].leiId : "";
   };
   const L = [];
-  L.push("LEIS E VÍNCULOS · EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?") + " · " + new Date().toISOString().slice(0, 16).replace("T", " "));
+  L.push("LEIS E VÍNCULOS · EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?") + " · " + leiQuandoLocal(new Date()).slice(0, 16) + " (" + leiFusoTxt() + ")");
   L.push(leis.length + " lei(s) na biblioteca");
   const chaves = [];
   leis.forEach((l, i) => {
@@ -5873,11 +5873,24 @@ function leiDupContextoEl(texto, cand) {
  * do app e as últimas linhas do registro, num texto só para colar numa
  * conversa. Nada é enviado sozinho.
  * ===================================================================== */
+/* (19.205.0) a hora LOCAL "AAAA-MM-DD HH:MM:SS" de um instante (ISO ou Date), e o fuso: os relatórios da lei saíam em
+ * UTC ("2026-11-26T10:52:10.175Z", e o registro só com a hora em UTC, sem a data — 10:15 vinha antes de 01:55) */
+function leiQuandoLocal(q) {
+  const d = q instanceof Date ? q : new Date(q);
+  if (isNaN(d.getTime())) return String(q || "?");
+  const p2 = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds());
+}
+function leiFusoTxt() {
+  try { if (typeof diagFuso === "function") return diagFuso(); } catch (e) {}
+  const m = -new Date().getTimezoneOffset(), a = Math.abs(m);
+  return "UTC" + (m >= 0 ? "+" : "-") + String(Math.floor(a / 60)).padStart(2, "0") + ":" + String(a % 60).padStart(2, "0");
+}
 function leiRelatorioFluxo(tela, opc) {
   const p = [];
   const cortar = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n || 200);
   p.push("EasyAnkiCards " + (typeof VERSAO !== "undefined" ? VERSAO : "?")
-    + " — relatório do fluxo da lei — " + new Date().toISOString());
+    + " — relatório do fluxo da lei — " + leiQuandoLocal(new Date()) + " (" + leiFusoTxt() + ")");
   p.push("Tela: " + (tela || "?"));
   const l = leiIdAtual ? leiDe(leiIdAtual) : null;
   if (l) {
@@ -6063,7 +6076,7 @@ function leiRelatorioFluxo(tela, opc) {
     return p.join("\n");
   }
   p.push("— Registro (últimas 60 linhas)");
-  leiLog.slice(-60).forEach((x) => p.push("  " + String(x.q).slice(11, 19) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
+  leiLog.slice(-60).forEach((x) => p.push("  " + leiQuandoLocal(x.q) + " [" + x.t + "] " + x.o + (x.d ? " — " + x.d : "")));
   return p.join("\n");
 }
 

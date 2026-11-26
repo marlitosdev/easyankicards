@@ -110,6 +110,17 @@ async function testes() {
     const tr = (x0, x1, y) => [{ x0, x1, y }];
     ok(a.leiPdfRiscado(it("revogado", 100, 500, 100), tr(100, 200, 504)), "D6e traço no miolo cobrindo tudo: riscado");
     ok(!a.leiPdfRiscado(it("vigente", 100, 500, 100), tr(100, 130, 504)), "D6f traço cobrindo 30%: não");
+    /* (19.205.0) a marca d'água (texto girado, a diagonal "nome + e-mail" dos PDFs vendidos) fica de fora */
+    const gir = (str, x, y, w) => ({ str, transform: [7.07, 7.07, -7.07, 7.07, x, y], width: w, height: 10, hasEOL: false });
+    const comMarca = junta([it("Art.", 100, 500, 18), gir("FULANO DE TAL", 110, 500, 60), it(" 5º Todos são iguais.", 118, 500, 90)]);
+    ok(comMarca.length === 1 && comMarca[0] === "Art. 5º Todos são iguais.", "D6g o texto girado (marca d'água) não entra na linha: " + JSON.stringify(comMarca));
+    /* a marca d'água horizontal do CTM: uma fonte só com os MESMOS 2 textos em toda página; o corpo (outra fonte) e um
+     * "-" repetido na fonte do corpo continuam */
+    const pag = (k) => [{ str: "Art. " + k + "º Texto " + k, fontName: "corpo" }, { str: "-", fontName: "corpo" }, { str: "FULANO DE TAL", fontName: "marca" }, { str: "fulano@exemplo.com", fontName: "marca" }];
+    const fm = a.leiPdfFontesMarca([1, 2, 3, 4, 5].map(pag));
+    ok(fm.has("marca") && !fm.has("corpo") && a.leiPdfFontesMarca([pag(1), pag(2)]).size === 0, "D6i a fonte que só repete os mesmos textos em quase toda página é marca d'água (com menos de 3 páginas, nada sai)");
+    ok(a.leiPdfGirado(gir("x", 0, 0, 5)) && !a.leiPdfGirado(it("x", 0, 0, 5)) && !a.leiPdfGirado({ str: "x", transform: [-10, 0, 0, -10, 0, 0] }), "D6h girado = matriz com b ou c ≠ 0 (o espelhado sem giro continua lido)");
+
     ok(!a.leiPdfRiscado(it("sublinhado", 100, 500, 100), tr(100, 200, 499)), "D6g traço abaixo da linha de base (sublinhado): não");
     ok(!a.leiPdfRiscado(it("borda", 100, 500, 100), tr(100, 200, 510)), "D6h traço acima da letra (borda de tabela): não");
     /* o traço desenhado num sistema deslocado (save/transform/restore) cai no lugar certo da página */

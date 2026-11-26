@@ -60,9 +60,11 @@ const LEI_RE_ARTIGO_SEM_SUFIXO = /^[\s>*]*Art(?:\.|igo)?\s*(\d{1,4}(?:\s*[ºo°�
  * do exercício financeiro" localiza muito melhor que "art. 35". */
 /* O número da divisão pode vir por extenso ("LIVRO PRIMEIRO", "TÍTULO SEGUNDO" — o CTN e os códigos
  * antigos), em romano com letra colada ("TÍTULO V-A"), em romano, "único" ou em algarismos. Cada
- * alternativa fecha com "não vem letra depois": sem isso "C" de "CÍVICO" virava o romano 100. */
+ * alternativa fecha com "não vem letra depois": sem isso "C" de "CÍVICO" virava o romano 100.
+ * (19.205.0) O espaço entre a palavra e o número pode faltar: o PDF consolidado do CTM de Caruaru traz "CAPÍTULOV",
+ * "SUBTÍTULOII", "SUB-TÍTULOIII". O "não vem letra depois" continua barrando palavras ("LIVRO DIREITO" não casa). */
 const LEI_RE_DIVISAO =
-  /^[\s>*]*(LIVRO|PARTE|T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O)\s+((?:PRIMEIR|SEGUND|TERCEIR|QUART|QUINT|SEXT|S[ÉE]TIM|OITAV|NON|D[ÉE]CIM)[OA](?![A-Za-zÀ-ú])|[IVXLCDM]+(?:-[A-Z])?(?![A-Za-zÀ-ú])|[ÚU]NIC[AO](?![A-Za-zÀ-ú])|\d{1,3}[ªº]?(?![A-Za-zÀ-ú0-9]))[\s.:\-–—]*(.*)$/i;
+  /^[\s>*]*(LIVRO|PARTE|T[ÍI]TULO|SUB-?T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O)\s*((?:PRIMEIR|SEGUND|TERCEIR|QUART|QUINT|SEXT|S[ÉE]TIM|OITAV|NON|D[ÉE]CIM)[OA](?![A-Za-zÀ-ú])|[IVXLCDM]+(?:-[A-Z])?(?![A-Za-zÀ-ú])|[ÚU]NIC[AO](?![A-Za-zÀ-ú])|\d{1,3}[ªº]?(?![A-Za-zÀ-ú0-9]))[\s.:\-–—]*(.*)$/i;
 
 /* Divisão SEM número, escrita numa linha só: "Disposições Finais e Transitórias", "PARTE GERAL".
  * Só estas frases: uma linha qualquer em maiúsculas não é divisão. */
@@ -73,8 +75,17 @@ const LEI_RE_DIVISAO_LIVRE =
 const LEI_RE_NOTA_DIVISAO =
   /\(\s*(?:Reda[çc][ãa]o\s+dada|Inclu[íi]d[oa]|Revogad[oa]|Vetad[oa]|Vide|Vig[êe]ncia|Produ[çc][ãa]o\s+de\s+efeito|Renumerad[oa])[^)]*\)/gi;
 
-/* Quanto mais alto o nível, mais fundo na árvore: Parte › Livro › Título › Capítulo › Seção › Subseção */
-const LEI_NIVEL_DIVISAO = { PARTE: 1, ATO: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, CAPITULO: 4, SECAO: 5, SUBSECAO: 6 };
+/* Quanto mais alto o nível, mais fundo na árvore: Parte › Livro › Título › Subtítulo › Capítulo › Seção › Subseção.
+ * (19.205.0) O SUBTÍTULO (também "SUB-TÍTULO") fica entre o Título e o Capítulo: o CTM de Caruaru divide o Livro II em
+ * subtítulos (um por tributo). Sem ele, "SUBTÍTULO I / DO IMPOSTO SOBRE SERVIÇOS…" virava "título dentro do artigo" e os
+ * capítulos do IPTU caíam no mesmo Título do ISS (dois "CAPÍTULO I — DA INCIDÊNCIA" seguidos). */
+const LEI_NIVEL_DIVISAO = { PARTE: 1, ATO: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 3, SUBTITULO: 3.5, CAPITULO: 4, SECAO: 5, SUBSECAO: 6 };
+
+/* (19.205.0) O FECHO DA LEI: "Palácio Jaime Nejaim, 05 de janeiro de 2009; 188º da Independência; 121º da República.",
+ * e depois o nome de quem assina, o cargo ("Prefeito") e a nota de autoria. Isso não é texto do último artigo: daqui em
+ * diante as linhas ficam fora da leitura (como o preâmbulo), até o próximo artigo ou divisão. Sem isto "JOSÉ QUEIROZ DE
+ * LIMA" e "O PROJETO … É DE AUTORIA DO PODER EXECUTIVO" apareciam como "título dentro do artigo" no art. 523. */
+const LEI_RE_FECHO = /\d{1,3}\s*[ºo°]\s*(?:anivers[áa]rio\s+)?da\s+Independ[êe]ncia\b/i;
 
 /* O número do artigo como se MOSTRA: sem espaços, e com o ordinal escrito como ordinal. Texto de PDF
  * traz "42O" (letra O) ou "1o"/"1°" no lugar do "º": é o mesmo artigo, e o "42O" ia para o mapa. */
@@ -320,6 +331,15 @@ function leiLerLei(texto, opc) {
     if (n.link) registra("link", { link: n.link }, rLink);
   };
   let aguardaNome = false;         /* a divisão aberta ainda espera o NOME (só veio a nota, ou nada) */
+  /* (19.205.0) O NOME QUE CONTINUA NA LINHA SEGUINTE: "SUB-TÍTULO III / DO IMPOSTO SOBRE A TRANSMISSÃO … DE BENS IMÓVEIS E DE
+   * / DIREITOS A ELES RELATIVOS". Nome que termina em preposição ou "E" não acabou: a próxima linha em maiúsculas (que não
+   * é divisão nem artigo) entra nele. Antes ela caía fora da leitura e o nome ficava cortado. */
+  let continuaNome = false;
+  /* quantas linhas com texto vêm DEPOIS de cada uma (para o fecho: só é fecho o que está no fim) */
+  const fechoRestam = new Array(linhas.length).fill(0);
+  for (let k = linhas.length - 2, c = 0; k >= 0; k--) { if (String(linhas[k + 1] || "").trim()) c++; fechoRestam[k] = c; }
+  const RE_NOME_CONTINUA = /\s(?:DE|DA|DO|DAS|DOS|E|NA|NO|NAS|NOS|EM|AO|AOS|À|ÀS|PARA|COM|POR|SOBRE)$/;
+  const conferirContinua = () => { continuaNome = !!(divisao && divisao.nome && RE_NOME_CONTINUA.test(String(divisao.nome).trim())); };
 
   linhas.forEach((linha, i) => {
     if (citadas.has(i + 1)) {
@@ -330,6 +350,17 @@ function leiLerLei(texto, opc) {
       return;
     }
     const d = linha.match(LEI_RE_DIVISAO);
+    if (continuaNome && !d) {
+      const cru = String(linha).trim();
+      if (!cru) return;                      /* linha em branco: continua esperando o resto do nome */
+      continuaNome = false;
+      if (divisao && !leiCasarArtigo(linha) && cru.length <= 90 && /^[A-ZÀ-Ú][A-ZÀ-Ú0-9 ,\-–—]*$/.test(cru)) {
+        divisao.nome = (divisao.nome + " " + cru).replace(/\s+/g, " ").trim();
+        rotular(divisao);
+        conferirContinua();
+        return;
+      }
+    } else if (d) continuaNome = false;
     if (!d && esperaNome) {
       const cru = String(linha).trim();
       if (!cru) return;                      /* linha em branco: continua esperando */
@@ -343,13 +374,14 @@ function leiLerLei(texto, opc) {
         aplicarNome(divisao, n, i + 1, linha);
         /* a linha trouxe SÓ a nota (o nome vem na seguinte): continua esperando o nome */
         aguardaNome = !n.nome;
+        conferirContinua();
         if (!n.nome) esperaNome = true;
         return;
       }
     }
     if (d) {
       const tipo = d[1].toUpperCase()
-        .replace("Í", "I").replace("Ç", "C").replace("Ã", "A");
+        .replace("Í", "I").replace("Ç", "C").replace("Ã", "A").replace("-", "");
       const n = leiNomeDaDivisao(d[3]);
       let nome = n.nome;
       let num = d[2].toUpperCase();
@@ -363,6 +395,7 @@ function leiLerLei(texto, opc) {
       aplicarNome(divisao, n, i + 1, linha);
       aguardaNome = !nome;
       esperaNome = aguardaNome;
+      conferirContinua();
       /* a divisão também não é artigo: se o cabeçalho cair dentro do
        * texto do artigo anterior, o bloco seguinte herdaria o artigo
        * errado na hora de contar o progresso */
@@ -435,6 +468,10 @@ function leiLerLei(texto, opc) {
       return;
     }
 
+    /* (19.205.0) o fecho encerra o último artigo: ele e o que vem depois (assinatura, cargo, autoria) ficam fora. SÓ no fim
+     * do texto (até 8 linhas depois dele): quando vem um anexo ("Lista de serviços anexa…", a tabela da LC 116), tudo
+     * continua no último artigo como antes, para o leitor oferecer separar o anexo. */
+    if (atual && LEI_RE_FECHO.test(linha) && fechoRestam[i] <= 8) atual = null;
     if (atual) {
       atual.linhas.push(linha);
       if (String(linha).trim()) atual.corpo += "\n" + linha;
@@ -3800,7 +3837,7 @@ function leiPareceAlteradora(texto) {
  * seguinte Capítulo II-B" no Código Penal e a citação abre com “CAPÍTULO II-B. Sem reconhecê-la, os Arts. 337-E a 337-P
  * viravam artigos da própria lei (a numeração "voltava" do 337-P para o 179) e as penas iguais deles, cabeçalho de página.
  * Só com a ASPA na frente: "CAPÍTULO II" sem aspas é divisão da própria lei. */
-const LEI_RE_ABRE_CITACAO = /^\s*[“"«]\s*(?:Art(?:\.|igo)?\s*\d|(?:CAP[ÍI]TULO|T[ÍI]TULO|LIVRO|PARTE|SUBSE[ÇC][ÃA]O|SE[ÇC][ÃA]O)\s+[IVXLCDM\d]+\b)/i;
+const LEI_RE_ABRE_CITACAO = /^\s*[“"«]\s*(?:Art(?:\.|igo)?\s*\d|(?:CAP[ÍI]TULO|T[ÍI]TULO|SUB-?T[ÍI]TULO|LIVRO|PARTE|SUBSE[ÇC][ÃA]O|SE[ÇC][ÃA]O)\s+[IVXLCDM\d]+\b)/i;
 /* fecha com aspas, a marca (NR)/(AC)/(VETADO) e — no Planalto — notas editoriais depois dela: "” (NR)   (Vide Lei nº 227)" */
 const LEI_RE_NOTA_DEPOIS = "(?:\\s*\\((?:Vide|Vig[êe]ncia|Regulamento|Produ[çc][ãa]o|Reda[çc][ãa]o|Inclu[ií]d|Revogad)[^)]*\\))*";
 const LEI_RE_FECHA_CITACAO = new RegExp("[”\"»]\\s*(?:\\((?:NR|AC|VETADO)\\))?" + LEI_RE_NOTA_DEPOIS + "\\s*\\.?\\s*$");

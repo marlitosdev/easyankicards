@@ -94,6 +94,11 @@ async function testes() {
   /* ---- 5: o relatório da tela leva o registro inteiro do fluxo ---- */
   const rel = api.leiRelatorioFluxo("atualizar a lei");
   ok(/Registro desta inclusão \(inteiro\)/.test(rel) && /texto colado:/.test(rel) && /Atualização aplicada/.test(rel), "R1 'copiar relatório desta tela' leva o fluxo desde a entrada");
+  /* (19.205.0) o relatório da lei na hora LOCAL, com o fuso (era "2026-11-26T10:52:10.175Z") */
+  ok(/relatório do fluxo da lei — \d{4}-\d\d-\d\d \d\d:\d\d:\d\d \(UTC[+-]\d\d:\d\d\)/.test(rel.split(String.fromCharCode(10))[0]) && !/T\d\d:\d\d:\d\d\.\d+Z/.test(rel.split(String.fromCharCode(10))[0]),
+    "R1b o cabeçalho do relatório da lei em hora local, com o fuso: " + rel.split(String.fromCharCode(10))[0]);
+  { const d = new Date("2026-11-26T10:52:10Z"); const p2 = (n) => String(n).padStart(2, "0");
+    ok(api.leiQuandoLocal("2026-11-26T10:52:10Z") === d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds()), "R1c o registro da lei com data e hora locais"); }
 
   /* ---- 6: erro vira etapa; novo fluxo encerra o anterior; guarda 5 ---- */
   api.leiReg("erro", "falha em comparar", "TypeError: x");

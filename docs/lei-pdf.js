@@ -95,8 +95,16 @@ function leiPdfRiscado(it, tracos) {
 }
 
 /* AS LINHAS de uma página, montadas pela POSIÇÃO: [{ runs: [{ t, r }] }] (r = riscado) */
+function leiPdfGirado(it) {
+  const m = it && it.transform;
+  if (!m || m.length < 4) return false;
+  const a = +m[0] || 0, b = +m[1] || 0, c = +m[2] || 0, d = +m[3] || 0;
+  const esc = Math.max(Math.abs(a), Math.abs(d), 1e-6);
+  return Math.abs(b) / esc > 0.05 || Math.abs(c) / esc > 0.05;
+}
 function leiPdfLinhas(items, tracos) {
   const linhas = [];
+  linhas.girados = 0;
   let cur = null, ultX1 = null, ultY = null;
   const fecha = () => { if (cur && cur.some((x) => x.t.trim())) linhas.push({ runs: cur }); cur = null; ultX1 = null; };
   const poe = (t, r) => {
@@ -104,6 +112,10 @@ function leiPdfLinhas(items, tracos) {
     if (u && u.r === r) u.t += t; else cur.push({ t, r });
   };
   (items || []).forEach((it) => {
+    /* (19.205.0) A MARCA D'ÁGUA: o texto GIRADO (a diagonal "nome + e-mail do comprador" dos PDFs vendidos) não é a lei.
+     * Lido junto, ele se intercalava às palavras ("alímneaarb.l(oinnclusído…") e quebrava artigos. O texto da lei é
+     * sempre horizontal: matriz [a, b, c, d] com b = c = 0. */
+    if (leiPdfGirado(it)) { if (linhas.girados !== undefined) linhas.girados++; return; }
     const s = String(it.str || "");
     const tem = !!s.trim();
     const x = it.transform[4], y = it.transform[5];
@@ -148,22 +160,59 @@ async function leiTextoDePdf(bytes, opc) {
     pdf = await (tarefa.promise || tarefa);
   } catch (e) { return { texto: "", n: 0, motivo: "pdf_invalido", paginas: 0 }; }
   const OPS = lib.OPS || {};
-  const paginas = [];
-  let chars = 0;
+  const brutas = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     if (typeof o.onProgresso === "function") { try { o.onProgresso(p, pdf.numPages); } catch (e) {} }
     const pg = await pdf.getPage(p);
     const tc = await pg.getTextContent();
     let tracos = [];
     try { tracos = leiPdfTracos(await pg.getOperatorList(), OPS); } catch (e) { tracos = []; }
-    const linhas = leiPdfLinhas(tc.items, tracos);
-    linhas.forEach((ln) => ln.runs.forEach((x) => { chars += x.t.trim().length; }));
-    paginas.push(linhas);
+    brutas.push({ items: tc.items || [], tracos });
   }
+  /* (19.205.0) a marca d'água: as fontes que só trazem os mesmos textos em quase todas as páginas */
+  const marca = leiPdfFontesMarca(brutas.map((b) => b.items));
+  const paginas = [];
+  let chars = 0, marcaN = 0;
+  brutas.forEach((b) => {
+    const items = marca.size ? b.items.filter((it) => { const fora = marca.has(it.fontName); if (fora) marcaN++; return !fora; }) : b.items;
+    const linhas = leiPdfLinhas(items, b.tracos);
+    linhas.forEach((ln) => ln.runs.forEach((x) => { chars += x.t.trim().length; }));
+    marcaN += linhas.girados || 0;
+    paginas.push(linhas);
+  });
   /* menos de 20 letras por página: é imagem (escaneado) — nada de texto para ler */
   if (chars < Math.max(20, pdf.numPages * 20)) return { texto: "", n: 0, motivo: "pdf_sem_texto", paginas: pdf.numPages };
   /* o "sem_tachado" do leitor de .htm não é problema aqui (lei sem nada riscado): motivo só para o que impede a leitura */
   const r = leiTextoDeArquivoHtml(leiPdfHtml(paginas));
-  return r.texto ? { texto: r.texto, n: r.n || 0, paginas: pdf.numPages }
+  return r.texto ? { texto: r.texto, n: r.n || 0, paginas: pdf.numPages, marcaDagua: marcaN }
     : { texto: "", n: 0, motivo: "pdf_sem_texto", paginas: pdf.numPages };
+}
+
+/* (19.205.0) A MARCA D'ÁGUA DO PDF VENDIDO. O CTM de Caruaru (PDF de curso) traz em TODAS as 325 páginas o nome e o
+ * e-mail do comprador, numa fonte só deles, em texto horizontal no meio da página. Lido junto, ele se intercalava às
+ * palavras ("alímneaarb.l(oinnclusído…") e quebrava artigos. A regra: uma fonte cujos textos são POUCOS (até 4) e se
+ * repetem, iguais, em pelo menos 80% das páginas não é a lei (é marca d'água ou cabeçalho corrido) — fica de fora.
+ * O corpo da lei, numa fonte com milhares de textos diferentes, nunca cai nela; um "-" repetido na fonte do corpo
+ * também não (a fonte tem outros textos). Com menos de 3 páginas não há como saber: nada sai. */
+function leiPdfFontesMarca(paginasItens) {
+  const n = (paginasItens || []).length;
+  const marca = new Set();
+  if (n < 3) return marca;
+  const porFonte = {}, rep = {};
+  paginasItens.forEach((items) => {
+    const vistos = new Set();
+    (items || []).forEach((it) => {
+      const s = String((it && it.str) || "").trim();
+      if (!s) return;
+      const f = String(it.fontName || "");
+      (porFonte[f] = porFonte[f] || new Set()).add(s);
+      const k = f + "\u0001" + s;
+      if (!vistos.has(k)) { vistos.add(k); rep[k] = (rep[k] || 0) + 1; }
+    });
+  });
+  Object.keys(porFonte).forEach((f) => {
+    const textos = Array.from(porFonte[f]);
+    if (textos.length <= 4 && textos.every((s) => (rep[f + "\u0001" + s] || 0) >= n * 0.8)) marca.add(f);
+  });
+  return marca;
 }

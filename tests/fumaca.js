@@ -777,7 +777,7 @@ function rodar(opc) {
     citDestacarRecem, citUltimoDestaqueLer: () => citUltimoDestaque, leiCitaVincInfoPintar, qsVincEscolherPara,
     leiBolhaAtualizar, leiBolhaVincular, leiBibNova, leiBibNovaEditor, leiNovaAbrir, leiNovaIr, leiNovaDefinirPrincipal,
     leiNovaAdicionarAlt, leiNovaTirarAlt, leiNovaComecar, leiNovaEtapa, leiNovaFim, leiNovaFaixaTexto, leiNovaArquivoPrincipal,
-    leiNovaCtxAtual: () => leiNovaCtx, leiTextoDePdf, leiPdfTracos, leiPdfLinhas, leiPdfHtml, leiPdfRiscado, leiLerArquivoLei, leiAltFilaNovaAtual: () => leiAltFilaNova, leiCtxDoLeitor, leiFontePintar,
+    leiNovaCtxAtual: () => leiNovaCtx, leiTextoDePdf, leiPdfTracos, leiPdfLinhas, leiPdfGirado, leiPdfFontesMarca, leiQuandoLocal, leiPdfHtml, leiPdfRiscado, leiLerArquivoLei, leiAltFilaNovaAtual: () => leiAltFilaNova, leiCtxDoLeitor, leiFontePintar,
     matRepararLacunas, matRepararLacunasTudo,
     matRecentesLer, matLembrarRecente, matReabrirRecente, matPintarRecentes, matEstadoEstudo, matEstadoTexto, matTopicosSemMaterial, MAT_RECENTES_CHAVE,
     bkAguardarGravacoes,
