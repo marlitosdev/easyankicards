@@ -870,9 +870,19 @@ async function bkaDesligar() {
   bkaPintarTudo();
   await uiAlert(t("bka_desligado"));
 }
+/* (19.209.0) renomear diz o que aconteceu: o nome novo e como as próximas cópias vão se chamar (as antigas ficam com o
+ * nome de antes — nada é renomeado na pasta) */
 async function bkaRenomearAparelho() {
-  const v = await uiPrompt(t("bka_renomear_pergunta"), bkaAparelho());
-  if (typeof v === "string" && v.trim()) { bkaAparelhoDefinir(v); bkaPintarTudo(); }
+  const antes = bkaAparelho();
+  const v = await uiPrompt(t("bka_renomear_pergunta"), antes);
+  if (typeof v !== "string" || !v.trim()) return { ok: false, razao: "cancelado" };
+  const novo = bkaAparelhoDefinir(v);
+  bkaPintarTudo();
+  if (novo === antes) { await uiAlert(t("bka_renomear_igual", { a: novo })); return { ok: true, igual: true }; }
+  try { reg("BACKUP", "nome do aparelho trocado", antes + " → " + novo); } catch (e) {}
+  const gz = typeof bkPodeCompactar === "function" ? bkPodeCompactar() : true;
+  await uiAlert(t("bka_renomear_ok", { a: novo, n: bkaNome(novo, new Date(bkaRelogio()), false, gz), v: antes }));
+  return { ok: true, nome: novo };
 }
 
 /* ---------------- a tela ---------------- */

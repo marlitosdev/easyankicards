@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.208.0";
+const VERSAO = "19.209.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -426,6 +426,9 @@ function uiDialog(texto, comCancelar, opc) {
     _uiLigarPadrao();
     const t3 = document.getElementById("uiModalTerceiro");
     if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
+    /* (19.209.0) o campo da pergunta (uiPrompt) não sobra num aviso comum */
+    const piu = document.getElementById("uiPromptInput");
+    if (piu) piu.style.display = "none";
     /* (v19.4.0) AS CORES VOLTAM AO PADRÃO a cada abertura: uma pergunta de escolha (uiEscolha) pinta estes mesmos
      * botões, e a confirmação seguinte herdava — o "Cancelar" saía vermelho e o "OK" azul. opc.perigo: o OK é a
      * ação destrutiva (vermelho), com rótulo próprio (opc.ok). */
@@ -2440,11 +2443,19 @@ function aplicarTituloCirurgico(linhaCartao, novoTitulo) {
 }
 
 /* Diálogo com UMA caixa de texto (reaproveita o modal animado). */
+/* (19.209.0) A PERGUNTA QUE NÃO APARECIA. O uiModal virou <dialog> (aberto com showModal, na camada de topo), mas esta
+ * função ainda o abria do jeito antigo (classList "on"): a pergunta ficava invisível — atrás de qualquer janela aberta,
+ * como o painel do backup — e "Nome deste computador" (e "tempo do registro" no diário) pareciam não fazer nada.
+ * Agora abre como os outros avisos (showModal, botões religados), Enter confirma e o texto vem selecionado. */
 function uiPrompt(rotulo, valorInicial) {
   return new Promise((resolve) => {
     if (_uiResolve) { const rr = _uiResolve; _uiResolve = null; rr(false); }
     const m = document.getElementById("uiModal");
     document.getElementById("uiModalMsg").textContent = rotulo;
+    try { m.classList.remove("ui-modal-largo"); } catch (e) {}
+    try { _uiLigarPadrao(); } catch (e) {}
+    const t3 = document.getElementById("uiModalTerceiro");
+    if (t3) { t3.hidden = true; t3.style.display = "none"; t3.onclick = null; }
     // injeta um input logo abaixo da mensagem
     let inp = document.getElementById("uiPromptInput");
     if (!inp) {
@@ -2461,9 +2472,10 @@ function uiPrompt(rotulo, valorInicial) {
     const cancel = document.getElementById("uiModalCancel");
     cancel.className = "btn btn-cinza";
     cancel.textContent = t("cancel_btn"); cancel.style.display = "";
+    inp.onkeydown = (ev) => { if (ev && ev.key === "Enter") { try { ev.preventDefault(); } catch (e) {} _uiFechar(true); } };
     _uiResolve = (ok) => { inp.style.display = "none"; resolve(ok ? inp.value : null); };
-    m.classList.add("on");
-    setTimeout(() => inp.focus(), 60);
+    if (!m.open) m.showModal();
+    setTimeout(() => { try { inp.focus(); if (inp.select) inp.select(); } catch (e) {} }, 60);
   });
 }
 

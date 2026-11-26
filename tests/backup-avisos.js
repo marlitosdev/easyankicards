@@ -273,6 +273,32 @@ async function testes() {
       "V9o a tentativa velha sai como 'substituída' e não desfaz o backup novo: " + JSON.stringify({ rv, erro: est.erro, ultimo: est.ultimo && est.ultimo.nome, perm: api.bkaPermissaoAtual() }));
   }
   {
+    /* (19.209.0) V10: "Nome deste computador" — a pergunta aparece (na camada de topo, por cima do painel) e o nome novo
+     * é salvo com o aviso de como as próximas cópias vão se chamar */
+    const { api } = rodar();
+    api.loja.setItem("eac_aparelho", "PC da sala");
+    const pp = api.uiPrompt("Nome?", "valor inicial");
+    ok(api.$("uiModal").open === true && api.$("uiPromptInput") && api.$("uiPromptInput").style.display !== "none" && api.$("uiPromptInput").value === "valor inicial",
+      "V10 a pergunta abre como <dialog> (showModal), com o campo à vista e o valor de agora");
+    api.$("uiPromptInput").value = "outro";
+    api._uiFechar(true);
+    ok((await pp) === "outro" && api.$("uiModal").open !== true, "V10a OK devolve o texto digitado e fecha");
+    const pr = api.bkaRenomearAparelho();
+    await new Promise((r) => setImmediate(r));
+    ok(api.$("uiModal").open === true && api.$("uiPromptInput").value === "PC da sala", "V10b 'Nome deste computador' abre a pergunta com o nome atual");
+    api.$("uiPromptInput").value = "Notebook Novo";
+    api._uiFechar(true);
+    await new Promise((r) => setImmediate(r));
+    const aviso = api.$("uiModalMsg").textContent;
+    ok(api.$("uiModal").open === true && /Notebook Novo/.test(aviso) && /easyankicards-auto-notebook-novo-\d{8}\.json/.test(aviso) && /PC da sala/.test(aviso),
+      "V10c o aviso diz o nome novo e como as próximas cópias vão se chamar: " + aviso);
+    api._uiFechar(true);
+    const rr = await pr;
+    ok(rr.ok === true && api.loja.getItem("eac_aparelho") === "Notebook Novo" && api.rtTudo({}).some((x) => /nome do aparelho trocado/.test(x.msg)), "V10d o nome fica salvo e entra no registro");
+    ["bka_renomear_ok", "bka_renomear_igual"].forEach((k) => ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) !== k, "V10e falta " + k + " em " + lg); }));
+    api.setLanguage("pt");
+  }
+  {
     /* V9j: ao abrir, a pasta que não responde não prende a abertura (antes: bkaIniciar esperava para sempre) */
     const r = rodar();
     const { api, janela } = r;
