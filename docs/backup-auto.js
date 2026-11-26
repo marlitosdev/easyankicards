@@ -155,7 +155,7 @@ function bkaReferencia(est) {
  *  · o REGISTRO DAS TENTATIVAS: cada tentativa com as etapas e quanto cada uma levou, no painel e no diagnóstico, com
  *    "copiar relatório do backup".
  * ===================================================================== */
-const BKA_PRAZO = { permissao: 10000, pedir: 120000, dados: 30000, procurar: 30000, compactar: 60000, gravar: 60000, limpar: 30000, listar: 30000 };
+const BKA_PRAZO = { permissao: 10000, pedir: 60000, dados: 30000, procurar: 30000, compactar: 60000, gravar: 60000, limpar: 30000, listar: 30000 };
 /* quem agenda o fim do prazo: (fn, ms) → id. Trocável nos testes (lá o setTimeout dispara na hora e venceria tudo) */
 let bkaPrazoAgendar = (fn, ms) => setTimeout(fn, ms);
 let bkaPrazoCancelar = (id) => clearTimeout(id);
@@ -179,8 +179,12 @@ async function bkaPermitido(pedir) {
   if (!bkaPasta) { bkaPermissao = ""; return ""; }
   let p = "granted";
   try {
-    if (typeof bkaPasta.queryPermission === "function") p = await bkaComPrazo(bkaPasta.queryPermission({ mode: "readwrite" }), "permissao");
-    if (p !== "granted" && pedir && typeof bkaPasta.requestPermission === "function") p = await bkaComPrazo(bkaPasta.requestPermission({ mode: "readwrite" }), "pedir");
+    /* (19.207.0) COM O TOQUE DA PESSOA, PEDE DIRETO. No caso real (26/11, Chrome 158) a CONSULTA (queryPermission) da
+     * pasta guardada nunca respondia, embora a pasta do Drive estivesse normal no Windows. O pedido (requestPermission)
+     * devolve "granted" na hora quando já há permissão, e só mostra o pedido do navegador quando falta — então, havendo
+     * toque, a consulta não é necessária. Sem toque (o automático), continua só consultando. */
+    if (pedir && typeof bkaPasta.requestPermission === "function") p = await bkaComPrazo(bkaPasta.requestPermission({ mode: "readwrite" }), "pedir");
+    else if (typeof bkaPasta.queryPermission === "function") p = await bkaComPrazo(bkaPasta.queryPermission({ mode: "readwrite" }), "permissao");
   } catch (e) { p = e && e.name === "TimeoutError" ? "sem_resposta" : "denied"; }
   bkaPermissao = p || "?";
   return bkaPermissao;
@@ -231,7 +235,9 @@ function bkaTentLinha(x) {
   const p2 = (n) => String(n).padStart(2, "0");
   const q = isNaN(d.getTime()) ? "?" : p2(d.getDate()) + "/" + p2(d.getMonth() + 1) + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds());
   const seg = (ms) => (Math.round((ms || 0) / 100) / 10).toFixed(1).replace(".", ",") + " s";
-  const etapas = (x.e || []).map((e) => e.n + " " + seg(e.ms)).join(" › ");
+  /* quanto CADA etapa levou (até a seguinte começar; a última, até o fim) — não a hora em que começou */
+  const es = x.e || [];
+  const etapas = es.map((e, i) => e.n + " " + seg((i + 1 < es.length ? es[i + 1].ms : (x.ms || e.ms)) - e.ms)).join(" › ");
   return q + " · " + (x.m || "-") + (x.g ? " (toque)" : "") + " · " + t("bka_tent_r_" + (x.r || "erro")) + " em " + seg(x.ms)
     + (x.a ? " · " + x.a : "") + (x.x ? " · " + x.x : "") + (etapas ? " · etapas: " + etapas : "") + " · permissão: " + (x.p || "?");
 }
@@ -245,10 +251,11 @@ function bkaRelatorio() {
   L.push("automático: " + (est.ligado ? "ligado" : "desligado") + " · pasta: " + (est.pasta || "?") + " · conectada nesta aba: " + (bkaPasta ? "sim" : "não")
     + " · permissão: " + (bkaPermissao || "?") + " · aparelho: " + bkaAparelho());
   L.push("gravando agora: " + (bkaGravando ? "sim, desde " + (bkaGravandoDesde ? Math.round((bkaRelogio() - bkaGravandoDesde) / 1000) + " s" : "?") : "não"));
-  L.push("último backup: " + (est.ultimo && est.ultimo.nome ? est.ultimo.quando + " · " + est.ultimo.nome : "nenhum"));
+  const local = (iso) => { const ms = new Date(iso).getTime(); return isNaN(ms) ? String(iso || "?") : (typeof diagQuando === "function" ? diagQuando(ms) : new Date(ms).toLocaleString()); };
+  L.push("último backup: " + (est.ultimo && est.ultimo.nome ? local(est.ultimo.quando) + " · " + est.ultimo.nome : "nenhum"));
   const mp = bkaMotivoParado();
   if (mp) L.push("parado: " + mp);
-  if (est.erro) L.push("falha: " + (est.erro.cod || "?") + " · " + (est.erro.n || 1) + "ª seguida · " + (est.erro.msg || "") + (est.erro.proxima ? " · próxima tentativa " + est.erro.proxima : ""));
+  if (est.erro) L.push("falha: " + (est.erro.cod || "?") + " · " + (est.erro.n || 1) + "ª seguida · " + (est.erro.msg || "") + (est.erro.proxima ? " · próxima tentativa " + local(est.erro.proxima) : ""));
   if (est.pausado) L.push("pausado (encolheu): " + (est.pausado.nome || ""));
   if (est.travado) L.push("travado: há backup mais novo de " + (est.travado.aparelho || "?"));
   const ts = bkaTentativas();
@@ -903,6 +910,12 @@ function bkaPintar() {
     const le = linha();
     if (ie.acao === "reconectar") botao(le, t("bka_reconectar"), bkaReconectar, "btn btn-verde", "btnBkaErroReconectar");
     else if (bkaPasta) botao(le, t("bka_erro_tentar"), bkaGravarPedido, "btn btn-verde", "btnBkaErroTentar");
+    /* (19.207.0) a pasta GUARDADA que não responde: escolher a mesma pasta de novo dá ao navegador uma referência nova
+     * (e a permissão junto) — foi o que destravou o caso de 26/11 */
+    if (ie.cod === "sem_resposta") {
+      nota(t("bka_sem_resposta_dica"), "nota bka-sem-resposta-dica");
+      botao(le, t("bka_escolher_de_novo"), bkaConectar, "btn btn-azul", "btnBkaEscolherDeNovo", "", t("bka_escolher_de_novo_sub", { p: est.pasta || "?" }));
+    }
     nota(t("bka_erro_tecnico", { m: est.erro.msg }), "nota bka-erro-tec");
   }
   if (bkaMaisNovo) {

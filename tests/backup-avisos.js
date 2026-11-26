@@ -190,18 +190,29 @@ async function testes() {
     ok(!api.bkaPermVencida() && !/Reconectar/.test(api.bkaBolhaEstado().rot || ""), "V9b não é 'permissão vencida': o balão não manda reconectar");
     const ts = api.bkaTentativas();
     ok(ts.length >= 1 && ts[0].r === "erro" && ts[0].e.some((x) => x.n === "permissão") && /permissão/.test(api.bkaTentLinha(ts[0])), "V9c a tentativa fica no registro, com a etapa onde parou: " + (ts[0] && api.bkaTentLinha(ts[0])));
-    /* "Salvar agora": responde, e diz por quê */
+    /* "Salvar agora" com o PEDIDO também mudo: responde, e diz por quê */
+    const pedirAntes = P.requestPermission;
+    P.requestPermission = () => new Promise(() => {});
     api.bkPintarPainel();
-    let alerta = "";
-    const alertaAntes = api.uiAlert;
     const p = api.bkaGravarPedido();
     await conduzir(api, p);
     const rp = await p;
     ok(rp.ok === false && /não respondeu/.test(api.bkaPorQueNaoGravou(rp)), "V9d 'Salvar agora' sem gravar diz por quê: " + api.bkaPorQueNaoGravou(rp));
-    void alerta; void alertaAntes;
-    /* o painel mostra o registro e o relatório */
+    /* o painel mostra o registro, o relatório e "escolher a pasta de novo" */
     api.bkPintarPainel();
     ok(api.$("bkaRegistro") && api.$("btnBkaRelatorio") && /Registro das tentativas \(\d+\)/.test(api.$("bkaRegistro").textContent), "V9e o painel tem o registro das tentativas e 'copiar relatório'");
+    ok(api.$("btnBkaEscolherDeNovo") && /mesma pasta de novo/i.test(api.$("bkaCorpo").textContent), "V9e2 sem resposta: o painel oferece escolher a mesma pasta de novo");
+    /* (19.207.0) o caso real: a CONSULTA trava, mas o pedido com toque responde — "Salvar agora" grava */
+    P.requestPermission = pedirAntes;
+    api.bkaPrazoDefinir(() => null, () => {});
+    L.setItem("eac_texto", "A :: B" + String.fromCharCode(10) + "C :: D" + String.fromCharCode(10) + "E :: F");
+    const p2 = api.bkaGravarPedido();
+    await conduzir(api, p2);
+    const rp2 = await p2;
+    ok(rp2.ok === true && !api.bkaEstado().erro, "V9k com a consulta muda, 'Salvar agora' pede direto e grava: " + JSON.stringify(rp2));
+    const lt = api.bkaTentLinha(api.bkaTentativas()[0]);
+    ok(/etapas: permissão \d+,\d s › dados/.test(lt), "V9l cada etapa com quanto levou: " + lt);
+    api.bkaPrazoDefinir((fn) => { Promise.resolve().then(() => Promise.resolve()).then(fn); return 1; }, () => {});
     const rel = api.bkaRelatorio();
     ok(/relatório do backup automático/.test(rel) && /permissão: sem_resposta/.test(rel) && /tentativas \(\d+/.test(rel) && !/C :: D/.test(rel), "V9f o relatório traz o estado e as tentativas, sem os dados: " + rel.split(String.fromCharCode(10)).slice(0, 4).join(" | "));
     const dg = await api.montarDiagnostico();
@@ -209,6 +220,7 @@ async function testes() {
     /* o Drive volta: grava */
     api.bkaPrazoDefinir(() => null, () => {});
     P.queryPermission = async () => "granted";
+    L.setItem("eac_texto", "A :: B" + String.fromCharCode(10) + "G :: H");
     const ok2 = await api.bkaGravarAgora("nova tentativa");
     ok(ok2.ok === true && !api.bkaEstado().erro && api.bkaTentativas()[0].r === "gravou", "V9h a pasta volta: grava e a falha sai");
     api.bkaPrazoDefinir(() => null, () => {});
