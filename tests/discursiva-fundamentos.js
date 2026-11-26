@@ -114,7 +114,7 @@ async function testes() {
   const bt = api.$("ledCorpo").querySelectorAll("button").filter((b) => /^btnLedDs_/.test(b.id) && b.id.indexOf(lef.id) >= 0 && b.id.indexOf(api.ledIdSeguro(p2.id)) >= 0)[0];
   ok(!!bt, "F4c cada tema tem 'abrir o tema'");
   if (bt) bt.onclick();
-  ok(!api.$("dlgLeisEd").open && api.dsPropSel[e.id] === p2.id && api.loja.getItem("eac_ds_secao") === "propostas", "F4d abrir o tema fecha a tela e abre o leitor dele");
+  ok(!api.$("dlgLeiBib").open && api.dsPropSel[e.id] === p2.id && api.loja.getItem("eac_ds_secao") === "propostas", "F4d abrir o tema fecha a tela e abre o leitor dele");
   void p3;
 
   ["ds_esq_cartao", "ds_esq_cartao_tip", "ds_card_cab", "ds_card_enun", "ds_card_item", "ds_card_trecho", "led_em_ds", "led_ds_ver", "led_ds_abrir", "led_ds_disc", "led_lac_ds"].forEach((k) =>

@@ -7974,7 +7974,7 @@ function vkIniciarTela() {
       const antesL = ledIaLigada();
       const depoisL = ledIaLigar(!!$("chkVzLedIa").checked);
       if (antesL !== depoisL) reg("LEI", depoisL ? "Gemini direto nas leis do edital: LIGADO pela pessoa" : "Gemini direto nas leis do edital: desligado");
-      try { if ($("dlgLeisEd") && $("dlgLeisEd").open && typeof ledPintar === "function") ledPintar(); } catch (e) {}
+      try { if ($("dlgLeiBib") && $("dlgLeiBib").open && typeof leiBibPintar === "function") leiBibPintar(); } catch (e) {}
     }
     /* (19.154.0) a chave na Análise do estudo: perguntar direto ao Gemini sobre o relatório da análise */
     if ($("chkVzAeIa") && typeof aeIaLigar === "function") {

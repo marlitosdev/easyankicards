@@ -68,7 +68,11 @@ async function testes() {
     api.$("leiBibPastas").querySelectorAll("button").filter((b) => /Área fiscal/.test(b.textContent))[0].onclick();
     ok(nomes() === "Constituição Federal | LC 15/2009 Caruaru", "B3 escolher a pasta filtra a lista: " + nomes());
     api.$("leiBibPastas").querySelectorAll("button").filter((b) => /ISS Caruaru/.test(b.textContent))[0].onclick();
-    ok(nomes() === "CTN", "B4 a pasta do edital: as leis ligadas a tópicos dele: " + nomes());
+    /* (19.204.0) a pasta do edital abre por disciplina (as Leis do edital); a lista continua a um toque */
+    const naDisc = () => api.$("ledCorpo").querySelectorAll(".led-lei-nome").map((x) => x.textContent).join(" | ");
+    ok(!api.$("ledCorpo").hidden && api.$("leiBibLista").hidden && naDisc() === "CTN", "B4 a pasta do edital, por disciplina: as leis do edital: " + naDisc());
+    api.leiBibVistaTrocar("lista");
+    ok(nomes() === "CTN", "B4a na lista: as leis ligadas a tópicos dele: " + nomes());
     api.$("leiBibPastas").querySelectorAll("button").filter((b) => /ISS Caruaru/.test(b.textContent))[0].onclick();
     ok(nomes().split(" | ").length === 3, "B5 tocar de novo volta a todas");
     const bt = api.$("leiBibLista").querySelectorAll("button").filter((b) => b.id === "btnPas_lei_" + cf.id)[0];
@@ -144,26 +148,59 @@ async function testes() {
     /* o ⚖ da agenda, com o edital da linha: abre as leis do edital com o tópico em destaque */
     const r = api.edRecursosDoTopico("Sistema Tributário", "Suspensão do crédito", e.id);
     r.lei.onclick({ stopPropagation() {} });
-    ok(api.$("dlgLeisEd").open && api.$("ledFoco") && /Suspensão do crédito/.test(api.$("ledFoco").textContent) && /2 de 4 lidos/.test(api.$("ledFoco").textContent),
-      "L6 o ⚖ da agenda abre as leis do edital, com o tópico em destaque e o que dele está lido: " + (api.$("ledFoco") && api.$("ledFoco").textContent.slice(0, 160)));
+    ok(api.$("dlgLeiBib").open && api.$("ledFoco") && /Suspensão do crédito/.test(api.$("ledFoco").textContent) && /2 de 4 lidos/.test(api.$("ledFoco").textContent),
+      "L6 o ⚖ da agenda abre a biblioteca na pasta do edital, por disciplina, com o tópico em destaque e o que dele está lido: " + (api.$("ledFoco") && api.$("ledFoco").textContent.slice(0, 160)));
+    ok(!api.$("ledCorpo").hidden && api.$("leiBibLista").hidden && api.$("btnLeiBibVista_disc").getAttribute("aria-pressed") === "true" && !api.$("leiBibVista").hidden,
+      "L6a (19.204.0) sem janela à parte: a vista 'por disciplina' da biblioteca, com o alternador");
     const bt = api.$("btnLedFocoLer_" + ctn.id);
     ok(bt && /continuar no art\. 4º/.test(bt.textContent), "L7 'continuar' no primeiro artigo cobrado que falta: " + (bt && bt.textContent));
     ok(/2 de 5 artigos cobrados lidos/.test(api.$("ledResumo").textContent), "L8 o resumo do edital: " + api.$("ledResumo").textContent);
-    api.$("btnLedF_ok").onclick();
-    ok(/Nada neste filtro/.test(api.$("ledCorpo").textContent) && !/Código Tributário/.test(api.$("ledCorpo").textContent.split("Concluídas")[1] || "") && api.$("btnLedF_ok").getAttribute("aria-pressed") === "true", "L9 o filtro 'concluídas' esconde o que falta");
-    api.$("btnLedF_falta").onclick();
-    ok(api.$("ledLei_0_" + ctn.id) && api.$("ledLei_0_" + lef.id), "L9a 'falta ler' mostra as que faltam");
-    bt.onclick();
+    /* (19.204.0) a fileira da leitura da biblioteca filtra as disciplinas, pelo que o edital cobra */
+    const estE = () => ["todas", "nao", "lendo", "ok"].map((k) => api.$("btnLeiBibE_" + k).textContent).join(" | ");
+    ok(/^Todas · 3 \| Não começadas · 2 \| Em leitura · 1 \| ✓ Lidas · 0$/.test(estE()), "L8a a leitura conta as leis do edital: " + estE());
+    /* (o $ do DOM falso ainda acha o que saiu da tela: confere dentro do corpo) */
+    const naTela = (id) => api.$("ledCorpo").querySelectorAll("div").some((x) => x.id === id);
+    api.$("btnLeiBibE_ok").onclick();
+    ok(/Nada neste filtro/.test(api.$("ledCorpo").textContent) && !naTela("ledLei_0_" + ctn.id) && api.$("btnLeiBibE_ok").getAttribute("aria-pressed") === "true", "L9 o filtro 'lidas' esconde o que falta");
+    api.$("btnLeiBibE_lendo").onclick();
+    ok(naTela("ledLei_0_" + ctn.id) && !naTela("ledLei_0_" + lef.id), "L9a 'em leitura' mostra a que começou");
+    api.$("btnLeiBibE_nao").onclick();
+    ok(naTela("ledLei_0_" + lef.id) && !naTela("ledLei_0_" + ctn.id), "L9b 'não começadas' mostra a que falta começar");
+    api.$("btnLeiBibE_todas").onclick();
+    /* a busca da biblioteca vale nos grupos */
+    api.$("leiBibBusca").value = "LEF"; api.$("leiBibBusca").oninput();
+    ok(naTela("ledLei_0_" + lef.id) && !naTela("ledLei_0_" + ctn.id), "L9c a busca filtra as leis dentro das disciplinas");
+    api.$("leiBibBusca").value = ""; api.$("leiBibBusca").oninput();
+    /* cada disciplina: peso, artigos lidos e barra; dobrável e lembrada */
+    const d0 = api.$("ledDisc_0");
+    ok(d0 && /Sistema Tributário/.test(d0.textContent) && /peso 5/.test(d0.textContent) && /2 de 5 artigos/.test(d0.textContent) && d0.querySelectorAll(".led-barra").length >= 1,
+      "L9d o cabeçalho da disciplina: peso, artigos cobrados lidos e a barra: " + (d0 && d0.textContent.slice(0, 120)));
+    ok(api.$("ledLei_0_" + cf.id) && api.$("ledLei_1_" + cf.id) && /também em/.test(api.$("ledLei_0_" + cf.id).textContent), "L9e a lei de duas disciplinas aparece nas duas");
+    ok(api.$("btnLeiBibMais_" + cf.id + "_0") && api.$("btnLeiBibMais_" + cf.id + "_1"), "L9f cada lei tem o '⋯' da biblioteca, sem id repetido");
+    api.ledDiscGuardar(e.id, "Direito Constitucional", false);
+    api.ledPintar();
+    ok(api.$("ledDisc_1").open === false && api.$("ledDisc_0").open === true, "L9g o grupo fechado fica fechado ao repintar");
+    api.ledAbrir(e.id, { disciplina: "Direito Constitucional" });
+    ok(api.$("ledDisc_1").open === true, "L9h abrir pela disciplina abre o grupo dela");
+    api.$("btnLeiBibVista_lista").onclick();
+    ok(api.$("ledCorpo").hidden && !api.$("leiBibLista").hidden && api.$("leiBib_" + ctn.id) && api.loja.getItem("eac_lb_vista") === "lista", "L9i 'lista' volta à lista de sempre, e fica lembrada");
+    api.$("btnLeiBibVista_disc").onclick();
+    ok(!api.$("ledCorpo").hidden && api.loja.getItem("eac_lb_vista") === "disc", "L9j e 'por disciplina' volta");
+    api.$("dlgLeiBib").close();
+    r.lei.onclick({ stopPropagation() {} });
+    bt.onclick && api.$("btnLedFocoLer_" + ctn.id).onclick();
     ok(api.$("dlgLeiSeca").open, "L10 'continuar' abre a lei (pelo tópico ligado, no artigo)");
     /* sem edital conhecido, o ⚖ continua abrindo a lei do tópico direto */
-    api.$("dlgLeiSeca").close(); api.$("dlgLeisEd").close();
+    api.$("dlgLeiSeca").close(); api.$("dlgLeiBib").close();
     api.edRecursosDoTopico("Sistema Tributário", "Suspensão do crédito").lei.onclick({ stopPropagation() {} });
-    ok(api.$("dlgLeiSeca").open && !api.$("dlgLeisEd").open, "L11 sem o edital da linha, o ⚖ abre a lei do tópico como antes");
+    ok(api.$("dlgLeiSeca").open && !api.$("dlgLeiBib").open, "L11 sem o edital da linha, o ⚖ abre a lei do tópico como antes");
     const html = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "index.html"), "utf8");
     const ferr = (html.split('id="edTopoFerr"')[1] || "").split("</div>")[0];
-    ok(/id="btnEdLeis"/.test(ferr) && /<dialog id="dlgLeisEd"/.test(html), "L12 o botão '⚖ Leis' nas ferramentas do edital e a janela existem");
-    ["led_btn", "led_btn_tip", "led_titulo", "led_como", "led_resumo", "led_foco_tit", "led_foco_sub", "led_foco_vazio", "led_foco_abrir", "led_foco_nums", "led_foco_sem_art",
-      "led_f_todas", "led_f_falta", "led_f_ok", "led_disc_meta", "led_cob", "led_cob_lei", "led_em_topicos", "led_tambem", "led_arts", "led_topicos_n", "led_continuar",
+    ok(/id="btnEdLeis"/.test(ferr) && !/<dialog id="dlgLeisEd"/.test(html) && /id="ledCorpo"/.test((html.split('<dialog id="dlgLeiBib"')[1] || "").split("</dialog>")[0]),
+      "L12 o botão '⚖ Leis' nas ferramentas do edital; (19.204.0) a janela à parte saiu e as leis do edital moram na biblioteca");
+    ["led_btn", "led_btn_tip", "led_como", "led_resumo", "led_foco_tit", "led_foco_sub", "led_foco_vazio", "led_foco_abrir", "led_foco_nums", "led_foco_sem_art",
+      "led_disc_meta", "led_disc_arts", "led_info", "led_foco_x", "led_pend_vinc", "led_pend_art", "led_pend_novas", "led_pend_nada", "led_pend_aj", "led_pend_ligar",
+      "led_outras_pasta", "led_outras_pasta_n", "lei_bib_vista_disc", "lei_bib_vista_lista", "lei_bib_vista_aj", "lei_bib_ajuda_tip", "led_cob", "led_cob_lei", "led_em_topicos", "led_tambem", "led_arts", "led_topicos_n", "led_continuar",
       "led_comecar", "led_abrir", "led_anel_aj", "led_nao_ligada", "led_vazio", "led_vazio_filtro"].forEach((k) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "L13 falta " + k + " em " + l); }));
     api.setLanguage("pt");
@@ -186,8 +223,14 @@ async function testes() {
       "G1 a lei citada que não está na biblioteca vira lacuna (e a sigla solta 'LEF' não): " + M.lacunas.map((G) => G.chave + "/" + G.rotulo).join());
     ok(api.ledChaveLacuna("Lei Complementar 116/2003") === "lc:116" && api.ledChaveLacuna("LC 116/03") === "lc:116" && api.ledChaveLacuna("ISS") === "", "G1a a mesma lei escrita de dois jeitos tem a mesma chave");
     api.ledAbrir(e.id);
-    ok(/Faltam na biblioteca · 1/.test(api.$("ledLac").textContent) && api.$("btnLedLacInc_lc_116") && /1 falta\(m\) na biblioteca/.test(api.$("ledResumo").textContent),
-      "G2 a faixa das lacunas, com '＋ incluir', e o resumo dizem o que falta: " + api.$("ledResumo").textContent);
+    ok(/Faltam na biblioteca · 1/.test(api.$("ledLac").textContent) && api.$("btnLedLacInc_lc_116") && /1 falta\(m\) na biblioteca/.test(api.$("btnLedPend").textContent),
+      "G2 a faixa das lacunas, com '＋ incluir', e a faixa do que falta dizem o que falta: " + api.$("btnLedPend").textContent);
+    /* (19.204.0) a faixa do que falta: recolhida, abre num toque e lembra */
+    ok(api.$("ledPendCorpo").hidden === true && api.$("btnLedPend").getAttribute("aria-expanded") === "false", "G2a a faixa começa recolhida");
+    api.$("btnLedPend").onclick();
+    ok(api.$("ledPendCorpo").hidden === false && api.loja.getItem("eac_lb_pend_aberta") === "1", "G2b tocar abre o detalhe e fica lembrado");
+    api.ledPintar();
+    ok(api.$("ledPendCorpo").hidden === false, "G2c repintada, continua aberta");
     api.$("btnLedLacDisp_lc_116").onclick();
     ok(Object.keys(api.ledDispensadas(e.id)).join() === "lc:116" && /Faltam na biblioteca · 0/.test(api.$("ledLac").textContent) && api.$("btnLedLacDispVer"),
       "G3 dispensar tira da lista (lembrado por edital) e deixa o 'mostrar'");
@@ -275,14 +318,17 @@ async function testes() {
       "R2 (19.183.0) o menu com nomes curtos, as Leis do edital e a Biblioteca (colar saiu): " + txt);
     ok(api.ledEditalDoTopico("Sistema Tributário", "Suspensão do crédito") === e.id && api.$("btnLeiFilaEdital"), "R3 a fila oferece '📚 leis do edital' quando o tópico é de um edital");
     api.$("btnLeiFilaEdital").onclick();
-    ok(api.$("dlgLeisEd").open && api.$("dlgLeiSeca").open && /Suspensão do crédito/.test(api.$("ledFoco").textContent), "R3a abre as Leis do edital por cima da leitura, com o tópico em destaque");
+    ok(api.$("dlgLeiBib").open && api.$("dlgLeiSeca").open && /Suspensão do crédito/.test(api.$("ledFoco").textContent), "R3a abre as Leis do edital (na biblioteca) por cima da leitura, com o tópico em destaque");
     api.$("btnLedFocoLer_" + cf.id).onclick();
-    ok(!api.$("dlgLeisEd").open && api.$("dlgLeiSeca").open && api.leiIdAtualValor() === cf.id, "R3b escolher uma lei ali fecha a tela de cima e a leitura troca para ela");
+    ok(!api.$("dlgLeiBib").open && api.$("dlgLeiSeca").open && api.leiIdAtualValor() === cf.id, "R3b escolher uma lei ali fecha a tela de cima e a leitura troca para ela");
     api.$("dlgLeiSeca").close();
     /* a biblioteca */
     api.leiParar(ctn.id, "3", 2);
     api.leiParar(cf.id, "10", 9);
+    /* (19.204.0) o ⚖ deixou a biblioteca na pasta do edital: volta a "todas as pastas", na vista lista */
+    api.leiBibVistaTrocar("lista");
     api.leiBibAbrir();
+    api.$("leiBibPastas").querySelectorAll("button")[0].onclick();
     const est = () => ["todas", "nao", "lendo", "ok"].map((k) => api.$("btnLeiBibE_" + k).textContent).join(" | ");
     ok(est() === "Todas · 3 | Não começadas · 1 | Em leitura · 1 | ✓ Lidas · 1", "R4 a fileira da leitura conta as leis: " + est());
     const nomes = () => api.$("leiBibLista").querySelectorAll(".lei-bib-tit").map((x) => x.textContent.replace(/\s*\d+% lida.*$/, "")).join(" | ");
@@ -290,15 +336,17 @@ async function testes() {
     ok(/^Lei 5\.172/.test(nomes()) && nomes().split(" | ").length === 1, "R4a 'em leitura' mostra só a lei com marcador no meio: " + nomes());
     api.$("btnLeiBibE_todas").onclick();
     ok(api.$("leiBib_" + ctn.id).querySelectorAll(".led-anel").length === 1 && /lb-ok/.test(api.$("leiBib_" + cf.id).className), "R5 cada lei com o anel; a lida com cara de concluída");
-    ok(api.$("leiBibEdFaixa").hidden === true, "R6 sem pasta de edital escolhida, nada de faixa");
+    ok(api.$("leiBibVista").hidden === true && !api.$("leiBibLista").hidden, "R6 sem pasta de edital escolhida, nada de alternador: a lista");
     const chipEd = api.$("leiBibPastas").querySelectorAll("button").filter((x) => /📋/.test(x.textContent))[0];
     ok(chipEd, "R6- a pasta do edital na fileira: " + api.$("leiBibPastas").querySelectorAll("button").map((x) => x.textContent).join(" | "));
     if (chipEd) chipEd.onclick();
-    ok(api.$("leiBibEdFaixa").hidden === false && /📋 ISS/.test(api.$("leiBibEdFaixaTxt").textContent), "R6a a pasta do edital mostra o caminho para as Leis do edital: " + api.$("leiBibEdFaixa").hidden + " " + api.$("leiBibEdFaixaTxt").textContent + " · " + chipEd.textContent);
-    api.$("btnLeiBibLed").onclick();
-    ok(api.$("dlgLeisEd").open && !api.$("dlgLeiBib").open, "R6b o botão abre as Leis do edital");
+    ok(api.$("leiBibVista").hidden === false && api.$("btnLeiBibVista_lista").getAttribute("aria-pressed") === "true" && !api.$("leiBibLista").hidden,
+      "R6a a pasta do edital mostra o alternador, na vista lembrada (lista)");
+    api.$("btnLeiBibVista_disc").onclick();
+    ok(api.$("dlgLeiBib").open && !api.$("ledCorpo").hidden && api.$("leiBibLista").hidden && api.$("ledDisc_0") && /Sistema Tributário/.test(api.$("ledDisc_0").textContent),
+      "R6b 'por disciplina' mostra as Leis do edital ali mesmo, sem outra janela");
     ["lei_nome_cf", "lei_fila_edital", "lei_fila_edital_aj", "lei_bib_e_todas", "lei_bib_e_nao", "lei_bib_e_lendo", "lei_bib_e_ok",
-      "lei_bib_anel_aj", "lei_bib_ed_faixa", "lei_bib_ed_bt"].forEach((k) =>
+      "lei_bib_anel_aj"].forEach((k) =>
       ["pt", "en"].forEach((l) => { api.setLanguage(l); ok(api.t(k) && api.t(k) !== k, "R7 falta " + k + " em " + l); }));
     api.setLanguage("pt");
   }

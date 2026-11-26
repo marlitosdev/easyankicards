@@ -6641,11 +6641,51 @@ function leiBibLista() {
     if (leiBibPasta && typeof pasContem === "function" && !pasContem(leiBibPasta, { t: "lei", id: l.id, topicos: l.topicos || [] }, idx)) return false;
     if (leiBibFiltro === "sem" && usos.length) return false;
     if (leiBibFiltro === "concurso" && !(atual && usos.some((u) => u.concurso === atual))) return false;
-    if (!q) return true;
-    const palheiro = leiTxtChave([l.nome, l.apelido, l.numero, leiNumeroNorm(l.numero), l.ano,
-      l.ente, l.especie].join(" "));
-    return palheiro.indexOf(q) >= 0;
+    return leiBibCasaBusca(l, q);
   });
+}
+function leiBibCasaBusca(l, q) {
+  if (!q) return true;
+  const palheiro = leiTxtChave([l.nome, l.apelido, l.numero, leiNumeroNorm(l.numero), l.ano,
+    l.ente, l.especie].join(" "));
+  return palheiro.indexOf(q) >= 0;
+}
+
+/* (19.204.0) A PASTA DE UM EDITAL tem duas vistas: "por disciplina" (as Leis do edital, que eram uma janela à parte —
+ * leis-edital.js) e "lista" (a de sempre). A escolha fica lembrada; quem abre pelo ⚖ de um tópico cai na de disciplina. */
+const LEI_BIB_VISTA = "eac_lb_vista";
+let leiBibVista = null;
+function leiBibVistaLer() {
+  if (leiBibVista === null) { try { leiBibVista = localStorage.getItem(LEI_BIB_VISTA) === "lista" ? "lista" : "disc"; } catch (e) { leiBibVista = "disc"; } }
+  return leiBibVista;
+}
+function leiBibVistaTrocar(v) {
+  leiBibVista = v === "lista" ? "lista" : "disc";
+  try { localStorage.setItem(LEI_BIB_VISTA, leiBibVista); } catch (e) {}
+  try { leiReg("lei", "biblioteca de leis: vista da pasta do edital", leiBibVista === "disc" ? "por disciplina" : "lista"); } catch (e) {}
+  leiBibPintar();
+  return leiBibVista;
+}
+/* o edital da pasta escolhida ("" se a pasta não é de um edital cadastrado) */
+function leiBibEdDaPasta() {
+  if (!leiBibPasta || !/^ed:/.test(leiBibPasta) || leiBibFiltro === "sem") return "";
+  let ed = null;
+  try { ed = typeof pasEdAchar === "function" ? pasEdAchar(leiBibPasta) : null; } catch (e) { ed = null; }
+  return ed && typeof ledEdital === "function" && ledEdital(ed.id) ? String(ed.id) : "";
+}
+function leiBibVendoEdital() { return leiBibVistaLer() === "disc" ? leiBibEdDaPasta() : ""; }
+/* a porta das "Leis do edital" (ledAbrir): a biblioteca na pasta do edital, por disciplina, sem busca nem filtro */
+function leiBibAbrirNoEdital(edId) {
+  leiBibPasta = "ed:" + edId;
+  leiBibFiltro = "todas";
+  leiBibEstado = "todas";
+  leiBibVista = "disc";
+  leiBibTexto = "";
+  if ($("leiBibBusca")) $("leiBibBusca").value = "";
+  leiBibPintar({ carregando: true });
+  abrirModal("dlgLeiBib");
+  try { leiBibCheiaTrocar(localStorage.getItem(LEI_BIB_CHEIA) === "1", false); } catch (e) {}
+  return true;
 }
 
 /* (v18.47.0) "＋ Nova lei": colar uma lei na biblioteca sem ligá-la a tópico nenhum (liga-se depois, por "ligar a um
@@ -6681,6 +6721,8 @@ function leiBibCheiaTrocar(sim, lembrar) {
 }
 function leiBibAbrir() {
   leiBibTexto = "";
+  /* aberta pelo menu (não pelo ⚖ de um tópico): sem o destaque de um tópico antigo */
+  if (typeof ledLimparFoco === "function") ledLimparFoco();
   if ($("leiBibBusca")) $("leiBibBusca").value = "";
   leiBibPintar();
   abrirModal("dlgLeiBib");
@@ -6688,9 +6730,18 @@ function leiBibAbrir() {
   try { leiReg("lei", "biblioteca de leis aberta", leisLista().length + " leis"); } catch (e) {}
 }
 
-function leiBibPintar() {
+function leiBibPintar(opc) {
+  const o = opc || {};
   const dlg = $("dlgLeiBib");
   const rolagem = dlg && dlg.scrollTop ? dlg.scrollTop : 0;
+  /* (19.204.0) o "ⓘ" do título guarda a explicação (era uma frase fixa no topo) */
+  if ($("btnLeiBibAjuda") && $("leiBibAjuda")) {
+    $("btnLeiBibAjuda").onclick = () => {
+      const abrir = !!$("leiBibAjuda").hidden;
+      $("leiBibAjuda").hidden = !abrir;
+      $("btnLeiBibAjuda").setAttribute("aria-expanded", String(abrir));
+    };
+  }
   const atual = leiConcursoAtualNome();
   if ($("leiBibBusca")) $("leiBibBusca").placeholder = t("lei_bib_busca");
   void atual;
@@ -6715,38 +6766,69 @@ function leiBibPintar() {
       b.onclick = () => { leiBibFiltro = on ? "todas" : "sem"; if (!on) leiBibPasta = ""; leiBibPintar(); };
       $("leiBibPastas").append(b);
     }
+    /* (19.204.0) as pastas numa linha só, que rola de lado: a escolhida fica à vista */
+    try {
+      let sel = null;
+      const fil = $("leiBibPastas").children || [];
+      for (let i = 0; i < fil.length && !sel; i++) {
+        const b = fil[i];
+        if (b.getAttribute && b.getAttribute("aria-pressed") === "true" && /pas-edital|pas-livre|lb-sem-chip/.test(b.className)) sel = b;
+      }
+      if (sel && sel.scrollIntoView && !o.carregando) sel.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } catch (e) {}
   }
+  /* (19.204.0) A PASTA DE UM EDITAL: "por disciplina | lista" (a faixa que levava à janela das Leis do edital saiu) */
+  const edVista = leiBibEdDaPasta();
+  const naDisc = !!edVista && leiBibVistaLer() === "disc";
+  if ($("leiBibVista")) {
+    const cxV = $("leiBibVista");
+    cxV.hidden = !edVista;
+    cxV.innerHTML = "";
+    cxV.setAttribute("aria-label", t("lei_bib_vista_aj"));
+    if (edVista) [["disc", t("lei_bib_vista_disc")], ["lista", t("lei_bib_vista_lista")]].forEach(([k, rot]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = "btnLeiBibVista_" + k;
+      b.className = "btn-min pas-chip" + (leiBibVista === k ? " mat-ligado" : "");
+      b.setAttribute("aria-pressed", String(leiBibVista === k));
+      b.textContent = rot;
+      b.onclick = () => leiBibVistaTrocar(k);
+      cxV.append(b);
+    });
+  }
+  let contaEd = null;
+  if (naDisc && typeof ledMontarNaBib === "function") {
+    if (o.carregando) {
+      if ($("ledCorpo")) { $("ledCorpo").innerHTML = ""; const p = document.createElement("p"); p.className = "nota"; p.textContent = t("led_carregando"); $("ledCorpo").append(p); }
+    } else {
+      const M = ledMontarNaBib(edVista, o);
+      if (M && typeof ledContarEstados === "function") contaEd = ledContarEstados(M);
+    }
+  }
+  if ($("ledCorpo")) $("ledCorpo").hidden = !naDisc;
   /* (19.140.0) A LEITURA, numa fileira própria: todas · não começadas · em leitura · lidas */
   if ($("leiBibEstados")) {
     const cxE = $("leiBibEstados");
     cxE.innerHTML = "";
     const conta = { nao: 0, lendo: 0, ok: 0 };
-    todas.forEach((l) => { conta[leiBibEstadoDe(l)]++; });
-    [["todas", t("lei_bib_e_todas", { n: todas.length })], ["nao", t("lei_bib_e_nao", { n: conta.nao })], ["lendo", t("lei_bib_e_lendo", { n: conta.lendo })], ["ok", t("lei_bib_e_ok", { n: conta.ok })]].forEach(([k, rot]) => {
+    /* na vista por disciplina, contam as leis do edital pelo que ELE cobra delas (os artigos, não a lei inteira) */
+    if (contaEd) Object.assign(conta, contaEd);
+    else todas.forEach((l) => { conta[leiBibEstadoDe(l)]++; });
+    [["todas", t("lei_bib_e_todas", { n: contaEd ? contaEd.todas : todas.length })], ["nao", t("lei_bib_e_nao", { n: conta.nao })], ["lendo", t("lei_bib_e_lendo", { n: conta.lendo })], ["ok", t("lei_bib_e_ok", { n: conta.ok })]].forEach(([k, rot]) => {
       const b = document.createElement("button");
       b.type = "button";
       b.id = "btnLeiBibE_" + k;
       b.className = "btn-min pas-chip" + (leiBibEstado === k ? " mat-ligado" : "");
       b.setAttribute("aria-pressed", String(leiBibEstado === k));
       b.textContent = rot;
-      b.onclick = () => { leiBibEstado = k; leiBibPintar(); };
+      b.onclick = () => { leiBibEstado = k; leiBibPintar({ reusar: true }); };
       cxE.append(b);
     });
   }
-  /* (19.140.0) A PASTA DE UM EDITAL leva às "Leis do edital": a mesma lista, por disciplina e peso, com o que falta */
-  if ($("leiBibEdFaixa")) {
-    let edP = null;
-    try { edP = leiBibPasta && /^ed:/.test(leiBibPasta) && typeof pasEdAchar === "function" ? pasEdAchar(leiBibPasta) : null; } catch (e) { edP = null; }
-    const temLed = !!(edP && typeof ledEdital === "function" && ledEdital(edP.id));
-    $("leiBibEdFaixa").hidden = !temLed;
-    if (temLed) {
-      $("leiBibEdFaixaTxt").textContent = t("lei_bib_ed_faixa", { e: edP.nome });
-      $("btnLeiBibLed").onclick = () => { $("dlgLeiBib").close(); ledAbrir(edP.id); };
-    }
-  }
-  const lista = leiBibLista();
+  const lista = naDisc ? [] : leiBibLista();
   const semVinculo = todas.filter((l) => !(l.topicos || []).length).length;
   $("leiBibResumo").textContent = t("lei_bib_resumo", { n: lista.length, v: semVinculo });
+  $("leiBibResumo").hidden = naDisc;
 
   const dup = leiDuplicadasNaBiblioteca();
   /* (19.96.0) leis usadas em vínculos de um tópico e ainda não ligadas a ele */
@@ -6770,7 +6852,8 @@ function leiBibPintar() {
 
   const cx = $("leiBibLista");
   cx.innerHTML = "";
-  if (!lista.length) {
+  cx.hidden = naDisc;
+  if (!lista.length && !naDisc) {
     const p = document.createElement("p");
     p.className = "nota";
     p.textContent = t("lei_bib_vazio");
@@ -6874,10 +6957,24 @@ function leiBibCartao({ l, usos }) {
       acoes.append(bl);
     }
   }
+  leiBibAcoesDaLei(l, "").forEach((el) => acoes.append(el));
+  card.append(acoes);
+  return card;
+}
+
+/* (19.204.0) o 📁 e o "⋯" de uma lei — os mesmos na lista e na vista por disciplina (lá a lei pode aparecer em duas
+ * disciplinas: o sufixo mantém os ids únicos) */
+function leiBibAcoesDaLei(l, suf) {
+  const s = suf || "";
+  const out = [];
   /* (v19.12.0) em que pastas está (e pôr/tirar) */
-  if (typeof pasBotaoItem === "function") acoes.append(pasBotaoItem("lei", l.id, l.nome, () => leiBibPintar()));
+  if (typeof pasBotaoItem === "function") {
+    const pb = pasBotaoItem("lei", l.id, l.nome, () => leiBibPintar());
+    if (s) pb.id += s;
+    out.push(pb);
+  }
   const bm = document.createElement("button");
-  bm.type = "button"; bm.className = "btn-min ed-mais-bt"; bm.id = "btnLeiBibMais_" + l.id;
+  bm.type = "button"; bm.className = "btn-min ed-mais-bt"; bm.id = "btnLeiBibMais_" + l.id + s;
   bm.textContent = "⋯";
   bm.title = t("lei_bib_mais_tip");
   bm.setAttribute("aria-label", t("lei_bib_mais_aria", { l: l.nome }));
@@ -6889,14 +6986,13 @@ function leiBibCartao({ l, usos }) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     if (typeof edMenuAbrir !== "function") return;
     edMenuAbrir(bm, menu, () => [
-      { id: "btnLeiBibMapa_" + l.id, rot: t("lei_bib_m_mapa"), dica: t("lei_mapa_btn"), faz: () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); leiMapaAbrir(); } },
-      { id: "btnLeiBibLigar_" + l.id, rot: t("lei_bib_m_ligar"), faz: () => leiTopicoAbrir(l) },
-      { id: "btnLeiBibApagar_" + l.id, cls: "ed-menu-perigo", rot: t("lei_bib_m_apagar"), faz: () => leiBibApagar(l) },
+      { id: "btnLeiBibMapa_" + l.id + s, rot: t("lei_bib_m_mapa"), dica: t("lei_mapa_btn"), faz: () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); leiMapaAbrir(); } },
+      { id: "btnLeiBibLigar_" + l.id + s, rot: t("lei_bib_m_ligar"), faz: () => leiTopicoAbrir(l) },
+      { id: "btnLeiBibApagar_" + l.id + s, cls: "ed-menu-perigo", rot: t("lei_bib_m_apagar"), faz: () => leiBibApagar(l) },
     ]);
   };
-  acoes.append(bm, menu);
-  card.append(acoes);
-  return card;
+  out.push(bm, menu);
+  return out;
 }
 
 /* abrir uma lei SEM tópico: o que depende de um tópico (registrar leitura,
@@ -11310,7 +11406,7 @@ function leiIniciar() {
   liga("btnLeiBibX", "fechar a biblioteca de leis", () => $("dlgLeiBib").close());
   liga("btnLeiBibCheia", "biblioteca de leis: tela cheia", () => leiBibCheiaTrocar(undefined, true));
   liga("btnLeiBibDup", "biblioteca: leis que parecem a mesma", () => leiMesAbrir());
-  if ($("leiBibBusca")) $("leiBibBusca").oninput = () => { leiBibTexto = $("leiBibBusca").value; leiBibPintar(); };
+  if ($("leiBibBusca")) $("leiBibBusca").oninput = () => { leiBibTexto = $("leiBibBusca").value; leiBibPintar({ reusar: true }); };
   liga("btnLeiTopX", "fechar ligar a tópico", () => $("dlgLeiTopico").close());
   liga("btnLeiTopFechar", "fechar ligar a tópico", () => $("dlgLeiTopico").close());
   if ($("leiTopBusca")) $("leiTopBusca").oninput = () => { if (leiTopCtx) { leiTopCtx.busca = $("leiTopBusca").value; leiTopicoPintar(); } };

@@ -14,10 +14,12 @@
  *
  * De onde vêm as leis de um tópico: as LIGADAS a ele (lei.topicos) e as CITADAS no texto dele no edital (nome, nota e
  * ramos) que estão na biblioteca. Nada aqui grava: é uma vista do que já existe.
+ *
+ * (19.204.0) NÃO É MAIS UMA JANELA: é a vista "por disciplina" da pasta 📋 do edital na Biblioteca de leis (veja "a
+ * tela", abaixo). ledAbrir continua sendo a porta: abre a biblioteca nessa pasta.
  * ===================================================================== */
 
 let ledCtx = { edId: "", disciplina: "", topico: "" };
-let ledFiltro = "todas";
 let ledUltimo = null;
 let ledPorCimaDaLeitura = false;
 
@@ -216,7 +218,7 @@ function ledCobertasEl(M) {
   const det = ledEl("details", "led-lig led-cob");
   det.id = "ledCob";
   det.append(ledEl("summary", "led-lig-tit", t("led_cob_tit", { n: cob.length })));
-  det.append(ledEl("p", "nota", t("led_cob_expl")));
+  det.append(ledInfo(t("led_cob_expl")));
   cob.forEach((G) => {
     const lin = ledEl("div", "led-lac-lin");
     lin.id = "ledCob_" + ledIdSeguro(G.chave);
@@ -309,11 +311,10 @@ function ledCitadasSituacao(M) {
     return Object.assign({}, C, { st, dentro });
   }).sort((a, b) => LED_CIT_ORDEM[a.st] - LED_CIT_ORDEM[b.st] || String(a.rotulo).localeCompare(String(b.rotulo)));
 }
-function ledCitadasEl(M) {
+/* (19.182.0) "na biblioteca" não é "ligada": os tópicos que citam a lei PELO NÚMERO e não estão ligados a ela.
+ * (19.204.0) à parte, para a faixa do que falta contar e oferecer o "ligar todas" */
+function ledVinculosFaltando(M) {
   const L = ledCitadasSituacao(M);
-  if (!L.length) return null;
-  const nB = L.filter((x) => x.st === "biblioteca" || x.st === "coberta").length, nF = L.filter((x) => x.st === "falta").length;
-  /* (19.182.0) "na biblioteca" não é "ligada": os tópicos que citam a lei PELO NÚMERO e não estão ligados a ela */
   /* a MESMA regra das sugestões, tópico a tópico (a linha da lei junta tópicos achados pelo número e pelo nome: a
    * "Constituição do crédito tributário" cai na linha da CF, e não pode ganhar a CF por isso) */
   const E = typeof ledEdital === "function" ? ledEdital(M.edId) : null;
@@ -328,18 +329,19 @@ function ledCitadasEl(M) {
   };
   const pend = [];
   L.forEach((x) => { x.semVinc = semV(x); x.semVinc.forEach((p) => pend.push(p)); });
+  return { L, pend };
+}
+function ledCitadasEl(M, V0) {
+  const V = V0 || ledVinculosFaltando(M);
+  const L = V.L, pend = V.pend;
+  if (!L.length) return null;
+  const nB = L.filter((x) => x.st === "biblioteca" || x.st === "coberta").length, nF = L.filter((x) => x.st === "falta").length;
   const det = ledEl("details", "led-lig led-cit");
   det.id = "ledCit";
   det.append(ledEl("summary", "led-lig-tit", t("led_cit_tit", { n: L.length, b: nB, f: nF }) + (pend.length ? " · " + t("lv_cit_sem", { n: pend.length }) : "")));
-  det.append(ledEl("p", "nota", t("led_cit_expl")));
-  if (pend.length && typeof lvLigarVarios === "function") {
-    det.open = true;
-    const bt = ledEl("button", "btn-min btn-min-ok", t("lv_cit_ligar_todas", { n: pend.length }));
-    bt.type = "button"; bt.id = "btnLedCitLigarTodas";
-    bt.title = t("lv_cit_ligar_todas_tip");
-    bt.onclick = () => { lvLigarVarios(pend, "leis do edital: ligar todas"); ledPintar(); };
-    det.append(bt);
-  }
+  det.append(ledInfo(t("led_cit_expl")));
+  /* o "ligar todas" mora na faixa do que falta; aqui, a lei a lei */
+  if (pend.length && typeof lvLigarVarios === "function") det.open = true;
   L.forEach((x) => {
     const lin = ledEl("div", "led-cit-lin led-cit-" + x.st);
     lin.id = "ledCit_" + ledIdSeguro(x.chave);
@@ -469,7 +471,7 @@ function ledOutrasEl(M) {
   const det = ledEl("details", "led-lig led-outras");
   det.id = "ledOutras";
   det.append(ledEl("summary", "led-lig-tit", t("led_outras_tit", { n: L.length })));
-  det.append(ledEl("p", "nota", t("led_outras_expl")));
+  det.append(ledInfo(t("led_outras_expl")));
   L.forEach((G) => {
     const k = ledIdSeguro(G.chave);
     const lin = ledEl("div", "led-lac-lin");
@@ -505,7 +507,7 @@ function ledArtsFaltaEl(M) {
   const det = ledEl("details", "led-lig led-artfalta");
   det.id = "ledArtFalta";
   det.append(ledEl("summary", "led-lig-tit", t("led_artfalta_tit", { n })));
-  det.append(ledEl("p", "nota", t("led_artfalta_expl")));
+  det.append(ledInfo(t("led_artfalta_expl")));
   L.forEach((x) => {
     const lin = ledEl("div", "led-lac-lin");
     lin.id = "ledArtFalta_" + x.leiId;
@@ -902,9 +904,9 @@ function ledDoTopico(M, disciplina, topico) {
 /* Com um tópico ligado à lei, abre pelo tópico (registrar leitura, cartões e a fila de leis dele funcionam); sem tópico
  * ligado, abre a lei solta, como a biblioteca. O artigo, quando há, manda; sem artigo, a lei retoma no marcador. */
 function ledLer(id, prox, T) {
-  /* aberta a partir da leitura (o "📚 leis do edital" da fila), esta tela está POR CIMA da lei: fecha, e a leitura de
-   * baixo troca de lei. Aberta pela agenda, ela fica embaixo e volta quando a leitura fecha. */
-  if ($("dlgLeiSeca") && $("dlgLeiSeca").open && $("dlgLeisEd") && $("dlgLeisEd").open && ledPorCimaDaLeitura) $("dlgLeisEd").close();
+  /* aberta a partir da leitura (o "📚 leis do edital" da fila), a biblioteca está POR CIMA da lei: fecha, e a leitura
+   * de baixo troca de lei. Aberta pela agenda, ela fica embaixo e volta (repintada) quando a leitura fecha. */
+  if ($("dlgLeiSeca") && $("dlgLeiSeca").open && $("dlgLeiBib") && $("dlgLeiBib").open && ledPorCimaDaLeitura) $("dlgLeiBib").close();
   const P = ledUltimo && ledUltimo.leis[id];
   const lig = T && T.ligada ? T : (P ? P.topicos.find((x) => x.ligada && (!prox || x.nums.indexOf(prox.num) >= 0)) || P.topicos.find((x) => x.ligada) : null);
   try { reg("LEI", "leis do edital: abrir", ((P && P.lei && P.lei.nome) || id) + (prox ? " · art. " + prox.numCru : "")); } catch (e) {}
@@ -916,40 +918,64 @@ function ledLer(id, prox, T) {
   return leiAbrir("", "", id);
 }
 
-/* ---------------- a tela ---------------- */
+/* ---------------- a tela: DENTRO DA BIBLIOTECA (19.204.0) ----------------
+ * "Integrar as leis do edital à biblioteca, sem janela à parte." Escolhida a pasta 📋 de um edital, a biblioteca (na
+ * vista "por disciplina") mostra as leis AGRUPADAS PELAS DISCIPLINAS do edital, da de maior peso para a de menor: cada
+ * grupo com o peso, os artigos cobrados já lidos e uma barra; a lei de duas disciplinas aparece nas duas ("também em").
+ * O que falta (leis fora da biblioteca, vínculos, artigos fora do texto, a IA) vira UMA faixa recolhida, com "ligar
+ * todas" à mão. Quem chamava a janela (o ⚖ da agenda, a fila da leitura, a porta do tópico, a análise) abre a
+ * biblioteca já nessa pasta, com o tópico em destaque e a disciplina dele aberta. Os grupos lembram, por edital, se
+ * estão abertos; as explicações moram no "ⓘ como funciona". A vista "lista" é a biblioteca de sempre. */
+const LED_FECHADAS_CH = "eac_lb_disc_fechadas";   /* {edId: {disciplina normalizada: 1}} — os grupos que a pessoa fechou */
+const LED_PEND_CH = "eac_lb_pend_aberta";          /* "1": a faixa do que falta fica aberta */
+let ledRolar = "";
+let ledNaBibPintando = false;
+let ledExtras = [];
+
+function ledDiscFechadas(edId) {
+  const o = ledLerMapa(LED_FECHADAS_CH)[String(edId)];
+  return o && typeof o === "object" ? o : {};
+}
+function ledDiscGuardar(edId, nome, aberta) {
+  const todos = ledLerMapa(LED_FECHADAS_CH);
+  const o = todos[String(edId)] && typeof todos[String(edId)] === "object" ? todos[String(edId)] : {};
+  const k = ledNormDisc(nome);
+  if (aberta) delete o[k]; else o[k] = 1;
+  if (Object.keys(o).length) todos[String(edId)] = o; else delete todos[String(edId)];
+  ledGravarMapa(LED_FECHADAS_CH, todos);
+  return !!aberta;
+}
+function ledPendAberta() { try { return localStorage.getItem(LED_PEND_CH) === "1"; } catch (e) { return false; } }
+function ledPendGuardar(sim) { try { if (sim) localStorage.setItem(LED_PEND_CH, "1"); else localStorage.removeItem(LED_PEND_CH); } catch (e) {} return !!sim; }
+
+/* o edital mostrado mudou: o destaque do tópico sai e "o que mudou" é refeito na próxima pintura */
+function ledContexto(edId, opc) {
+  const o = opc || {};
+  ledCtx = { edId: String(edId || ""), disciplina: o.disciplina || "", topico: o.topico || "", recem: true };
+  return ledCtx;
+}
+function ledLimparFoco() { ledCtx = Object.assign({}, ledCtx, { disciplina: "", topico: "", recem: true }); }
+
 function ledAbrir(edId, opc) {
   const o = opc || {};
   const id = edId || (typeof edAberto === "function" && edAberto() ? edAberto().id : "") || (typeof editalAtual !== "undefined" ? editalAtual : "");
-  if (!ledEdital(id)) return false;
-  ledCtx = { edId: id, disciplina: o.disciplina || "", topico: o.topico || "", recem: true };
+  if (!ledEdital(id) || typeof leiBibAbrirNoEdital !== "function" || !$("dlgLeiBib")) return false;
+  ledContexto(id, o);
   ledPorCimaDaLeitura = !!($("dlgLeiSeca") && $("dlgLeiSeca").open);
-  ledFiltro = "todas";
+  /* a disciplina pedida abre (mesmo que a pessoa a tenha fechado antes) e a tela rola até ela — ou até o tópico */
+  if (o.disciplina) ledDiscGuardar(id, o.disciplina, true);
+  ledRolar = o.topico ? "ledFoco" : (o.disciplina ? "disc:" + ledNormDisc(o.disciplina) : "");
   /* a janela abre antes da lista: a primeira montagem lê os artigos de cada lei (a CF, o CTM…) e pode levar um instante */
-  if ($("ledCorpo")) { $("ledCorpo").innerHTML = ""; $("ledCorpo").append(ledEl("p", "nota", t("led_carregando"))); }
-  const ed0 = ledEdital(id);
-  if ($("ledSub")) $("ledSub").textContent = (ed0 && ed0.nome) || "";
-  abrirModal("dlgLeisEd");
-  const montar = () => { try { ledPintar(); } catch (e) { try { reg("ERRO", "leis do edital: falha ao montar", (e && e.message) || ""); } catch (x) {} } };
+  leiBibAbrirNoEdital(id);
+  const montar = () => { try { leiBibPintar(); } catch (e) { try { reg("ERRO", "leis do edital: falha ao montar", (e && e.message) || ""); } catch (x) {} } };
   /* LOGO DEPOIS DE ABRIR O APP as leis ainda estão chegando do IndexedDB (idb-leis.js): montar agora dava "0 leis".
    * Espera a leitura terminar; sem IndexedDB (ou já lidas), monta no próximo instante. */
   const lendo = typeof _leisCache !== "undefined" && _leisCache === null && typeof leisIdbSuportado === "function" && leisIdbSuportado()
     && typeof leisIdbMigrar === "function";
   if (lendo) Promise.resolve(leisIdbMigrar()).then(montar, montar);
   else setTimeout(montar, 0);
-  try { ledCheiaTrocar(localStorage.getItem("eac_led_cheia") === "1", false); } catch (e) {}
-  try { reg("LEI", "leis do edital abertas", (ledUltimo ? ledUltimo.nome + " · " + ledUltimo.n + " leis" : id) + (o.topico ? " · tópico " + o.topico : "")); } catch (e) {}
+  try { reg("LEI", "leis do edital abertas na biblioteca", (ledUltimo ? ledUltimo.nome + " · " + ledUltimo.n + " leis" : id) + (o.topico ? " · tópico " + o.topico : (o.disciplina ? " · disciplina " + o.disciplina : ""))); } catch (e) {}
   return true;
-}
-
-function ledCheiaTrocar(sim, lembrar) {
-  const dlg = $("dlgLeisEd");
-  if (!dlg) return false;
-  const quer = sim === undefined ? !dlg.classList.contains("lb-cheia") : !!sim;
-  dlg.classList.toggle("lb-cheia", quer);
-  const b = $("btnLedCheia");
-  if (b) { b.textContent = t(quer ? "dom_cheia_sair" : "dom_cheia"); b.setAttribute("aria-pressed", String(quer)); }
-  if (lembrar) { try { localStorage.setItem("eac_led_cheia", quer ? "1" : "0"); } catch (e) {} }
-  return quer;
 }
 
 function ledEl(tag, cls, txt) {
@@ -957,6 +983,14 @@ function ledEl(tag, cls, txt) {
   if (cls) el.className = cls;
   if (txt != null) el.textContent = txt;
   return el;
+}
+
+/* "ⓘ como funciona": a explicação longa fica recolhida, a um toque */
+function ledInfo(...partes) {
+  const d = ledEl("details", "led-info");
+  d.append(ledEl("summary", "", t("led_info")));
+  partes.forEach((p) => { if (p) d.append(typeof p === "string" ? ledEl("p", "nota", p) : p); });
+  return d;
 }
 
 /* o anel do progresso: um círculo cheio até a porcentagem (CSS conic-gradient) */
@@ -970,6 +1004,15 @@ function ledAnel(pct, estado, titulo) {
   a.append(i);
   return a;
 }
+function ledBarra(pct, cls) {
+  const barra = ledEl("span", "led-barra" + (cls ? " " + cls : ""));
+  const fill = ledEl("span", "led-barra-fill");
+  fill.style.width = (pct || 0) + "%";
+  barra.append(fill);
+  barra.setAttribute("role", "img");
+  barra.setAttribute("aria-label", t("led_anel_aj", { p: pct || 0 }));
+  return barra;
+}
 
 function ledBotaoLer(id, leit, T, idBt) {
   const b = ledEl("button", "btn-min" + (leit.prox ? " btn-min-ok" : ""));
@@ -980,203 +1023,316 @@ function ledBotaoLer(id, leit, T, idBt) {
   return b;
 }
 
-function ledPintar() {
-  const M = ledModelo(ledCtx.edId);
+/* as leis da pasta do edital que o edital não cita nem liga (postas à mão, usadas num vínculo): um grupo no fim */
+function ledExtrasDaPasta(M) {
+  if (!M || typeof pasContem !== "function" || typeof leisLista !== "function") return [];
+  const pid = "ed:" + M.edId;
+  let idx = null;
+  try { idx = typeof pasIndice === "function" ? pasIndice() : null; } catch (e) { idx = null; }
+  return leisLista().filter((l) => !M.leis[l.id] && pasContem(pid, { t: "lei", id: l.id, topicos: l.topicos || [] }, idx));
+}
+
+/* a fileira da leitura da biblioteca (não começadas · em leitura · lidas) conta, nesta vista, as LEIS que aparecem em
+ * cada filtro: uma lei de duas disciplinas conta uma vez em cada estado em que esteja em alguma delas */
+function ledContarEstados(M) {
+  const por = {};
+  ((M && M.disciplinas) || []).forEach((D) => D.lista.forEach((x) => { (por[x.id] = por[x.id] || new Set()).add(ledEstado(x.leit)); }));
+  const c = { todas: 0, nao: 0, lendo: 0, ok: 0 };
+  Object.keys(por).forEach((id) => { c.todas++; por[id].forEach((s) => { c[s]++; }); });
+  (ledExtras || []).forEach((l) => { c.todas++; const s = typeof leiBibEstadoDe === "function" ? leiBibEstadoDe(l) : "nao"; c[s] = (c[s] || 0) + 1; });
+  return c;
+}
+
+/* a biblioteca pinta o edital por aqui; ledPintar (de fora) repinta a biblioteca inteira, que conta e filtra junto */
+function ledMontarNaBib(edId, opc) {
+  if (String(ledCtx.edId) !== String(edId)) ledContexto(edId);
+  ledNaBibPintando = true;
+  try { return ledMontar(opc); } finally { ledNaBibPintando = false; }
+}
+function ledPintar(opc) {
+  const dlg = $("dlgLeiBib");
+  if (!ledNaBibPintando && dlg && dlg.open && typeof leiBibVendoEdital === "function" && leiBibVendoEdital() && typeof leiBibPintar === "function") {
+    leiBibPintar(opc);
+    return ledUltimo;
+  }
+  return ledMontar(opc);
+}
+
+/* NESTE TÓPICO: o que o ⚖ da agenda pediu */
+function ledFocoEl(M) {
+  const fc = ledEl("section", "led-foco");
+  fc.id = "ledFoco";
+  const cab = ledEl("div", "led-foco-cab");
+  cab.append(ledEl("div", "led-foco-tit", t("led_foco_tit")));
+  const bx = ledEl("button", "btn-quieto btn-p", "✕");
+  bx.type = "button"; bx.id = "btnLedFocoX";
+  bx.title = t("led_foco_x");
+  bx.setAttribute("aria-label", t("led_foco_x"));
+  bx.onclick = () => { ledCtx = Object.assign({}, ledCtx, { disciplina: "", topico: "" }); ledPintar({ reusar: true }); };
+  cab.append(bx);
+  fc.append(cab);
+  fc.append(ledEl("div", "led-foco-sub", t("led_foco_sub", { t: ledCtx.topico, d: ledCtx.disciplina })));
+  const doT = ledDoTopico(M, ledCtx.disciplina, ledCtx.topico);
+  /* (19.182.0) sem lei achada pelo edital, a que o tópico cita pelo número (a CF com todas as letras) ainda pode estar
+   * na biblioteca sem vínculo: ela aparece aqui, com "ligar e ler" */
+  let sugF = [];
+  if (!doT.length && typeof lvSugestoesDoTopico === "function") { try { sugF = lvSugestoesDoTopico(ledCtx.disciplina, ledCtx.topico); } catch (e) { sugF = []; } }
+  sugF.forEach((o, i) => {
+    const lin = ledEl("div", "led-foco-lin led-foco-sem");
+    lin.id = "ledFocoSug_" + i;
+    const tx = ledEl("div", "led-lei-txt");
+    tx.append(ledEl("div", "led-lei-nome", o.lei.nome));
+    tx.append(ledEl("div", "led-lei-meta", t("lv_foco_sem_vinculo", { r: o.rotulo })));
+    lin.append(tx);
+    const ac = ledEl("div", "led-lei-acoes");
+    const bl = ledEl("button", "btn-min btn-min-ok", t("lv_foco_ligar"));
+    bl.type = "button"; bl.id = "btnLedFocoLigarSug_" + i;
+    bl.onclick = () => lvLigarEAbrir(ledCtx.disciplina, ledCtx.topico, o.lei.id, "leis do edital");
+    ac.append(bl);
+    lin.append(ac);
+    fc.append(lin);
+  });
+  if (!doT.length) {
+    if (!sugF.length) fc.append(ledEl("p", "nota", t("led_foco_vazio")));
+    /* a lei seca do tópico: "usar uma lei já guardada" ou "colar uma lei nova" */
+    const b = ledEl("button", "btn-min" + (sugF.length ? "" : " btn-min-ok"), t(sugF.length ? "lv_foco_outra" : "led_foco_abrir"));
+    b.type = "button"; b.id = "btnLedFocoAbrir";
+    b.title = t("lv_foco_abrir_tip");
+    b.onclick = () => leiAbrir(ledCtx.disciplina, ledCtx.topico);
+    fc.append(b);
+  }
+  doT.forEach((x) => {
+    const lin = ledEl("div", "led-foco-lin");
+    lin.id = "ledFoco_" + x.id;
+    const est = ledEstado(x.leit);
+    lin.append(ledAnel(x.leit.pct, est, t("led_anel_aj", { p: x.leit.pct })));
+    const tx = ledEl("div", "led-lei-txt");
+    tx.append(ledEl("div", "led-lei-nome", x.P.lei.nome));
+    tx.append(ledEl("div", "led-lei-meta", x.nums.length
+      ? t("led_foco_nums", { f: ledFaixas(x.nums, x.P.leit, 12), l: x.leit.lidos, t: x.leit.total })
+      : t(x.T.ligada ? "led_foco_sem_art" : "lv_foco_sem_art_cit")));
+    /* (19.189.0) os ★ importantes desta lei para este edital */
+    try {
+      const nImp = typeof liLista === "function" ? liLista(x.id, M.edId).length : 0;
+      if (nImp) tx.append(ledEl("div", "led-lei-meta li-led", t("li_led_n", { n: nImp })));
+    } catch (e) {}
+    lin.append(tx);
+    const acF = ledEl("div", "led-lei-acoes");
+    /* (19.182.0) achada pelo edital, mas SEM vínculo com o tópico: ler solta não conta para ele — ligar e ler primeiro */
+    if (!x.T.ligada && typeof lvLigarEAbrir === "function") {
+      lin.className += " led-foco-sem";
+      tx.append(ledEl("div", "led-lei-meta led-sem-vinculo", t("lv_foco_nao_ligada")));
+      const bl = ledEl("button", "btn-min btn-min-ok", t("lv_foco_ligar"));
+      bl.type = "button"; bl.id = "btnLedFocoLigar_" + x.id;
+      bl.onclick = () => lvLigarEAbrir(ledCtx.disciplina, ledCtx.topico, x.id, "leis do edital");
+      acF.append(bl);
+    } else acF.append(ledBotaoLer(x.id, x.leit, x.T, "btnLedFocoLer_" + x.id));
+    lin.append(acF);
+    fc.append(lin);
+  });
+  return fc;
+}
+
+/* O QUE FALTA, numa faixa: "⚠ 2 faltam na biblioteca · 6 vínculo(s) faltando" + "🔗 ligar todas"; tocar abre o detalhe
+ * (as citadas no edital, as lacunas, as que já estão dentro de outra lei, os artigos fora do texto, o material e a IA) */
+function ledPendEl(M) {
+  const V = ledVinculosFaltando(M);
+  const nLac = (M.lacunas || []).filter((G) => !G.dispensada).length;
+  const nArt = (M.artsFalta || []).reduce((a, x) => a + x.nums.length, 0);
+  const nNov = ledDif && ledDif.edId === M.edId && !ledDif.igual ? (ledDif.entraram || []).length : 0;
+  const partes = [];
+  if (nLac) partes.push(t("led_resumo_lac", { n: nLac }));
+  if (V.pend.length) partes.push(t("led_pend_vinc", { n: V.pend.length }));
+  if (nArt) partes.push(t("led_pend_art", { n: nArt }));
+  const aviso = partes.length > 0;
+  if (nNov) partes.push(t("led_pend_novas", { n: nNov }));
+  const box = ledEl("section", "led-pend" + (aviso ? "" : " led-pend-ok"));
+  box.id = "ledPend";
+  const lin = ledEl("div", "led-pend-lin");
+  const aberta = ledPendAberta();
+  const alt = ledEl("button", "led-pend-alt", (aviso ? "⚠ " : "✓ ") + (partes.length ? partes.join(" · ") : t("led_pend_nada")));
+  alt.type = "button"; alt.id = "btnLedPend";
+  alt.title = t("led_pend_aj");
+  alt.setAttribute("aria-expanded", String(aberta));
+  alt.setAttribute("aria-controls", "ledPendCorpo");
+  lin.append(alt);
+  if (V.pend.length && typeof lvLigarVarios === "function") {
+    const bt = ledEl("button", "btn-min btn-min-ok", t("led_pend_ligar", { n: V.pend.length }));
+    bt.type = "button"; bt.id = "btnLedCitLigarTodas";
+    bt.title = t("lv_cit_ligar_todas_tip");
+    bt.onclick = () => { lvLigarVarios(V.pend, "leis do edital: ligar todas"); ledPintar(); };
+    lin.append(bt);
+  }
+  box.append(lin);
+  const cp = ledEl("div", "led-pend-corpo");
+  cp.id = "ledPendCorpo";
+  cp.hidden = !aberta;
+  alt.onclick = () => { const abrir = !!cp.hidden; cp.hidden = !abrir; alt.setAttribute("aria-expanded", String(abrir)); ledPendGuardar(abrir); };
+  const difEl = ledDif && ledDif.edId === M.edId ? ledDifEl(ledDif) : null;
+  if (difEl) cp.append(difEl);
+  const citEl = ledCitadasEl(M, V);
+  if (citEl) cp.append(citEl);
+  ledPintarLacunas(M, cp);
+  box.append(cp);
+  return box;
+}
+
+/* UMA DISCIPLINA: o cabeçalho (nome, peso, leis, artigos cobrados lidos e a barra) e as leis dela, dobrável */
+function ledDiscEl(M, D, k, itens, aberta) {
+  const sec = ledEl("details", "led-disc");
+  sec.id = "ledDisc_" + k;
+  sec.open = aberta;
+  if (sec.addEventListener) sec.addEventListener("toggle", () => ledDiscGuardar(M.edId, D.nome, sec.open));
+  const sm = ledEl("summary", "led-disc-cab");
+  sm.append(ledEl("span", "led-disc-nome", D.nome));
+  sm.append(ledEl("span", "led-disc-meta", t("led_disc_meta", { p: D.peso, n: D.lista.length })));
+  if (D.total) {
+    const pg = ledEl("span", "led-disc-prog");
+    pg.append(ledEl("span", "", t("led_disc_arts", { l: D.lidos, t: D.total })));
+    pg.append(ledBarra(D.pct, "led-barra-p"));
+    sm.append(pg);
+  }
+  sec.append(sm);
+  itens.forEach((x) => sec.append(ledLeiEl(M, D, k, x)));
+  return sec;
+}
+
+/* UMA LEI dentro da disciplina: o que ESTA disciplina cobra dela, os tópicos e temas, e as ações da biblioteca */
+function ledLeiEl(M, D, k, x) {
+  const P = M.leis[x.id];
+  const L2 = x.leit;
+  const est = ledEstado(L2);
+  const card = ledEl("div", "led-lei led-lei-" + est);
+  card.id = "ledLei_" + k + "_" + x.id;
+  card.append(ledAnel(L2.pct, est, t("led_anel_aj", { p: L2.pct })));
+  const tx = ledEl("div", "led-lei-txt");
+  const nm = ledEl("div", "led-lei-nome", P.lei.nome);
+  if (!P.topicos.some((T) => T.ligada)) nm.append(ledEl("span", "led-tag", t("led_nao_ligada")));
+  tx.append(nm);
+  const meta = [L2.modo === "cobrados" ? t("led_cob", { t: L2.total, l: L2.lidos }) : t("led_cob_lei", { t: L2.total, l: L2.lidos })];
+  const outras = P.disciplinas.filter((n) => n !== D.nome);
+  if (outras.length) meta.push(t("led_tambem", { d: outras.join(", ") }));
+  tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
+  if (M.iaPrioridade && M.iaPrioridade[x.id]) tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_prio", { m: M.iaPrioridade[x.id] })));
+  if (M.iaNaoCai && M.iaNaoCai[x.id]) tx.append(ledEl("div", "led-lei-meta led-aviso", t("led_ia_nao_cai", { m: M.iaNaoCai[x.id] })));
+  if (L2.modo === "cobrados" && L2.cobrados.length) tx.append(ledEl("div", "led-lei-arts", t("led_arts", { f: ledFaixas(L2.cobrados, P.leit, 14) })));
+  const det = ledEl("details", "led-lei-tops");
+  det.append(ledEl("summary", "", x.topicos.length ? t("led_topicos_n", { n: x.topicos.length }) + ((x.ds || []).length ? " · " + t("led_em_ds", { n: x.ds.length }) : "") : t("led_ds_ver", { n: (x.ds || []).length })));
+  x.topicos.slice().sort((a, b) => b.peso - a.peso).forEach((T) => {
+    const li = ledEl("div", "led-top");
+    li.append(ledEl("span", "led-top-peso", String(T.peso)));
+    li.append(ledEl("span", "led-top-nome", T.nome + (T.nums.length ? " · " + t("led_arts", { f: ledFaixas(T.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
+    det.append(li);
+  });
+  /* (19.159.0) os temas de discursiva que citam a lei, com os artigos; tocar abre o tema */
+  (x.ds || []).forEach((S) => {
+    const li = ledEl("div", "led-top led-top-ds");
+    li.append(ledEl("span", "led-top-peso", "✍"));
+    li.append(ledEl("span", "led-top-nome", S.tema + (S.nums.length ? " · " + t("led_arts", { f: ledFaixas(S.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
+    const b = ledEl("button", "btn-min", t("led_ds_abrir"));
+    b.type = "button"; b.id = "btnLedDs_" + k + "_" + x.id + "_" + ledIdSeguro(S.id);
+    b.onclick = () => {
+      if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
+      if (typeof dsIrPara === "function") dsIrPara(M.edId, { secao: "propostas", pid: S.id });
+    };
+    li.append(b);
+    det.append(li);
+  });
+  tx.append(det);
+  card.append(tx);
+  const ac = ledEl("div", "led-lei-acoes");
+  ac.append(ledBotaoLer(x.id, L2, x.topicos.find((T) => T.ligada) || null, "btnLedLer_" + k + "_" + x.id));
+  /* o 📁 e o "⋯" (mapa, ligar a um tópico, apagar): os mesmos da lista */
+  if (typeof leiBibAcoesDaLei === "function") leiBibAcoesDaLei(P.lei, "_" + k).forEach((el) => ac.append(el));
+  card.append(ac);
+  return card;
+}
+
+/* a pintura: o resumo, o destaque do tópico, a faixa do que falta e as disciplinas (com o filtro de leitura e a busca
+ * da biblioteca) */
+function ledMontar(opc) {
+  const o = opc || {};
+  const M = o.reusar && ledUltimo && String(ledUltimo.edId) === String(ledCtx.edId) ? ledUltimo : ledModelo(ledCtx.edId);
   ledUltimo = M;
-  if (!M || !$("ledCorpo")) return M;
-  $("ledSub").textContent = M.nome;
   const corpo = $("ledCorpo");
+  if (!M || !corpo) return M;
+  const rolagem = corpo.scrollTop || 0;
   corpo.innerHTML = "";
+  const estado = typeof leiBibEstado !== "undefined" ? leiBibEstado : "todas";
+  const q = typeof leiBibTexto !== "undefined" && typeof leiTxtChave === "function" ? leiTxtChave(leiBibTexto) : "";
+  const casa = (l) => !q || typeof leiBibCasaBusca !== "function" || leiBibCasaBusca(l, q);
 
   /* o resumo do edital: quanto do que ele cobra já foi lido */
   const rs = ledEl("div", "led-resumo");
   rs.id = "ledResumo";
-  const nLac = (M.lacunas || []).filter((G) => !G.dispensada).length;
-  rs.append(ledEl("span", "led-resumo-txt", t("led_resumo", { n: M.n, l: M.lidos, t: M.total, p: M.pct }) + (nLac ? " · " + t("led_resumo_lac", { n: nLac }) : "")));
-  const barra = ledEl("span", "led-barra");
-  const fill = ledEl("span", "led-barra-fill");
-  fill.style.width = M.pct + "%";
-  barra.append(fill);
-  rs.append(barra);
+  rs.append(ledEl("span", "led-resumo-txt", t("led_resumo", { n: M.n, l: M.lidos, t: M.total, p: M.pct })));
+  rs.append(ledBarra(M.pct));
+  rs.append(ledInfo(t("led_como")));
   corpo.append(rs);
-  /* (19.164.0) O QUE MUDOU desde a última vez que a tela foi aberta (calculado só ao abrir, não a cada repintura) */
+  /* (19.164.0) O QUE MUDOU desde a última vez (calculado só ao abrir, não a cada repintura) */
   if (ledCtx.recem) { ledCtx.recem = false; try { ledDif = ledDiferenca(M); if (ledDif) ledDif.edId = M.edId; } catch (e) { ledDif = null; } }
-  const difEl = ledDif && ledDif.edId === M.edId ? ledDifEl(ledDif) : null;
-  if (difEl) corpo.append(difEl);
-  /* (19.164.0) a conferência: todas as leis que o edital cita, com a situação de cada uma */
-  const citEl = ledCitadasEl(M);
-  if (citEl) corpo.append(citEl);
+  if (ledCtx.topico) corpo.append(ledFocoEl(M));
+  corpo.append(ledPendEl(M));
 
-  /* NESTE TÓPICO: o que o ⚖ da agenda pediu */
-  if (ledCtx.topico) {
-    const fc = ledEl("section", "led-foco");
-    fc.id = "ledFoco";
-    fc.append(ledEl("div", "led-foco-tit", t("led_foco_tit")));
-    fc.append(ledEl("div", "led-foco-sub", t("led_foco_sub", { t: ledCtx.topico, d: ledCtx.disciplina })));
-    const doT = ledDoTopico(M, ledCtx.disciplina, ledCtx.topico);
-    /* (19.182.0) sem lei achada pelo edital, a que o tópico cita pelo número (a CF com todas as letras) ainda pode estar
-     * na biblioteca sem vínculo: ela aparece aqui, com "ligar e ler" */
-    let sugF = [];
-    if (!doT.length && typeof lvSugestoesDoTopico === "function") { try { sugF = lvSugestoesDoTopico(ledCtx.disciplina, ledCtx.topico); } catch (e) { sugF = []; } }
-    sugF.forEach((o, i) => {
-      const lin = ledEl("div", "led-foco-lin led-foco-sem");
-      lin.id = "ledFocoSug_" + i;
-      const tx = ledEl("div", "led-lei-txt");
-      tx.append(ledEl("div", "led-lei-nome", o.lei.nome));
-      tx.append(ledEl("div", "led-lei-meta", t("lv_foco_sem_vinculo", { r: o.rotulo })));
-      lin.append(tx);
-      const ac = ledEl("div", "led-lei-acoes");
-      const bl = ledEl("button", "btn-min btn-min-ok", t("lv_foco_ligar"));
-      bl.type = "button"; bl.id = "btnLedFocoLigarSug_" + i;
-      bl.onclick = () => lvLigarEAbrir(ledCtx.disciplina, ledCtx.topico, o.lei.id, "leis do edital");
-      ac.append(bl);
-      lin.append(ac);
-      fc.append(lin);
-    });
-    if (!doT.length) {
-      if (!sugF.length) fc.append(ledEl("p", "nota", t("led_foco_vazio")));
-      /* a lei seca do tópico: "usar uma lei já guardada" ou "colar uma lei nova" */
-      const b = ledEl("button", "btn-min" + (sugF.length ? "" : " btn-min-ok"), t(sugF.length ? "lv_foco_outra" : "led_foco_abrir"));
-      b.type = "button"; b.id = "btnLedFocoAbrir";
-      b.title = t("lv_foco_abrir_tip");
-      b.onclick = () => leiAbrir(ledCtx.disciplina, ledCtx.topico);
-      fc.append(b);
-    }
-    doT.forEach((x) => {
-      const lin = ledEl("div", "led-foco-lin");
-      lin.id = "ledFoco_" + x.id;
-      const est = ledEstado(x.leit);
-      lin.append(ledAnel(x.leit.pct, est, t("led_anel_aj", { p: x.leit.pct })));
-      const tx = ledEl("div", "led-lei-txt");
-      tx.append(ledEl("div", "led-lei-nome", x.P.lei.nome));
-      tx.append(ledEl("div", "led-lei-meta", x.nums.length
-        ? t("led_foco_nums", { f: ledFaixas(x.nums, x.P.leit, 12), l: x.leit.lidos, t: x.leit.total })
-        : t(x.T.ligada ? "led_foco_sem_art" : "lv_foco_sem_art_cit")));
-      /* (19.189.0) os ★ importantes desta lei para este edital */
-      try {
-        const nImp = typeof liLista === "function" ? liLista(x.id, M.edId).length : 0;
-        if (nImp) tx.append(ledEl("div", "led-lei-meta li-led", t("li_led_n", { n: nImp })));
-      } catch (e) {}
-      lin.append(tx);
-      const acF = ledEl("div", "led-lei-acoes");
-      /* (19.182.0) achada pelo edital, mas SEM vínculo com o tópico: ler solta não conta para ele — ligar e ler primeiro */
-      if (!x.T.ligada && typeof lvLigarEAbrir === "function") {
-        lin.className += " led-foco-sem";
-        tx.append(ledEl("div", "led-lei-meta led-sem-vinculo", t("lv_foco_nao_ligada")));
-        const bl = ledEl("button", "btn-min btn-min-ok", t("lv_foco_ligar"));
-        bl.type = "button"; bl.id = "btnLedFocoLigar_" + x.id;
-        bl.onclick = () => lvLigarEAbrir(ledCtx.disciplina, ledCtx.topico, x.id, "leis do edital");
-        acF.append(bl);
-      } else acF.append(ledBotaoLer(x.id, x.leit, x.T, "btnLedFocoLer_" + x.id));
-      lin.append(acF);
-      fc.append(lin);
-    });
-    corpo.append(fc);
-  }
-
-  /* (etapa 2) o que falta na biblioteca, as citadas sem ligação e a IA */
-  ledPintarLacunas(M, corpo);
-
-  /* os filtros: todas · falta ler · concluídas */
-  /* os filtros contam LEIS (uma lei em duas disciplinas conta uma vez); "falta ler" vale se falta em alguma delas */
-  const ids = Object.keys(M.leis);
-  const falta = new Set();
-  M.disciplinas.forEach((D) => D.lista.forEach((x) => { if (ledEstado(x.leit) !== "ok") falta.add(x.id); }));
-  const nFalta = falta.size;
-  const nOk = ids.length - nFalta;
-  const fi = ledEl("div", "pas-fileira led-filtros");
-  fi.setAttribute("role", "group");
-  [["todas", t("led_f_todas", { n: ids.length })], ["falta", t("led_f_falta", { n: nFalta })], ["ok", t("led_f_ok", { n: nOk })]].forEach(([k, rot]) => {
-    const b = ledEl("button", "btn-min pas-chip" + (ledFiltro === k ? " mat-ligado" : ""), rot);
-    b.type = "button"; b.id = "btnLedF_" + k;
-    b.setAttribute("aria-pressed", String(ledFiltro === k));
-    b.onclick = () => { ledFiltro = k; ledPintar(); };
-    fi.append(b);
-  });
-  corpo.append(fi);
-
-  if (!M.disciplinas.length) corpo.append(ledEl("p", "nota", t("led_vazio")));
+  const fechadas = ledDiscFechadas(M.edId);
   let mostrou = 0;
+  let alvo = ledRolar === "ledFoco" && ledCtx.topico ? "ledFoco" : "";
   M.disciplinas.forEach((D, k) => {
-    const itens = D.lista.filter((x) => {
-      const e = ledEstado(x.leit);
-      return ledFiltro === "todas" || (ledFiltro === "ok" ? e === "ok" : e !== "ok");
-    });
+    const itens = D.lista.filter((x) => (estado === "todas" || ledEstado(x.leit) === estado) && casa(M.leis[x.id].lei));
     if (!itens.length) return;
     mostrou++;
-    const sec = ledEl("details", "led-disc");
-    sec.id = "ledDisc_" + k;
-    sec.open = true;
-    const sm = ledEl("summary", "led-disc-cab");
-    sm.append(ledEl("span", "led-disc-nome", D.nome));
-    sm.append(ledEl("span", "led-disc-meta", t("led_disc_meta", { p: D.peso, n: D.lista.length, pc: D.pct })));
-    sec.append(sm);
-    itens.forEach((x) => {
-      const P = M.leis[x.id];
-      const L2 = x.leit;
-      const est = ledEstado(L2);
-      const card = ledEl("div", "led-lei led-lei-" + est);
-      card.id = "ledLei_" + k + "_" + x.id;
-      card.append(ledAnel(L2.pct, est, t("led_anel_aj", { p: L2.pct })));
-      const tx = ledEl("div", "led-lei-txt");
-      const nm = ledEl("div", "led-lei-nome", P.lei.nome);
-      if (!P.topicos.some((T) => T.ligada)) nm.append(ledEl("span", "led-tag", t("led_nao_ligada")));
-      tx.append(nm);
-      const meta = [L2.modo === "cobrados" ? t("led_cob", { t: L2.total, l: L2.lidos }) : t("led_cob_lei", { t: L2.total, l: L2.lidos })];
-      if (x.topicos.length) meta.push(t("led_em_topicos", { n: x.topicos.length }));
-      if ((x.ds || []).length) meta.push(t("led_em_ds", { n: x.ds.length }));
-      const outras = P.disciplinas.filter((n) => n !== D.nome);
-      if (outras.length) meta.push(t("led_tambem", { d: outras.join(", ") }));
-      tx.append(ledEl("div", "led-lei-meta", meta.join(" · ")));
-      if (M.iaPrioridade && M.iaPrioridade[x.id]) tx.append(ledEl("div", "led-lei-meta led-ia-nota", t("led_ia_prio", { m: M.iaPrioridade[x.id] })));
-      if (M.iaNaoCai && M.iaNaoCai[x.id]) tx.append(ledEl("div", "led-lei-meta led-aviso", t("led_ia_nao_cai", { m: M.iaNaoCai[x.id] })));
-      if (L2.modo === "cobrados" && L2.cobrados.length) tx.append(ledEl("div", "led-lei-arts", t("led_arts", { f: ledFaixas(L2.cobrados, P.leit, 14) })));
-      const det = ledEl("details", "led-lei-tops");
-      det.append(ledEl("summary", "", x.topicos.length ? t("led_topicos_n", { n: x.topicos.length }) + ((x.ds || []).length ? " · " + t("led_em_ds", { n: x.ds.length }) : "") : t("led_ds_ver", { n: (x.ds || []).length })));
-      x.topicos.slice().sort((a, b) => b.peso - a.peso).forEach((T) => {
-        const li = ledEl("div", "led-top");
-        li.append(ledEl("span", "led-top-peso", String(T.peso)));
-        li.append(ledEl("span", "led-top-nome", T.nome + (T.nums.length ? " · " + t("led_arts", { f: ledFaixas(T.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
-        det.append(li);
-      });
-      /* (19.159.0) os temas de discursiva que citam a lei, com os artigos; tocar abre o tema */
-      (x.ds || []).forEach((S) => {
-        const li = ledEl("div", "led-top led-top-ds");
-        li.append(ledEl("span", "led-top-peso", "✍"));
-        li.append(ledEl("span", "led-top-nome", S.tema + (S.nums.length ? " · " + t("led_arts", { f: ledFaixas(S.nums.filter((n) => P.leit.pos && P.leit.pos[n] !== undefined).sort((a, b) => P.leit.pos[a] - P.leit.pos[b]), P.leit, 6) }) : "")));
-        const b = ledEl("button", "btn-min", t("led_ds_abrir"));
-        b.type = "button"; b.id = "btnLedDs_" + k + "_" + x.id + "_" + ledIdSeguro(S.id);
-        b.onclick = () => {
-          if ($("dlgLeisEd") && $("dlgLeisEd").open) $("dlgLeisEd").close();
-          if (typeof dsIrPara === "function") dsIrPara(M.edId, { secao: "propostas", pid: S.id });
-        };
-        li.append(b);
-        det.append(li);
-      });
-      tx.append(det);
-      card.append(tx);
-      const ac = ledEl("div", "led-lei-acoes");
-      ac.append(ledBotaoLer(x.id, L2, x.topicos.find((T) => T.ligada) || null, "btnLedLer_" + k + "_" + x.id));
-      card.append(ac);
-      sec.append(card);
-    });
-    corpo.append(sec);
+    const nd = ledNormDisc(D.nome);
+    corpo.append(ledDiscEl(M, D, k, itens, !fechadas[nd]));
+    if (ledRolar === "disc:" + nd) alvo = "ledDisc_" + k;
   });
-  if (M.disciplinas.length && !mostrou) corpo.append(ledEl("p", "nota", t("led_vazio_filtro")));
+  /* as leis da pasta que o edital não cita: no fim, com o cartão da lista */
+  ledExtras = ledExtrasDaPasta(M);
+  const ex = ledExtras.filter((l) => (estado === "todas" || (typeof leiBibEstadoDe === "function" ? leiBibEstadoDe(l) : "nao") === estado) && casa(l));
+  if (ex.length && typeof leiBibCartao === "function" && typeof leiUsosDaLei === "function") {
+    mostrou++;
+    const sec = ledEl("details", "led-disc led-disc-outras");
+    sec.id = "ledDiscOutras";
+    sec.open = !fechadas["#outras"];
+    if (sec.addEventListener) sec.addEventListener("toggle", () => ledDiscGuardar(M.edId, "#outras", sec.open));
+    const sm = ledEl("summary", "led-disc-cab");
+    sm.append(ledEl("span", "led-disc-nome", t("led_outras_pasta")));
+    sm.append(ledEl("span", "led-disc-meta", t("led_outras_pasta_n", { n: ex.length })));
+    sec.append(sm);
+    let idx = null;
+    try { idx = typeof matIndiceConcursos === "function" ? matIndiceConcursos() : null; } catch (e) { idx = null; }
+    ex.forEach((l) => sec.append(leiBibCartao({ l, usos: leiUsosDaLei(l, idx) })));
+    corpo.append(sec);
+  }
+  if (!M.disciplinas.length && !ledExtras.length) corpo.append(ledEl("p", "nota", t("led_vazio")));
+  else if (!mostrou) corpo.append(ledEl("p", "nota", t("led_vazio_filtro")));
+  ledRolar = "";
+  if (alvo) ledRolarPara(alvo);
+  else if (rolagem) corpo.scrollTop = rolagem;
   return M;
 }
 
+/* rolar até o tópico ou a disciplina pedida, com o foco do teclado nela */
+function ledRolarPara(id) {
+  const el = $(id);
+  if (!el) return false;
+  try { if (el.scrollIntoView) el.scrollIntoView({ block: "start" }); } catch (e) {}
+  try {
+    /* no destaque, a primeira ação (ler, ligar, abrir a lei seca) — não o "✕" */
+    const f = el.querySelector ? el.querySelector(id === "ledFoco" ? ".led-lei-acoes button, #btnLedFocoAbrir" : "summary") : null;
+    if (f && f.focus) f.focus({ preventScroll: true });
+  } catch (e) {}
+  return true;
+}
+
 function ledIniciar() {
-  if (typeof document === "undefined" || !$("dlgLeisEd")) return;
-  if ($("btnLedX")) $("btnLedX").onclick = () => $("dlgLeisEd").close();
-  if ($("btnLedCheia")) $("btnLedCheia").onclick = () => ledCheiaTrocar(undefined, true);
+  if (typeof document === "undefined") return;
   if ($("btnEdLeis")) $("btnEdLeis").onclick = () => ledAbrir();
-  /* (etapa 2) a lei nova pode ter saído do assistente sem passar pela "volta" (fechou no meio): repinta ao voltar */
-  const dn = $("dlgLeiNova");
-  if (dn && dn.addEventListener) dn.addEventListener("close", () => { if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar(); });
-  /* voltar da leitura repinta: o marcador e os vistos mudaram */
-  const dl = $("dlgLeiSeca");
-  if (dl && dl.addEventListener) dl.addEventListener("close", () => { if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar(); });
+  /* voltar da leitura ou do assistente de lei nova repinta a biblioteca: o marcador, os vistos e as leis mudaram */
+  const repintar = () => { if ($("dlgLeiBib") && $("dlgLeiBib").open && typeof leiBibPintar === "function") leiBibPintar(); };
+  ["dlgLeiNova", "dlgLeiSeca"].forEach((id) => {
+    const d = $(id);
+    if (d && d.addEventListener && !d._ledOuvinte) { d._ledOuvinte = true; d.addEventListener("close", repintar); }
+  });
 }
 
 /* =====================================================================
@@ -1383,7 +1539,8 @@ async function ledIaGemini() {
 function ledIncluir(G) {
   if (typeof leiNovaAbrir !== "function") return false;
   try { reg("LEI", "leis do edital: incluir lacuna", G.rotulo); } catch (e) {}
-  return leiNovaAbrir({ volta: (id) => ledIncluida(G, id) });
+  /* a biblioteca fica embaixo do assistente e é repintada quando ele fecha */
+  return leiNovaAbrir({ volta: (id) => ledIncluida(G, id), manterBib: true });
 }
 
 /* a lei nova ficou pronta: se ela É a que faltava, liga aos tópicos que a citam; senão, só avisa */
@@ -1400,7 +1557,7 @@ function ledIncluida(G, id) {
   } else if (l) {
     try { toastMsg(t("led_inc_outra", { l: l.nome, r: G.rotulo }), 7000); } catch (e) {}
   }
-  if ($("dlgLeisEd") && $("dlgLeisEd").open) ledPintar();
+  if ($("dlgLeiBib") && $("dlgLeiBib").open) ledPintar();
   return n;
 }
 
@@ -1424,8 +1581,7 @@ function ledPintarLacunas(M, corpo) {
     const sec = ledEl("section", "led-lac");
     sec.id = "ledLac";
     sec.append(ledEl("div", "led-lac-tit", t("led_lac_tit", { n: ativas.length })));
-    sec.append(ledEl("p", "nota", t("led_lac_expl")));
-    sec.append(ledEl("p", "nota led-lac-crit", t("led_lac_criterio")));
+    sec.append(ledInfo(t("led_lac_expl"), ledEl("p", "nota led-lac-crit", t("led_lac_criterio"))));
     const linha = (G, dispensada) => {
       const k = ledIdSeguro(G.chave);
       const lin = ledEl("div", "led-lac-lin" + (dispensada ? " led-lac-disp" : ""));
@@ -1494,7 +1650,7 @@ function ledPintarLacunas(M, corpo) {
     const det = ledEl("details", "led-lig");
     det.id = "ledLig";
     det.append(ledEl("summary", "led-lig-tit", t("led_lig_tit", { n: M.semLigacao.length })));
-    det.append(ledEl("p", "nota", t("led_lig_expl")));
+    det.append(ledInfo(t("led_lig_expl")));
     M.semLigacao.forEach((x) => {
       const lin = ledEl("div", "led-lac-lin");
       lin.id = "ledLig_" + x.id;
@@ -1519,7 +1675,7 @@ function ledPintarLacunas(M, corpo) {
   ia.open = ledIaAberta;
   if (ia.addEventListener) ia.addEventListener("toggle", () => { ledIaAberta = ia.open; });
   ia.append(ledEl("summary", "led-ia-tit", t("led_ia_tit")));
-  ia.append(ledEl("p", "nota", t("led_ia_expl")));
+  ia.append(ledInfo(t("led_ia_expl")));
   if (M.iaEm) {
     const ult = ledEl("p", "nota led-ia-ult", t("led_ia_ultima", { d: new Date(M.iaEm).toLocaleDateString() }) + " ");
     const bl = ledEl("button", "btn-link", t("led_ia_limpar"));

@@ -216,7 +216,8 @@ function pasFileira(o) {
   const encerradas = [];
   todas.forEach((p) => {
     const k = conta(p.id);
-    if (p.edital && !k) return;
+    /* (19.204.0) a escolhida aparece mesmo vazia (as Leis do edital abrem nela pelo ⚖ de um tópico ainda sem lei) */
+    if (p.edital && !k && o.sel !== p.id) return;
     if (p.edital && p.encerrado) { encerradas.push([p, k]); return; }
     chip(p, k);
   });
