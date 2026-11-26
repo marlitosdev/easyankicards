@@ -202,6 +202,11 @@ async function testes() {
     api.bkPintarPainel();
     ok(api.$("bkaRegistro") && api.$("btnBkaRelatorio") && /Registro das tentativas \(\d+\)/.test(api.$("bkaRegistro").textContent), "V9e o painel tem o registro das tentativas e 'copiar relatório'");
     ok(api.$("btnBkaEscolherDeNovo") && /mesma pasta de novo/i.test(api.$("bkaCorpo").textContent), "V9e2 sem resposta: o painel oferece escolher a mesma pasta de novo");
+    /* (19.208.0) a pasta muda em destaque: o cartão, o selo e a frase do topo dizem o que fazer */
+    ok(api.bkaPastaMuda() && /perdeu a ligação com a pasta/.test(api.$("bkaMuda").textContent) && api.$("btnBkaMudaBaixar")
+      && /perdeu a pasta/.test(api.bkaAvisoDoSelo().txt) && api.bkaAvisoDoSelo().cls === "sb-alerta" && api.bkaBolhaEstado().rot === "Escolher a pasta"
+      && /perdeu a ligação/.test(api.bkSituacao().txt) && api.bkSituacao().fn === api.bkaEscolherDeNovo,
+      "V9e3 a pasta muda: cartão com 'escolher de novo' e 'baixar uma cópia', selo em alarme, balão 'Escolher a pasta' e a frase do topo");
     /* (19.207.0) o caso real: a CONSULTA trava, mas o pedido com toque responde — "Salvar agora" grava */
     P.requestPermission = pedirAntes;
     api.bkaPrazoDefinir(() => null, () => {});
@@ -209,7 +214,8 @@ async function testes() {
     const p2 = api.bkaGravarPedido();
     await conduzir(api, p2);
     const rp2 = await p2;
-    ok(rp2.ok === true && !api.bkaEstado().erro, "V9k com a consulta muda, 'Salvar agora' pede direto e grava: " + JSON.stringify(rp2));
+    ok(rp2.ok === true && !api.bkaEstado().erro && api.bkaTentativas()[0].m === "ao escolher a pasta" && !api.bkaPastaMuda(),
+      "V9k com a pasta muda, 'Salvar agora' abre a escolha da pasta e grava (sem esperar o pedido que não vem): " + JSON.stringify(rp2));
     const lt = api.bkaTentLinha(api.bkaTentativas()[0]);
     ok(/etapas: permissão \d+,\d s › dados/.test(lt), "V9l cada etapa com quanto levou: " + lt);
     api.bkaPrazoDefinir((fn) => { Promise.resolve().then(() => Promise.resolve()).then(fn); return 1; }, () => {});
@@ -230,6 +236,41 @@ async function testes() {
     ["bka_erro_sem_resposta", "bka_salvando", "bka_nao_gravou", "bka_reg_tit", "bka_rel_copiar", "bka_tent_r_erro", "bka_tent_r_gravou"].forEach((k) =>
       ["pt", "en"].forEach((lg) => { api.setLanguage(lg); ok(api.t(k) && api.t(k) !== k, "V9i falta " + k + " em " + lg); }));
     api.setLanguage("pt");
+  }
+  {
+    /* (19.208.0) V9n: o caso de 26/11 18:31 — um "Salvar agora" fica esperando a pasta antiga; no meio, a pasta é escolhida
+     * de novo e grava; quando a velha termina (falha), NÃO regrava o estado de antes por cima */
+    const r = rodar();
+    const { api, janela } = r;
+    const L = api.loja;
+    L.setItem("eac_texto", "A :: B");
+    api.bkaRelogioDefinir(() => agora);
+    api.bkAntesLojaDefinir({ ler: async () => [], gravar: async () => {} });
+    const loja = { h: null, ler: async () => loja.h, gravar: async (h) => { loja.h = h; } };
+    api.bkaPastaLojaDefinir(loja);
+    const P = pasta();
+    janela.showDirectoryPicker = async () => P;
+    api.bkIniciar();
+    await conduzir(api, api.bkaConectar());
+    /* a pasta guardada emudece; o prazo da tentativa velha só vence quando o teste mandar */
+    P.requestPermission = () => new Promise(() => {});
+    P.queryPermission = () => new Promise(() => {});
+    let vencer = null;
+    api.bkaPrazoDefinir((fn) => { vencer = fn; return 1; }, () => {});
+    L.setItem("eac_texto", "A :: B" + String.fromCharCode(10) + "C :: D");
+    const velha = api.bkaGravarAgora("pedido", { gesto: true, forcar: true });
+    /* a pessoa escolhe a pasta de novo: pasta nova, que responde */
+    const P2 = pasta();
+    janela.showDirectoryPicker = async () => P2;
+    api.bkaPrazoDefinir(() => null, () => {});
+    const nova = await api.bkaConectar();
+    const ultimoBom = api.bkaEstado().ultimo && api.bkaEstado().ultimo.nome;
+    ok(nova.ok === true && !!ultimoBom, "V9n a pasta escolhida de novo grava no meio da espera da velha: " + JSON.stringify(nova));
+    if (vencer) vencer();
+    const rv = await velha;
+    const est = api.bkaEstado();
+    ok(rv.razao === "obsoleta" && !est.erro && est.ultimo && est.ultimo.nome === ultimoBom && api.bkaPermissaoAtual() === "granted",
+      "V9o a tentativa velha sai como 'substituída' e não desfaz o backup novo: " + JSON.stringify({ rv, erro: est.erro, ultimo: est.ultimo && est.ultimo.nome, perm: api.bkaPermissaoAtual() }));
   }
   {
     /* V9j: ao abrir, a pasta que não responde não prende a abertura (antes: bkaIniciar esperava para sempre) */

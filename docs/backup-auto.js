@@ -155,7 +155,7 @@ function bkaReferencia(est) {
  *  · o REGISTRO DAS TENTATIVAS: cada tentativa com as etapas e quanto cada uma levou, no painel e no diagnóstico, com
  *    "copiar relatório do backup".
  * ===================================================================== */
-const BKA_PRAZO = { permissao: 10000, pedir: 60000, dados: 30000, procurar: 30000, compactar: 60000, gravar: 60000, limpar: 30000, listar: 30000 };
+const BKA_PRAZO = { permissao: 10000, pedir: 20000, dados: 30000, procurar: 30000, compactar: 60000, gravar: 60000, limpar: 30000, listar: 30000 };
 /* quem agenda o fim do prazo: (fn, ms) → id. Trocável nos testes (lá o setTimeout dispara na hora e venceria tudo) */
 let bkaPrazoAgendar = (fn, ms) => setTimeout(fn, ms);
 let bkaPrazoCancelar = (id) => clearTimeout(id);
@@ -177,6 +177,7 @@ function bkaComPrazo(p, etapa) {
 }
 async function bkaPermitido(pedir) {
   if (!bkaPasta) { bkaPermissao = ""; return ""; }
+  const h = bkaPasta;
   let p = "granted";
   try {
     /* (19.207.0) COM O TOQUE DA PESSOA, PEDE DIRETO. No caso real (26/11, Chrome 158) a CONSULTA (queryPermission) da
@@ -186,6 +187,8 @@ async function bkaPermitido(pedir) {
     if (pedir && typeof bkaPasta.requestPermission === "function") p = await bkaComPrazo(bkaPasta.requestPermission({ mode: "readwrite" }), "pedir");
     else if (typeof bkaPasta.queryPermission === "function") p = await bkaComPrazo(bkaPasta.queryPermission({ mode: "readwrite" }), "permissao");
   } catch (e) { p = e && e.name === "TimeoutError" ? "sem_resposta" : "denied"; }
+  /* (19.208.0) a resposta da pasta ANTIGA não vale para a pasta nova escolhida no meio da espera */
+  if (bkaPasta !== h) return p || "?";
   bkaPermissao = p || "?";
   return bkaPermissao;
 }
@@ -336,7 +339,7 @@ function bkaGravarAgora(motivo, opc) {
   const o = opc || {};
   /* (19.206.0) uma gravação por vez — mas a pessoa que toca em "Salvar agora" não espera uma presa há mais de 20 s
    * (com os prazos isso não deve acontecer; se acontecer, a nova segue e a velha é ignorada quando terminar) */
-  if (bkaGravando && !(o.gesto && bkaRelogio() - bkaGravandoDesde > 20000)) return bkaGravando;
+  if (bkaGravando && !o.novaPasta && !(o.gesto && bkaRelogio() - bkaGravandoDesde > 20000)) return bkaGravando;
   if (bkaGravando) { try { reg("BACKUP", "gravação anterior presa: abandonada", Math.round((bkaRelogio() - bkaGravandoDesde) / 1000) + " s · " + (motivo || "-")); } catch (e) {} }
   /* (19.40.0) o balão: "salvando…" enquanto grava; depois ✓ por um instante (ou o aviso, se falhou) */
   const est0 = bkaEstado();
@@ -355,21 +358,27 @@ function bkaGravarAgora(motivo, opc) {
 }
 async function bkaGravarDeVerdade(motivo, o) {
   const est = bkaEstado();
+  /* (19.208.0) A TENTATIVA QUE FICOU PARA TRÁS NÃO MEXE EM NADA. No caso de 26/11 um "Salvar agora" ficou 60 s esperando a
+   * pasta antiga; no meio, a pessoa escolheu a pasta de novo e o backup GRAVOU; quando a tentativa velha terminou, a falha
+   * dela regravou o estado de antes por cima ("último backup: 22/11", "permissão: sem_resposta"). Agora cada tentativa
+   * guarda a pasta com que começou: se a pasta mudou, ela sai como "substituída", sem tocar no estado. */
+  const pasta = bkaPasta;
+  const falhou = (e) => (bkaPasta !== pasta ? { ok: false, razao: "obsoleta" } : bkaFalhou(bkaEstado(), e));
   if (!est.ligado || !bkaPasta) { if (est.ligado) bkaRegistrarNaoTentou("sem_pasta", motivo); return { ok: false, razao: "sem_pasta" }; }
   bkaUltimaTentativa = bkaRelogio();
   bkaEtapa("permissão");
   const perm = await bkaPermitido(!!o.gesto);
   /* (19.206.0) a pasta não respondeu à pergunta da permissão: é falha passageira (Drive fora), não permissão vencida */
-  if (perm === "sem_resposta") { const eT = new Error("a pasta não respondeu à pergunta da permissão"); eT.name = "TimeoutError"; return bkaFalhou(est, eT); }
+  if (perm === "sem_resposta") { const eT = new Error("a pasta não respondeu à pergunta da permissão"); eT.name = "TimeoutError"; return falhou(eT); }
   if (perm !== "granted") { bkaRegistrarNaoTentou("permissao " + (bkaPermissao || "?"), motivo); bkaPintarTudo(); return { ok: false, razao: "permissao", permissao: perm }; }
   let bk;
   bkaEtapa("dados");
-  try { await bkaComPrazo(bkEsperarDados(), "dados"); bk = montarBackup(); } catch (e) { return bkaFalhou(est, e); }
+  try { await bkaComPrazo(bkEsperarDados(), "dados"); bk = montarBackup(); } catch (e) { return falhou(e); }
   const hash = bkaImpressao(bk.dados);
   if (!o.forcar && est.ultimo && est.ultimo.hash === hash) {
     /* (19.167.0) havia falha: confere se a pasta voltou a responder; se sim, o aviso sai — a última cópia já está em dia */
     if (est.erro) {
-      try { await bkaListar(); } catch (e) { return bkaFalhou(est, e); }
+      try { await bkaListar(); } catch (e) { return falhou(e); }
       bkaFalhaResolvida(est, "a pasta voltou a responder (nada novo a gravar)");
       bkaEstadoGravar(est);
       bkaPintarTudo();
@@ -431,7 +440,7 @@ async function bkaGravarDeVerdade(motivo, o) {
     reg("BACKUP", "automático gravado", nome + " · " + motivo + (apagados.length ? " · rotação: " + apagados.join(", ") : ""));
     bkaPintarTudo();
     return { ok: true, nome, apagados };
-  } catch (e) { return bkaFalhou(est, e); }
+  } catch (e) { return falhou(e); }
 }
 /* =====================================================================
  * (19.167.0) A FALHA EXPLICADA, A NOVA TENTATIVA SOZINHA E O ALARME SÓ QUANDO INSISTE
@@ -472,7 +481,10 @@ function bkaErroInfo(erro) {
   const n = erro.n || 1;
   return Object.assign({}, ex, { n, grave: !ex.transitorio || n >= 3, texto: t("bka_erro_" + ex.cod), desde: erro.desde || erro.quando, proxima: erro.proxima || "" });
 }
-function bkaFalhou(est, e) {
+function bkaFalhou(est0, e) {
+  /* (19.208.0) o estado de AGORA (quem chama pode ter lido antes de uma espera longa): a falha não desfaz o que gravou */
+  const est = bkaEstado();
+  void est0;
   const ex = bkaErroExplicar(e);
   const ant = est.erro || null;
   const agoraMs = bkaRelogio();
@@ -595,7 +607,7 @@ async function bkaConectar() {
     return { ok: false, razao: "erro" };
   }
   bkaPasta = h;
-  try { await bkaPastaLoja().gravar(h); } catch (e) { /* sem guardar a pasta, vale só nesta sessão */ }
+  try { await bkaComPrazo(bkaPastaLoja().gravar(h), "dados"); } catch (e) { /* sem guardar a pasta, vale só nesta sessão */ }
   const est = bkaEstado();
   est.ligado = true;
   est.pasta = h.name || "";
@@ -603,8 +615,18 @@ async function bkaConectar() {
   bkaEstadoGravar(est);
   bkaPermissao = "granted";
   reg("BACKUP", "pasta do automático escolhida", est.pasta);
-  const r = await bkaGravarAgora("ao escolher a pasta", { gesto: true, forcar: true });
-  await bkaProcurarMaisNovo();
+  /* (19.208.0) novaPasta: não reaproveita uma gravação presa na pasta antiga */
+  const r = await bkaGravarAgora("ao escolher a pasta", { gesto: true, forcar: true, novaPasta: true });
+  try { await bkaComPrazo(bkaProcurarMaisNovo(), "procurar"); } catch (e) {}
+  return r;
+}
+/* (19.208.0) "Escolher a pasta de novo": a janela de escolher (com o toque ainda valendo), grava e DIZ o resultado */
+async function bkaEscolherDeNovo() {
+  let r;
+  try { r = await bkaConectar(); } catch (e) { r = { ok: false, razao: "erro", erro: String((e && e.message) || e) }; }
+  bkaPintarTudo();
+  if (r && r.ok) await uiAlert(t("bka_muda_ok", { n: r.nome || (bkaEstado().ultimo || {}).nome || "" }));
+  else if (r && r.razao !== "cancelado" && r.razao !== "erro") await uiAlert(bkaPorQueNaoGravou(r) + "\n\n" + t("bka_muda_nao_abriu"));
   return r;
 }
 async function bkaReconectar() {
@@ -613,7 +635,20 @@ async function bkaReconectar() {
   await bkaProcurarMaisNovo();
   return r;
 }
+/* (19.208.0) A PASTA MUDA: o navegador deixou de responder pela pasta guardada (nem a consulta nem o pedido de
+ * permissão respondem). No caso de 26/11 foram 4 tentativas, a última de 60 s com o toque da pessoa. Daí em diante só
+ * escolher a pasta de novo resolve (o navegador ganha uma ligação nova) — então é isso que o app oferece, direto. */
+function bkaPastaMuda() {
+  const est = bkaEstado();
+  return !!(est.ligado && bkaPasta && (bkaPermissao === "sem_resposta" || (est.erro && est.erro.cod === "sem_resposta")));
+}
 async function bkaGravarPedido() {
+  /* com a pasta muda, "Salvar agora" abre a escolha da pasta (ANTES de qualquer espera: o navegador só abre a janela
+   * com o toque ainda valendo) e grava em seguida — em vez de esperar 60 s por uma resposta que não vem */
+  if (bkaPastaMuda()) {
+    try { reg("BACKUP", "salvar agora com a pasta muda: escolher a pasta de novo", (bkaEstado().erro && bkaEstado().erro.n || 0) + " falha(s) seguidas"); } catch (e) {}
+    return bkaEscolherDeNovo();
+  }
   if (bkaMaisNovo) {
     const ok = await uiConfirm(t("bka_conf_sobrepor", { a: bkaMaisNovo.aparelho }));
     if (!ok) return { ok: false, razao: "cancelado" };
@@ -852,6 +887,8 @@ function bkaAvisoDoSelo() {
   const est = bkaEstado();
   if (!est.ligado) return null;
   if (est.pausado) return { txt: t("bka_selo_pausado"), cls: "sb-alerta" };
+  /* (19.208.0) a pasta muda não se resolve sozinha: alarme, e o texto já diz o que fazer */
+  if (bkaPastaMuda()) return { txt: t("bka_selo_muda"), cls: "sb-alerta" };
   /* (19.167.0) a falha passageira, nas primeiras vezes, é aviso ("tentando de novo"); o alarme é quando insiste */
   if (est.erro) { const ie = bkaErroInfo(est.erro); return ie.grave ? { txt: t("bka_selo_erro"), cls: "sb-alerta" } : { txt: t("bka_selo_tentando"), cls: "sb-aviso" }; }
   if (!bkaPasta || (bkaPermVencida())) return { txt: t("bka_selo_reconectar"), cls: "sb-aviso" };
@@ -900,9 +937,42 @@ function bkaPintar() {
     if (bkaPasta && est.ultimo && est.ultimo.nome) botao(ls, t("bka_enc_ver_boa"), bkaVerBoa, "btn btn-azul", "btnBkaVerBoa", "", t("bka_enc_ver_boa_sub", { q: bkQuandoCurto(est.ultimo.quando) }));
     botao(ls, t("bka_aceitar"), bkaAceitarPedido, "btn btn-perigo", "btnBkaAceitar", t("bka_aceitar_tip"), t("bka_aceitar_sub"));
   }
+  /* (19.208.0) A PASTA MUDA, em destaque: o que aconteceu em uma frase, há quanto tempo não há backup, e as duas saídas
+   * — escolher a mesma pasta de novo (resolve) e baixar uma cópia agora (garante). O "não funcionou?" fica dobrado. */
+  const muda = bkaPastaMuda();
+  if (muda) {
+    const card = document.createElement("div");
+    card.className = "bka-muda";
+    card.id = "bkaMuda";
+    const tit = document.createElement("div");
+    tit.className = "bka-muda-tit";
+    tit.textContent = t("bka_muda_tit");
+    card.append(tit);
+    const tx = document.createElement("div");
+    tx.className = "bka-muda-txt";
+    tx.textContent = t("bka_muda_txt", { q: est.ultimo && est.ultimo.quando ? bkQuandoCurto(est.ultimo.quando) : t("bka_muda_nunca") });
+    card.append(tx);
+    const lb = document.createElement("div");
+    lb.className = "btn-linha";
+    card.append(lb);
+    botao(lb, t("bka_escolher_de_novo"), bkaEscolherDeNovo, "btn btn-azul", "btnBkaEscolherDeNovo", "", t("bka_escolher_de_novo_sub", { p: est.pasta || "?" }));
+    if (typeof bkBaixar === "function") botao(lb, t("bka_muda_baixar"), () => bkBaixar(), "btn btn-cinza", "btnBkaMudaBaixar", "", t("bka_muda_baixar_sub"));
+    const dn = document.createElement("details");
+    dn.className = "bka-muda-mais";
+    const sn = document.createElement("summary");
+    sn.textContent = t("bka_muda_nao_funcionou");
+    dn.append(sn);
+    const pn = document.createElement("div");
+    pn.className = "nota";
+    pn.textContent = t("bka_muda_nao_abriu");
+    dn.append(pn);
+    card.append(dn);
+    cx.append(card);
+  }
   /* (19.167.0) a falha explicada: a causa e o que fazer, desde quando, a próxima tentativa sozinha, "tentar agora" e o
-   * texto técnico à parte */
-  if (est.erro) {
+   * texto técnico à parte. (19.208.0) Com a pasta muda, o cartão acima já diz tudo: aqui só o texto técnico. */
+  if (est.erro && muda) nota(t("bka_erro_tecnico", { m: est.erro.msg }), "nota bka-erro-tec");
+  else if (est.erro) {
     const ie = bkaErroInfo(est.erro);
     nota(t(ie.grave ? "bka_erro" : "bka_erro_tentando", { e: ie.texto }), "bk-aviso " + (ie.grave ? "grave" : "") + " bka-erro");
     const hm = (iso) => { const d = new Date(iso); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
@@ -910,12 +980,6 @@ function bkaPintar() {
     const le = linha();
     if (ie.acao === "reconectar") botao(le, t("bka_reconectar"), bkaReconectar, "btn btn-verde", "btnBkaErroReconectar");
     else if (bkaPasta) botao(le, t("bka_erro_tentar"), bkaGravarPedido, "btn btn-verde", "btnBkaErroTentar");
-    /* (19.207.0) a pasta GUARDADA que não responde: escolher a mesma pasta de novo dá ao navegador uma referência nova
-     * (e a permissão junto) — foi o que destravou o caso de 26/11 */
-    if (ie.cod === "sem_resposta") {
-      nota(t("bka_sem_resposta_dica"), "nota bka-sem-resposta-dica");
-      botao(le, t("bka_escolher_de_novo"), bkaConectar, "btn btn-azul", "btnBkaEscolherDeNovo", "", t("bka_escolher_de_novo_sub", { p: est.pasta || "?" }));
-    }
     nota(t("bka_erro_tecnico", { m: est.erro.msg }), "nota bka-erro-tec");
   }
   if (bkaMaisNovo) {
@@ -928,7 +992,8 @@ function bkaPintar() {
   }
   nota(est.ultimo && est.ultimo.nome ? t("bka_ultimo", { q: bkQuandoCurto(est.ultimo.quando), n: est.ultimo.nome }) : t("bka_ainda_nao"), "bk-txt bka-ultimo");
   try { bkaPintarUltimas(cx); } catch (e) {}
-  if (bkaPasta) botao(linha(), t("bka_gravar_agora"), bkaGravarPedido, "btn btn-azul", "btnBkaGravar", "", t("bka_gravar_agora_sub"));
+  /* com a pasta muda, a ação principal está no cartão do topo: o "Salvar agora" daqui não repete o pedido que não vem */
+  if (bkaPasta && !muda) botao(linha(), t("bka_gravar_agora"), bkaGravarPedido, "btn btn-azul", "btnBkaGravar", "", t("bka_gravar_agora_sub"));
   /* (19.206.0) O REGISTRO DAS TENTATIVAS: cada uma com o motivo, o resultado, as etapas e o tempo — e o relatório para
    * colar numa conversa de suporte */
   const rg = document.createElement("details");
@@ -996,7 +1061,7 @@ function bkaBolhaEstado() {
   const av = bkaAvisoDoSelo();
   if (av) {
     /* (19.41.0) a LEGENDA curta embaixo do círculo diz o problema sem precisar parar o mouse em cima */
-    const rot = est.pausado ? t("bka_rot_pausado") : est.erro ? t(bkaErroInfo(est.erro).grave ? "bka_rot_erro" : "bka_rot_tentando")
+    const rot = est.pausado ? t("bka_rot_pausado") : bkaPastaMuda() ? t("bka_rot_muda") : est.erro ? t(bkaErroInfo(est.erro).grave ? "bka_rot_erro" : "bka_rot_tentando")
       : (!bkaPasta || (bkaPermVencida())) ? t("bka_rot_reconectar")
       : est.travado ? t("bka_rot_travado") : t("bka_rot_mais_novo");
     return { k: "problema", ic: "!", rot, txt: av.txt, cls: av.cls === "sb-alerta" ? "bb-alerta" : "bb-aviso" };

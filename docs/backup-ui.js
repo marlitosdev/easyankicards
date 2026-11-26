@@ -479,6 +479,8 @@ function bkSituacao() {
     if (!est.ligado) return { st: "st-aviso", txt: t("bk_sit_auto_off"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
     if (av) {
       if (!bkaPasta) return { st: "st-alerta", txt: t("bka_pasta_perdida"), acao: t("bk_sit_escolher_pasta"), fn: bkaConectar };
+      /* (19.208.0) a pasta muda: a frase do topo diz o que houve, e a ação é escolher a mesma pasta de novo */
+      if (typeof bkaPastaMuda === "function" && bkaPastaMuda()) return { st: "st-alerta", txt: t("bk_sit_muda"), acao: t("bka_escolher_de_novo"), fn: bkaEscolherDeNovo };
       if (bkaPermVencida()) return { st: "st-alerta", txt: t("bk_sit_permissao"), acao: t("bka_reconectar"), fn: bkaReconectar };
       if (est.pausado) return { st: "st-alerta", txt: t("bk_sit_pausado") };
       if (est.erro) {
