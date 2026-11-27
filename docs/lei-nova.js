@@ -24,8 +24,11 @@ const LEI_NOVA_ROTULOS = { 1: "leiNovaP1", 2: "leiNovaPNome", 3: "leiNovaP2", 4:
 
 /* opc.volta(id): quem pediu a lei nova (a janela de vínculo) volta quando ela fica pronta, com o id dela */
 function leiNovaAbrir(opc) {
-  /* (19.204.0) pedida pelas Leis do edital (manterBib), a biblioteca fica embaixo e volta quando o assistente fecha */
-  if (!(opc && opc.manterBib) && $("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
+  /* (19.212.0) A BIBLIOTECA FICA EMBAIXO, SEMPRE. Ela era fechada aqui (só as Leis do edital, com manterBib, a
+   * mantinham): fechar o assistente pelo ✕ largava a pessoa no Material de estudo, não na biblioteca de onde veio.
+   * Agora o assistente abre por cima; o ✕ e o Esc revelam a biblioteca como estava. Ao "Criar", o leitor entra no
+   * lugar da biblioteca (leiBibNovaEditor → leiBibTrocar) e ela volta quando o leitor fechar. (opc.manterBib ficou
+   * sem efeito: é o comportamento de sempre.) */
   leiNovaIniciarTela();   /* idempotente: os botões ficam ligados mesmo se a partida não ligou */
   leiNovaCtx = { passo: 1, texto: "", origem: "", tipo: "", riscados: 0, alts: [], faixa: null,
     nome: "", apelido: "", nomeTocado: false, volta: (opc && typeof opc.volta === "function") ? opc.volta : null };

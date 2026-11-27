@@ -905,9 +905,14 @@ function ledDoTopico(M, disciplina, topico) {
 /* Com um tópico ligado à lei, abre pelo tópico (registrar leitura, cartões e a fila de leis dele funcionam); sem tópico
  * ligado, abre a lei solta, como a biblioteca. O artigo, quando há, manda; sem artigo, a lei retoma no marcador. */
 function ledLer(id, prox, T) {
-  /* aberta a partir da leitura (o "📚 leis do edital" da fila), a biblioteca está POR CIMA da lei: fecha, e a leitura
-   * de baixo troca de lei. Aberta pela agenda, ela fica embaixo e volta (repintada) quando a leitura fecha. */
-  if ($("dlgLeiSeca") && $("dlgLeiSeca").open && $("dlgLeiBib") && $("dlgLeiBib").open && ledPorCimaDaLeitura) $("dlgLeiBib").close();
+  /* (19.212.0) a biblioteca DÁ LUGAR à leitura e volta, como estava, quando a leitura fecha (leiBibTrocar). Aberta a
+   * partir da leitura (o "📚 leis do edital" da fila), ela estava por cima da lei: sai, e a leitura de baixo troca de
+   * lei. Aberta pela agenda, ela ficava EMBAIXO da leitura — e o "📚" da gaveta não a trazia para cima (já estava
+   * aberta, escondida). */
+  if ($("dlgLeiBib") && $("dlgLeiBib").open) {
+    if (typeof leiBibTrocar === "function") leiBibTrocar();
+    else $("dlgLeiBib").close();
+  }
   const P = ledUltimo && ledUltimo.leis[id];
   const lig = T && T.ligada ? T : (P ? P.topicos.find((x) => x.ligada && (!prox || x.nums.indexOf(prox.num) >= 0)) || P.topicos.find((x) => x.ligada) : null);
   try { reg("LEI", "leis do edital: abrir", ((P && P.lei && P.lei.nome) || id) + (prox ? " · art. " + prox.numCru : "")); } catch (e) {}
@@ -1233,7 +1238,11 @@ function ledLeiEl(M, D, k, x) {
     const b = ledEl("button", "btn-min", t("led_ds_abrir"));
     b.type = "button"; b.id = "btnLedDs_" + k + "_" + x.id + "_" + ledIdSeguro(S.id);
     b.onclick = () => {
-      if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
+      /* (19.212.0) a biblioteca sai com volta: na tela das discursivas, aparece "↩ Voltar para Biblioteca de leis" */
+      if ($("dlgLeiBib") && $("dlgLeiBib").open) {
+        if (typeof leiBibTrocar === "function") leiBibTrocar(b.id);
+        else $("dlgLeiBib").close();
+      }
       if (typeof dsIrPara === "function") dsIrPara(M.edId, { secao: "propostas", pid: S.id });
     };
     li.append(b);
@@ -1329,7 +1338,11 @@ function ledIniciar() {
   if (typeof document === "undefined") return;
   if ($("btnEdLeis")) $("btnEdLeis").onclick = () => ledAbrir();
   /* voltar da leitura ou do assistente de lei nova repinta a biblioteca: o marcador, os vistos e as leis mudaram */
-  const repintar = () => { if ($("dlgLeiBib") && $("dlgLeiBib").open && typeof leiBibPintar === "function") leiBibPintar(); };
+  /* (19.212.0) a biblioteca que acabou de voltar (leiBibReabrir) já veio pintada: não pinta duas vezes */
+  const repintar = () => {
+    if (typeof leiBibReabertaEm !== "undefined" && Date.now() - leiBibReabertaEm < 800) return;
+    if ($("dlgLeiBib") && $("dlgLeiBib").open && typeof leiBibPintar === "function") leiBibPintar();
+  };
   ["dlgLeiNova", "dlgLeiSeca"].forEach((id) => {
     const d = $(id);
     if (d && d.addEventListener && !d._ledOuvinte) { d._ledOuvinte = true; d.addEventListener("close", repintar); }

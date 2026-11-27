@@ -29,7 +29,7 @@
  *     automática de que todo $("id") existe no index.html.
  */
 
-const VERSAO = "19.211.0";
+const VERSAO = "19.212.0";
 const $ = (id) => document.getElementById(id);
 let ultimoResult = null;
 let previewTimer = null;
@@ -559,17 +559,41 @@ const _modaisAbertos = new Set();
  * a disciplina onde estava. Agora o painel fica "armado": quando o que foi aberto a partir dele fecha (e nada mais está
  * aberto), o painel volta, na mesma disciplina, filtro e rolagem. Se a pessoa saiu para outra tela do app (os cartões,
  * por exemplo), ele não volta sozinho por cima dela: aparece o botão "↩ Voltar para …" no rodapé.
+ *
+ * (19.212.0) UMA PILHA, NÃO UMA VAGA SÓ. A regra das janelas do app é: a nova abre POR CIMA, sem fechar a de baixo, e
+ * fechar (✕, Esc, "voltar") revela a de baixo como estava. Quando uma janela PRECISA dar lugar a outra (a Biblioteca de
+ * leis dá lugar ao leitor da lei, que tem a sua própria gaveta e pode reabrir a biblioteca), ela é "trocada" por
+ * janelaTrocar: sai guardando como voltar, e volta quando a que entrou fecha. Eram uma vaga só (voltarPara): a
+ * biblioteca aberta pelo Painel, trocada pelo leitor, apagava a volta para o Painel. Agora cada troca empilha a sua, e
+ * a de cima é a que vale (voltarPara continua sendo o topo).
+ *
+ * O QUE JÁ ESTAVA ABERTO NÃO SEGURA A VOLTA. Ao trocar, anota-se o que estava aberto embaixo (base). Se, ao fechar a
+ * vigiada, só sobra a base (a lei aberta por uma questão, por exemplo), a janela trocada volta POR CIMA dela — antes,
+ * ela só voltava quando a de baixo também fechasse, e a pessoa caía na tela de baixo sem a janela de onde viera.
  * ===================================================================== */
-let voltarPara = null;      /* { painel: id do dialog, rotulo, reabrir(), vigia: dialog aberto a partir dele, modo } */
+let voltarPilha = [];       /* as voltas armadas, a última é a que vale */
+let voltarPara = null;      /* o topo da pilha: { painel: id do dialog, rotulo, reabrir(), vigia, modo, base, foco } */
 
-function voltarTopo(excluir) {
+function voltarSync() {
+  voltarPara = voltarPilha.length ? voltarPilha[voltarPilha.length - 1] : null;
+  voltarChipPintar();
+}
+
+/* as janelas abertas agora, na ordem em que abriram (a de cima por último) */
+function voltarAbertos() {
+  const ordem = Array.from(_modaisAbertos).filter((d) => d && d.open);
   let lista = [];
   try { lista = Array.from(document.querySelectorAll("dialog[open]")); } catch (e) { lista = []; }
-  const painel = voltarPara ? voltarPara.painel : "";
-  const ok = (d) => d && d.open && d !== excluir && d.id !== painel;
-  const ordem = Array.from(_modaisAbertos).filter(ok);
-  if (ordem.length) return ordem[ordem.length - 1];
-  lista = lista.filter(ok);
+  lista.forEach((d) => { if (d && d.open && ordem.indexOf(d) < 0) ordem.unshift(d); });
+  return ordem;
+}
+
+/* a janela de cima, fora a que fechou e a trocada; soNovas: só as que abriram depois da troca (fora da base) */
+function voltarTopo(excluir, soNovas) {
+  const v = voltarPara;
+  const painel = v ? v.painel : "";
+  const lista = voltarAbertos().filter((d) => d !== excluir && d.id !== painel
+    && !(soNovas && v && v.base && v.base.indexOf(d) >= 0));
   return lista.length ? lista[lista.length - 1] : null;
 }
 
@@ -584,14 +608,34 @@ function voltarChipPintar() {
   if (x) x.onclick = () => voltarLimpar();
 }
 
-/* fecha o painel e o deixa "armado" para voltar; quem chama abre o que quiser logo em seguida */
-function painelArmar(dlgId, rotulo, reabrir) {
-  voltarPara = { painel: dlgId, rotulo: rotulo || "", reabrir, vigia: null, armadoEm: Date.now(),
-    modo: typeof modoAtual !== "undefined" ? modoAtual : "" };
+/* fecha o painel e o deixa "armado" para voltar; quem chama abre o que quiser logo em seguida.
+ * opc.foco: o id do botão que levou adiante — ao voltar, o foco vai para ele (sem opc.foco, o que tinha o foco) */
+function painelArmar(dlgId, rotulo, reabrir, opc) {
+  const o = opc || {};
   const dlg = document.getElementById(dlgId);
+  let foco = o.foco || "";
+  try {
+    const at = document.activeElement;
+    if (!foco && at && at.id && dlg && dlg.contains && dlg.contains(at)) foco = at.id;
+  } catch (e) {}
+  /* a mesma janela trocada de novo: a volta antiga dela sai (ela vai voltar uma vez só) */
+  voltarPilha = voltarPilha.filter((x) => x.painel !== dlgId);
+  voltarPilha.push({ painel: dlgId, rotulo: rotulo || "", reabrir, vigia: null, armadoEm: Date.now(),
+    modo: typeof modoAtual !== "undefined" ? modoAtual : "", foco,
+    base: voltarAbertos().filter((d) => d !== dlg) });
+  voltarSync();
   try { if (dlg && dlg.open) dlg.close(); } catch (e) {}
+  try { if (o.reg !== false) reg("PAINEL", "saiu de " + (rotulo || dlgId) + " para abrir outra janela; volta ao fechar", voltarPilha.length > 1 ? voltarPilha.length + " voltas na pilha" : ""); } catch (e) {}
   setTimeout(voltarAdotar, 0);
   voltarVigiar();
+}
+
+/* o nome geral: uma janela dá lugar a outra e volta quando a outra fechar (painelArmar é o mesmo, do tempo dos painéis) */
+function janelaTrocar(dlgId, rotulo, reabrir, opc) {
+  const dlg = document.getElementById(dlgId);
+  if (!dlg || !dlg.open) return false;
+  painelArmar(dlgId, rotulo, reabrir, opc);
+  return true;
 }
 
 /* O EVENTO "close" NÃO BASTA: com a aba em segundo plano (ou o painel do navegador escondido) o navegador o segura, e o
@@ -612,11 +656,11 @@ function voltarAdotar() {
   voltarChipPintar();
 }
 
-/* uma janela fechou: se era a vigiada e não há outra aberta, o painel volta */
+/* uma janela fechou: se era a vigiada e não há outra aberta depois da troca, o painel volta */
 function voltarDialogoFechou(d) {
   if (!voltarPara || !d || d.id === voltarPara.painel) return false;
   if (voltarPara.vigia && d !== voltarPara.vigia) return false;
-  const outra = voltarTopo(d);
+  const outra = voltarTopo(d, true);
   if (outra) { voltarPara.vigia = outra; return false; }
   /* foi para outra tela do app: não cobre a tela nova — oferece o botão */
   if (typeof modoAtual !== "undefined" && voltarPara.modo && modoAtual !== voltarPara.modo) {
@@ -628,20 +672,36 @@ function voltarDialogoFechou(d) {
 }
 
 function voltarIr() {
-  const v = voltarPara;
-  voltarPara = null;
-  voltarChipPintar();
+  const v = voltarPilha.pop();
+  voltarSync();
   if (!v || typeof v.reabrir !== "function") return false;
-  try { reg("PAINEL", "voltou para " + v.rotulo, ""); } catch (e) {}
-  try { v.reabrir(); } catch (e) { return false; }
+  try { reg("PAINEL", "voltou para " + v.rotulo, v.vigia && v.vigia.id ? "ao fechar " + v.vigia.id : ""); } catch (e) {}
+  try { v.reabrir(); } catch (e) {
+    try { reg("ERRO", "não deu para voltar a " + v.rotulo, (e && e.message) || ""); } catch (x) {}
+    return false;
+  }
+  /* o foco volta ao botão que levou adiante (a janela foi repintada: acha-se pelo id) */
+  if (v.foco) {
+    setTimeout(() => {
+      try {
+        const el = document.getElementById(v.foco);
+        if (el && el.focus) el.focus({ preventScroll: true });
+      } catch (e) {}
+    }, 0);
+  }
+  /* a volta de baixo, se houver, passa a vigiar o que está aberto agora (a janela que acabou de voltar) */
+  voltarAdotar();
   return true;
 }
 
-/* abrir o painel pelo botão dele (ou dispensar o rodapé) desarma a volta */
+/* abrir o painel pelo botão dele (ou dispensar o rodapé) desarma a volta: sem painel, a de cima; com painel, a dele */
 function voltarLimpar(painel) {
-  if (!voltarPara || (painel && voltarPara.painel !== painel)) return false;
-  voltarPara = null;
-  voltarChipPintar();
+  const antes = voltarPilha.length;
+  if (!antes) return false;
+  if (painel) voltarPilha = voltarPilha.filter((x) => x.painel !== painel);
+  else voltarPilha.pop();
+  if (voltarPilha.length === antes) return false;
+  voltarSync();
   return true;
 }
 
@@ -674,7 +734,10 @@ function abrirModal(id) {
       _modaisAbertos.delete(d); _modaisAbertos.add(d);
       /* (19.103.0) aberto a partir de um painel armado: esta é a janela a vigiar */
       /* só logo depois de armar: uma janela qualquer aberta mais tarde, já em outra tela, não é "a que o painel abriu" */
-      if (voltarPara && d.id !== voltarPara.painel && (!voltarPara.vigia || !voltarPara.vigia.open)
+      /* (19.212.0) a vigiada provisória que era só uma janela de baixo (base) cede o lugar à que abriu agora */
+      const vg = voltarPara && voltarPara.vigia;
+      const vgBase = !!(vg && voltarPara.base && voltarPara.base.indexOf(vg) >= 0);
+      if (voltarPara && d.id !== voltarPara.painel && (!vg || !vg.open || vgBase)
           && Date.now() - (voltarPara.armadoEm || 0) < 3000) { voltarPara.vigia = d; voltarChipPintar(); }
     }
   } catch (e) {

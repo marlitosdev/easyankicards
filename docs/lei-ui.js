@@ -55,14 +55,17 @@ function leiLogCarregar() {
 }
 
 function leiReg(tipo, oque, detalhe) {
-  const l = leiIdAtual ? leiDe(leiIdAtual) : null;
+  /* (19.212.0) NO ASSISTENTE "INCLUIR LEI" (passos 1 a 4), a lei do registro é a que está sendo incluída: o rótulo
+   * mostrava a última lei aberta no leitor ("incluir lei: lei principal lida de …pdf" com a Lei 8.987 ao lado) */
+  const nova = typeof leiNovaCtx !== "undefined" && leiNovaCtx && !leiNovaCtx.faixa ? leiNovaCtx : null;
+  const l = !nova && leiIdAtual ? leiDe(leiIdAtual) : null;
   leiLog.push({
     q: new Date().toISOString(),
     t: String(tipo || ""),
     o: String(oque || ""),
     d: String(detalhe == null ? "" : detalhe).slice(0, 240),
-    lei: (l && l.nome) || "",
-    top: (leiAtual && leiAtual.topico) || "",
+    lei: nova ? "lei nova: " + (nova.nome || nova.origem || "sem nome ainda") : ((l && l.nome) || ""),
+    top: nova ? "" : ((leiAtual && leiAtual.topico) || ""),
     modo: leiModo,
   });
   while (leiLog.length > LEI_LOG_MAX) leiLog.shift();
@@ -398,6 +401,9 @@ function leiAvisoNomePintar() {
 }
 
 function leiAbrir(disciplina, topico, id, opc) {
+  /* (19.212.0) com a biblioteca aberta (por baixo ou por cima do leitor), ela dá lugar ao leitor e volta quando ele
+   * fechar — vale para todo caminho que abre uma lei: os botões da biblioteca, as leis do edital, o destaque do tópico */
+  try { if ($("dlgLeiBib") && $("dlgLeiBib").open && typeof leiBibTrocar === "function") leiBibTrocar(); } catch (e) {}
   try { if (typeof matLembrarRecente === "function" && disciplina && topico) matLembrarRecente("lei", disciplina, topico); } catch (e) {}
   /* abrir outra lei descarta o desenho em andamento da anterior */
   leiPinturaCancelar();
@@ -6689,6 +6695,8 @@ function leiBibEdDaPasta() {
 function leiBibVendoEdital() { return leiBibVistaLer() === "disc" ? leiBibEdDaPasta() : ""; }
 /* a porta das "Leis do edital" (ledAbrir): a biblioteca na pasta do edital, por disciplina, sem busca nem filtro */
 function leiBibAbrirNoEdital(edId) {
+  /* (19.212.0) aberta de novo pela porta: uma volta antiga para a biblioteca não vale mais (ela já está aqui) */
+  if (typeof voltarLimpar === "function") voltarLimpar("dlgLeiBib");
   leiBibPasta = "ed:" + edId;
   leiBibFiltro = "todas";
   leiBibEstado = "todas";
@@ -6710,12 +6718,68 @@ function leiBibNova() {
   return leiBibNovaEditor();
 }
 function leiBibNovaEditor() {
-  if ($("dlgLeiBib") && $("dlgLeiBib").open) $("dlgLeiBib").close();
+  leiBibTrocar("btnLeiBibNova");
   leiIdAtual = "";
   leiAbrir("", "", null, { nova: true, semRetomar: true });
   try { leiFluxoGarantir("criar", null, true); } catch (e) {}
   try { leiReg("lei", "nova lei pela biblioteca", "sem tópico"); } catch (e) {}
   return true;
+}
+
+/* =====================================================================
+ * (19.212.0) A BIBLIOTECA DÁ LUGAR AO LEITOR, E VOLTA
+ *
+ * O RELATO: "ao abrir uma nova janela e depois fechá-la não está voltando para a janela anterior, mas sim pra janela
+ * inicial do material de estudo". Abrir uma lei (Abrir, Continuar, mapa e conferência, o editor completo, o "ler" das
+ * leis do edital) FECHAVA a biblioteca antes de abrir o leitor — e fechar o leitor não tinha para onde voltar.
+ *
+ * Por que trocar e não empilhar: o leitor tem a gaveta com "📚 biblioteca", e a biblioteca aberta por baixo dele
+ * ficaria escondida (abrir uma janela já aberta não a traz para cima). Então ela sai, guardando como estava — pasta,
+ * filtro, leitura, vista, busca e rolagem —, e volta assim quando o leitor fecha (✕, Esc ou "salvar e sair"), com o
+ * foco no botão que abriu a lei. O "＋ Nova lei" não troca: o assistente abre POR CIMA da biblioteca.
+ * ===================================================================== */
+let leiBibReabertaEm = 0;
+function leiBibEstadoAgora() {
+  const dlg = $("dlgLeiBib");
+  const lista = $("leiBibLista");
+  /* na vista por disciplina (as leis do edital), quem rola é o #ledCorpo, não a lista */
+  const corpo = $("ledCorpo");
+  return { rolCorpo: corpo && corpo.scrollTop ? corpo.scrollTop : 0, pasta: leiBibPasta, filtro: leiBibFiltro, estado: leiBibEstado, vista: leiBibVista, texto: leiBibTexto,
+    busca: $("leiBibBusca") ? String($("leiBibBusca").value || "") : "",
+    rolLista: lista && lista.scrollTop ? lista.scrollTop : 0, rolDlg: dlg && dlg.scrollTop ? dlg.scrollTop : 0 };
+}
+function leiBibReabrir(st) {
+  const s = st || {};
+  if (s.pasta !== undefined) leiBibPasta = s.pasta;
+  if (s.filtro !== undefined) leiBibFiltro = s.filtro;
+  if (s.estado !== undefined) leiBibEstado = s.estado;
+  if (s.vista !== undefined) leiBibVista = s.vista;
+  leiBibTexto = s.texto || "";
+  if ($("leiBibBusca")) $("leiBibBusca").value = s.busca || "";
+  leiBibPintar();
+  abrirModal("dlgLeiBib");
+  leiBibReabertaEm = Date.now();
+  try { leiBibCheiaTrocar(localStorage.getItem(LEI_BIB_CHEIA) === "1", false); } catch (e) {}
+  /* a rolagem só "pega" com a janela aberta (fechada, ela mede zero): agora e de novo depois da pintura */
+  const rolar = () => {
+    try {
+      if (s.rolLista && $("leiBibLista")) $("leiBibLista").scrollTop = s.rolLista;
+      if (s.rolCorpo && $("ledCorpo")) $("ledCorpo").scrollTop = s.rolCorpo;
+      if (s.rolDlg && $("dlgLeiBib")) $("dlgLeiBib").scrollTop = s.rolDlg;
+    } catch (e) {}
+  };
+  rolar();
+  setTimeout(rolar, 0);
+  try { leiReg("lei", "biblioteca de leis de volta", [s.pasta ? "pasta " + s.pasta : "", s.busca ? "busca \"" + s.busca + "\"" : "", (s.rolLista || s.rolCorpo) ? "rolagem " + Math.round(s.rolLista || s.rolCorpo) : ""].filter(Boolean).join(" · ")); } catch (e) {}
+  return true;
+}
+/* a biblioteca sai para dar lugar a outra janela e volta quando ela fechar; foco: o botão que levou adiante */
+function leiBibTrocar(foco) {
+  const dlg = $("dlgLeiBib");
+  if (!dlg || !dlg.open) return false;
+  if (typeof janelaTrocar !== "function") { dlg.close(); return false; }
+  const st = leiBibEstadoAgora();
+  return janelaTrocar("dlgLeiBib", t("lei_bib_titulo"), () => leiBibReabrir(st), { foco: foco || "" });
 }
 
 /* (19.98.0) tela cheia, lembrada neste aparelho */
@@ -6733,6 +6797,7 @@ function leiBibCheiaTrocar(sim, lembrar) {
   return quer;
 }
 function leiBibAbrir() {
+  if (typeof voltarLimpar === "function") voltarLimpar("dlgLeiBib");
   leiBibTexto = "";
   /* aberta pelo menu (não pelo ⚖ de um tópico): sem o destaque de um tópico antigo */
   if (typeof ledLimparFoco === "function") ledLimparFoco();
@@ -6945,7 +7010,7 @@ function leiBibCartao({ l, usos }) {
   const ab = document.createElement("button");
   ab.type = "button"; ab.className = "btn-min btn-min-ok"; ab.id = "btnLeiBibAbrir_" + l.id;
   ab.textContent = t("lei_bib_abrir");
-  ab.onclick = () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); };
+  ab.onclick = () => { leiBibTrocar(ab.id); leiAbrirAvulsa(l.id); };
   acoes.append(ab);
   if (m.prox) {
     /* tem marcador e ainda falta ler: um botão que já abre no artigo em que a leitura recomeça */
@@ -6954,7 +7019,7 @@ function leiBibCartao({ l, usos }) {
     bc.className = "btn-min btn-min-ok";
     bc.id = "btnLeiBibCont_" + l.id;
     bc.textContent = t("lei_bib_continuar", { a: m.prox.numCru });
-    bc.onclick = () => { $("dlgLeiBib").close(); leiContinuarLei(l.id, m.prox); };
+    bc.onclick = () => { leiBibTrocar(bc.id); leiContinuarLei(l.id, m.prox); };
     acoes.append(bc);
   }
   /* (19.182.0) sem vínculo, mas tópicos dos editais em andamento a citam pelo número: ligar a eles num toque */
@@ -6999,7 +7064,7 @@ function leiBibAcoesDaLei(l, suf) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     if (typeof edMenuAbrir !== "function") return;
     edMenuAbrir(bm, menu, () => [
-      { id: "btnLeiBibMapa_" + l.id + s, rot: t("lei_bib_m_mapa"), dica: t("lei_mapa_btn"), faz: () => { $("dlgLeiBib").close(); leiAbrirAvulsa(l.id); leiMapaAbrir(); } },
+      { id: "btnLeiBibMapa_" + l.id + s, rot: t("lei_bib_m_mapa"), dica: t("lei_mapa_btn"), faz: () => { leiBibTrocar(bm.id); leiAbrirAvulsa(l.id); leiMapaAbrir(); } },
       { id: "btnLeiBibLigar_" + l.id + s, rot: t("lei_bib_m_ligar"), faz: () => leiTopicoAbrir(l) },
       { id: "btnLeiBibApagar_" + l.id + s, cls: "ed-menu-perigo", rot: t("lei_bib_m_apagar"), faz: () => leiBibApagar(l) },
     ]);

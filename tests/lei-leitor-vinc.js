@@ -97,7 +97,8 @@ async function testes() {
     api.leiBibAbrir();
     /* (v19.2.0) o botão abre o assistente "Incluir lei"; o leitor vazio é o "editor completo" (leiBibNovaEditor) */
     api.$("btnLeiBibNova").onclick();
-    ok(api.$("dlgLeiBib").open === false && api.$("dlgLeiNova").open === true, "V6 '＋ Nova lei' abre o assistente de inclusão");
+    /* (19.212.0) o assistente abre POR CIMA da biblioteca: fechá-lo revela a biblioteca (era fechada, e o ✕ caía no Material) */
+    ok(api.$("dlgLeiBib").open === true && api.$("dlgLeiNova").open === true, "V6 '＋ Nova lei' abre o assistente de inclusão por cima da biblioteca");
     api.$("btnLeiNovaEditor").onclick();
     ok(api.$("dlgLeiNova").open === false && api.$("dlgLeiSeca").open === true && api.$("leiTexto").value === "" && api.leiIdAtualValor() === "",
        "V6 o editor completo abre o leitor VAZIO para a lei nova (não a última aberta)");
