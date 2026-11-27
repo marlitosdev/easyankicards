@@ -40,12 +40,17 @@ const DEC_DECISOES = ["aceitou", "recusou", "mudou", "escolheu", "sem_decisao", 
  * escondido atrás do "já carreguei uma vez" — senão uma leitura muito cedo (antes da
  * promessa da migração resolver) travaria decLista na versão velha para a sessão inteira. */
 function decCarregar() {
+  /* (19.211.0) O RESUMO POR REGRA É LIDO SEMPRE. Ele só era lido junto da lista do localStorage: com as decisões já no
+   * IndexedDB (_decCache), a função voltava antes, decResumo ficava null e a tela de decisões quebrava em
+   * decPorRegra ("Cannot convert undefined or null to object", 14 vezes até 26/11, na versão atual). */
+  if (!decResumo || typeof decResumo !== "object" || Array.isArray(decResumo)) {
+    try { decResumo = JSON.parse(localStorage.getItem(DEC_RESUMO_CHAVE) || "{}"); } catch (e) { decResumo = {}; }
+    if (!decResumo || typeof decResumo !== "object" || Array.isArray(decResumo)) decResumo = {};
+  }
   if (_decCache) { decLista = _decCache; return; }
   if (decLista) return;
   try { decLista = JSON.parse(localStorage.getItem(DEC_CHAVE) || "[]"); } catch (e) { decLista = []; }
   if (!Array.isArray(decLista)) decLista = [];
-  try { decResumo = JSON.parse(localStorage.getItem(DEC_RESUMO_CHAVE) || "{}"); } catch (e) { decResumo = {}; }
-  if (!decResumo || typeof decResumo !== "object" || Array.isArray(decResumo)) decResumo = {};
 }
 
 function decLer() { decCarregar(); return decLista; }
@@ -182,8 +187,8 @@ function decRiscoDoTexto(textos) {
 function decPorRegra() {
   decCarregar();
   const m = {};
-  Object.keys(decResumo).forEach((k) => { m[k] = Object.assign({ regra: k }, decResumo[k]); });
-  decLista.forEach((r) => {
+  Object.keys(decResumo || {}).forEach((k) => { m[k] = Object.assign({ regra: k }, decResumo[k]); });
+  (decLista || []).forEach((r) => {
     const s = m[r.regra] = m[r.regra]
       || { regra: r.regra, area: r.area, sug: 0, ace: 0, rec: 0, mud: 0, esc: 0, sem: 0, cer: 0, err: 0 };
     s.sug++;

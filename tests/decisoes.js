@@ -539,6 +539,11 @@ async function testes() {
     api.decDefinirTudo([{ id: "d_restaurado", q: "2026-02-02T00:00:00.000Z", regra: "versao.cobertura", decisao: "recusou" }]);
     ok(api.decCacheAtual() && api.decCacheAtual().length === 1 && api.decCacheAtual()[0].id === "d_restaurado",
        "P4b decDefinirTudo com um array novo substitui o cache de verdade: " + JSON.stringify(api.decCacheAtual()));
+    /* (19.211.0) com o cache do IndexedDB ativo, recarregar e contar por regra não quebra (decResumo ficava null:
+     * "Cannot convert undefined or null to object" em decPorRegra, 14 vezes na versão 19.210.0) */
+    let pr = null, erroP = "";
+    try { api.decRecarregar(); pr = api.decPorRegra(); } catch (e) { erroP = String(e && e.message); }
+    ok(!erroP && Array.isArray(pr) && pr.some((x) => x.regra === "versao.cobertura"), "P4c com o cache ativo, decPorRegra conta sem quebrar: " + (erroP || JSON.stringify(pr)));
 
     /* a gravação de verdade no IndexedDB falha (não existe em Node) — isso tem de aparecer, não sumir calado */
     await new Promise((r) => setImmediate(r));
