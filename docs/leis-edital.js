@@ -559,12 +559,13 @@ function ledCitacoes(texto) {
 }
 
 /* A lei nomeada SEM artigo ("LC 116/03", "Lei nº 4.320/64", "CTN"): conta como lei do tópico se estiver na biblioteca. */
-const LED_RE_MENCAO = /(?:^|[^\wÀ-ú])((?:Constitui[çc][ãa]o(?:\s+Federal)?|CF(?:\/88)?|CRFB|Lei\s+Complementar\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|LC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Decreto[\s-]?Lei\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Emenda\s+Constitucional\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?|EC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?|Lei\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Decreto\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|[A-Z]{3,6}))(?![\wÀ-ú])/g;
+const LED_RE_MENCAO = /(?:^|[^\wÀ-ú])((?:Constitui[çc][ãa]o(?:\s+Federal)?|CF(?:\/88)?|CRFB|Lei\s+Complementar(?:\s+(?:Municipal|Estadual|Federal))?\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|LC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Decreto[\s-]?Lei\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Emenda\s+Constitucional\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?|EC\s*[nN]?\.?\s*[ºo°]?\.?\s*\d{1,4}(?:\s*\/\s*\d{2,4})?|Lei(?:\s+(?:Municipal|Estadual|Federal))?\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|Decreto(?:\s+(?:Municipal|Estadual|Federal))?\s*[nN]?\.?\s*[ºo°]?\.?\s*\d[\d.]{0,8}(?:\s*\/\s*\d{2,4})?|[A-Z]{3,6}))(?![\wÀ-ú])/g;
 function ledMencoes(texto) {
   const out = [];
   const re = new RegExp(LED_RE_MENCAO.source, "g");
   let m;
-  while ((m = re.exec(String(texto || ""))) !== null) out.push(m[1]);
+  /* (19.210.0) "Lei Complementar Municipal nº 147/2025" é a "Lei Complementar nº 147/2025": a esfera sai do rótulo */
+  while ((m = re.exec(String(texto || ""))) !== null) out.push(String(m[1]).replace(/\s+(?:Municipal|Estadual|Federal)(?=\s|$)/i, ""));
   return out;
 }
 

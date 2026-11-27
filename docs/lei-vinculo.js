@@ -38,6 +38,13 @@ function lvCandidatas(texto) {
     por(l, m);
   });
   if (LV_CF_RE.test(txt)) por(lista.find(lvEhCF), "Constituição Federal");
+  /* (19.210.0) a lei citada PELO NOME, sem número ("Lei Orgânica do Município", "Código Tributário Municipal"): a mesma
+   * regra da lista "leis citadas no edital", agora também na sugestão de cada tópico */
+  try {
+    if (typeof ledNomesNoTexto === "function" && typeof ledCasarPorNome === "function") {
+      ledNomesNoTexto(txt).forEach((nm) => { if (typeof ledCanon === "function" && ledCanon(nm)) return; por(ledCasarPorNome(nm, lista), nm); });
+    }
+  } catch (e) {}
   return out;
 }
 /* o texto do tópico que vale para achar a lei: o nome, a nota do edital ("+ Crimes :: 3 :: Lei nº 8.137/90") e os ramos

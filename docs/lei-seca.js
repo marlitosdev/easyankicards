@@ -85,6 +85,26 @@ const LEI_NIVEL_DIVISAO = { PARTE: 1, ATO: 1, LIVRO: 2, TITULO: 3, DISPOSICOES: 
  * e depois o nome de quem assina, o cargo ("Prefeito") e a nota de autoria. Isso não é texto do último artigo: daqui em
  * diante as linhas ficam fora da leitura (como o preâmbulo), até o próximo artigo ou divisão. Sem isto "JOSÉ QUEIROZ DE
  * LIMA" e "O PROJETO … É DE AUTORIA DO PODER EXECUTIVO" apareciam como "título dentro do artigo" no art. 523. */
+/* (19.210.0) uma linha do bloco de assinaturas do fim da lei (ver leiLerLei, fechoAssin) */
+const LEI_CARGO_ASSIN = "(?:Prefeit[oa]|Vice-?Prefeit[oa]|Secret[áa]ri[oa]|Procurador[a]?|Chefe|Governador[a]?|Presidente|Ministr[oa]|Vereador[a]?|Controlador[a]?)";
+const LEI_RE_ASSIN = [
+  new RegExp("^" + LEI_CARGO_ASSIN + "\\b[^.;:]{0,70}$", "i"),                      /* "Prefeito", "Procurador Geral do Município" */
+  new RegExp("^[A-ZÀ-ÚÇ'´ .-]{3,70}\\s+" + LEI_CARGO_ASSIN + "\\b[^.;:]{0,70}$"),  /* "ANDREA RIBEIRO LIMA Secretária da Fazenda" */
+  /^[A-ZÀ-ÚÇ'´ .-]{2,70}$/,                                                          /* "RODRIGO PINHEIRO", "DOS" */
+  /^[A-Z][a-zà-ú]+(?:\s+(?:d[aeo]s?|[A-ZÀ-Ú][a-zà-ú]+)){1,5}$/,                      /* "Rodrigo Pinheiro" */
+  /Assinado de forma|^digital(?:\s+por)?\b|^por\s+[A-ZÀ-Ú]{2}|Dados:\s*\d{4}[./-]\d{2}[./-]\d{2}|^\d{1,2}:\d{2}:\d{2}\s*[-+]\d{2}'?\d{2}'?$/i,
+  /^[A-ZÀ-ÚÇ ]+:\s*\d{3,}/,                                                          /* "NOME:00000000000 Dados: …" (o selo) */
+  /^[\d\s]{1,15}$/, /^[A-ZÀ-Ú0-9]{2,24}$/,                                           /* pedaços do selo ("440", "47R24O40DRIGO") */
+  /^(?:Pal[áa]cio|Gabinete)\b.{0,160}$/i,
+  /^(?:Registre-se|Publique-se|Cumpra-se)/i,
+  /autoria|Poder Executivo|n[ãa]o substitui o (?:original|publicado)|Leis\.org|^https?:/i,
+];
+function leiEhLinhaDeAssinatura(s) {
+  const y = String(s || "").trim();
+  if (!y || y.length > 180) return false;
+  if (/^Art\.?\s*\d|^§|^Par[áa]grafo|^[IVXLCDM]+\s*[-–—.)]/i.test(y)) return false;
+  return LEI_RE_FECHO.test(y) || LEI_RE_ASSIN.some((re) => re.test(y));
+}
 const LEI_RE_FECHO = /\d{1,3}\s*[ºo°]\s*(?:anivers[áa]rio\s+)?da\s+Independ[êe]ncia\b/i;
 
 /* O número do artigo como se MOSTRA: sem espaços, e com o ordinal escrito como ordinal. Texto de PDF
@@ -338,6 +358,21 @@ function leiLerLei(texto, opc) {
   /* quantas linhas com texto vêm DEPOIS de cada uma (para o fecho: só é fecho o que está no fim) */
   const fechoRestam = new Array(linhas.length).fill(0);
   for (let k = linhas.length - 2, c = 0; k >= 0; k--) { if (String(linhas[k + 1] || "").trim()) c++; fechoRestam[k] = c; }
+  /* (19.210.0) O BLOCO DE ASSINATURAS no fim do texto, lido de baixo para cima: nomes em maiúsculas, cargos ("Prefeito",
+   * "Secretária da Fazenda", "Procurador Geral do Município"), os pedaços do selo de assinatura digital ("Assinado de
+   * forma digital por…", "NOME:00000000000", "Dados: 2023.05.08", "11:07:15 -03'00'") e a linha "Palácio…". Nos
+   * decretos de Caruaru assinados digitalmente o selo embaralha a linha do "da Independência", e o fecho só se reconhece
+   * por esse bloco. Ele sai do último artigo (fica fora da leitura, como o preâmbulo). */
+  const fechoAssin = new Array(linhas.length).fill(false);
+  for (let k = linhas.length - 1, n = 0; k >= 0 && n < 25; k--) {
+    const y = String(linhas[k] || "").trim();
+    if (!y) continue;
+    if (!leiEhLinhaDeAssinatura(y)) break;
+    fechoAssin[k] = true; n++;
+  }
+  /* a linha do "da Independência" é fecho também quando o que vem depois dela, até o fim, é só o bloco de assinaturas
+   * (o selo digital passa das 8 linhas) */
+  const fechoAssinDepois = (i) => { for (let k = i + 1; k < linhas.length; k++) { if (String(linhas[k] || "").trim()) return fechoAssin[k]; } return true; };
   const RE_NOME_CONTINUA = /\s(?:DE|DA|DO|DAS|DOS|E|NA|NO|NAS|NOS|EM|AO|AOS|À|ÀS|PARA|COM|POR|SOBRE)$/;
   const conferirContinua = () => { continuaNome = !!(divisao && divisao.nome && RE_NOME_CONTINUA.test(String(divisao.nome).trim())); };
 
@@ -471,7 +506,7 @@ function leiLerLei(texto, opc) {
     /* (19.205.0) o fecho encerra o último artigo: ele e o que vem depois (assinatura, cargo, autoria) ficam fora. SÓ no fim
      * do texto (até 8 linhas depois dele): quando vem um anexo ("Lista de serviços anexa…", a tabela da LC 116), tudo
      * continua no último artigo como antes, para o leitor oferecer separar o anexo. */
-    if (atual && LEI_RE_FECHO.test(linha) && fechoRestam[i] <= 8) atual = null;
+    if (atual && ((LEI_RE_FECHO.test(linha) && (fechoRestam[i] <= 8 || fechoAssinDepois(i))) || fechoAssin[i])) atual = null;
     if (atual) {
       atual.linhas.push(linha);
       if (String(linha).trim()) atual.corpo += "\n" + linha;

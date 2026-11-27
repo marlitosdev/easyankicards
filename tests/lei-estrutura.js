@@ -418,6 +418,19 @@ async function testes() {
     /* o PDF consolidado gruda a palavra no número: "CAPÍTULOV", "SUBTÍTULOII" */
     const gr = api.leiEstruturaLei(["TÍTULO I", "DOS IMPOSTOS", "SUBTÍTULOII", "DO IPTU", "CAPÍTULOV", "DA BASE DE CÁLCULO", "Art. 1º Texto.", "Livro de ocorrências."].join(NL));
     const rots = Object.values(gr.nos).map((x) => x.rotulo);
+    /* (19.210.0) o decreto municipal assinado digitalmente: o selo embaralha as linhas e passa das 8 depois do fecho */
+    const dec = ["Art. 1º Fica regulamentado o pagamento.", "Art. 2º Este Decreto entra em vigor na data de sua publicação.",
+      "Palácio Jaime Nejaim, 05 de maio de 2023; 202º aniversário da Independência; 135º aniversário da República",
+      "FULANO", "Assinado de forma digital", "DE TAL", "por FULANO DE TAL", "SILVA DOS", "SILVA DOS SANTOS:00000000000",
+      "SANTOS:0000000 Dados: 2023.05.08", "440", "11:07:15 -03'00'", "FULANO DE TAL", "Prefeito",
+      "BELTRANA DA SILVA Secretária da Fazenda", "CICLANO DE SOUZA", "Procurador Geral do Município"].join(NL);
+    const ed = api.leiEstruturaLei(dec);
+    const a2 = ed.artigos.find((a) => a.num === "2");
+    ok(ed.artigos.length === 2 && a2 && !/FULANO|Prefeito|Assinado|00000|Palácio/.test(a2.texto) && !(api.leiDiagnosticarLei(dec).itens || []).length,
+      "G18h o bloco de assinaturas (com o selo digital) fica fora do último artigo, sem 'a conferir': " + (a2 && a2.texto.slice(-60)));
+    /* sem fecho no fim, nada muda: um artigo com nome em maiúsculas no meio continua inteiro */
+    const sem = api.leiEstruturaLei(["Art. 1º O órgão é a SECRETARIA DA FAZENDA.", "Art. 2º Texto final do artigo."].join(NL));
+    ok(sem.artigos.length === 2 && /Texto final do artigo/.test(sem.artigos[1].texto), "G18i lei sem bloco de assinatura continua igual");
     ok(rots.indexOf("SUBTÍTULO II — DO IPTU") >= 0 && rots.indexOf("CAPÍTULO V — DA BASE DE CÁLCULO") >= 0 && rots.length === 3, "G18g palavra grudada no número é divisão ('CAPÍTULOV'), e 'Livro de…' continua texto: " + rots.join(" | "));
   }
 

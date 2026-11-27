@@ -50,6 +50,14 @@ async function testes() {
     ok(api.lvSugestoesDoTopico("Direito Tributário", "Crimes contra a ordem tributária", [], "Lei nº 8.137/90").length === 1, "V1e a nota do edital ('+ Tópico :: peso :: Lei nº …') também vale");
     api.leiLigar(id(l14), api.matChave("Noções de Direito Administrativo", "Licitações públicas e contratos administrativos (Lei 14.133/2021)"));
     ok(!api.lvSugestoesDoTopico("Noções de Direito Administrativo", "Licitações públicas e contratos administrativos (Lei 14.133/2021)").length, "V1f já ligada, não é mais sugestão");
+    /* (19.210.0) a esfera entre o tipo e o número ("Decreto Municipal 30/2023", "Lei Complementar Municipal nº 147/2025")
+     * e a lei citada só pelo NOME ("Lei Orgânica do Município") também viram sugestão */
+    api.leiGuardar({ nome: "Decreto 030/2023 - Pagamento por cartão", texto: arts(3), topicos: [] });
+    api.leiGuardar({ nome: "LC 147/2025", texto: arts(3), topicos: [] });
+    api.leiGuardar({ nome: "Lei Orgânica do Município de Caruaru", texto: arts(3), topicos: [] });
+    ok(nomes("Pagamento por cartão (Decreto Municipal 30/2023)") === "Decreto 030/2023 - Pagamento por cartão" && nomes("Lei Complementar Municipal nº 147/2025") === "LC 147/2025",
+      "V1g 'Municipal' entre o tipo e o número: " + nomes("Decreto Municipal 30/2023") + " | " + nomes("Lei Complementar Municipal nº 147/2025"));
+    ok(nomes("Competência do Prefeito na Lei Orgânica do Município") === "Lei Orgânica do Município de Caruaru", "V1h a lei citada pelo nome (sem número) é sugerida: " + nomes("Lei Orgânica do Município"));
   }
 
   /* V2 + V3 + V6: a porta única, o destaque do tópico, o registro */
