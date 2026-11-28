@@ -940,7 +940,36 @@ dialog.fuga-dlg{width:min(680px,96vw);max-width:min(680px,96vw)}
 .fuga-chip{border-radius:var(--r-pilula);opacity:.65}
 .fuga-chip-on{opacity:1;border-color:var(--acao);color:var(--acao)}
 .fuga-chip-sep{color:var(--sutil)}
-.fuga-palco{min-height:220px;max-height:60vh;overflow:auto}
+/* (19.214.0) UMA ROLAGEM SÓ, e as ações sempre à vista: a janela é uma coluna (até 94dvh) em que só o meio rola; as
+   bolinhas ficam presas no alto do meio, as ações do item presas embaixo. Era um max-height de 60vh com as ações no fim
+   do cartão: um artigo longo escondia o "virar" atrás da barra de rolagem interna. */
+dialog.fuga-dlg[open]{display:flex;flex-direction:column;max-height:94dvh;overflow-y:auto}
+dialog.fuga-dlg[open] > *{flex:0 0 auto}
+dialog.fuga-dlg[open] > .fuga-palco{flex:1 1 auto}
+.fuga-palco{min-height:180px;overflow:auto;overscroll-behavior:contain}
+.fuga-palco > .fuga-passos{position:sticky;top:0;z-index:2;margin:0;padding:var(--esp-1) 0 var(--esp-2);background:var(--panel)}
+.fuga-item > .fuga-acoes,.fuga-palco > .fuga-acoes,.fuga-palco > .fuga-notas,.fuga-palco > .fuga-feito{position:sticky;bottom:0;z-index:1;
+  padding-bottom:var(--esp-1);background:linear-gradient(to top, var(--panel) 85%, transparent)}
+.fuga-item > .fuga-acoes{padding-top:var(--esp-2);margin-top:var(--esp-2)}
+.fuga-principal{min-height:var(--h-m)}
+.fuga-acoes .fuga-ir{margin-left:auto}
+.fuga-acoes > .fuga-feito{flex:1 1 100%;margin-top:0}
+/* (19.214.0) a letra da lei: uma linha por dispositivo, recuo pela hierarquia, o rótulo em negrito */
+.fuga-lei{line-height:1.55}
+.fuga-lei-lin{margin:0 0 var(--esp-1)}
+.fuga-lei-inc{padding-left:var(--esp-4)}
+.fuga-lei-ali{padding-left:var(--esp-6)}
+.fuga-lei-item{padding-left:calc(var(--esp-6) + var(--esp-4))}
+.fuga-lei-par{margin-top:var(--esp-3)}
+.fuga-lei-rot{font-weight:var(--peso-f)}
+.fuga-lei-mais{margin-top:var(--esp-1)}
+/* (19.214.0) o julgado: o tribunal num selo, a identificação grande, órgão · relator · data discretos, a pergunta */
+.fuga-jur-id{display:flex;flex-wrap:wrap;align-items:center;gap:var(--esp-2)}
+.fuga-jur-trib{border:1px solid var(--info);color:var(--info);border-radius:var(--r-pilula);padding:0 var(--esp-2);
+  font-size:var(--fs-1);font-weight:var(--peso-m);line-height:1.8}
+.fuga-jur-meta{margin-top:var(--esp-1);font-size:var(--fs-2);color:var(--sutil)}
+.fuga-pergunta{margin-top:var(--esp-2);font-size:var(--fs-3);color:var(--sutil)}
+.fuga-jur-resumo{margin-top:var(--esp-1);font-size:var(--fs-3);line-height:1.5;color:var(--sutil)}
 .fuga-item{border:1px solid var(--borda);border-radius:var(--r-m);padding:var(--esp-3)}
 .fuga-cab{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--esp-2);font-size:var(--fs-2);color:var(--sutil);margin-bottom:var(--esp-1)}
 .fuga-cab-tipo{font-weight:var(--peso-f);color:var(--texto)}
@@ -8963,7 +8992,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.213.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.214.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
@@ -10910,7 +10939,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
   <div class="fuga-painel" id="fugaOpcoes" hidden><div class="fuga-chips" id="fugaChips"></div></div>
   <div id="fugaLista" class="fuga-palco"></div>
   <div class="dlg-rodape">
-    <button class="btn btn-azul" id="btnFugaOutros" data-i18n="fuga_outros" data-i18n-title="fuga_outros_tip"></button>
+    <button class="btn-min" id="btnFugaOutros" data-i18n="fuga_outros" data-i18n-title="fuga_outros_tip"></button>
     <!-- (19.189.0) o que a fuga registrou (ou que nada foi registrado), ao lado do "sair e voltar" -->
     <span class="nota fuga-registro" id="fugaRegistro" role="status" aria-live="polite"></span>
     <button class="btn btn-verde" id="btnFugaFechar" data-i18n="fuga_voltar" data-i18n-title="fuga_voltar_tip"></button>

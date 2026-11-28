@@ -50,6 +50,14 @@ function fugaLimpo(s) {
     /* o "* " / "- " / "1. " da lista que veio junto com a marca (marcas antigas, ver matMarcaAntesDaLista) */
     .replace(/^(?:[-*]|\d+[.)])\s+/, "");
 }
+/* (19.214.0) o mesmo limpo, mas UMA LINHA POR DISPOSITIVO: o corpo do artigo vem do leitor com o caput, cada inciso,
+ * cada alínea e cada parágrafo na sua linha — e o fugaLimpo juntava tudo num bloco corrido */
+function fugaLimpoLinhas(s) {
+  return String(s || "").replace(/\r/g, "").split("\n")
+    .map((l) => l.replace(/\{\{c\d+::([\s\S]*?)\}\}/g, (m, x) => x.split("::")[0]).replace(/\*\*|__|==[!?§*~@]?/g, "")
+      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean).join("\n");
+}
 function fugaHash(s) { let h = 5381; const x = String(s || ""); for (let i = 0; i < x.length; i++) h = ((h << 5) + h + x.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 /* a identidade de um item (para não repetir nesta fuga e evitar o das últimas) */
 function fugaChave(x) {
@@ -200,7 +208,7 @@ function fugaArtigos() {
     if (!efetivosDe[l.id]) { try { efetivosDe[l.id] = leiArtigosEfetivos(l); } catch (e) { efetivosDe[l.id] = []; } }
     const a = efetivosDe[l.id].find((x) => x.num === r.num);
     if (!a || a.revogado) return;
-    const corpo = fugaLimpo(a.corpo || a.texto || "");
+    const corpo = fugaLimpoLinhas(a.corpo || a.texto || "");
     if (corpo.length < 10) return;
     const erra = r.e > r.a;
     let nota = "";
@@ -213,7 +221,7 @@ function fugaArtigos() {
     const curta = fugaLeiRotulo(l);
     out.push({ tipo: "artigo", lei: l.nome || "", leiCurta: curta || l.nome || "", leiId: l.id, num: r.num, rotulo: a.rotulo || ("Art. " + r.num),
       disciplina: maisDe(r.discs) || tp.disciplina, topico: maisDe(r.tops) || tp.topico,
-      frente: a.rotulo + " · " + (curta || l.nome || "") + (nota ? " — " + fugaLimpo(nota) : ""), verso: corpo.slice(0, 900),
+      frente: a.rotulo + " · " + (curta || l.nome || "") + (nota ? " — " + fugaLimpo(nota) : ""), verso: corpo,
       motivo: t(erra ? "fuga_art_erra" : "fuga_art_cai", { q: r.q, e: r.e }), peso: (erra ? 10 : 0) + r.q - (soDeduzida ? 3 : 0),
       fonte, soDeduzida: !!soDeduzida });
   });
@@ -230,12 +238,12 @@ function fugaArtigos() {
         if (!efetivosDe[l.id]) { try { efetivosDe[l.id] = leiArtigosEfetivos(l); } catch (e) { efetivosDe[l.id] = []; } }
         const a = efetivosDe[l.id].find((x) => x.num === im.num);
         if (!a || a.revogado) return;
-        const corpo = fugaLimpo(a.corpo || a.texto || "");
+        const corpo = fugaLimpoLinhas(a.corpo || a.texto || "");
         if (corpo.length < 10) return;
         const curta = fugaLeiRotulo(l);
         const tp = fugaDoTopico((l.topicos || [])[0]);
         out.push({ tipo: "artigo", lei: l.nome || "", leiCurta: curta, leiId: l.id, num: im.num, rotulo: a.rotulo || ("Art. " + im.num),
-          disciplina: tp.disciplina, topico: tp.topico, frente: a.rotulo + " · " + curta, verso: corpo.slice(0, 900),
+          disciplina: tp.disciplina, topico: tp.topico, frente: a.rotulo + " · " + curta, verso: corpo,
           motivo: "", peso: 14, fonte: null, imp: im, motivoImp });
       });
     }
@@ -300,7 +308,7 @@ function fugaPrazos(rnd) {
     fugaEmbaralhar(arts, rnd).some((a) => {
       const tx = String(a.texto || "");
       if (/revogad|vetad/i.test(tx.slice(0, 200)) || !FUGA_RE_PRAZO.test(tx) || tx.length > 900) return false;
-      out.push({ tipo: "prazo", lei: l.nome || "", leiId: l.id, num: a.num, rotulo: a.rotulo || ("Art. " + a.numCru), texto: fugaLimpo(tx).slice(0, 600),
+      out.push({ tipo: "prazo", lei: l.nome || "", leiId: l.id, num: a.num, rotulo: a.rotulo || ("Art. " + a.numCru), texto: fugaLimpoLinhas(tx),
         disciplina: (l.topicos || []).length ? tp.disciplina : "", topico: (l.topicos || []).length ? tp.topico : "" });
       return ++n >= 8;
     });
@@ -318,10 +326,25 @@ function fugaJulgados() {
     const nome = typeof jurCitNome === "function" ? jurCitNome(j) : [j.tribunal, j.classe, j.numero].filter(Boolean).join(" ");
     if (!String(nome || "").trim()) return;
     const tp = fugaDoTopico((j.topicos || [])[0]);
+    /* (19.214.0) o que a frente mostra além do nome: o tribunal à parte (o selo), a identificação (a súmula, o processo,
+     * o tema), órgão · relator · data, e o resumo (quando há) para depois de virar */
+    let ident = "";
+    try { ident = typeof jurIdentTexto === "function" ? jurIdentTexto(j) : ""; } catch (e) { ident = ""; }
+    if (!String(ident || "").trim()) ident = [j.classe, j.numero].filter(Boolean).join(" ") + (j.tema ? " · Tema " + j.tema : "");
+    const resumo = fugaLimpo(j.resumo || "");
     out.push({ tipo: "julgado", id: j.id, disciplina: tp.disciplina, topico: tp.topico, frente: nome, verso: tese,
+      tribunal: String(j.tribunal || "").trim(), ident: String(ident || "").trim(), sumula: /s[úu]mula/i.test(String(j.classe || "")),
+      meta: [j.orgao, j.relator, fugaDataBr(j.data)].map((v) => String(v || "").trim()).filter(Boolean).join(" · "),
+      resumo: resumo && fugaNorm(resumo) !== fugaNorm(tese) ? resumo.slice(0, 900) : "",
       peso: /s[úu]mula/i.test(String(j.classe || "")) ? 2 : 1 });
   });
   return out.sort((a, b) => b.peso - a.peso);
+}
+/* "2024-03-15" → "15/03/2024" (o que não for data ISO fica como veio) */
+function fugaDataBr(d) {
+  const s = String(d || "").trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : s;
 }
 /* os ramos que você esqueceu no "tentar lembrar" do mapa: [{ tipo: "mapa", chave, caminho, disciplina, topico, frente, verso }] */
 function fugaMapa() {
@@ -694,6 +717,81 @@ function fugaTique() {
 /* ---------------- a janela ---------------- */
 function fugaEl(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 function fugaBt(rot, fn, cls, id, tip) { const b = fugaEl("button", "btn-min" + (cls ? " " + cls : ""), rot); b.type = "button"; if (id) b.id = id; if (tip) b.title = tip; b.onclick = fn; return b; }
+/* (19.214.0) A AÇÃO DO MOMENTO é o botão cheio do cartão (DESIGN.md: um primário por grupo): virar, "ok" do que é só de
+ * ler, "próximo". Era um btn-min verde do tamanho de "abrir na Jurisprudência", ao lado dele — não se destacava. */
+function fugaBtPrincipal(rot, fn, id, tip) { const b = fugaEl("button", "btn btn-azul fuga-principal", rot); b.type = "button"; if (id) b.id = id; if (tip) b.title = tip; b.onclick = fn; return b; }
+/* =====================================================================
+ * (19.214.0) A LETRA DA LEI NA FUGA: uma linha por dispositivo
+ * O artigo vinha cortado em 900 caracteres ("…dos processos e, indev") e corrido, com os incisos e as alíneas no meio
+ * da frase. Agora: o texto inteiro, o caput, os incisos recuados, as alíneas mais recuadas, os parágrafos com espaço
+ * antes e o rótulo (I –, a), § 1º) em negrito. O artigo longo mostra o começo e diz quanto falta ("ver o resto").
+ * ===================================================================== */
+const FUGA_LEI_MAX_LIN = 10, FUGA_LEI_MAX_CAR = 1100, FUGA_LEI_RECORTE = 650;
+function fugaLeiTipoLinha(s) {
+  const x = String(s || "");
+  let m;
+  if ((m = /^(§\s*\d+[º°o]?(?:-[A-Z])?\.?|Par[áa]grafo [úu]nico\.?)/i.exec(x))) return { tipo: "par", rot: m[1] };
+  if ((m = /^([IVXLC]+(?:-[A-Z])?\s*[-–—])\s/.exec(x))) return { tipo: "inc", rot: m[1] };
+  if ((m = /^([a-z](?:-[a-z])?\))\s/.exec(x))) return { tipo: "ali", rot: m[1] };
+  if ((m = /^(\d+(?:\.\d+)*[.)])\s/.exec(x))) return { tipo: "item", rot: m[1] };
+  return { tipo: "cap", rot: "" };
+}
+/* quantas linhas cabem no recorte: até ~650 caracteres, no mínimo 3 linhas */
+function fugaLeiCorte(linhas) {
+  const total = linhas.reduce((s, l) => s + l.length, 0);
+  if (linhas.length <= FUGA_LEI_MAX_LIN && total <= FUGA_LEI_MAX_CAR) return linhas.length;
+  let k = 0, soma = 0;
+  while (k < linhas.length && (k < 3 || soma + linhas[k].length <= FUGA_LEI_RECORTE)) { soma += linhas[k].length; k++; }
+  return Math.min(k, linhas.length);
+}
+function fugaLeiEl(texto) {
+  const box = fugaEl("div", "fuga-lei");
+  box.id = "fugaLei";
+  const linhas = String(texto || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const corte = fugaLeiCorte(linhas);
+  const escondidas = [];
+  linhas.forEach((l, i) => {
+    const tp = fugaLeiTipoLinha(l);
+    const d = fugaEl("div", "fuga-lei-lin fuga-lei-" + tp.tipo);
+    if (tp.rot) { d.append(fugaEl("span", "fuga-lei-rot", tp.rot)); d.append(document.createTextNode(l.slice(tp.rot.length))); }
+    else d.textContent = l;
+    if (i >= corte) { d.hidden = true; escondidas.push(d); }
+    box.append(d);
+  });
+  if (escondidas.length) {
+    const b = fugaEl("button", "btn-quieto fuga-lei-mais", t("fuga_lei_mais", { n: escondidas.length }));
+    b.type = "button";
+    b.id = "btnFugaLeiMais";
+    b.setAttribute && b.setAttribute("aria-expanded", "false");
+    b.onclick = () => {
+      const abrir = escondidas[0].hidden;
+      escondidas.forEach((e) => { e.hidden = !abrir; });
+      b.textContent = abrir ? t("fuga_lei_menos") : t("fuga_lei_mais", { n: escondidas.length });
+      b.setAttribute && b.setAttribute("aria-expanded", abrir ? "true" : "false");
+    };
+    box.append(b);
+  }
+  return box;
+}
+/* (19.214.0) O JULGADO COMO OS OUTROS ITENS: o tribunal num selo, a identificação grande, órgão · relator · data
+ * discretos e a pergunta. Sem o link de citação na frente: o balão dele mostrava a tese antes de virar. */
+function fugaJurFrenteEl(x, revelado) {
+  const f = fugaEl("div", "fuga-jur");
+  f.id = "fugaFrente";
+  const id = fugaEl("div", "fuga-jur-id");
+  if (x.tribunal) { const s = fugaEl("span", "fuga-jur-trib", x.tribunal); s.id = "fugaJurTrib"; id.append(s); }
+  const nome = fugaEl("span", "fuga-txt fuga-jur-nome", x.ident || x.frente || "");
+  nome.id = "fugaJurNome";
+  id.append(nome);
+  f.append(id);
+  if (x.meta) { const m = fugaEl("div", "fuga-jur-meta", x.meta); m.id = "fugaJurMeta"; f.append(m); }
+  if (!revelado) {
+    const p = fugaEl("div", "fuga-pergunta", t(x.sumula ? "fuga_jur_q_sumula" : "fuga_jur_q"));
+    p.id = "fugaPergunta";
+    f.append(p);
+  }
+  return f;
+}
 function fugaRotuloTipo(x) { return t("fuga_tipo_" + x.tipo); }
 /* as contas de uma lista de respostas: o que é só de ler ("lido") não entra em sabia/não sabia */
 function fugaContas(rs) {
@@ -910,7 +1008,7 @@ function fugaPintarCartao(box, x, S) {
   /* a parte de baixo: virar, ou as quatro notas com o intervalo de cada uma */
   const acoes = fugaEl("div", "fuga-acoes");
   if (!S.revelado) {
-    if (c.kind !== "mc") acoes.append(fugaBt(t("fuga_virar"), () => fugaVirar(), "btn-min-ok", "btnFugaVirar", t("fuga_virar_tip")));
+    if (c.kind !== "mc") acoes.append(fugaBtPrincipal(t("fuga_virar"), () => fugaVirar(), "btnFugaVirar", t("fuga_virar_tip")));
     box.append(acoes);
     return;
   }
@@ -1024,10 +1122,14 @@ function fugaPintar(resLegado) {
   orig.title = fugaOrigem(x);
   cab.append(orig);
   c.append(cab);
-  const frente = fugaEl("div", "fuga-txt", x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica" || x.tipo === "prazo" ? (x.tipo === "prazo" ? x.rotulo + " — " + t("fuga_prazo_q") : x.texto) : x.frente);
-  frente.id = "fugaFrente";
-  if (x.tipo !== "artigo" && x.tipo !== "prazo") fugaLigarCitas(frente, x);
-  c.append(frente);
+  if (x.tipo === "julgado") {
+    c.append(fugaJurFrenteEl(x, S.revelado));
+  } else {
+    const frente = fugaEl("div", "fuga-txt", x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica" || x.tipo === "prazo" ? (x.tipo === "prazo" ? x.rotulo + " — " + t("fuga_prazo_q") : x.texto) : x.frente);
+    frente.id = "fugaFrente";
+    if (x.tipo !== "artigo" && x.tipo !== "prazo") fugaLigarCitas(frente, x);
+    c.append(frente);
+  }
   if (x.motivoImp) { const mi = fugaEl("div", "fuga-imp", "★ " + x.motivoImp); mi.id = "fugaImp"; c.append(mi); }
   if (x.motivo) c.append(fugaEl("div", "nota fuga-motivo", x.motivo));
   if (fugaTemFonte(x)) c.append(fugaFonteEl(x));
@@ -1107,20 +1209,17 @@ function fugaPintar(resLegado) {
         c.append(sec);
       }
       acoes.innerHTML = "";
-      acoes.append(fugaBt(t("fuga_proximo"), () => fugaSeguir(), "btn-min-ok", "btnFugaProx"));
+      acoes.append(fugaBtPrincipal(t("fuga_proximo"), () => fugaSeguir(), "btnFugaProx"));
     }
   } else if (fugaRespondido(x) && (x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica")) {
     acoes.append(fugaFeitoEl(fugaRespostaDe(x), x));
   } else if (x.tipo === "pegadinha" || x.tipo === "importante" || x.tipo === "dica") {
     /* o que é só para ler: lido, segue */
-    acoes.append(fugaBt(t("fuga_lido"), () => fugaResponder(true, true), "btn-min-ok", "btnFugaLido", t("fuga_lido_tip")));
+    acoes.append(fugaBtPrincipal(t("fuga_lido"), () => fugaResponder(true, true), "btnFugaLido", t("fuga_lido_tip")));
   } else if (!S.revelado) {
-    acoes.append(fugaBt(t("fuga_virar"), () => fugaVirar(), "btn-min-ok", "btnFugaVirar", t("fuga_virar_tip")));
+    acoes.append(fugaBtPrincipal(t("fuga_virar"), () => fugaVirar(), "btnFugaVirar", t("fuga_virar_tip")));
   } else {
-    const v = fugaEl("div", "fuga-verso", x.tipo === "prazo" ? x.texto : x.verso);
-    v.id = "fugaVerso";
-    fugaLigarCitas(v, x);
-    c.append(v);
+    c.append(fugaVersoEl(x));
     if (fugaRespondido(x)) acoes.append(fugaFeitoEl(fugaRespostaDe(x), x));
     else {
       acoes.append(fugaBt(t("fuga_sabia"), () => fugaResponder(true), "btn-min-ok", "btnFugaSabia", t("fuga_sabia_tip")));
@@ -1129,9 +1228,37 @@ function fugaPintar(resLegado) {
   }
   /* abrir no lugar dele (sem fechar a fuga: a janela abre por cima) */
   const ir = fugaIrBotao(x);
-  if (ir && (S.revelado || x.tipo === "julgado" || x.tipo === "artigo")) acoes.append(ir);
+  if (ir && (S.revelado || x.tipo === "julgado" || x.tipo === "artigo")) { ir.classList && ir.classList.add("fuga-ir"); acoes.append(ir); }
   c.append(acoes);
   box.append(c);
+}
+/* (19.214.0) O VERSO: a lei (artigo, prazo) uma linha por dispositivo; o julgado com o título (enunciado ou tese) e o
+ * resumo num "ver o resumo"; o resto como era (texto corrido, com as citações ligadas) */
+function fugaVersoEl(x) {
+  const v = fugaEl("div", "fuga-verso" + (x.tipo === "artigo" || x.tipo === "prazo" ? " fuga-verso-lei" : ""));
+  v.id = "fugaVerso";
+  if (x.tipo === "artigo" || x.tipo === "prazo") {
+    v.append(fugaLeiEl(x.tipo === "prazo" ? x.texto : x.verso));
+  } else if (x.tipo === "julgado") {
+    v.append(fugaEl("div", "fuga-q-sec-tit", t(x.sumula ? "fuga_jur_enunciado" : "fuga_jur_tese")));
+    const tx = fugaEl("div", "fuga-verso-txt", x.verso);
+    tx.id = "fugaJurTese";
+    v.append(tx);
+    if (x.resumo) {
+      const rs = fugaEl("div", "fuga-jur-resumo", x.resumo);
+      rs.id = "fugaJurResumo";
+      rs.hidden = true;
+      const b = fugaEl("button", "btn-quieto fuga-lei-mais", t("fuga_jur_ver_resumo"));
+      b.type = "button";
+      b.id = "btnFugaJurResumo";
+      b.onclick = () => { rs.hidden = !rs.hidden; b.textContent = t(rs.hidden ? "fuga_jur_ver_resumo" : "fuga_jur_sem_resumo"); };
+      v.append(b, rs);
+    }
+  } else {
+    v.textContent = x.verso || "";
+  }
+  fugaLigarCitas(v, x);
+  return v;
 }
 /* (19.188.0) O QUE VOCÊ MARCOU neste item: "✓ sabia", "✗ não sabia", "✓ lido" ou a nota do cartão — e o próximo */
 function fugaFeitoEl(resp, x) {
@@ -1139,7 +1266,7 @@ function fugaFeitoEl(resp, x) {
   d.id = "fugaFeito";
   const txt = resp.nota ? t("fuga_feito_nota", { n: t("est_nota" + resp.nota) }) : t(resp.lido ? "fuga_feito_lido" : resp.sabia ? "fuga_feito_sabia" : "fuga_feito_nao");
   d.append(fugaEl("span", "fuga-feito-txt", txt));
-  d.append(fugaBt(t("fuga_proximo"), () => fugaSeguir(), "btn-min-ok", "btnFugaProx"));
+  d.append(fugaBtPrincipal(t("fuga_proximo"), () => fugaSeguir(), "btnFugaProx"));
   return d;
 }
 /* "próximo" depois de responder ou de rever: o próximo SEM resposta; sem nenhum, o fim da rodada */
@@ -1195,7 +1322,7 @@ function fugaPintarFimRodada(box, S) {
   const tp = fugaProximoTipo();
   p.append(fugaEl("p", "nota fuga-corrente", t("fuga_corrente", { t: tp ? (FUGA_ICO[tp === "marca" ? "pegadinha" : tp] || "") + " " + t("fuga_tipo_" + (tp === "marca" ? "pegadinha" : tp)) : "—" })));
   const ac = fugaEl("div", "fuga-acoes");
-  ac.append(fugaBt(t("fuga_outros_seguir"), () => fugaOutros(), "btn-min-ok", "btnFugaSeguir"));
+  ac.append(fugaBtPrincipal(t("fuga_outros_seguir"), () => fugaOutros(), "btnFugaSeguir"));
   ac.append(fugaBt(t("fuga_terminar"), () => fugaTerminar(), "", "btnFugaTerminar"));
   p.append(ac);
   box.append(p);
