@@ -9,11 +9,12 @@
  * NADA É MEDIDO DE NOVO: as horas vêm do diário (o mesmo que o ritmo semanal lê), o peso e a ordem vêm do plano
  * (`montarPlano`), e o corte vem do cumprimento dos blocos (`plano.blocos`, o painel dos mínimos).
  *
- * O CORTE EM HORAS é uma aproximação declarada: o mínimo do edital é uma fração da COBERTURA do bloco; aplicada às horas
- * PLANEJADAS de cada disciplina do bloco, vira "quantas horas, mais ou menos, levam até o corte" (e até o corte com a
- * folga de 25% que o painel dos mínimos já usa). Não promete acerto — só mostra o ponto de referência no gráfico.
+ * (19.213.0) O DADO PRINCIPAL É A COBERTURA, NÃO O TEMPO: a barra de horas contra o planejado parecia "quase tudo
+ * estudado" (47h de 51h) com 41% dos assuntos cumpridos — o "de" era só o que faltava, e encolhia a cada ramo. Agora a
+ * barra é assuntos cumpridos ÷ todos, o corte do bloco fica na mesma régua (% dos assuntos), e as horas viram apoio:
+ * total, fatia do tempo, estudo novo × revisão, ritmo (minutos por assunto) contra o plano e se o que falta cabe até a prova.
  * ===================================================================== */
-const HOR = { revisaoAlerta: 0.5, minutosAlerta: 120 };
+const HOR = { revisaoAlerta: 0.5, minutosAlerta: 120, ritmoMinUn: 3, minutosConcentra: 300, concentraFator: 1.5, concentraPontos: 15 };
 
 /* Divide `m` minutos entre os ramos de `ids` pelo peso deles (a régua dos ramos do plano). */
 function horDividir(item, ids, m) {
@@ -39,12 +40,16 @@ function horMapa(plano, diario, opc) {
     if (!topo.has(chave)) topo.set(chave, { est: 0, rev: 0, ramos: new Map() });
     return topo.get(chave);
   };
+  /* (19.213.0) o estudo novo de SEMPRE, por tópico: o ritmo (minutos por assunto cumprido) compara com os assuntos
+   * cumpridos de sempre, então não pode olhar só o período escolhido */
+  const estTudo = new Map();
   let semMinutos = 0, fora = 0;
   (diario || []).forEach((x) => {
     if (!x || !x.d || x.d === "?" || x.a === "pendente") return;
+    const item = porChave.get(x.c);
+    if (item && x.a !== "revisado" && Number(x.m) > 0) estTudo.set(x.c, (estTudo.get(x.c) || 0) + Number(x.m));
     if (o.desde && String(x.d) < o.desde) return;
     if (o.ate && String(x.d) > o.ate) return;
-    const item = porChave.get(x.c);
     if (!item) { fora++; return; }
     const m = Number(x.m) || 0;
     if (!m) { semMinutos++; return; }
@@ -68,12 +73,17 @@ function horMapa(plano, diario, opc) {
   const disciplinas = nomes.map((nome) => {
     const its = porDisc.get(nome);
     const bruto = its.reduce((a, i) => a + i.bruto, 0);
-    let est = 0, rev = 0, plan = 0, unTotal = 0, unFeitas = 0, unRev = 0;
+    let est = 0, rev = 0, estT = 0, orc = 0, faltaPlano = 0, unTotal = 0, unFeitas = 0, unRev = 0;
     const topicos = its.map((i) => {
       const t = topo.get(i.chave) || { est: 0, rev: 0, ramos: new Map() };
-      est += t.est; rev += t.rev;
-      plan += i.ehRevisao ? i.minutos * 2 : i.minutos;
+      est += t.est; rev += t.rev; estT += estTudo.get(i.chave) || 0;
       const rs = (i.ramos || []).filter((r) => !r.pulado);
+      /* (19.213.0) O ORÇAMENTO FIXO do tópico: a soma do tempo dos ramos (sem os pulados), ou o tempo da faixa. Não é
+       * `i.minutos`: num tópico com ramos esse é só o que FALTA (encolhe a cada ramo cumprido — era o "de 51h20" que fazia
+       * a barra subir sozinha), e na revisão é a sessão (metade). */
+      const base = i.ehRevisao ? i.minutos * 2 : i.minutos;
+      orc += rs.length ? rs.reduce((a, r) => a + (r.minutos || 0), 0) : base;
+      faltaPlano += rs.length ? rs.filter((r) => !r.feito).reduce((a, r) => a + (r.minutos || 0), 0) : (i.feito ? 0 : base);
       const un = rs.length ? rs.length : 1;
       const feitas = rs.length ? rs.filter((r) => r.feito).length : (i.feito ? 1 : 0);
       const revs = rs.length ? rs.filter((r) => r.revisado).length : (i.revisado ? 1 : 0);
@@ -93,27 +103,68 @@ function horMapa(plano, diario, opc) {
      * disciplina vale 44%). Sem a fatia no plano, a conta antiga continua de reserva. */
     const pesoPct = plano.fatiaFina && plano.fatiaFina[nome] != null ? plano.fatiaFina[nome]
       : (plano.fatiaExata && plano.fatia && plano.fatia[nome] != null ? plano.fatia[nome] : (bruto / totalBruto) * 100);
-    /* (19.103.0) COM UM PERÍODO, A META É A DO PERÍODO: as horas por semana × as semanas do período × o que a disciplina
-     * vale. Antes as horas eram as do período e a meta, a do edital inteiro ("1h30 de 62h35" na semana). */
+    /* (19.103.0) COM UM PERÍODO, A META DE HORAS É A DO PERÍODO: as horas por semana × as semanas do período × o que a
+     * disciplina vale. Sem período, o planejado é o orçamento fixo da disciplina inteira. */
     const planPer = o.dias && o.minSemana ? o.minSemana * (o.dias / 7) * (pesoPct / 100) : null;
-    if (planPer !== null) plan = planPer;
-    const bl = planPer === null ? blocos.find((b) => (b.disciplinas || []).indexOf(nome) >= 0 && b.minPct !== null && b.minPct !== undefined) : null;
-    const corteMin = bl ? plan * bl.minPct / 100 : null;
-    const seguroMin = bl ? plan * Math.min(100, bl.minPct * ED_FOLGA_MINIMO) / 100 : null;
+    /* (19.213.0) A COBERTURA É O DADO PRINCIPAL: assuntos (ramos, ou o tópico sem ramos) cumpridos ÷ todos. O corte do bloco
+     * fica na MESMA régua (% dos assuntos), com a folga de 25% do painel dos mínimos. Antes o corte virava horas (% do
+     * planejado) e passar da linha parecia "passei do corte" quando era só "gastei metade das horas". A cobertura não
+     * depende do período, então as linhas ficam em qualquer período. */
+    const coberturaPct = unTotal ? (unFeitas / unTotal) * 100 : 0;
+    const bl = blocos.find((b) => (b.disciplinas || []).indexOf(nome) >= 0 && b.minPct !== null && b.minPct !== undefined) || null;
+    const cortePct = bl ? bl.minPct : null;
+    const seguroPct = bl ? Math.min(100, bl.minPct * ED_FOLGA_MINIMO) : null;
+    const estado = cortePct === null ? null : coberturaPct < cortePct ? "abaixo" : coberturaPct < seguroPct ? "apertado" : "ok";
+    /* O RITMO: minutos de estudo novo (de sempre) por assunto cumprido, contra o que o plano prevê por assunto. Com menos
+     * de HOR.ritmoMinUn assuntos cumpridos a média não diz nada e fica de fora. */
+    const pendentes = unTotal - unFeitas;
+    const ritmoMin = unFeitas >= HOR.ritmoMinUn && estT > 0 ? estT / unFeitas : null;
+    const previstoMin = unTotal ? orc / unTotal : null;
+    const faltaRitmoMin = ritmoMin === null ? null : ritmoMin * pendentes;
+    /* CABE ATÉ A PROVA? O tempo que sobra para ela (horas por semana × semanas até a prova × o que ela vale) contra o que
+     * falta (no ritmo real, ou pelo plano sem ritmo). Aproximação declarada: não desconta o tempo de revisão. */
+    const dispMin = o.diasProva > 0 && o.minSemana ? o.minSemana * (o.diasProva / 7) * (pesoPct / 100) : null;
+    const faltaMin = faltaRitmoMin !== null ? faltaRitmoMin : faltaPlano;
     const revisaoPct = total ? rev / total : 0;
     return {
       nome, peso: its[0].disciplinaPeso, pesoPct,
-      estudoMin: est, revisaoMin: rev, totalMin: total, planejadoMin: plan, revisaoPct, periodo: planPer !== null,
-      unidades: unTotal, feitas: unFeitas, revisadas: unRev, pendentes: unTotal - unFeitas,
+      estudoMin: est, revisaoMin: rev, totalMin: total, estudoTudoMin: estT, revisaoPct, periodo: planPer !== null,
+      planejadoMin: planPer !== null ? planPer : orc, orcamentoMin: orc,
+      unidades: unTotal, feitas: unFeitas, revisadas: unRev, pendentes, coberturaPct,
       bloco: bl ? { nome: bl.nome, minPct: bl.minPct, abaixo: !!bl.abaixo, apertado: !!bl.apertado } : null,
-      corteMin, seguroMin,
+      cortePct, seguroPct, estado,
+      ritmoMin, previstoMin, faltaRitmoMin, faltaPlanoMin: faltaPlano, faltaMin, dispMin,
+      naoCabe: dispMin !== null && pendentes > 0 && faltaMin > dispMin,
       /* muito tempo, mais da metade revisando e ainda há assunto por cumprir: horas que não avançaram o edital */
-      alerta: total >= HOR.minutosAlerta && revisaoPct >= HOR.revisaoAlerta && unTotal - unFeitas > 0,
+      alerta: total >= HOR.minutosAlerta && revisaoPct >= HOR.revisaoAlerta && pendentes > 0,
       topicos,
     };
   }).sort((a, b) => (b.pesoPct - a.pesoPct) || (a.nome < b.nome ? -1 : 1));
   const est = disciplinas.reduce((a, d) => a + d.estudoMin, 0), rev = disciplinas.reduce((a, d) => a + d.revisaoMin, 0);
-  return { disciplinas, total: { estudoMin: est, revisaoMin: rev, totalMin: est + rev, revisaoPct: est + rev ? rev / (est + rev) : 0 }, semMinutos, fora };
+  const tot = est + rev;
+  /* (19.213.0) a fatia do TEMPO de cada disciplina, para comparar com a fatia da PROVA */
+  disciplinas.forEach((d) => { d.tempoPct = tot ? (d.totalMin / tot) * 100 : 0; });
+  const unidades = disciplinas.reduce((a, d) => a + d.unidades, 0), feitas = disciplinas.reduce((a, d) => a + d.feitas, 0);
+  /* O RESUMO DO TOPO: onde o tempo se concentrou além do peso, o que vale prova e não teve hora nenhuma, o que não cabe */
+  const concentradas = tot >= HOR.minutosConcentra
+    ? disciplinas.filter((d) => d.tempoPct >= d.pesoPct * HOR.concentraFator && d.tempoPct - d.pesoPct >= HOR.concentraPontos) : [];
+  return {
+    disciplinas,
+    total: { estudoMin: est, revisaoMin: rev, totalMin: tot, revisaoPct: tot ? rev / tot : 0, unidades, feitas, coberturaPct: unidades ? (feitas / unidades) * 100 : 0 },
+    concentradas,
+    semHoras: disciplinas.filter((d) => d.totalMin === 0 && d.pendentes > 0),
+    naoCabem: disciplinas.filter((d) => d.naoCabe),
+    semMinutos, fora,
+  };
+}
+
+/* (19.213.0) A FRASE-DIAGNÓSTICO de cada coluna: o que o número quer dizer, em palavras */
+function horDiagnostico(d) {
+  if (!d.pendentes) return t("hor_dg_tudo");
+  if (!d.feitas && !d.estudoTudoMin) return t("hor_dg_nada");
+  if (!d.feitas) return t("hor_dg_sem_un", { h: horTexto(d.estudoTudoMin) });
+  if (d.ritmoMin !== null) return t("hor_dg_ritmo", { r: horTexto(d.ritmoMin), p: horTexto(d.previstoMin), f: horTexto(d.faltaRitmoMin) });
+  return t("hor_dg_plano", { f: horTexto(d.faltaPlanoMin) });
 }
 
 /* "12h30" / "45min" */
@@ -126,8 +177,8 @@ function horTexto(min) {
 
 /* =====================================================================
  * A TELA: colunas, da esquerda para a direita, na ordem do PESO
- *   azul = estudo novo · roxo = revisão · contorno tracejado = horas planejadas · linhas = corte e corte com folga
- *   embaixo de cada coluna: quantos assuntos (ramos) já foram cumpridos. Clicar numa coluna abre os tópicos e ramos.
+ *   a barra = assuntos (ramos) cumpridos ÷ todos · linhas = corte do bloco e corte com folga, na mesma régua
+ *   embaixo: as horas (azul = estudo novo, roxo = revisão), a fatia do tempo e a frase-diagnóstico. Clicar abre os tópicos.
  * ===================================================================== */
 const HOR_ALTURA = 190;
 let horDiscAberta = "";
@@ -185,53 +236,74 @@ function horPintar() {
   const { plano, diario, minSemana } = horDoAberto();
   if (!plano.itens.length) { cx.append(gerEl("p", "nota", t("hor_sem_plano"))); return; }
   const per = horPeriodo();
-  const m = horMapa(plano, diario, Object.assign({ minSemana }, per));
+  const sp = plano.prazo && typeof semanasAte === "function" ? semanasAte(plano.prazo) : null;
+  const m = horMapa(plano, diario, Object.assign({ minSemana, diasProva: sp ? sp.dias : null }, per));
   const tt = m.total;
+  /* (19.213.0) O RESUMO DIZ A CONCLUSÃO PRIMEIRO: quanto do edital foi cumprido; depois as horas; depois o que pede atenção */
   const res = gerEl("div", "hor-resumo");
-  res.append(gerEl("b", "", t("hor_total", { h: horTexto(tt.totalMin) })),
-    document.createTextNode(" " + t("hor_total2", { e: horTexto(tt.estudoMin), r: horTexto(tt.revisaoMin), p: Math.round(tt.revisaoPct * 100) })));
+  res.append(gerEl("b", "", t("hor_cob_total", { a: tt.feitas, n: tt.unidades, p: Math.round(tt.coberturaPct) })),
+    document.createTextNode(" " + t("hor_total", { h: horTexto(tt.totalMin) }) + " " + t("hor_total2", { e: horTexto(tt.estudoMin), r: horTexto(tt.revisaoMin), p: Math.round(tt.revisaoPct * 100) })));
+  const avisos = [];
+  m.concentradas.forEach((d) => avisos.push(t("hor_res_concentra", { d: d.nome, t: Math.round(d.tempoPct), p: pctProva(d.pesoPct) })));
+  if (m.semHoras.length) avisos.push(t("hor_res_sem_horas", { l: m.semHoras.map((d) => d.nome + " (" + pctProva(d.pesoPct) + "%)").join(", ") }));
+  if (m.naoCabem.length) avisos.push(t("hor_res_nao_cabe", { l: m.naoCabem.map((d) => d.nome).join(", ") }));
+  if (avisos.length) {
+    const ul = gerEl("ul", "hor-resumo-av");
+    avisos.forEach((a) => ul.append(gerEl("li", "", a)));
+    res.append(ul);
+  }
   cx.append(res);
   if (m.semMinutos) cx.append(gerEl("p", "nota", t("hor_sem_minutos", { n: m.semMinutos })));
   const leg = gerEl("div", "hor-legenda");
   /* as linhas de corte só entram na legenda quando alguma coluna tem uma (blocos com mínimo no edital) */
-  const temCorte = m.disciplinas.some((d) => d.corteMin !== null);
-  [["hor-est", t("hor_leg_est")], ["hor-rev", t("hor_leg_rev")], ["hor-plano", t("hor_leg_plano")]]
-    .concat(temCorte ? [["hor-corte", t("hor_leg_corte")], ["hor-seguro", t("hor_leg_seguro")]] : []).forEach(([c, r]) => {
+  const temCorte = m.disciplinas.some((d) => d.cortePct !== null);
+  [["hor-cob", t("hor_leg_cob")]]
+    .concat(temCorte ? [["hor-corte", t("hor_leg_corte")], ["hor-seguro", t("hor_leg_seguro")]] : [])
+    .concat([["hor-est", t("hor_leg_est")], ["hor-rev", t("hor_leg_rev")]]).forEach(([c, r]) => {
     const it = gerEl("span", "hor-leg"); it.append(gerEl("i", "hor-leg-i " + c), document.createTextNode(" " + r));
     leg.append(it);
   });
   cx.append(leg);
-  /* CADA COLUNA É UMA TRILHA DE ALTURA FIXA = as horas PLANEJADAS daquela disciplina (100%). O azul e o roxo sobem
-   * da base como fração da meta; as linhas de corte ficam na mesma escala (o mínimo é % do planejado). Assim todas as
-   * colunas têm o mesmo topo e o mesmo rótulo, e o que muda é o quanto da meta foi cumprido — as horas absolutas vão no
-   * rótulo de cima ("2h45 de 30h"). Passou da meta: a trilha enche e mostra o "+". */
+  /* (19.213.0) CADA COLUNA É A COBERTURA: a trilha de altura fixa é a disciplina inteira (100% dos assuntos), o
+   * preenchimento é o que já foi cumprido e as linhas de corte estão na mesma régua. A cor diz o estado contra o corte
+   * (vermelho abaixo, laranja apertado, verde com folga; sem corte, azul). As HORAS vêm embaixo, como apoio: o total, a
+   * fatia do seu tempo e uma tira (azul = estudo novo, roxo = revisão) do tamanho das horas, comparável entre colunas. */
   const graf = gerEl("div", "hor-graf");
+  const maxMin = m.disciplinas.reduce((a, d) => Math.max(a, d.totalMin), 0) || 1;
   m.disciplinas.forEach((d) => {
-    const col = gerEl("div", "hor-col" + (d.alerta ? " hor-col-alerta" : "") + (horDiscAberta === d.nome ? " hor-col-aberta" : ""));
-    col.title = d.nome + " — " + t("hor_tip_col", { e: horTexto(d.estudoMin), r: horTexto(d.revisaoMin), p: horTexto(d.planejadoMin), a: d.feitas, n: d.unidades })
-      + (d.bloco ? " — " + t("hor_tip_corte", { p: d.bloco.minPct, h: horTexto(d.corteMin) }) : "");
+    const col = gerEl("div", "hor-col" + (d.alerta || d.naoCabe ? " hor-col-alerta" : "") + (horDiscAberta === d.nome ? " hor-col-aberta" : ""));
+    col.title = d.nome + " — " + t("hor_tip_col", { a: d.feitas, n: d.unidades, c: Math.round(d.coberturaPct), e: horTexto(d.estudoMin), r: horTexto(d.revisaoMin) })
+      + (d.cortePct !== null ? " — " + t("hor_tip_corte", { p: d.cortePct }) : "");
     const topo = gerEl("div", "hor-topo");
-    topo.append(gerEl("b", "", horTexto(d.totalMin)), gerEl("span", "hor-topo-de", d.periodo ? t("hor_de_periodo", { p: horTexto(d.planejadoMin), d: per.dias }) : t("hor_de", { p: horTexto(d.planejadoMin) })));
+    topo.append(gerEl("b", "", Math.round(d.coberturaPct) + "%"), gerEl("span", "hor-topo-de", t("hor_un", { a: d.feitas, n: d.unidades })));
     col.append(topo);
-    const area = gerEl("div", "hor-area" + (d.totalMin > d.planejadoMin ? " hor-excede" : ""));
+    const area = gerEl("div", "hor-area");
     area.style.height = HOR_ALTURA + "px";
-    const base = d.planejadoMin || Math.max(60, d.totalMin);
-    const pEst = Math.min(100, (d.estudoMin / base) * 100), pRev = Math.min(100 - pEst, (d.revisaoMin / base) * 100);
-    const est = gerEl("div", "hor-est"); est.style.height = pEst.toFixed(2) + "%";
-    const rev = gerEl("div", "hor-rev"); rev.style.height = pRev.toFixed(2) + "%";
-    area.append(rev, est);
-    if (d.corteMin !== null && d.planejadoMin) {
-      const c = gerEl("div", "hor-corte" + (d.bloco.abaixo ? " hor-corte-risco" : "")); c.style.bottom = ((d.corteMin / d.planejadoMin) * 100).toFixed(2) + "%"; area.append(c);
-      const s = gerEl("div", "hor-seguro"); s.style.bottom = ((d.seguroMin / d.planejadoMin) * 100).toFixed(2) + "%"; area.append(s);
+    const cob = gerEl("div", "hor-cob" + (d.estado ? " hor-cob-" + d.estado : ""));
+    cob.style.height = Math.min(100, d.coberturaPct).toFixed(2) + "%";
+    area.append(cob);
+    if (d.cortePct !== null) {
+      const c = gerEl("div", "hor-corte" + (d.estado === "abaixo" ? " hor-corte-risco" : "")); c.style.bottom = d.cortePct.toFixed(2) + "%"; area.append(c);
+      const s = gerEl("div", "hor-seguro"); s.style.bottom = d.seguroPct.toFixed(2) + "%"; area.append(s);
     }
     col.append(area);
-    const prog = gerEl("div", "hor-prog");
-    const barra = gerEl("div", "hor-prog-b"); barra.style.width = (d.unidades ? (d.feitas / d.unidades) * 100 : 0).toFixed(0) + "%";
-    prog.append(barra);
-    col.append(prog, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades })));
+    /* as horas: no período, contra a meta do período; sem período, a fatia do seu tempo */
+    col.append(gerEl("div", "hor-horas", d.periodo
+      ? t("hor_horas_periodo", { h: horTexto(d.totalMin), p: horTexto(d.planejadoMin), d: per.dias })
+      : t("hor_horas", { h: horTexto(d.totalMin), p: Math.round(d.tempoPct) })));
+    const tira = gerEl("div", "hor-tira");
+    const tiraIn = gerEl("div", "hor-tira-in"); tiraIn.style.width = ((d.totalMin / maxMin) * 100).toFixed(2) + "%";
+    const te = gerEl("div", "hor-est"), tr = gerEl("div", "hor-rev");
+    te.style.width = (d.totalMin ? (d.estudoMin / d.totalMin) * 100 : 0).toFixed(2) + "%";
+    tr.style.width = (d.totalMin ? (d.revisaoMin / d.totalMin) * 100 : 0).toFixed(2) + "%";
+    tiraIn.append(te, tr); tira.append(tiraIn);
+    col.append(tira, gerEl("div", "hor-diag", horDiagnostico(d)));
     col.append(gerEl("div", "hor-nome", d.nome), gerEl("div", "hor-pesop", t("cov_vale", { p: pctProva(d.pesoPct) })));
     /* o alerta ocupa SEMPRE a mesma linha (vazia quando não há), para as colunas terminarem alinhadas */
-    col.append(gerEl("div", "hor-alerta", d.alerta ? "⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) }) : ""));
+    const al = [];
+    if (d.naoCabe) al.push("⚠ " + t("hor_alerta_cabe"));
+    if (d.alerta) al.push("⚠ " + t("hor_alerta", { p: Math.round(d.revisaoPct * 100) }));
+    col.append(gerEl("div", "hor-alerta", al.join(" · ")));
     col.onclick = () => { horAbrirDisc(d.nome); };
     graf.append(col);
   });
@@ -286,12 +358,12 @@ function horPintar() {
     const linha1 = gerEl("div", "hor-drow-l1");
     linha1.append(gerEl("span", "", d.nome), gerEl("span", "hor-drow-peso", t("cov_vale", { p: pctProva(d.pesoPct) })));
     meio.append(linha1);
+    /* (19.213.0) o trilho da linha é a mesma cobertura da coluna (não mais as horas contra o planejado) */
     const trilho = gerEl("div", "hor-drow-trilho");
-    const base = d.planejadoMin || Math.max(60, d.totalMin);
-    const pEst = Math.min(100, (d.estudoMin / base) * 100), pRev = Math.min(100 - pEst, (d.revisaoMin / base) * 100);
-    trilho.append(gerEl("div", "hor-drow-est", ""), gerEl("div", "hor-drow-rev", ""));
-    trilho.children[0].style.width = pEst.toFixed(2) + "%"; trilho.children[1].style.width = pRev.toFixed(2) + "%";
-    meio.append(trilho, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades })));
+    const cobL = gerEl("div", "hor-cob" + (d.estado ? " hor-cob-" + d.estado : ""));
+    cobL.style.width = Math.min(100, d.coberturaPct).toFixed(2) + "%";
+    trilho.append(cobL);
+    meio.append(trilho, gerEl("div", "hor-un", t("hor_un", { a: d.feitas, n: d.unidades }) + " · " + horTexto(d.totalMin)));
     cab.append(meio);
     row.append(cab);
     cab.onclick = () => horAbrirDisc(d.nome);

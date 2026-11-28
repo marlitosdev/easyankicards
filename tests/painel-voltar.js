@@ -2,7 +2,8 @@
  *
  *   PV1  "vale X% da prova" é a MESMA fatia do plano nas horas, no Domínio e na cobertura (híbrida: parte do edital, parte
  *        estimada) — antes eram três contas
- *   PV2  com um período (7 dias), a meta é a do período (horas por semana × semanas × fatia) e as linhas de corte saem
+ *   PV2  com um período (7 dias), a meta de HORAS é a do período (horas por semana × semanas × fatia); o corte, em
+ *        cobertura, não depende do período (19.213.0)
  *   PV3  abrir o estudo a partir das horas e fechar: as horas voltam, na mesma disciplina
  *   PV4  se a pessoa foi para outra tela do app, o painel não volta por cima: aparece "↩ Voltar para …", que reabre
  *   PV5  o Domínio volta com o mesmo filtro e a mesma visão
@@ -45,10 +46,10 @@ async function testes() {
   /* ---- PV2 ---- */
   const h7 = api.horMapa(plano, [], { dias: 7, minSemana: 20 * 60, desde: d(-7) });
   const pt = h7.disciplinas.find((x) => x.nome === "Português");
-  ok(pt.periodo === true && igual(pt.planejadoMin, 20 * 60 * ff["Português"] / 100) && pt.corteMin === null, "PV2 em 7 dias, a meta é 20h × a fatia: " + Math.round(pt.planejadoMin) + " min");
+  ok(pt.periodo === true && igual(pt.planejadoMin, 20 * 60 * ff["Português"] / 100) && pt.cortePct === null, "PV2 em 7 dias, a meta é 20h × a fatia: " + Math.round(pt.planejadoMin) + " min");
   api.$("btnEdHoras").onclick();
   api.$("horPeriodo").value = "7"; api.$("horPeriodo").onchange();
-  const topo = todos(api.$("horCorpo")).filter((e) => cls(e, "hor-topo-de")).map((e) => e.textContent);
+  const topo = todos(api.$("horCorpo")).filter((e) => cls(e, "hor-horas")).map((e) => e.textContent);
   ok(topo.length === 3 && topo.every((x) => /previstas em 7 dias/.test(x)), "PV2b o rótulo diz que a meta é do período: " + topo[0]);
   ok(todos(api.$("horCorpo")).filter((e) => cls(e, "hor-pesop")).every((e) => /^vale [\d,]+% da prova$/.test(e.textContent)), "PV2c cada coluna diz quanto vale na prova");
   api.$("horPeriodo").value = "tudo"; api.$("horPeriodo").onchange();

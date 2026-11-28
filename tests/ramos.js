@@ -2418,8 +2418,8 @@ async function testes() {
       const comBloco = Object.assign({}, plano, { blocos: [{ nome: "Bloco A", disciplinas: ["Direito Financeiro"], minPct: 50, abaixo: true }] });
       const mb = a.horMapa(comBloco, diario, {});
       const dfb = mb.disciplinas.find((d) => d.nome === "Direito Financeiro");
-      ok(dfb.corteMin !== null && Math.abs(dfb.corteMin - dfb.planejadoMin * 0.5) < 1e-9 && Math.abs(dfb.seguroMin - dfb.planejadoMin * 0.625) < 1e-9 && dfb.bloco.abaixo === true, "R62i o corte vira horas: 50% do planejado, e com folga de 25%: " + dfb.corteMin + " / " + dfb.seguroMin);
-      ok(dl.corteMin === null && a.horTexto(750) === "12h30" && a.horTexto(45) === "45min" && a.horTexto(120) === "2h", "R62j sem bloco nao ha linha de corte; formato das horas");
+      ok(dfb.cortePct === 50 && Math.abs(dfb.seguroPct - 62.5) < 1e-9 && dfb.estado === "abaixo" && dfb.bloco.abaixo === true, "R62i (19.213.0) o corte fica na regua da COBERTURA: 50% dos assuntos, e com folga de 25%: " + dfb.cortePct + " / " + dfb.seguroPct + " / " + dfb.estado);
+      ok(dl.cortePct === null && dl.estado === null && a.horTexto(750) === "12h30" && a.horTexto(45) === "45min" && a.horTexto(120) === "2h", "R62j sem bloco nao ha linha de corte; formato das horas");
       const vazio = a.horMapa(plano, [], {});
       ok(vazio.total.totalMin === 0 && vazio.disciplinas.every((d) => d.alerta === false && d.revisaoPct === 0), "R62k sem registro nenhum: tudo zero, sem alerta e sem dividir por zero");
     }
@@ -2433,17 +2433,17 @@ async function testes() {
       const iso = hoje.getFullYear() + "-" + p2(hoje.getMonth() + 1) + "-" + p2(hoje.getDate());
       a.edDiarioDefinir([{ d: iso, c: lei.chave, a: "feito", m: 90, rm: [{ id: lei.ramos[0].id }], cc: "ISS Caruaru" }, { d: iso, c: rec.chave, a: "revisado", m: 150, cc: "ISS Caruaru" }, { d: iso, c: rec.chave, a: "feito", m: 30, cc: "ISS Caruaru" }]);
       const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
-      ok(["hor-graf", "hor-col", "hor-est", "hor-rev", "hor-plano", "hor-corte", "hor-seguro", "hor-prog", "hor-det", "hor-alerta"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.hor-dlg\[open\]/.test(html), "R63a as classes do grafico tem CSS (e a janela tem a regra [open])");
+      ok(["hor-graf", "hor-col", "hor-est", "hor-rev", "hor-cob", "hor-corte", "hor-seguro", "hor-tira", "hor-diag", "hor-det", "hor-alerta"].every((c) => html.indexOf("." + c) >= 0) && /dialog\.hor-dlg\[open\]/.test(html), "R63a as classes do grafico tem CSS (e a janela tem a regra [open])");
       a.$("btnEdHoras").onclick();
       ok(a.$("dlgHoras").open === true, "R63b o botao do edital abre as horas por assunto");
       const cols = achar(a.$("horCorpo"), (e) => cls(e, "hor-col"));
       ok(cols.length === 2 && /Licitações/.test(cols[0].textContent), "R63c uma coluna por disciplina, a de maior peso a esquerda: " + cols.map((c) => c.textContent.slice(0, 20)).join("|"));
       const est = achar(cols[0], (e) => cls(e, "hor-est"))[0], rev = achar(cols[1], (e) => cls(e, "hor-rev"))[0];
       const est1 = achar(cols[1], (e) => cls(e, "hor-est"))[0];
-      ok(/%$/.test(est.style.height) && parseFloat(est.style.height) > 0 && parseFloat(rev.style.height) > 0 && parseFloat(est1.style.height) + parseFloat(rev.style.height) <= 100.0001, "R63d as camadas sao fracao da META planejada (a trilha e' sempre 100%): " + est.style.height + " / " + rev.style.height);
+      ok(/%$/.test(est.style.width) && parseFloat(est.style.width) > 0 && parseFloat(rev.style.width) > 0 && Math.abs(parseFloat(est1.style.width) + parseFloat(rev.style.width) - 100) < 0.01 && achar(cols[0], (e) => cls(e, "hor-cob")).length === 1, "R63d (19.213.0) a barra e' a cobertura; estudo novo e revisao vao na tira das horas, repartindo o total: " + est.style.width + " / " + rev.style.width);
       ok(achar(cols[0], (e) => cls(e, "hor-area")).length === 1 && achar(cols, (e) => cls(e, "hor-area")).every((x) => x.style.height === achar(cols[0], (e) => cls(e, "hor-area"))[0].style.height), "R63d2 todas as trilhas tem a MESMA altura (os rotulos ficam alinhados no mesmo topo)");
       ok(achar(cols[1], (e) => cls(e, "hor-alerta"))[0].textContent.length > 0 && achar(cols[0], (e) => cls(e, "hor-alerta"))[0].textContent === "", "R63e a disciplina que so' revisou mostra o alerta (as outras deixam a linha vazia, alinhada)");
-      ok(!/horas até o corte/.test(a.$("horCorpo").textContent), "R63e2 sem bloco com minimo, a legenda NAO mostra as linhas de corte");
+      ok(!/corte do bloco/.test(a.$("horCorpo").textContent), "R63e2 sem bloco com minimo, a legenda NAO mostra as linhas de corte");
       cols[0].onclick();
       ok(achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length === 1 && achar(a.$("horCorpo"), (e) => cls(e, "hor-ramo")).length >= 3, "R63f clicar na coluna abre os topicos e ramos");
       const btsDet = achar(a.$("horCorpo"), (e) => cls(e, "hor-det")).length ? achar(achar(a.$("horCorpo"), (e) => cls(e, "hor-det"))[0], (e) => e.tag === "button") : [];
