@@ -23,9 +23,10 @@ async function testes() {
   const cls = (e, c) => new RegExp("(^|\\s)" + c + "(\\s|$)").test(e.className || "");
   const EDITAL = ["# ISS | prova: 2027-06-01 | horas: 20", "@ Licitações :: 5", "+ Lei 14.133 :: 5", "++ Modalidades :: 5", "++ Fase preparatória",
     "+ Convênios :: 2", "@ Direito Financeiro :: 4", "+ Receita Pública :: 4"].join("\n");
-  const montar = () => {
+  const montar = (aba) => {
     const r = rodar(); const a = r.api;
     a.matIniciar(); a.edIniciar();
+    if (aba !== null) a.domAbaDefinir(aba || "prior", true);
     const ed = a.edCriar("ISS Caruaru Auditor", EDITAL);
     return { a, ed };
   };
@@ -33,13 +34,13 @@ async function testes() {
 
   /* ---- 1, 2, 3: abrir, visões, topo, "?" e o tom da manchete ---- */
   {
-    const { a, ed } = montar();
+    const { a, ed } = montar(null);
     a.domAbrir(ed.id);
     const html = fs.readFileSync(path.join(__dirname, "..", "docs", "index.html"), "utf8");
     ok(["dom-fixo", "dom-ajuda", "dom-aj-par", "dom-manchete-info", "dom-ganho", "dom-item-porque", "dom-sem-estudo", "dom-linha", "dom-linha-sel", "dom-linha-menu", "dom-tl", "dom-busca",
-      "dom-det", "dom-det-nav", "dom-seg-balao", "dom-seg-incerto", "dom-seg-venc", "dom-seg-sub", "dom-seg-n", "dom-mapa-leg", "dom-apagado", "dom-disc-fim"].every((c) => html.indexOf("." + c) >= 0), "D0 as classes novas têm CSS");
-    ok(a.$("dlgDominio").open === true && pain(a, "prior").hidden === false && pain(a, "disc").hidden === true && pain(a, "evo").hidden === true && pain(a, "det").hidden === true
-      && a.$("btnDomAbaPrior").getAttribute("aria-selected") === "true", "D1 abre em Prioridades (só aquela visão à mostra)");
+      "dom-det", "dom-det-nav", "dom-seg-balao", "dom-seg-incerto", "dom-seg-venc", "dom-seg-sub", "dom-mapa-leg", "dom-ajuda-leg", "dom-det-menu", "dom-det-agenda", "dom-tl-ag", "dom-apagado", "dom-disc-fim"].every((c) => html.indexOf("." + c) >= 0), "D0 as classes novas têm CSS");
+    ok(a.$("dlgDominio").open === true && pain(a, "disc").hidden === false && pain(a, "prior").hidden === true && pain(a, "evo").hidden === true && pain(a, "det").hidden === true
+      && a.$("btnDomAbaDisc").getAttribute("aria-selected") === "true", "D1 (19.215.0) sem escolha lembrada, abre no mapa (Disciplinas): o Domínio é diagnóstico");
     const fixo = achar(a.$("domCorpo"), (e) => cls(e, "dom-fixo"))[0];
     ok(fixo && achar(fixo, (e) => cls(e, "dom-dist")).length === 1 && achar(fixo, (e) => cls(e, "cov-manchete")).length === 1 && !achar(pain(a, "prior"), (e) => cls(e, "dom-dist")).length,
       "D2 a manchete e a barra do peso ficam no topo preso, fora das visões");
@@ -398,14 +399,15 @@ async function testes() {
     const sRec = segDe("Receita Pública"), sConv = segDe("Convênios");
     ok(cls(sRec, "dom-seg-incerto") && !cls(sConv, "dom-seg-incerto"), "M2 o verde com amostra pequena (6 questões) vem listrado: medida incerta");
     const nConv = a.domCtxAtual().posFila[a.matChave("Licitações", "Convênios")];
-    ok(nConv >= 1 && nConv <= 5 && achar(sConv, (e) => cls(e, "dom-seg-n"))[0].textContent === String(nConv) && !achar(sRec, (e) => cls(e, "dom-seg-n")).length,
-      "M2a o pedaço traz a posição na fila (os 5 primeiros); o verde, fora da fila, não: " + nConv);
+    ok(nConv >= 1 && !achar(pain(a, "disc"), (e) => cls(e, "dom-seg-n")).length,
+      "M2a (19.215.0) o pedaço não traz mais o número da fila (um canal a menos na barra): " + nConv);
     ok(/Receita Pública/.test(sRec.getAttribute("aria-label")) && /vale [\d,]+% da prova/.test(sRec.getAttribute("aria-label")), "M2b o pedaço diz o que é a quem não vê a cor");
     a.difDefinir("Licitações", a.domChaveAuto("Lei 14.133", "modalidades"), "alta", "declarada");
     a.domPintar();
     const sub = achar(segDe("Lei 14.133"), (e) => cls(e, "dom-seg-sub"))[0];
     ok(sub && sub.children.length === 2 && cls(sub.children[0], "dom-n-vermelho") && cls(sub.children[1], "dom-n-cinza"), "M2c ramos de cores diferentes: a faixa fina embaixo mostra a cor de cada um");
-    ok(achar(pain(a, "disc"), (e) => cls(e, "dom-mapa-leg")).length === 1 && achar(pain(a, "disc"), (e) => cls(e, "dom-leg-amostra")).length === 4, "M2d a legenda 'como ler a barra' com as quatro marcas");
+    ok(!achar(pain(a, "disc"), (e) => cls(e, "dom-mapa-leg")).length && achar(a.$("domLegCx"), (e) => cls(e, "dom-leg-amostra")).length === 3,
+      "M2d (19.215.0) 'como ler a barra' mora no ⓘ, com as três marcas (listras, risco, ramos), e não antes do mapa");
     /* os filtros acendem */
     const nDisc = discs().length;
     a.domFiltroDefinir("vermelho");
@@ -479,6 +481,46 @@ async function testes() {
     const ec3 = { preventDefault() { this.p = true; } };
     ((dlg._ouv && dlg._ouv.cancel) || []).forEach((f) => f(ec3));
     ok(eb.p && ec3.p && a.$("domBusca").value === "" && achar(pain(a, "prior"), (e) => cls(e, "dom-linha")).length >= 2, "M4c Esc na busca limpa a busca (e não fecha a janela)");
+  }
+  /* ---- (19.215.0) VERSÃO ENXUTA: o ⓘ, uma ação no detalhe e a posição na AGENDA ---- */
+  {
+    const { a, ed } = montar(null);
+    a.domAbrir(ed.id);
+    ok(a.$("domLegCx").hidden === false && a.$("domTeclas").hidden === false && a.$("domSub").hidden === false, "E1 na primeira vez, o ⓘ aberto mostra a explicação, a legenda e o teclado");
+    ok(a.t("dom_sub").length < 260 && a.t("dom_sub").indexOf("agenda") >= 0, "E1a a explicação é curta e diz que o que estudar é a agenda: " + a.t("dom_sub").length);
+    a.$("btnDomAjuda").onclick();
+    ok(a.$("domLegCx").hidden === true && a.$("domTeclas").hidden === true, "E1b fechado o ⓘ, a legenda e o teclado saem do topo");
+    /* a agenda desenhada é a fonte: a mesma lista, na mesma ordem */
+    a.hubPintarAgenda();
+    const ag = a.hubUltimaAgendaAtual();
+    const meus = (ag.itens || []).filter((x) => x.edital === String(ed.id));
+    ok(meus.length >= 1 && ag.editais.indexOf(String(ed.id)) >= 0 && typeof ag.nHoje === "number", "E2 a agenda guarda a lista da semana, os editais e quantas são de hoje: " + meus.length);
+    a.domPintar();
+    const c = a.domCtxAtual();
+    const x0 = meus[0];
+    const tp0 = Object.values(c.topPorChave).find((tp) => tp.chave === x0.chave);
+    const tl0 = tp0 && c.tls[tp0.chave];
+    ok(tp0 && tl0 && achar(tl0, (e) => cls(e, "dom-tl-ag")).length === 1, "E3 no mapa, o tópico da agenda leva o selo 📅 (hoje ou nesta semana): " + x0.nome);
+    const nSelos = achar(pain(a, "disc"), (e) => cls(e, "dom-tl-ag")).length;
+    ok(nSelos === meus.length, "E3a um selo por tópico da agenda deste edital: " + nSelos + " de " + meus.length);
+    a.domIrAoTopico(c.discDoTop[tp0.chave].nome, tp0.chave);
+    const onde = achar(pain(a, "det"), (e) => cls(e, "dom-det-onde"))[0];
+    const esperado = a.t(ag.nHoje >= 1 ? "dom_det_ag_hoje" : "dom_det_ag_semana", { i: 1, n: ag.itens.length });
+    ok(onde && onde.textContent === esperado && cls(onde, "dom-det-agenda") && /fila do que reforçar|Fora da fila/.test(onde.title || ""),
+      "E4 o detalhe diz onde o tópico está na agenda (a fila do reforço fica no balão): " + (onde && onde.textContent));
+    /* uma ação à vista no detalhe; o resto no ⋯ */
+    const det = pain(a, "det");
+    const acoes = achar(det, (e) => cls(e, "dom-item-acoes"))[0];
+    const menu = achar(acoes, (e) => cls(e, "dom-det-menu"))[0];
+    ok(achar(acoes, (e) => cls(e, "dom-acao-1")).length === 1 && achar(acoes, (e) => cls(e, "dom-mais")).length === 1 && menu && menu.hidden === true
+      && achar(menu, (e) => cls(e, "cov-acoes")).length === 1 && !Array.from(acoes.children).some((e) => cls(e, "cov-acoes")),
+      "E5 o detalhe mostra uma ação (a que mais ajuda na cor) e o ⋯; abrir, cartões, questões e registrar ficam no menu");
+    achar(acoes, (e) => cls(e, "dom-mais"))[0].onclick({ stopPropagation() {} });
+    ok(menu.hidden === false, "E5a o ⋯ abre o menu das outras ações");
+    /* sem agenda para o edital: a fila do reforço, como antes; tópico fora da agenda: diz isso */
+    ok(a.domNaAgenda(null, "X", { chave: "k", nome: "k" }) === null, "E6 sem agenda, nada a dizer (o detalhe volta à fila do reforço)");
+    ok(a.domNaAgenda({ mapa: new Map(), n: 3 }, "X", { chave: "k", nome: "k" }).fora === true && a.domAgendaTxt({ fora: true }) === a.t("dom_det_ag_fora"), "E6a edital na agenda e tópico não: 'não está na agenda desta semana'");
+    ok(a.domAgendaDoEdital("edital-que-nao-existe") === null, "E6b edital fora da agenda: null");
   }
   return falhas;
 }

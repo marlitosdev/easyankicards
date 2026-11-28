@@ -336,6 +336,8 @@ function hubPintarAgenda() {
   });
 
   if (!linhas.length) {
+    /* (19.215.0) semana vazia: o Domínio não pode ler a lista da pintura anterior */
+    if (hubUltimaAgenda) { hubUltimaAgenda.itens = []; hubUltimaAgenda.nHoje = 0; hubUltimaAgenda.editais = ativos.map((e) => String(e.id)); }
     const p = document.createElement("div");
     p.className = "ed-caixa-sub";
     p.textContent = t("hub_agenda_vazia");
@@ -698,6 +700,12 @@ function hubPintarAgenda() {
   const diaHoje = SS.dias.filter((d) => d.estado === "hoje")[0] || null;
   const cotaHoje = diaHoje && diaHoje.estudo ? Math.max(0, diaHoje.previstoMin - diaHoje.feitoMin) : 0;
   const nHoje = edCabemHoje(linhas, cotaHoje);
+  /* (19.215.0) a lista desta semana, na ordem em que aparece, e quantas são de hoje: o Domínio diz "3º de 12 nesta
+   * semana" com o mesmo número que a pessoa vê aqui (domAgendaDoEdital), sem montar outro plano */
+  const itemAg = (i) => ({ edital: String(i.edital), chave: i.chave || "", disciplina: i.disciplina || "", nome: i.nome || i.titulo || "" });
+  hubUltimaAgenda.itens = linhas.map((i) => Object.assign(itemAg(i), { tambem: (i.tambem || []).map(itemAg) }));
+  hubUltimaAgenda.nHoje = nHoje;
+  hubUltimaAgenda.editais = ativos.map((e) => String(e.id));
   const somaDe = (a) => a.reduce((s2, i) => s2 + edMinSemana(i), 0);
   const grupo = (tit, res, cls) => {
     const g = document.createElement("div");

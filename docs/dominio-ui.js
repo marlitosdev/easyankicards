@@ -8,10 +8,13 @@
  * ===================================================================== */
 let domEditalId = "", domDiscAberta = "", domFiltro = "todos";
 /* (v18.86.0) TRÊS VISÕES em vez de uma rolagem só: o que fazer agora (prioridades), o mapa (disciplinas) e a evolução.
- * A barra do peso por nível fica presa no topo do corpo, à vista nas três. A visão escolhida é lembrada. */
+ * A barra do peso por nível fica presa no topo do corpo, à vista nas três. A visão escolhida é lembrada.
+ * (19.215.0) O DOMÍNIO É DIAGNÓSTICO: sem escolha lembrada, abre no MAPA (Disciplinas). O que estudar a seguir é da
+ * agenda da semana; a fila do reforço continua a um toque, na aba dela. */
 const DOM_ABAS = ["prior", "disc", "evo"];
 const DOM_CH_ABA = "eac_dom_aba";
-let domAba = "prior";
+const DOM_ABA_PADRAO = "disc";
+let domAba = DOM_ABA_PADRAO;
 /* (v18.88.0) a barra de cada disciplina: na ordem do edital ou POR COR (vermelho → amarelo → azul → verde → não estudado);
  * tocar num pedaço abre aquele tópico no mapa */
 const DOM_CH_ORDEM = "eac_dom_ordem";
@@ -39,7 +42,7 @@ function domIrAoTopico(disciplina, chave) {
   }
   return el;
 }
-function domAbaLer() { try { const v = localStorage.getItem(DOM_CH_ABA); return DOM_ABAS.indexOf(v) >= 0 ? v : "prior"; } catch (e) { return "prior"; } }
+function domAbaLer() { try { const v = localStorage.getItem(DOM_CH_ABA); return DOM_ABAS.indexOf(v) >= 0 ? v : DOM_ABA_PADRAO; } catch (e) { return DOM_ABA_PADRAO; } }
 function domAbaDefinir(a, calado) {
   domAba = DOM_ABAS.indexOf(a) >= 0 ? a : "prior";
   /* trocar de aba fecha o detalhe (na tela estreita ele ocupa o lugar da lista) */
@@ -313,8 +316,15 @@ function domItemFila(f, tp, semRamos) {
   const linhaAc = gerEl("div", "dom-item-acoes dom-item-linha");
   const p = gerEl("button", "btn-min dom-acao-1 dom-acao-" + ac1.cod, ac1.txt); p.type = "button"; p.title = ac1.tip;
   p.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); ac1.fazer(); };
-  linhaAc.append(p);
-  domLinhaAcoes(linhaAc, f.disciplina, f.topico, f.cartoes, f.tipo === "ramo" ? { id: f.ramoId, nome: f.ramoNome } : null);
+  /* (19.215.0) UMA AÇÃO À VISTA: a que mais ajuda na cor; abrir, cartões, questões e registrar ficam no "⋯" (como na
+   * linha da fila). Eram cinco botões lado a lado no detalhe, competindo com a agenda. */
+  const mais = gerEl("button", "btn-min dom-mais", "⋯"); mais.type = "button";
+  mais.title = t("dom_mais_tip"); mais.setAttribute("aria-label", t("dom_mais_tip")); mais.setAttribute("aria-expanded", "false");
+  const menu = gerEl("div", "dom-linha-menu dom-det-menu"); menu.hidden = true;
+  domLinhaAcoes(menu, f.disciplina, f.topico, f.cartoes, f.tipo === "ramo" ? { id: f.ramoId, nome: f.ramoNome } : null);
+  menu.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); };
+  mais.onclick = (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); domMenuTrocar(menu, mais); };
+  linhaAc.append(p, mais, menu);
   l.append(linhaAc);
   return l;
 }
@@ -352,7 +362,42 @@ function domLinhaAcoes(pai, disciplina, topico, cartoes, ramo) {
  *    resto, sem esconder nada (na fila, recortam); teclado: ↑↓ andam na fila, Enter abre, Esc volta, "/" vai à busca.
  * ===================================================================== */
 const DOM_LINHAS = 20;
-const DOM_TOPO_N = 5;   /* quantos da fila levam o número no pedaço do mapa */
+/* (19.215.0) ONDE O TÓPICO ESTÁ NA AGENDA DA SEMANA. O Domínio mostrava "nº 1 de 126 na fila do que reforçar" e o
+ * número no pedaço do mapa: uma segunda lista de tarefas, com outra ordem, ao lado da agenda. Agora ele diz o que a
+ * AGENDA diz. A lista vem da última pintura da agenda (hubUltimaAgenda), sem recalcular: o plano da agenda usa a meta,
+ * o ritmo real e a reserva da discursiva, que o Domínio não conhece — uma conta própria daria outra semana.
+ * Devolve { mapa: chave → { pos, n, hoje }, n } do edital, ou null se ele não está na agenda (ou não há agenda). */
+function domAgendaDoEdital(edId) {
+  let a = null;
+  try {
+    if (typeof hubUltimaAgenda !== "undefined") {
+      if (!hubUltimaAgenda && typeof hubPintarAgenda === "function") { try { hubPintarAgenda(); } catch (e) {} }
+      a = hubUltimaAgenda;
+    }
+  } catch (e) { a = null; }
+  const ed = String(edId || "");
+  if (!a || !Array.isArray(a.itens) || !Array.isArray(a.editais) || a.editais.indexOf(ed) < 0) return null;
+  const mapa = new Map();
+  const n = a.itens.length, nHoje = a.nHoje || 0;
+  a.itens.forEach((x, i) => {
+    /* a linha fundida de dois editais vinculados vale para os dois */
+    [x].concat(x.tambem || []).forEach((y) => {
+      if (String(y.edital) !== ed) return;
+      const info = { pos: i + 1, n, hoje: i < nHoje };
+      [y.chave, (y.disciplina || "") + "\u0001" + (y.nome || "")].forEach((k) => { if (k && !mapa.has(k)) mapa.set(k, info); });
+    });
+  });
+  return { mapa, n };
+}
+/* o tópico na agenda: { pos, n, hoje }; { fora: true } quando o edital está na agenda e o tópico não; null sem agenda */
+function domNaAgenda(ag, disciplina, tp) {
+  if (!ag || !tp) return null;
+  return ag.mapa.get(tp.chave) || ag.mapa.get(String(disciplina || "") + "\u0001" + (tp.nome || "")) || { fora: true };
+}
+function domAgendaTxt(x) {
+  if (!x) return "";
+  return x.fora ? t("dom_det_ag_fora") : t(x.hoje ? "dom_det_ag_hoje" : "dom_det_ag_semana", { i: x.pos, n: x.n });
+}
 let domSel = null, domSelAuto = false, domDetAberto = false, domBusca = "", domLimite = DOM_LINHAS;
 let domCtx = null, domMenu = null, domRolagemLista = 0, domEscTratado = 0, domBuscaT = null, domBalaoEl = null;
 
@@ -395,10 +440,11 @@ function domMarcasDoTopico(tp) {
   return { venc, incerto, mistos: cores.length > 1 && cores.some((x) => x !== cores[0]) };
 }
 /* o texto do balão do pedaço (uma linha por item) */
-function domSegLinhas(d, tp, n, pq) {
+function domSegLinhas(d, tp, agTxt, pq) {
   const out = [d.nome + " › " + tp.nome];
-  out.push(domNivelTxt(tp.nivel) + " · " + t("cov_vale", { p: pctProva(tp.pesoPct || 0) }) + (n ? " · " + t("dom_tl_n", { n }) : ""));
+  out.push(domNivelTxt(tp.nivel) + " · " + t("cov_vale", { p: pctProva(tp.pesoPct || 0) }));
   if (pq) out.push(pq);
+  if (agTxt) out.push(agTxt);
   if (tp.ramos && tp.ramos.length) {
     const cont = {}, ordem = [];
     tp.ramos.forEach((r) => { const k = r.nivel === "pulado" ? t("dom_n_pulado") : t("dom_n_" + r.nivel); if (!cont[k]) { cont[k] = 0; ordem.push(k); } cont[k]++; });
@@ -528,7 +574,9 @@ function domPintar() {
   const painel = (aba) => { const p = gerEl("div", "dom-painel dom-painel-" + aba); cx.append(p); return p; };
   const pDisc = painel("disc"), pPrior = painel("prior"), pDet = painel("det"), pEvo = painel("evo");
   const c = domCtx = { m, ed, fase, fixo, pDisc, pPrior, pDet, pEvo, linhas: [], segs: {}, tls: {}, tiras: [],
-    topPorChave: Object.create(null), discDoTop: Object.create(null), filaTudo: [], posFila: Object.create(null), nFila: 0, detEl: null };
+    topPorChave: Object.create(null), discDoTop: Object.create(null), filaTudo: [], posFila: Object.create(null), nFila: 0, detEl: null,
+    agenda: domAgendaDoEdital(ed.id) };
+  domPintarLegenda();
   m.disciplinas.forEach((d) => d.topicos.forEach((tp) => { c.topPorChave[tp.chave] = tp; c.discDoTop[tp.chave] = d; }));
   if (domSel && !c.topPorChave[domSel.chave]) { domSel = null; domSelAuto = false; domDetAberto = false; }
   /* ---- evolução (calculada sempre: a diferença de cada disciplina aparece no mapa) ---- */
@@ -629,14 +677,7 @@ function domPintar() {
     b.onclick = () => domOrdemDefinir(v);
     linOrd.append(b);
   });
-  /* como ler a barra: o que ela diz além da cor */
-  const leg = gerEl("span", "dom-mapa-leg");
-  leg.append(gerEl("span", "dom-leg-item", t("dom_leg_largura")),
-    domLegAmostra("cinza", "", "1", "dom_leg_fila"),
-    domLegAmostra("azul", "dom-seg-incerto", "", "dom_leg_incerto"),
-    domLegAmostra("amarelo", "dom-seg-venc", "", "dom_leg_venc"),
-    domLegAmostra("vermelho", "dom-seg-mistos", "", "dom_leg_ramos"));
-  linOrd.append(leg);
+  /* (19.215.0) "como ler a barra" mora no ⓘ (domPintarLegenda): era a segunda faixa de chips antes do mapa */
   pDisc.append(linOrd);
   const listaD = gerEl("div", "cov-lista dom-mapa");
   const semEstudo = gerEl("details", "dom-sem-estudo");
@@ -664,10 +705,10 @@ function domPintar() {
     const daTira = { d, segs: [] };
     segs.forEach((tp) => {
       const mc = domMarcasDoTopico(tp);
-      const n = c.posFila[tp.chave] || 0;
+      const ag = domNaAgenda(c.agenda, d.nome, tp);
       const seg = gerEl("div", "cov-seg dom-n-" + domNv(tp.nivel) + (mc.incerto ? " dom-seg-incerto" : "") + (mc.venc ? " dom-seg-venc" : "") + (filtrando && !casaT(tp) ? " dom-apagado" : ""));
       seg.style.width = ((tp.pesoPct / somaTop) * 100).toFixed(2) + "%";
-      if (n && n <= DOM_TOPO_N) seg.append(gerEl("span", "dom-seg-n", String(n)));
+      /* (19.215.0) sem o número da fila no pedaço: um canal a menos na barra (a posição que vale é a da agenda, no balão) */
       if (mc.mistos) {
         const sub = gerEl("span", "dom-seg-sub");
         const somaR = tp.ramos.reduce((x, r) => x + (r.pesoPct || 0), 0) || 1;
@@ -676,7 +717,7 @@ function domPintar() {
       }
       /* o pior ramo explica a cor do tópico com ramos */
       const pior = tp.ramos.length ? tp.ramos.filter((r) => r.nivel === tp.nivel)[0] : null;
-      const linhasB = domSegLinhas(d, tp, n, domPorque(tp.motivos || (pior && pior.motivos) || []));
+      const linhasB = domSegLinhas(d, tp, ag && !ag.fora ? domAgendaTxt(ag) : "", domPorque(tp.motivos || (pior && pior.motivos) || []));
       seg.tabIndex = -1;
       seg.setAttribute("role", "button");
       seg.setAttribute("aria-label", linhasB.slice(0, -1).join(" · "));
@@ -712,8 +753,13 @@ function domPintar() {
       r.tabIndex = 0;
       if (tp.chave && r.dataset) r.dataset.chave = tp.chave;
       r.append(gerEl("span", "dom-nivel dom-n-" + domNv(tp.nivel), domNivelTxt(tp.nivel)), gerEl("span", "dom-tl-nome", tp.nome));
-      const n = c.posFila[tp.chave] || 0;
-      if (n && n <= DOM_TOPO_N) r.append(gerEl("span", "dom-tl-n", t("dom_tl_n", { n })));
+      /* (19.215.0) o selo diz se o tópico está na agenda (hoje ou nesta semana), não a posição na fila do reforço */
+      const agT = domNaAgenda(c.agenda, d.nome, tp);
+      if (agT && !agT.fora) {
+        const sa = gerEl("span", "dom-tl-n dom-tl-ag", t(agT.hoje ? "dom_tl_ag_hoje" : "dom_tl_ag_semana"));
+        sa.title = domAgendaTxt(agT);
+        r.append(sa);
+      }
       if (tp.ramos.length) r.append(gerEl("span", "dom-tl-ramos", t("dom_tl_ramos", { n: tp.ramos.length })));
       if (tp.fase2 && m.fase === 1) r.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
       const pior = tp.ramos.length ? tp.ramos.filter((x) => x.nivel === tp.nivel)[0] : null;
@@ -784,8 +830,14 @@ function domPintarDetalhe() {
   if (!f) f = domItemDoTopico(d, tp);
   const box = gerEl("div", "dom-top dom-det dom-b-" + domNv(tp.nivel));
   if (tp.chave && box.dataset) box.dataset.chave = tp.chave;
+  /* (19.215.0) ONDE ELE ESTÁ: na agenda da semana (a ordem que vale para estudar); a posição na fila do reforço fica no
+   * balão. Sem agenda para este edital, a fila, como antes. */
   const n = c.posFila[tp.chave] || 0;
-  box.append(gerEl("div", "dom-det-onde", n ? t("dom_det_na_fila", { n, t: c.nFila }) : t("dom_det_fora")));
+  const filaTxt = n ? t("dom_det_na_fila", { n, t: c.nFila }) : t("dom_det_fora");
+  const ag = domNaAgenda(c.agenda, d.nome, tp);
+  const onde = gerEl("div", "dom-det-onde" + (ag && !ag.fora ? " dom-det-agenda" : ""), ag ? domAgendaTxt(ag) : filaTxt);
+  if (ag) onde.title = filaTxt;
+  box.append(onde);
   box.append(domItemFila(f, tp, false));
   if (tp.fase2 && c.m.fase === 1) box.append(gerEl("span", "cov-f2", t("cov_f2_tag")));
   domAutoWidget(box, d.nome, tp.nome, false);
@@ -994,6 +1046,17 @@ function domPintarFiltros(m) {
   });
 }
 
+/* (19.215.0) COMO LER A BARRA, no ⓘ: o que o pedaço diz além da cor (largura, listras, risco, faixa dos ramos) */
+function domPintarLegenda() {
+  const cx = $("domLegCx");
+  if (!cx) return null;
+  cx.innerHTML = "";
+  cx.append(gerEl("span", "dom-leg-item", t("dom_leg_largura")),
+    domLegAmostra("azul", "dom-seg-incerto", "", "dom_leg_incerto"),
+    domLegAmostra("amarelo", "dom-seg-venc", "", "dom_leg_venc"),
+    domLegAmostra("vermelho", "dom-seg-mistos", "", "dom_leg_ramos"));
+  return cx;
+}
 /* os cortes do semáforo */
 function domPreencherCortes() {
   const l = domLimitesLer();
@@ -1010,6 +1073,9 @@ function domAjudaTrocar(sim) {
   p.hidden = sim === undefined ? !p.hidden : !sim;
   /* (19.193.0) os cortes do semáforo moram junto da explicação, no ⓘ (o topo fica mais curto) */
   if ($("domAjustesCx")) $("domAjustesCx").hidden = p.hidden;
+  /* (19.215.0) e também "como ler a barra" e o teclado */
+  if ($("domLegCx")) $("domLegCx").hidden = p.hidden;
+  if ($("domTeclas")) $("domTeclas").hidden = p.hidden;
   if ($("btnDomAjuda")) $("btnDomAjuda").setAttribute("aria-expanded", p.hidden ? "false" : "true");
   return !p.hidden;
 }

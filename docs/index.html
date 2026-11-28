@@ -8059,11 +8059,13 @@ dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
 .dom-mais{min-width:2.2em;font-weight:var(--peso-f)}
 .dom-linha-menu{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:var(--esp-1);padding:var(--esp-1) 0 0 calc(1.6em + var(--esp-2));cursor:default}
 .dom-linha-menu .cov-acoes{flex-wrap:wrap}
+.dom-det-menu{padding-left:0}
 .dom-mais-linhas{margin:var(--esp-2) 0 0}
 .dom-lista-pe{font-size:var(--fs-1);margin-top:var(--esp-2)}
 /* o mapa: uma linha por disciplina (o nome e o peso · a barra · o verde e a mudança) */
 .dom-mapa-leg{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--esp-1) var(--esp-3);margin-left:auto;font-size:var(--fs-1);color:var(--sutil)}
 .dom-leg-item{display:inline-flex;align-items:center;gap:var(--esp-1);white-space:nowrap}
+.dom-ajuda-leg{display:flex;margin:var(--esp-1) 0}
 .dom-leg-amostra{position:relative;display:inline-flex;align-items:center;justify-content:center;width:22px;height:14px;border-radius:var(--r-p);overflow:hidden}
 #dlgDominio .dom-mapa{gap:var(--esp-1)}
 #dlgDominio .dom-disc{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr) auto;align-items:center;column-gap:var(--esp-3);row-gap:var(--esp-1);padding:var(--esp-1) var(--esp-2)}
@@ -8078,7 +8080,6 @@ dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
 .dom-tira .cov-seg{position:relative;display:flex;align-items:center;justify-content:center;min-width:3px;cursor:pointer}
 .dom-tira .cov-seg:focus-visible{outline:2px solid var(--texto);outline-offset:-2px}
 .dom-seg-sel{box-shadow:inset 0 0 0 2px var(--texto)}
-.dom-seg-n{font-size:var(--fs-1);font-weight:var(--peso-f);line-height:1;pointer-events:none}
 .dom-seg-incerto{background-image:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--panel) 45%,transparent) 4px 7px)}
 .dom-seg-venc::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--texto);opacity:.75}
 .dom-seg-sub{position:absolute;left:0;right:0;bottom:0;height:4px;display:flex}
@@ -8102,6 +8103,8 @@ dialog.dom-dlg.dom-largo[open]{width:min(1440px,97vw);max-width:97vw}
 .dom-det{padding:var(--esp-2) var(--esp-3)}
 .dom-det .dom-item{background:transparent;padding:0;border:0}
 .dom-det-onde{font-size:var(--fs-1);color:var(--sutil);margin-bottom:var(--esp-1)}
+.dom-det-agenda{color:var(--texto);font-weight:var(--peso-m)}
+.dom-tl-ag{color:var(--acao)}
 .dom-det-ramos{margin-top:var(--esp-3)}
 .dom-det-ramos > summary{cursor:pointer;font-size:var(--fs-2);color:var(--sutil)}
 .dom-ramo-atual{box-shadow:0 0 0 2px var(--acao)}
@@ -8992,7 +8995,7 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <div class="abertura-nome">EasyAnkiCards</div>
     <!-- (19.192.0) A VERSÃO QUE ESTÁ CARREGANDO, desde o primeiro instante: escrita aqui (a capa aparece antes de qualquer
          script) e confirmada pelo app.js ao carregar. O teste tests/abertura.js exige que bata com o VERSAO e o sw.js. -->
-    <div class="abertura-versao" id="aberturaVersao">v19.214.0</div>
+    <div class="abertura-versao" id="aberturaVersao">v19.215.0</div>
     <div class="abertura-barra"><span class="abertura-fio"></span></div>
   </div>
 </div>
@@ -14088,6 +14091,9 @@ dialog.ui-modal.mat-ficha-dlg[open]{display:flex;flex-direction:column;overflow-
     <button type="button" class="qs-x" id="btnDomX" aria-label="Fechar">✕</button>
   </div>
   <p class="nota" id="domSub" data-i18n="dom_sub" hidden></p>
+  <!-- (19.215.0) "como ler a barra" e o teclado também moram no ⓘ: o topo chega ao mapa sem faixas de explicação -->
+  <div class="dom-mapa-leg dom-ajuda-leg" id="domLegCx" hidden></div>
+  <p class="nota" id="domTeclas" data-i18n="dom_sub_teclas" hidden></p>
   <!-- (19.193.0) os cortes do semáforo moram no ⓘ, junto da explicação: o topo fica mais curto -->
   <details class="dom-ajustes" id="domAjustesCx" hidden>
     <summary id="domAjustesSum" data-i18n="dom_ajustes"></summary>
